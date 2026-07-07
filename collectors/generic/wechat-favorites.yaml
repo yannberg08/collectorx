@@ -8,6 +8,7 @@ time_field: time
 armed: false
 category: generic
 owner_scope: personal
+skill: wechat-favorites
 
 scope:
   collects:
@@ -23,5 +24,5 @@ scope:
     - credentials
 
 description: |
-  微信收藏和公众号文章动作的通用采集器占位。它采用户自己的收藏、保存、转发和文章指针；
+  微信收藏和公众号文章动作的通用采集器。它采用户自己的收藏、保存、转发和文章指针；
   wechat-article-favorites lens 只筛投资类公众号和炒股文章。

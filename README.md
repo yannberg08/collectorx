@@ -84,7 +84,7 @@ Operational docs:
 | `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
 | `calendar` | none yet | YAML placeholder; generic calendar channel |
 | `meeting-artifacts` | `meeting-artifacts` | Local file event-package baseline for meeting minutes/transcripts; platform API adapters pending |
-| `wechat-favorites` | none yet | YAML placeholder; WeChat favorites/public-account article actions |
+| `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |
 | `social-activity` | none yet | YAML placeholder; Weibo/Bilibili/Xiaohongshu user activity |
 
 ### Vertical Investor Collectors
@@ -111,7 +111,7 @@ Operational docs:
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; calendar validation pending |
-| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; favorites collector pending |
+| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; saved-article validation done |
 | `social-investment-influence` | `social-activity` | Runnable lens baseline for investment creators and social influence signals; social activity adapters pending |
 
 Status legend:

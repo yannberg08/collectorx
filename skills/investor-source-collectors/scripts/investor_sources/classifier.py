@@ -99,7 +99,7 @@ SOURCE_TERMS = {
     "meeting-minutes": UNIVERSAL_TERMS | REASON_TERMS | {"投委会", "电话会", "专家会", "交流会"},
     "investment-notes": UNIVERSAL_TERMS | ACTION_TERMS | REASON_TERMS | {"checklist", "watchlist"},
     "task-calendar-investor": ACTION_TERMS | {"复盘", "盯盘", "财报日", "预约调研", "研究任务", "跟踪"},
-    "wechat-article-favorites": UNIVERSAL_TERMS | {"公众号", "收藏", "转发", "阅读"},
+    "wechat-article-favorites": UNIVERSAL_TERMS | REASON_TERMS | {"财经", "券商", "研究所", "投研", "投资公众号", "股票公众号"},
     "social-investment-influence": UNIVERSAL_TERMS | {"大V", "财经博主", "投教", "实盘"},
 }
 
@@ -241,9 +241,14 @@ def term_hits(terms: Iterable[str], text: str, lowered: str) -> List[str]:
     hits = []
     for term in sorted(terms):
         probe = term.lower()
-        if (probe in lowered) if term.isascii() else (term in text):
+        if ascii_term_match(probe, lowered) if term.isascii() else (term in text):
             hits.append(term)
     return hits
+
+
+def ascii_term_match(term: str, lowered: str) -> bool:
+    pattern = r"(?<![a-z0-9])" + re.escape(term) + r"(?![a-z0-9])"
+    return re.search(pattern, lowered) is not None
 
 
 def source_specific_score(

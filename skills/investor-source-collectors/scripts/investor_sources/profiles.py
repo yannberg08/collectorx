@@ -433,7 +433,7 @@ SOURCE_CLASSIFICATION: Dict[str, Dict[str, Any]] = {
     },
     "wechat-article-favorites": {
         "collector_class": "lens",
-        "upstream_collectors": ["wechat", "filesystem"],
+        "upstream_collectors": ["wechat-favorites"],
         "channel": "公众号/微信收藏",
         "collects": ["投资文章收藏", "阅读痕迹", "转发给自己的材料", "文章 raw_ref"],
         "does_not_collect": ["公众号全量文章库", "非投资收藏", "他人阅读记录"],

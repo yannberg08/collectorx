@@ -1,0 +1,1 @@
+"""Wechat favorites collector package."""

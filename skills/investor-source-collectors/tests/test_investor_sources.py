@@ -338,6 +338,72 @@ def test_meeting_minutes_lens_keeps_investment_minutes_only() -> None:
         assert "matched_source_profile_terms" in lens_events[0]["data"]["classification"]["reasons"]
 
 
+def test_wechat_article_favorites_lens_keeps_investment_articles_only() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "wechat-favorites-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:1",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T10:00:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "favorite",
+                    "title": "半导体行业景气跟踪",
+                    "source_account": "券商研究公众号",
+                    "text_preview": "讨论财报、估值、风险点和安全边际。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/investment"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:2",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T11:00:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "favorite",
+                    "title": "周末做饭清单",
+                    "source_account": "生活号",
+                    "text_preview": "采购食材和聚餐安排。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/life"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "wechat-article-favorites",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T11:30:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "wechat-article-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        assert lens_events[0]["data"]["payload"]["title"] == "半导体行业景气跟踪"
+        assert lens_events[0]["raw_ref"]["upstream_event_id"] == "wechat-favorites:1"
+
+
 if __name__ == "__main__":
     test_list_sources_contains_all_priorities()
     test_collect_xueqiu_csv_outputs_event_and_evidence()
@@ -347,4 +413,5 @@ if __name__ == "__main__":
     test_email_research_reads_upstream_collectorx_event()
     test_task_calendar_lens_keeps_investment_task_only()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
+    test_wechat_article_favorites_lens_keeps_investment_articles_only()
     print("investor-source-collectors tests passed.")

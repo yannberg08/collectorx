@@ -194,6 +194,24 @@ Current status:
 - Feishu/DingTalk/WeCom/Tencent Meeting platform adapters still require real
   authorization validation.
 
+### 微信收藏 / 公众号文章
+
+```bash
+python3 skills/wechat-favorites/scripts/wechat_favorites.py collect \
+  --input <authorized-wechat-favorites-or-saved-article-folder> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, and TXT saved-article
+  records into generic `wechat-favorites` events.
+- Does not claim investment-article status directly.
+- Feed `lake/wechat-favorites/events.jsonl` into `wechat-article-favorites`
+  lens for investment public-account articles and saved reading sources.
+- Real WeChat favorites database/public-account read-history adapters still
+  require version-specific validation.
+
 ### 投资 Lens / 分类工具
 
 ```bash
