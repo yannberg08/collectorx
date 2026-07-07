@@ -88,6 +88,24 @@ Findings:
   20 candidate files; manifest was corrected to avoid claiming complete asset
   boundary from partial input.
 
+### Wave C: P1 notes productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-validation-2026-07-08.md`
+
+Findings:
+
+- `notes-collector` now emits `collectorx.event.v1` and a standard collection
+  package for Obsidian/Notion flows.
+- Real local Obsidian-style validation produced 168 generic note events.
+- `investment-notes` lens produced 100 investor-note evidence events and 10
+  usable investor subdimensions.
+- Shared lens readiness was corrected so it does not claim complete source
+  collection from partial authorized input.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -102,7 +120,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G1 | G2: strengthen Obsidian/Notion/Youdao/Evernote collectors and investment-note classifier |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes | Strengthen Notion/Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1 | G2: validate TickTick output, implement generic calendar collector, classify tasks |
 | 3 | `meeting-minutes` | G1 | G2: real Feishu/DingTalk/WeCom/Tencent Meeting artifacts and unified minutes schema |
 | 4 | `wechat-article-favorites` | G1 | G2: implement WeChat favorites/public-account article action collector |

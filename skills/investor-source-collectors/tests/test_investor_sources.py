@@ -168,6 +168,7 @@ def test_lens_without_investment_match_does_not_fill_wiki_coverage() -> None:
         )
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "no_investment_evidence_matched"
+        assert manifest["collection_readiness"]["can_claim_complete_source_collection"] is False
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
@@ -212,6 +213,9 @@ def test_email_research_reads_upstream_collectorx_event() -> None:
         assert event["raw_ref"]["parser"] == "collectorx.event.v1"
         assert event["raw_ref"]["upstream_event_id"] == "email:fixture"
         assert event["data"]["classification"]["confidence"] >= 0.3
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
+        assert manifest["collection_readiness"]["can_claim_complete_source_collection"] is False
 
 
 if __name__ == "__main__":

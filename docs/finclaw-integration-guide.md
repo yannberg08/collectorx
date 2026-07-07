@@ -141,6 +141,24 @@ Current status:
   subscriptions, redemptions, and asset snapshots.
 - Per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/banks still need
   real validation.
+- Any parsed input is treated as partial authorized input until platform/account
+  coverage is verified.
+
+### 笔记
+
+```bash
+python3 skills/notes-collector/scripts/notes_api.py obsidian \
+  --vault <authorized-obsidian-vault> \
+  --export <out-dir>/notes.json \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Emits generic `notes` events and a standard package.
+- Does not claim investment-note status directly.
+- Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
+  evidence.
 
 ### 投资 Lens / 分类工具
 

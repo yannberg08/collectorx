@@ -176,7 +176,8 @@ def build_manifest(source_id: str, events: List[Dict[str, Any]], *, collected_at
         "collection_readiness": {
             "status": status,
             "can_enter_finclaw": bool(events) and not only_gap,
-            "can_claim_complete_source_collection": not only_gap,
+            "can_claim_complete_source_collection": False,
+            "source_collection_scope": "none" if only_gap else "partial_authorized_input",
             "next_action": next_action_for_status(status),
         },
         "privacy": {

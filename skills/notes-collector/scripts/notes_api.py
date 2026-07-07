@@ -7,6 +7,8 @@ import os
 import sys
 from pathlib import Path
 
+from notes.events import notes_to_events, write_jsonl, write_package
+
 # Windows控制台utf-8
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -15,7 +17,14 @@ except (AttributeError, OSError):
     pass
 
 
-def collect_obsidian(vault_path: str, export_path: str, limit: int = None):
+def collect_obsidian(
+    vault_path: str,
+    export_path: str,
+    limit: int = None,
+    event_export: str = None,
+    out_dir: str = None,
+    include_content: bool = False,
+):
     """采集Obsidian笔记（本地文件）"""
     vault = Path(vault_path)
     if not vault.exists():
@@ -44,11 +53,29 @@ def collect_obsidian(vault_path: str, export_path: str, limit: int = None):
     # 导出
     with open(export_path, "w", encoding="utf-8") as f:
         json.dump(notes, f, ensure_ascii=False, indent=2)
+
+    events = notes_to_events(
+        notes,
+        source_app="obsidian",
+        source_label=f"Obsidian vault: {vault.name}",
+        include_content=include_content,
+    )
+    if event_export:
+        write_jsonl(Path(event_export).expanduser(), events)
+    if out_dir:
+        write_package(Path(out_dir).expanduser(), events, source_app="obsidian")
     
     print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
 
 
-def collect_notion(token: str, export_path: str, limit: int = None):
+def collect_notion(
+    token: str,
+    export_path: str,
+    limit: int = None,
+    event_export: str = None,
+    out_dir: str = None,
+    include_content: bool = False,
+):
     """采集Notion笔记（通过API）"""
     import urllib.request
     
@@ -85,6 +112,17 @@ def collect_notion(token: str, export_path: str, limit: int = None):
         # 导出
         with open(export_path, "w", encoding="utf-8") as f:
             json.dump(notes, f, ensure_ascii=False, indent=2)
+
+        events = notes_to_events(
+            notes,
+            source_app="notion",
+            source_label="Notion API",
+            include_content=include_content,
+        )
+        if event_export:
+            write_jsonl(Path(event_export).expanduser(), events)
+        if out_dir:
+            write_package(Path(out_dir).expanduser(), events, source_app="notion")
         
         print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
         
@@ -119,12 +157,18 @@ def main():
     obs_parser.add_argument("--vault", required=True, help="Vault目录")
     obs_parser.add_argument("--export", required=True, help="导出路径")
     obs_parser.add_argument("--limit", type=int, help="限制数量")
+    obs_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
+    obs_parser.add_argument("--out-dir", help="导出完整采集包目录")
+    obs_parser.add_argument("--include-content", action="store_true", help="在事件中包含完整笔记正文；默认只放预览")
     
     # notion命令
     not_parser = subparsers.add_parser("notion", help="采集Notion笔记")
     not_parser.add_argument("--token", required=True, help="API Token")
     not_parser.add_argument("--export", required=True, help="导出路径")
     not_parser.add_argument("--limit", type=int, help="限制数量")
+    not_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
+    not_parser.add_argument("--out-dir", help="导出完整采集包目录")
+    not_parser.add_argument("--include-content", action="store_true", help="在事件中包含完整笔记正文；默认只放预览")
     
     # status命令
     subparsers.add_parser("status", help="显示状态")
@@ -132,9 +176,9 @@ def main():
     args = parser.parse_args()
     
     if args.command == "obsidian":
-        collect_obsidian(args.vault, args.export, args.limit)
+        collect_obsidian(args.vault, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
     elif args.command == "notion":
-        collect_notion(args.token, args.export, args.limit)
+        collect_notion(args.token, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
     elif args.command == "status":
         cmd_status()
     else:

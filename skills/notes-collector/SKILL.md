@@ -21,8 +21,11 @@ python <SKILL_DIR>/scripts/notes_api.py notion --token <token> --export ~/Deskto
 # 采集Obsidian笔记
 python <SKILL_DIR>/scripts/notes_api.py obsidian --vault ~/Documents/MyVault --export ~/Desktop/obsidian.json
 
-# 采集有道云笔记
-python <SKILL_DIR>/scripts/notes_api.py youdao --token <token> --export ~/Desktop/youdao.json
+# 推荐给 CollectorX/FinClaw：同时输出标准事件包
+python <SKILL_DIR>/scripts/notes_api.py obsidian \
+  --vault ~/Documents/MyVault \
+  --export ~/Desktop/obsidian.json \
+  --out-dir ~/Desktop/notes-collect
 ```
 
 ## 支持的笔记应用
@@ -43,6 +46,15 @@ python <SKILL_DIR>/scripts/notes_api.py youdao --token <token> --export ~/Deskto
 | `--export` | 导出文件路径 |
 | `--format` | 输出格式（json/markdown） |
 | `--limit` | 限制笔记数量 |
+| `--event-export` | 导出 `collectorx.event.v1` JSONL |
+| `--out-dir` | 导出完整采集包：`lake/notes/events.jsonl`、`manifest.json`、`SUMMARY.md` |
+| `--include-content` | 在事件中包含完整正文；默认只写正文预览 |
+
+## CollectorX 事件边界
+
+`notes-collector` 是 generic collector：它采集用户授权笔记事实，不直接判断哪些是投资笔记，也不直接写投资 Wiki。
+
+默认事件只包含 `content_preview`，不包含完整正文；如用户明确授权，可加 `--include-content`。投资分身应把 `lake/notes/events.jsonl` 交给 `investment-notes` lens，由 lens 负责筛选复盘、规则库、估值假设和交易 checklist。
 
 ## 数据流向Wiki
 

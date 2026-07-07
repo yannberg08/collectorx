@@ -38,6 +38,7 @@ PARSER_TESTS = [
     "skills/email-collector/tests/test_events.py",
     "skills/filesystem-collector/tests/test_filesystem_collector.py",
     "skills/qq-export/tests/test_parser.py",
+    "skills/notes-collector/tests/test_notes_collector.py",
     "skills/ths-portfolio/tests/test_parser.py",
     "skills/eastmoney-portfolio/tests/test_parser.py",
     "skills/xueqiu-watchlist/tests/test_parser.py",
