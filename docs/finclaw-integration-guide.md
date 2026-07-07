@@ -191,6 +191,37 @@ Current status:
 - Generic `filesystem` remains metadata-only; investment routing stays in the
   `research-documents` lens.
 
+### 邮件研报
+
+```bash
+python3 skills/email-collector/scripts/email_api.py collect \
+  --account all \
+  --out-dir <out-dir>
+```
+
+Fallback for local authorized exports:
+
+```bash
+python3 skills/email-collector/scripts/email_api.py import \
+  --input <authorized-email-export-or-folder> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- IMAP `collect --out-dir` and local `import --out-dir` both write
+  `lake/email/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
+- Manifest output records account/folder audit, field coverage, body policy,
+  attachment policy, and the generic-to-lens evidence boundary.
+- Full bodies are excluded by default and require explicit `--event-include-body`.
+- Attachment bodies are never written; only filename, content type, and size are
+  retained.
+- If no mailbox is registered, IMAP authorization fails, or the selected folders
+  have no matching mail, the collector writes an explicit gap event and next
+  action instead of pretending the mailbox was collected.
+- Feed `lake/email/events.jsonl` into `email-research` before using broker
+  research, IR, roadshow, or research-attachment evidence in the investor Wiki.
+
 ### 雪球投资活动
 
 ```bash
@@ -256,40 +287,6 @@ Current status:
 - `manifest.field_coverage` and `manifest.asset_value_summary` tell FinClaw
   which key asset fields are present and summarize this run's authorized values
   by platform.
-
-### 邮件
-
-IMAP collection:
-
-```bash
-python3 skills/email-collector/scripts/email_api.py collect \
-  --account all \
-  --format json \
-  --event-export <out-dir>/lake/email/events.jsonl
-```
-
-Authorized local export import:
-
-```bash
-python3 skills/email-collector/scripts/email_api.py import \
-  --input <authorized-eml-mbox-json-csv-email-export> \
-  --out-dir <out-dir>
-```
-
-Current status:
-
-- Converts IMAP messages or authorized local EML/MBOX/JSON/JSONL/CSV/TSV/ZIP
-  exports into generic `email` events.
-- Captures mailbox, folder, sender, recipients, cc, subject, date,
-  body preview, message ID, attachment refs, and ZIP member provenance.
-- Does not include full body by default; `--event-include-body` requires
-  explicit authorization.
-- Does not write attachment bodies into events; attachment refs and raw refs
-  filter token/cookie/password/secret-like keys.
-- `email-research` can also match clear research attachment filenames such as
-  broker reports, morning notes, roadshow invites, and financial statements.
-- Does not claim investment-research status directly. Feed `lake/email/events.jsonl`
-  into `email-research` for broker research, roadshow, and IR mail evidence.
 
 ### 笔记
 

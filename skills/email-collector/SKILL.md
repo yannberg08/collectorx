@@ -1,7 +1,6 @@
 ---
 name: email-collector
 description: 采集邮箱邮件并输出CollectorX邮件事件。当用户说"查邮件"、"导出邮件"、"采集邮件"、"邮件备份"、"邮件投资讨论"时使用此skill。
-version: 0.4.1
 ---
 
 # 邮箱采集器
@@ -40,7 +39,11 @@ python <SKILL_DIR>/scripts/email_api.py status
 # 采集全部已启用邮箱
 python <SKILL_DIR>/scripts/email_api.py collect --account all --format json
 
-# 采集并导出 CollectorX Event JSONL
+# 采集并导出标准 CollectorX 包，推荐给 FinClaw 调用
+python <SKILL_DIR>/scripts/email_api.py collect --account all \
+  --out-dir ~/Desktop/email-package
+
+# 仅采集并导出 CollectorX Event JSONL
 python <SKILL_DIR>/scripts/email_api.py collect --account all --format json \
   --event-export ~/Desktop/email-events.jsonl
 
@@ -76,15 +79,21 @@ python <SKILL_DIR>/scripts/email_api.py import \
 | `--folder` | 覆盖采集文件夹 |
 | `--format` | 输出格式（json/txt） |
 | `--limit` | 限制邮件数量 |
+| `--out-dir` | IMAP 或本地导入的标准采集包输出目录 |
 
 ## 本地导入
 
-`import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV、ZIP 邮件包。它输出标准采集包：
+`collect --out-dir` 和 `import --out-dir` 都输出标准采集包：
 
 - `lake/email/events.jsonl`
 - `manifest.json`
 - `SUMMARY.md`
 
+`collect` 通过已注册的 IMAP 邮箱读取邮件，并在 manifest 中记录账户/文件夹审计：
+注册账户数、选中账户数、登录/搜索/抓取状态、匹配邮件数、抓取邮件数和失败原因。
+如果没有注册邮箱、授权失败或时间窗口没有邮件，也会输出 gap 事件和明确下一步。
+
+`import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV、ZIP 邮件包。
 默认只写入 `body_preview` 和 `attachment_refs`，附件只记录文件名、类型和大小，
 不写入附件正文。ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。
 只有显式使用 `--event-include-body` 时才会把完整正文写入事件。
@@ -100,6 +109,7 @@ python <SKILL_DIR>/scripts/email_api.py import \
 - `import` 默认只记录附件引用，不写入附件正文
 - 附件引用和 `raw_ref` 会过滤 token、cookie、password、secret 等敏感键
 - 支持多邮箱接入清单，状态文件结构为 `accounts[]`；旧版单邮箱 `account` 状态会被兼容读取
+- `manifest.evidence_policy` 明确标记邮箱是通用证据源，进入投资 Wiki 前必须经过 `email-research` lens
 
 ## CollectorX事件输出
 

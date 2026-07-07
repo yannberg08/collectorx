@@ -9,9 +9,11 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from contextlib import redirect_stdout
 from pathlib import Path
 from email.header import Header
 from email.message import EmailMessage
+from io import StringIO
 
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
@@ -207,6 +209,103 @@ def test_fake_imap_multi_folder_collection(monkeypatch=None):
     assert any(ref["filename"] == "morning-note.pdf" for item in emails for ref in item.get("attachment_refs", []))
 
 
+def test_imap_collect_standard_package():
+    import email_api
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        state_path = root / "email.json"
+        FakeIMAP.mailboxes = {
+            ("owner@gmail.com", "INBOX"): {
+                1: _mail_bytes("晨会纪要", "Analyst <a@example.com>", "Owner <owner@gmail.com>", "正文A")
+            },
+            ("owner@gmail.com", "Sent"): {
+                2: _mail_bytes("调研回复", "Owner <owner@gmail.com>", "Analyst <a@example.com>", "正文B", "roadshow.pdf")
+            },
+        }
+
+        original_imap = email_api.imaplib.IMAP4_SSL
+        original_token_file = email_api.TOKEN_FILE
+        email_api.imaplib.IMAP4_SSL = FakeIMAP
+        email_api.TOKEN_FILE = state_path
+        try:
+            email_api._save_accounts(
+                [
+                    {
+                        "id": "owner_gmail_com",
+                        "provider": "gmail",
+                        "host": "imap.gmail.com",
+                        "email": "owner@gmail.com",
+                        "password": "ok",
+                        "folders": ["INBOX", "Sent"],
+                        "days": 30,
+                        "enabled": True,
+                    }
+                ]
+            )
+            with redirect_stdout(StringIO()):
+                email_api.cmd_collect(
+                    days=None,
+                    folder=None,
+                    fmt="json",
+                    limit=None,
+                    out_dir=str(out),
+                    collected_at="2026-07-08T13:00:00+08:00",
+                    account_id="all",
+                )
+        finally:
+            email_api.imaplib.IMAP4_SSL = original_imap
+            email_api.TOKEN_FILE = original_token_file
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 2
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["schema"] == "collectorx.email_collect.manifest.v1"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["source_collection_scope"] == "authorized_imap"
+        assert manifest["collection_audit"]["source_type"] == "imap"
+        assert manifest["collection_audit"]["account_status_counts"] == {"collected": 1}
+        assert manifest["collection_audit"]["folder_status_counts"] == {"collected": 2}
+        assert manifest["field_coverage"]["fields"]["from"]["present"] == 2
+        assert manifest["evidence_policy"]["investor_wiki_requires_lens"] == "email-research"
+
+
+def test_imap_collect_gap_package_without_registered_account():
+    import email_api
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        original_token_file = email_api.TOKEN_FILE
+        email_api.TOKEN_FILE = root / "missing-email-state.json"
+        try:
+            with redirect_stdout(StringIO()):
+                email_api.cmd_collect(
+                    days=30,
+                    folder=None,
+                    fmt="json",
+                    limit=None,
+                    out_dir=str(out),
+                    collected_at="2026-07-08T13:10:00+08:00",
+                    account_id="all",
+                )
+        finally:
+            email_api.TOKEN_FILE = original_token_file
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert events[0]["data"]["gap"] == "email_imap_account_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_email_registered_account"
+        assert manifest["collection_audit"]["status"] == "no_registered_account"
+
+
 def test_local_email_import_package():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -380,6 +479,8 @@ if __name__ == "__main__":
     test_email_event_sanitizes_attachment_and_raw_ref_secrets()
     test_provider_inference_and_multi_account_state()
     test_fake_imap_multi_folder_collection()
+    test_imap_collect_standard_package()
+    test_imap_collect_gap_package_without_registered_account()
     test_local_email_import_package()
     test_local_email_import_gap_event()
     test_local_email_import_zip_package()

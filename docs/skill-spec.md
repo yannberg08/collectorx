@@ -75,7 +75,7 @@ skill-name/
 | hk-us-brokerage | 7+ | 港美股券商强交易垂直采集器 baseline；支持授权 CSV/JSON/Excel/ZIP、券商/交易表/字段覆盖 manifest 和凭证字段过滤，仍需真实富途/老虎/盈透账号验证 |
 | pro-terminal-usage | 7+ | 专业终端使用痕迹垂直采集器 baseline；支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP、终端/活动/字段覆盖 manifest 和凭证/许可字段过滤，仍需真实 Wind/Choice/iFinD/Bloomberg 账号验证 |
 | social-activity | 7+ | 社交平台用户活动通用采集器 baseline；支持授权 JSON/CSV/Excel/HTML/TXT/ZIP、弱证据策略、平台/动作/字段覆盖 manifest 和凭证字段过滤，仍需真实微博/B站/小红书账号验证 |
-| email-collector | 8+ | 已有多邮箱前置识别与邮件事件输出基线，需真实邮箱验证与安全评审 |
+| email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、账户/文件夹审计和字段覆盖已补齐，仍需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
 | notes-collector | 6+ | 笔记通用采集器 baseline；支持 Obsidian/Notion、有道/印象/Markdown/HTML/JSON/ENEX/ZIP 授权导入和平台覆盖 manifest，仍需真实 Notion/有道/印象账号验证 |
 | investor-source-collectors | 7+ | 投资分身分类、路由和 lens 证据包工具，不替代通用/垂直源采集器 |

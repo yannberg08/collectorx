@@ -176,6 +176,12 @@ def is_sensitive_key(key: Any) -> bool:
 
 def gap_event(*, collected_at: Optional[str] = None, reason: str = "email_authorized_input_missing") -> Dict[str, Any]:
     collected = collected_at or datetime.now(CN_TZ).isoformat(timespec="seconds")
+    messages = {
+        "email_authorized_export_missing": "No user-authorized local email export was provided.",
+        "email_imap_account_missing": "No enabled mailbox account was registered for IMAP collection.",
+        "email_imap_no_messages": "No messages matched the authorized IMAP account, folder, and time window.",
+        "email_imap_collection_failed": "IMAP collection did not fetch messages; inspect collection_audit for account and folder errors.",
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": f"{COLLECTOR_ID}:gap:{reason}",
@@ -187,7 +193,7 @@ def gap_event(*, collected_at: Optional[str] = None, reason: str = "email_author
         "collected_at": collected,
         "data": {
             "gap": reason,
-            "message": "No user-authorized mailbox account or local email export was provided.",
+            "message": messages.get(reason, "No user-authorized mailbox account or local email export was provided."),
         },
         "raw_ref": {"preflight": True},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},

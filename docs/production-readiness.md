@@ -16,8 +16,23 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`wechat` and `wechat-investment-dialogue` now have a standard source-to-lens
-path for FinClaw:
+`email` now has the same standard package contract for registered IMAP mailboxes
+as it already had for local authorized exports:
+
+- `email_api.py collect --account all --out-dir <dir>` writes
+  `lake/email/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
+- Manifest output records account/folder audit, field coverage, body policy,
+  attachment policy, and the generic-to-lens evidence boundary.
+- Gap events distinguish missing registered mailbox, no messages in the selected
+  time window, and IMAP collection failure.
+- Full bodies remain excluded by default and require explicit
+  `--event-include-body`; attachment bodies are never written.
+- This upgrades the real-mailbox product path, but it does not claim real
+  mailbox validation on the current machine because no mailbox is registered in
+  the local email collector state.
+
+The prior completed wave: `wechat` and `wechat-investment-dialogue` now have a
+standard source-to-lens path for FinClaw:
 
 - `wechat_query.py --collect --out-dir <dir>` writes
   `lake/wechat/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
@@ -44,7 +59,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; manifest now records extraction policy, skipped extensions, parser counts, and content-read counts | Broader private PDF/XLSX/DOCX samples, screenshot OCR decision, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance and path-traversal skipping; activity also supports XLSX/XLSM, nested Snowball-like payloads, raw sanitization, evidence policy, and SoulMirror sync; neither is a real account adapter | Real Xueqiu login/export discovery, activity pagination, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/JSON/CSV/ZIP, platform inference, numeric asset fields, platform coverage, field coverage, asset value summary, raw sanitization, ZIP provenance, and SoulMirror sync; no real account export found yet | Per-platform export/UI adapters, real account validation, complete account-boundary proof |
-| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; local EML/MBOX/JSON/CSV/ZIP import package works with sanitized attachment refs, ZIP member provenance, no full body by default, IMAP attachment refs, and research-attachment filename matching; real mailbox validation still blocked by missing registered mailbox | Register mailbox, real mailbox validation, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
+| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir` and local EML/MBOX/JSON/CSV/ZIP `import --out-dir` both produce standard packages with account/folder audit, field coverage, sanitized attachment refs, body/attachment policy, generic-to-lens evidence boundary, and research-attachment filename matching; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, real mailbox validation, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
 
 ## P1 Status
 

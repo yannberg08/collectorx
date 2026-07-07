@@ -24,6 +24,8 @@ scope:
     - date
     - body_preview
     - attachment_refs
+    - imap_account_folder_audit
+    - field_coverage
     - archive_member_provenance
   excludes:
     - mailbox_passwords
@@ -41,13 +43,15 @@ prompt: |
   IMAP 采集：
     python3 skills/email-collector/scripts/email_api.py collect \
       --account all \
-      --event-export <输出JSONL>
+      --out-dir <输出目录>
 
   本地授权导入：
     python3 skills/email-collector/scripts/email_api.py import \
       --input <用户授权的 EML/MBOX/JSON/CSV/ZIP 邮件导出文件或目录> \
       --out-dir <输出目录>
 
-  默认只输出 body_preview 和 attachment_refs；除非用户显式授权
-  --event-include-body，否则不把完整正文写入事件。ZIP 包保留
-  archive.zip::member 来源，并跳过路径穿越成员。
+  IMAP 和本地导入都会输出 lake/email/events.jsonl、manifest.json、
+  SUMMARY.md。默认只输出 body_preview 和 attachment_refs；除非用户显式
+  授权 --event-include-body，否则不把完整正文写入事件。ZIP 包保留
+  archive.zip::member 来源，并跳过路径穿越成员。投资相关筛选必须交给
+  email-research lens。

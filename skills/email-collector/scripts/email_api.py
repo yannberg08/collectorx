@@ -297,6 +297,7 @@ def cmd_collect(
     fmt: str = "json",
     limit: int = None,
     event_export: str = None,
+    out_dir: str = None,
     source: str = "IMAP 邮件",
     collected_at: str = None,
     event_include_body: bool = False,
@@ -306,22 +307,51 @@ def cmd_collect(
     state = _load_state()
     accounts = _select_accounts(state, account_id)
     if not accounts:
+        if out_dir or event_export:
+            audit = build_imap_collection_audit(
+                accounts=[],
+                account_audits=[],
+                account_id=account_id,
+                status="no_registered_account",
+            )
+            events = [gap_event(collected_at=collected_at, reason="email_imap_account_missing")]
+            if event_export:
+                write_events_jsonl(event_export, events)
+            if out_dir:
+                write_standard_email_package(
+                    out_dir,
+                    events,
+                    collected_at=collected_at,
+                    collection_audit=audit,
+                    package_schema="collectorx.email_collect.manifest.v1",
+                )
+            print(json.dumps({"collector": "email", "event_count": len(events)}, ensure_ascii=False, sort_keys=True))
+            return
         print("ERROR: 未找到邮箱账户，请先运行 register")
         sys.exit(1)
 
     try:
         emails = []
+        account_audits = []
         for account in accounts:
             account_days = days if days is not None else int(account.get("days", 30))
             folders = [folder] if folder else account.get("folders") or list(DEFAULT_FOLDERS)
-            emails.extend(
-                _collect_account_emails(
-                    account,
-                    days=account_days,
-                    folders=folders,
-                    limit=limit,
-                )
+            account_emails, account_audit = _collect_account_emails_with_audit(
+                account,
+                days=account_days,
+                folders=folders,
+                limit=limit,
             )
+            emails.extend(account_emails)
+            account_audits.append(account_audit)
+
+        audit_status = resolve_imap_audit_status(account_audits, emails)
+        collection_audit = build_imap_collection_audit(
+            accounts=accounts,
+            account_audits=account_audits,
+            account_id=account_id,
+            status=audit_status,
+        )
 
         if fmt == "json":
             print(json.dumps(emails, ensure_ascii=False, indent=2))
@@ -332,7 +362,8 @@ def cmd_collect(
                 print(f"Body: {e['body'][:200]}...")
                 print("---")
 
-        if event_export:
+        events = []
+        if emails:
             events = emails_to_events(
                 emails,
                 source=source,
@@ -341,8 +372,22 @@ def cmd_collect(
                 collected_at=collected_at,
                 include_body=event_include_body,
             )
+        elif event_export or out_dir:
+            events = [gap_event(collected_at=collected_at, reason=gap_reason_for_imap_audit(audit_status))]
+
+        if event_export:
             write_events_jsonl(event_export, events)
             print(f"事件导出完成: {len(events)} 条 -> {event_export}")
+
+        if out_dir:
+            write_standard_email_package(
+                out_dir,
+                events,
+                collected_at=collected_at,
+                collection_audit=collection_audit,
+                package_schema="collectorx.email_collect.manifest.v1",
+            )
+            print(f"标准采集包已写入: {out_dir}")
 
         print(f"采集完成: {len(emails)} 封邮件")
 
@@ -375,11 +420,13 @@ def cmd_import(
     if event_export:
         write_events_jsonl(event_export, events)
     if out_dir:
-        out = Path(out_dir).expanduser()
-        write_events_jsonl(str(out / "lake" / "email" / "events.jsonl"), events)
-        manifest = build_import_manifest(events, collected_at=collected_at, import_audit=import_audit)
-        write_json(str(out / "manifest.json"), manifest)
-        write_import_summary(out / "SUMMARY.md", manifest)
+        write_standard_email_package(
+            out_dir,
+            events,
+            collected_at=collected_at,
+            collection_audit=import_audit,
+            package_schema="collectorx.email_import.manifest.v1",
+        )
 
     print(json.dumps({"collector": "email", "event_count": len(events)}, ensure_ascii=False, sort_keys=True))
 
@@ -626,25 +673,62 @@ def _normalize_key(value) -> str:
     return str(value).lower().replace("_", "").replace("-", "").replace(" ", "")
 
 
-def build_import_manifest(events: list[dict], *, collected_at: str = None, import_audit: dict = None) -> dict:
+def write_standard_email_package(
+    out_dir: str,
+    events: list[dict],
+    *,
+    collected_at: str = None,
+    collection_audit: dict = None,
+    package_schema: str,
+) -> None:
+    out = Path(out_dir).expanduser()
+    write_events_jsonl(str(out / "lake" / "email" / "events.jsonl"), events)
+    manifest = build_email_manifest(
+        events,
+        collected_at=collected_at,
+        collection_audit=collection_audit,
+        package_schema=package_schema,
+    )
+    write_json(str(out / "manifest.json"), manifest)
+    write_email_summary(out / "SUMMARY.md", manifest)
+
+
+def build_email_manifest(
+    events: list[dict],
+    *,
+    collected_at: str = None,
+    collection_audit: dict = None,
+    package_schema: str,
+) -> dict:
     kind_counts = Counter(event["kind"] for event in events)
     folder_counts = Counter((event.get("data") or {}).get("folder", "unknown") for event in events if event["kind"] == "email")
     mailbox_counts = Counter((event.get("data") or {}).get("mailbox", "unknown") for event in events if event["kind"] == "email")
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    audit = collection_audit or {}
+    is_imap = package_schema == "collectorx.email_collect.manifest.v1"
+    if gap_only:
+        status = readiness_status_for_gap(events[0], audit=audit, is_imap=is_imap)
+        source_scope = "none"
+        next_action = next_action_for_gap(events[0], is_imap=is_imap)
+    else:
+        status = "events_collected"
+        source_scope = "authorized_imap" if is_imap else "partial_authorized_input"
+        next_action = "Feed lake/email/events.jsonl into email-research lens."
     return {
-        "schema": "collectorx.email_import.manifest.v1",
+        "schema": package_schema,
         "collector": "email",
         "collected_at": collected_at or datetime.now().astimezone().isoformat(timespec="seconds"),
         "event_count": len(events),
         "kind_counts": dict(sorted(kind_counts.items())),
         "folder_counts": dict(sorted(folder_counts.items())),
         "mailbox_counts": dict(sorted(mailbox_counts.items())),
+        "field_coverage": build_email_field_coverage(events),
         "collection_readiness": {
-            "status": "needs_email_authorized_export" if gap_only else "events_collected",
+            "status": status,
             "can_enter_finclaw": bool(events) and not gap_only,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": source_scope,
             "full_body_included": any("body" in (event.get("data") or {}) for event in events),
-            "next_action": "Provide authorized local email exports." if gap_only else "Feed lake/email/events.jsonl into email-research lens.",
+            "next_action": next_action,
         },
         "body_policy": {
             "full_body_included": any("body" in (event.get("data") or {}) for event in events),
@@ -656,7 +740,75 @@ def build_import_manifest(events: list[dict], *, collected_at: str = None, impor
             "attachment_bodies_included": False,
             "retained_fields": ["filename", "content_type", "size"],
         },
-        "collection_audit": import_audit or {},
+        "evidence_policy": {
+            "generic_collector": True,
+            "investor_wiki_requires_lens": "email-research",
+            "collector_claims_investment_conclusion": False,
+            "broker_trade_fact_source": False,
+        },
+        "collection_audit": audit,
+    }
+
+
+def build_import_manifest(events: list[dict], *, collected_at: str = None, import_audit: dict = None) -> dict:
+    return build_email_manifest(
+        events,
+        collected_at=collected_at,
+        collection_audit=import_audit,
+        package_schema="collectorx.email_import.manifest.v1",
+    )
+
+
+def readiness_status_for_gap(event: dict, *, audit: dict, is_imap: bool) -> str:
+    reason = (event.get("data") or {}).get("gap")
+    if reason == "email_imap_account_missing":
+        return "needs_email_registered_account"
+    if reason == "email_imap_no_messages":
+        return "no_matching_mail_in_time_window"
+    if reason == "email_imap_collection_failed":
+        return audit.get("status") or "imap_collection_failed"
+    if reason == "email_authorized_export_missing":
+        return "needs_email_authorized_export"
+    return "collection_gap"
+
+
+def next_action_for_gap(event: dict, *, is_imap: bool) -> str:
+    reason = (event.get("data") or {}).get("gap")
+    if reason == "email_imap_account_missing":
+        return "Register at least one mailbox with password_env, then run collect --out-dir again."
+    if reason == "email_imap_no_messages":
+        return "Increase --days, review folders, or feed another authorized email source."
+    if reason == "email_imap_collection_failed":
+        return "Review collection_audit account/folder errors and rerun after fixing authorization."
+    if reason == "email_authorized_export_missing":
+        return "Provide authorized local email exports."
+    return "Resolve the collection gap and rerun the collector."
+
+
+def build_email_field_coverage(events: list[dict]) -> dict:
+    email_events = [event for event in events if event.get("kind") == "email"]
+    fields = [
+        "mailbox",
+        "folder",
+        "from",
+        "to",
+        "cc",
+        "subject",
+        "body_preview",
+        "has_body",
+        "attachment_refs",
+        "message_id",
+    ]
+    coverage = {}
+    for field in fields:
+        if field == "message_id":
+            count = sum(1 for event in email_events if (event.get("raw_ref") or {}).get("message_id"))
+        else:
+            count = sum(1 for event in email_events if (event.get("data") or {}).get(field) not in (None, "", []))
+        coverage[field] = {"present": count, "missing": max(len(email_events) - count, 0)}
+    return {
+        "email_event_count": len(email_events),
+        "fields": coverage,
     }
 
 
@@ -674,13 +826,14 @@ def finalize_import_audit(audit: dict) -> None:
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
 
-def write_import_summary(path: Path, manifest: dict) -> None:
+def write_email_summary(path: Path, manifest: dict) -> None:
     lines = [
-        "# Email Collector Import Package",
+        "# Email Collector Package",
         "",
         "- collector: `email`",
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- source_scope: `{manifest['collection_readiness']['source_collection_scope']}`",
         "",
         "Local email exports are generic email evidence. Use the `email-research` lens for broker research, roadshow, and IR mail evidence.",
     ]
@@ -711,6 +864,63 @@ def cmd_status():
         print("未注册邮箱账户")
 
 
+def build_imap_collection_audit(
+    *,
+    accounts: list[dict],
+    account_audits: list[dict],
+    account_id: str,
+    status: str,
+) -> dict:
+    status_counts = Counter(item.get("status", "unknown") for item in account_audits)
+    folder_status_counts = Counter(
+        folder.get("status", "unknown")
+        for item in account_audits
+        for folder in item.get("folder_results", [])
+    )
+    return {
+        "source_type": "imap",
+        "requested_account": account_id or "all",
+        "configured_account_count": len(accounts),
+        "selected_account_count": len(accounts),
+        "account_status_counts": dict(sorted(status_counts.items())),
+        "folder_status_counts": dict(sorted(folder_status_counts.items())),
+        "collected_email_count": sum(int(item.get("collected_email_count", 0)) for item in account_audits),
+        "matched_message_count": sum(int(item.get("matched_message_count", 0)) for item in account_audits),
+        "fetched_message_count": sum(int(item.get("fetched_message_count", 0)) for item in account_audits),
+        "skipped_fetch_count": sum(int(item.get("skipped_fetch_count", 0)) for item in account_audits),
+        "status": status,
+        "read_only": True,
+        "password_material_in_output": False,
+        "accounts": account_audits,
+    }
+
+
+def resolve_imap_audit_status(account_audits: list[dict], emails: list[dict]) -> str:
+    if emails:
+        failed_count = sum(1 for item in account_audits if item.get("status") not in {"collected", "no_messages"})
+        return "partial_success" if failed_count else "events_collected"
+    statuses = {item.get("status") for item in account_audits}
+    if not statuses:
+        return "no_registered_account"
+    if statuses == {"no_messages"}:
+        return "no_matching_mail_in_time_window"
+    if "missing_password" in statuses:
+        return "missing_password_env"
+    if "login_failed" in statuses:
+        return "login_failed"
+    if "connect_failed" in statuses:
+        return "connect_failed"
+    return "imap_collection_failed"
+
+
+def gap_reason_for_imap_audit(status: str) -> str:
+    if status == "no_registered_account":
+        return "email_imap_account_missing"
+    if status == "no_matching_mail_in_time_window":
+        return "email_imap_no_messages"
+    return "email_imap_collection_failed"
+
+
 def _collect_account_emails(
     account: dict,
     *,
@@ -718,51 +928,146 @@ def _collect_account_emails(
     folders: list[str],
     limit: int = None,
 ) -> list[dict]:
+    emails, audit = _collect_account_emails_with_audit(account, days=days, folders=folders, limit=limit)
+    if audit.get("status") in {"collected", "no_messages"}:
+        return emails
+    print(f"ERROR: {account.get('email')} 邮箱采集失败: {audit.get('status')}")
+    sys.exit(1)
+
+
+def _collect_account_emails_with_audit(
+    account: dict,
+    *,
+    days: int,
+    folders: list[str],
+    limit: int = None,
+) -> tuple[list[dict], dict]:
+    audit = {
+        "account_id": account.get("id") or _account_id(account.get("email", "")),
+        "email": account.get("email"),
+        "provider": account.get("provider", "custom"),
+        "host": account.get("host"),
+        "folders_requested": list(folders),
+        "days": days,
+        "limit": limit,
+        "password_env_configured": bool(account.get("password_env")),
+        "legacy_password_present": bool(account.get("password")),
+        "folder_results": [],
+        "matched_message_count": 0,
+        "fetched_message_count": 0,
+        "skipped_fetch_count": 0,
+        "collected_email_count": 0,
+        "status": "started",
+    }
     password = _resolve_password(account)
     if not password:
-        print(f"ERROR: {account.get('email')} 未找到邮箱密码，请检查 --password 或 --password-env 配置")
-        sys.exit(1)
+        audit["status"] = "missing_password"
+        audit["error"] = "Password environment variable is not set."
+        return [], audit
 
-    mail = imaplib.IMAP4_SSL(account["host"])
-    mail.login(account["email"], password)
     collected: list[dict] = []
+    mail = None
+    try:
+        mail = imaplib.IMAP4_SSL(account["host"])
+    except Exception as exc:
+        audit["status"] = "connect_failed"
+        audit["error"] = safe_error_text(exc)
+        return collected, audit
+
+    try:
+        mail.login(account["email"], password)
+    except Exception as exc:
+        audit["status"] = "login_failed"
+        audit["error"] = safe_error_text(exc)
+        try:
+            mail.logout()
+        except Exception:
+            pass
+        return collected, audit
+
     try:
         for folder_name in folders:
-            mail.select(folder_name)
-            since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
-            status, messages = mail.search(None, f'(SINCE "{since_date}")')
-            if status != "OK":
-                print(f"{account['email']} / {folder_name} 搜索失败: {status}")
-                continue
-
-            msg_ids = messages[0].split()
-            if limit:
-                msg_ids = msg_ids[-limit:]
-
-            for msg_id in msg_ids:
-                status, msg_data = mail.fetch(msg_id, "(RFC822)")
+            folder_audit = {
+                "folder": folder_name,
+                "status": "started",
+                "matched_message_count": 0,
+                "fetched_message_count": 0,
+                "skipped_fetch_count": 0,
+            }
+            audit["folder_results"].append(folder_audit)
+            try:
+                status, _select_data = mail.select(folder_name)
                 if status != "OK":
+                    folder_audit["status"] = "select_failed"
+                    folder_audit["select_status"] = status
+                    continue
+                since_date = (datetime.now() - timedelta(days=days)).strftime("%d-%b-%Y")
+                status, messages = mail.search(None, f'(SINCE "{since_date}")')
+                if status != "OK":
+                    folder_audit["status"] = "search_failed"
+                    folder_audit["search_status"] = status
                     continue
 
-                msg = email.message_from_bytes(msg_data[0][1])
-                collected.append(
-                    {
-                        "id": msg_id.decode(),
-                        "message_id": decode_mime_header(msg["Message-ID"]),
-                        "mailbox": account["email"],
-                        "folder": folder_name,
-                        "from": decode_mime_header(msg["From"]),
-                        "to": decode_mime_header(msg["To"]),
-                        "cc": decode_mime_header(msg["Cc"]),
-                        "subject": decode_mime_header(msg["Subject"]),
-                        "date": msg["Date"],
-                        "body": get_email_body(msg)[:5000],
-                        "attachment_refs": get_email_attachments(msg),
-                    }
-                )
+                msg_ids = messages[0].split()
+                folder_audit["matched_message_count"] = len(msg_ids)
+                audit["matched_message_count"] += len(msg_ids)
+                if limit:
+                    msg_ids = msg_ids[-limit:]
+
+                for msg_id in msg_ids:
+                    try:
+                        status, msg_data = mail.fetch(msg_id, "(RFC822)")
+                        if status != "OK":
+                            folder_audit["skipped_fetch_count"] += 1
+                            audit["skipped_fetch_count"] += 1
+                            continue
+
+                        msg = email.message_from_bytes(msg_data[0][1])
+                        collected.append(
+                            {
+                                "id": msg_id.decode(),
+                                "message_id": decode_mime_header(msg["Message-ID"]),
+                                "mailbox": account["email"],
+                                "folder": folder_name,
+                                "from": decode_mime_header(msg["From"]),
+                                "to": decode_mime_header(msg["To"]),
+                                "cc": decode_mime_header(msg["Cc"]),
+                                "subject": decode_mime_header(msg["Subject"]),
+                                "date": msg["Date"],
+                                "body": get_email_body(msg)[:5000],
+                                "attachment_refs": get_email_attachments(msg),
+                            }
+                        )
+                        folder_audit["fetched_message_count"] += 1
+                        audit["fetched_message_count"] += 1
+                    except Exception as exc:
+                        folder_audit["skipped_fetch_count"] += 1
+                        audit["skipped_fetch_count"] += 1
+                        folder_audit["last_fetch_error"] = safe_error_text(exc)
+                folder_audit["status"] = "collected" if folder_audit["fetched_message_count"] else "no_messages"
+            except Exception as exc:
+                folder_audit["status"] = "folder_error"
+                folder_audit["error"] = safe_error_text(exc)
     finally:
-        mail.logout()
-    return collected
+        try:
+            mail.logout()
+        except Exception:
+            pass
+
+    audit["collected_email_count"] = len(collected)
+    if collected:
+        audit["status"] = "collected"
+    elif any(folder.get("status") in {"select_failed", "search_failed"} for folder in audit["folder_results"]):
+        audit["status"] = "folder_failed"
+    else:
+        audit["status"] = "no_messages"
+    return collected, audit
+
+
+def safe_error_text(exc: Exception) -> str:
+    text = str(exc) or exc.__class__.__name__
+    text = text.replace("\n", " ").replace("\r", " ").strip()
+    return text[:240]
 
 
 def _resolve_password(account: dict) -> str:
@@ -801,6 +1106,7 @@ def main():
     col_parser.add_argument("--format", choices=["json", "txt"], default="json")
     col_parser.add_argument("--limit", type=int, help="限制数量")
     col_parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
+    col_parser.add_argument("--out-dir", help="输出标准采集包目录")
     col_parser.add_argument("--source", default="IMAP 邮件", help="事件source字段")
     col_parser.add_argument("--collected-at", help="事件collected_at字段，默认当前时间")
     col_parser.add_argument("--event-include-body", action="store_true", help="事件中包含完整正文，默认只包含预览")
@@ -841,6 +1147,7 @@ def main():
             args.format,
             args.limit,
             event_export=args.event_export,
+            out_dir=args.out_dir,
             source=args.source,
             collected_at=args.collected_at,
             event_include_body=args.event_include_body,

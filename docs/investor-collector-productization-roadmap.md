@@ -281,6 +281,32 @@ Findings:
 - Fixture validation covers ZIP import, archive member provenance, traversal
   skipping, value summary, and field coverage.
 
+### Wave B5: P0 Email IMAP package and audit pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-imap-package-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.0`.
+- Added `email_api.py collect --account all --out-dir <dir>` for registered
+  IMAP mailboxes, matching the local import package contract.
+- Standard IMAP packages now include `lake/email/events.jsonl`,
+  `manifest.json`, and `SUMMARY.md`.
+- Manifest output records account/folder audit, selected/configured account
+  counts, login/search/fetch status counts, matched and fetched message counts,
+  field coverage, body policy, attachment policy, and generic-to-lens evidence
+  policy.
+- Gap packages now distinguish missing registered mailbox, no messages in the
+  selected time window, and IMAP collection failure.
+- Fixture validation covers fake IMAP multi-folder package output and missing
+  registered mailbox gap output.
+- Current local machine still has no registered mailbox, so this pass does not
+  claim real mailbox G3 validation.
+
 ### Wave C: P1 notes productization pass 1
 
 Status: `completed-baseline`

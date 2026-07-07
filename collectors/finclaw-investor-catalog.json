@@ -101,10 +101,10 @@
       "readiness": "baseline+audit",
       "gate": "G2",
       "finclaw_action": "authorized-imap-or-local-email-import",
-      "cli": "python3 skills/email-collector/scripts/email_api.py import --input <authorized-email-export> --out-dir <out-dir>",
-      "collects": "Authorized email metadata, body previews, sender/recipient fields, message IDs, attachment refs, and archive provenance.",
+      "cli": "python3 skills/email-collector/scripts/email_api.py collect --account all --out-dir <out-dir>",
+      "collects": "Authorized IMAP or local email metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, field coverage, and archive provenance.",
       "must_not_collect": "Full body unless explicitly authorized, attachment bodies by default, tokens, cookies, or passwords.",
-      "production_gap": "Register real mailbox, validate broker/IR sender matching, and run no-full-body leakage review."
+      "production_gap": "Register real mailbox credentials via password_env, validate broker/IR sender matching, and run no-full-body leakage review."
     },
     {
       "id": "email-research",
