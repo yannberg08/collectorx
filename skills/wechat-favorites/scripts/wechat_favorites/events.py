@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional
 COLLECTOR = "wechat-favorites"
 CN_TZ = timezone(timedelta(hours=8))
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "key")
+EXPECTED_WECHAT_ACTIONS = ("favorite", "read", "share", "saved_file")
 
 
 def now_iso() -> str:
@@ -26,7 +27,8 @@ def favorite_to_event(
     row: int,
     collected_at: Optional[str] = None,
 ) -> Dict[str, Any]:
-    title = first(record, ["title", "name", "subject", "标题", "文章标题"]) or path.stem
+    path_label = first(record, ["path", "file", "source_path"]) or str(path)
+    title = first(record, ["title", "name", "subject", "标题", "文章标题"]) or Path(path_label).stem
     url = first(record, ["url", "link", "href", "article_url", "原文链接", "链接"])
     account = first(record, ["source_account", "account", "author", "publisher", "公众号", "作者", "来源"])
     action_type = normalize_action(first(record, ["action_type", "action", "event", "type", "动作", "行为"]) or infer_action(record, path))
@@ -49,7 +51,7 @@ def favorite_to_event(
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(path, row, title, url, action_time, action_type),
+        "id": stable_id(path_label, row, title, url, action_time, action_type),
         "collector": COLLECTOR,
         "source": "微信收藏/公众号文章",
         "owner_scope": "personal",
@@ -58,7 +60,7 @@ def favorite_to_event(
         "collected_at": collected_at or now_iso(),
         "data": data,
         "raw_ref": {
-            "path": str(path),
+            "path": path_label,
             "row": row,
             "url": url,
             "source_account": account,
@@ -100,7 +102,16 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
     kind_counts = Counter(event["kind"] for event in events)
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
     item_counts = Counter((event.get("data") or {}).get("item_type", "unknown") for event in events)
+    source_accounts = {
+        str((event.get("data") or {}).get("source_account"))
+        for event in events
+        if (event.get("data") or {}).get("source_account")
+    }
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    observed_actions = sorted(action for action, count in action_counts.items() if count and action != "unknown")
+    observed_expected = [action for action in EXPECTED_WECHAT_ACTIONS if action_counts.get(action)]
+    missing_expected = [action for action in EXPECTED_WECHAT_ACTIONS if not action_counts.get(action)]
+    unknown_action_count = sum(count for action, count in action_counts.items() if action not in EXPECTED_WECHAT_ACTIONS)
     return {
         "schema": "collectorx.wechat_favorites.manifest.v1",
         "collector": COLLECTOR,
@@ -109,14 +120,33 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(kind_counts.items())),
         "action_type_counts": dict(sorted(action_counts.items())),
         "item_type_counts": dict(sorted(item_counts.items())),
+        "source_account_count": len(source_accounts),
+        "action_coverage": {
+            "expected_p1_actions": list(EXPECTED_WECHAT_ACTIONS),
+            "observed_actions": observed_actions,
+            "observed_expected_actions": observed_expected,
+            "missing_expected_actions": missing_expected,
+            "action_type_counts": dict(sorted(action_counts.items())),
+            "unknown_action_count": unknown_action_count,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_wechat_favorites_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_investment_article_favorites": False,
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "action_coverage_status": action_coverage_status(events, missing_expected),
             "next_action": "Provide authorized WeChat favorites or public-account article exports." if gap_only else "Feed events into wechat-article-favorites lens.",
         },
     }
+
+
+def action_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:
+    if not events or all((event.get("data") or {}).get("gap") for event in events):
+        return "no_action_observed"
+    if not missing_expected:
+        return "all_expected_actions_observed"
+    return "partial_expected_actions_observed"
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -139,6 +169,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- observed_actions: `{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
+        f"- missing_expected_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
         "",
         "Generic WeChat favorite/article events are not written to the investor Wiki directly. Use the wechat-article-favorites lens.",
     ]

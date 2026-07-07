@@ -84,7 +84,7 @@ Operational docs:
 | `wecom` | `collaboration-exports` | Authorized local export baseline for WeCom messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV/ZIP event-package baseline with Apple/Google/Outlook/Feishu/DingTalk/WeCom/Tencent Meeting platform coverage; investment filtering handled by `task-calendar-investor` |
 | `meeting-artifacts` | `meeting-artifacts` | Authorized local/platform-export/ZIP baseline for meeting minutes, transcripts, HTML/CSV/JSON exports, participants, links, platform normalization, and platform coverage manifest; account API adapters pending |
-| `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |
+| `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites/read/share file/folder/ZIP baseline with action coverage manifest; real WeChat favorites adapter pending |
 | `social-activity` | `social-activity` | Local JSON/CSV/Excel activity baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, engagement counts, and weak influence signals |
 
 ### Vertical Investor Collectors
@@ -111,7 +111,7 @@ Operational docs:
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; upstream task/calendar platform coverage manifests available |
-| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; saved-article validation done |
+| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; upstream saved/read/share action coverage available |
 | `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator and social influence signals |
 
 Status legend:

@@ -18,11 +18,15 @@ scope:
     - authors
     - urls
     - saved_at
+    - action_type
+    - source_account
+    - action_coverage_manifest
   excludes:
     - public_account_full_crawl
     - non_owner_read_history
     - credentials
 
 description: |
-  微信收藏和公众号文章动作的通用采集器。它采用户自己的收藏、保存、转发和文章指针；
+  微信收藏和公众号文章动作的通用采集器。它采用户自己的收藏、保存、阅读、转发和文章指针；
+  支持本地文件、导出目录和 ZIP 授权包，并在 manifest 中报告动作覆盖情况。
   wechat-article-favorites lens 只筛投资类公众号和炒股文章。

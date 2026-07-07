@@ -379,14 +379,17 @@ Current status:
 
 ```bash
 python3 skills/wechat-favorites/scripts/wechat_favorites.py collect \
-  --input <authorized-wechat-favorites-or-saved-article-folder> \
+  --input <authorized-wechat-favorites-saved-article-folder-or-zip> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, and TXT saved-article
-  records into generic `wechat-favorites` events.
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, and ZIP
+  saved-article records into generic `wechat-favorites` events.
+- Writes `manifest.action_coverage` with expected user actions: favorite,
+  read, share, and saved file.
+- Captures source account count and filters credential-like raw keys.
 - Does not claim investment-article status directly.
 - Feed `lake/wechat-favorites/events.jsonl` into `wechat-article-favorites`
   lens for investment public-account articles and saved reading sources.
