@@ -1,0 +1,30 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: investment-notes
+display_name: 投资笔记 Lens
+refresh_interval: 12h
+mode: snapshot
+time_field: updated_at
+armed: false
+category: lens
+owner_scope: personal
+upstream_collectors:
+  - notes
+skill: investor-source-collectors
+
+scope:
+  consumes:
+    - lake/notes/events.jsonl
+  collects:
+    - investment_notes
+    - review_notes
+    - rules_library
+    - trade_checklists
+    - valuation_assumptions
+  excludes:
+    - all_life_notes
+    - note_service_tokens
+    - unrelated_knowledge_base
+
+description: |
+  笔记应用本身是通用采集器。本 lens 只筛 Obsidian、Notion、有道云、印象笔记中的投资笔记。

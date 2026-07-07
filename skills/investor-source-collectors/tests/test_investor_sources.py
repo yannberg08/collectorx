@@ -1,0 +1,84 @@
+#!/usr/bin/env python3
+"""Tests for investor-source-collectors."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "investor_sources.py"
+
+
+def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([sys.executable, str(SCRIPT), *args], text=True, capture_output=True, check=True)
+
+
+def test_list_sources_contains_all_priorities() -> None:
+    result = run_cli("list-sources", "--format", "json")
+    profiles = json.loads(result.stdout)
+    ids = {profile["id"] for profile in profiles}
+    assert "wechat-investment-dialogue" in ids
+    assert "xueqiu-investor-activity" in ids
+    assert "social-investment-influence" in ids
+    priorities = {profile["priority"] for profile in profiles}
+    assert {"P0", "P1", "P2"}.issubset(priorities)
+    classes = {profile["collector_class"] for profile in profiles}
+    assert {"vertical", "lens"}.issubset(classes)
+
+
+def test_collect_xueqiu_csv_outputs_event_and_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        csv_path = root / "xueqiu.csv"
+        out_dir = root / "out"
+        csv_path.write_text("code,name,group,note\n600519,贵州茅台,白酒,长期观察\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "xueqiu-investor-activity",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-07T15:00:00+08:00",
+        )
+        event_path = out_dir / "lake" / "xueqiu-investor-activity" / "events.jsonl"
+        events = [json.loads(line) for line in event_path.read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["schema"] == "collectorx.event.v1"
+        assert events[0]["kind"] == "watchlist"
+        assert events[0]["data"]["normalized"]["symbol"] == "600519"
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["schema"] == "finclaw.investor_wiki_evidence.v1"
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+
+
+def test_collect_without_input_writes_gap_event() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out_dir = Path(tmp) / "out"
+        run_cli(
+            "collect",
+            "--source",
+            "china-wealth-assets",
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-07T15:00:00+08:00",
+        )
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_source_authorization_or_input"
+        event = json.loads((out_dir / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["data"]["payload"]["signal_type"] == "collector_preflight_gap"
+
+
+if __name__ == "__main__":
+    test_list_sources_contains_all_priorities()
+    test_collect_xueqiu_csv_outputs_event_and_evidence()
+    test_collect_without_input_writes_gap_event()
+    print("investor-source-collectors tests passed.")

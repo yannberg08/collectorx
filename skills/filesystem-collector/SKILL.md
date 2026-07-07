@@ -1,0 +1,44 @@
+---
+name: filesystem-collector
+description: 本地文件通用采集器，复刻 SoulMirror 已验证的 filesystem driver 边界：只扫描用户授权目录中的人类文档元数据，输出路径、大小、mtime、扩展名等 CollectorX file 事件，不读取正文。用于本地文件、研报、PDF、Excel、Word、Markdown、幻灯片等文件证据进入 lake，投资分身再通过 research-documents lens 筛选投研文件。
+---
+
+# 本地文件采集器
+
+本技能是 CollectorX 的开源本地文件采集器。行为对齐 SoulMirror `driver=filesystem`：扫描本地“有内容的人类文档”，只采元数据，不读正文。
+
+## 采什么
+
+- 文件路径、文件名、扩展名、大小、mtime。
+- 文档类、表格类、幻灯类、笔记类文件。
+- 默认目录：`~/Documents`、`~/Desktop`、`~/Downloads`，macOS 追加 iCloud Drive，Windows 追加 OneDrive。
+
+## 不采什么
+
+- 不读取正文。
+- 不扫描全盘。
+- 不进入 `node_modules`、`.git`、`build`、`dist`、缓存和虚拟环境。
+- 不采超过大小上限的文件。
+
+## 使用
+
+```bash
+python <SKILL_DIR>/scripts/filesystem_query.py collect \
+  --root ~/Documents \
+  --out-dir ~/Desktop/filesystem-collect
+
+python <SKILL_DIR>/scripts/filesystem_query.py collect \
+  --root ~/Documents/research \
+  --event-export ~/Desktop/filesystem-events.jsonl
+```
+
+输出：
+
+```text
+<out-dir>/
+├── lake/filesystem/events.jsonl
+├── manifest.json
+└── SUMMARY.md
+```
+
+投资分身不直接消费全量本地文件；`research-documents` lens 从 `filesystem` lake 中筛选研报、财报、公告批注、估值表等投研文件。

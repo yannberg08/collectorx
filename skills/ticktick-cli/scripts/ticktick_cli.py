@@ -24,10 +24,27 @@ try:
 except (AttributeError, OSError):
     pass
 
-import typer
-from pydantic import BaseModel
-from rich.console import Console
-from rich.table import Table
+try:
+    import typer
+    from pydantic import BaseModel
+    from rich.console import Console
+    from rich.table import Table
+except ModuleNotFoundError as exc:
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        print(
+            "usage: ticktick_cli.py [OPTIONS] COMMAND [ARGS]...\n\n"
+            "滴答清单 OpenAPI CLI。\n\n"
+            "Commands:\n"
+            "  project   项目相关操作\n"
+            "  task      任务相关操作\n\n"
+            "Note: full commands require uv script dependencies: "
+            "httpx, typer, pydantic, rich."
+        )
+        raise SystemExit(0)
+    raise SystemExit(
+        f"Missing dependency {exc.name!r}. Run this script through `uv run` "
+        "or install the declared script dependencies in an isolated environment."
+    )
 
 ENV_BASE_URL = "TICKTICK_BASE_URL"
 ENV_TIMEOUT = "TICKTICK_TIMEOUT"

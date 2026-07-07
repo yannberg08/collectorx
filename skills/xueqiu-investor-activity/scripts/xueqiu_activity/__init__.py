@@ -1,0 +1,2 @@
+"""Xueqiu investor activity collector."""
+

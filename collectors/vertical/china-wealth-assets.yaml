@@ -1,0 +1,36 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: china-wealth-assets
+display_name: 中国基金理财资产
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: vertical
+owner_scope: personal
+local_only: true
+skill: china-wealth-assets
+
+scope:
+  channels:
+    - alipay
+    - tiantian-fund
+    - danjuan
+    - qieman
+    - bank-wealth
+  collects:
+    - asset_snapshots
+    - fund_holdings
+    - wealth_holdings
+    - subscriptions
+    - redemptions
+    - profit_loss
+  excludes:
+    - payment_password
+    - bank_password
+    - consumption_records
+    - non_investment_payments
+
+description: |
+  采支付宝基金、天天基金、蛋卷、且慢、银行理财等非股票账户资产边界。
+  它只处理用户授权的只读界面、导出文件或官方账单，不碰支付和银行凭证。

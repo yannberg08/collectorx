@@ -1,0 +1,2 @@
+"""China wealth asset collector."""
+

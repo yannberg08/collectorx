@@ -1,0 +1,31 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: meeting-artifacts
+display_name: 会议纪要与录制产物
+refresh_interval: 6h
+mode: snapshot
+time_field: time
+armed: false
+category: generic
+owner_scope: personal
+
+scope:
+  channels:
+    - feishu
+    - dingtalk
+    - wecom
+    - tencent-meeting
+  collects:
+    - meeting_minutes
+    - transcripts
+    - participants
+    - attachments
+    - recording_refs
+  excludes:
+    - unauthorized_recording
+    - investment_classification
+    - credentials
+
+description: |
+  通用会议产物采集器占位。飞书、钉钉、企业微信、腾讯会议的原始会议产物先作为
+  通用证据进入 lake；meeting-minutes lens 再筛选路演、调研、投委会和投资复盘。

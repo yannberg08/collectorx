@@ -1,0 +1,26 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: calendar
+display_name: 日历
+refresh_interval: 1h
+mode: snapshot
+time_field: start
+armed: false
+category: generic
+owner_scope: personal
+
+scope:
+  collects:
+    - calendar_events
+    - attendees
+    - meeting_links
+    - reminders
+  excludes:
+    - investment_classification
+    - private_calendar_content_in_investor_wiki
+    - credentials
+
+description: |
+  通用日历采集器占位。它只采用户授权的日历事件原始证据，不判断是否投资相关。
+  投资分身需要的交易计划、财报日程、复盘提醒由 task-calendar-investor lens
+  从 calendar/ticktick lake 中筛选。

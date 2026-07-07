@@ -1,0 +1,32 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: financial-news-usage
+display_name: 财经资讯使用痕迹
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: vertical
+owner_scope: personal
+local_only: true
+skill: investor-source-collectors
+
+scope:
+  channels:
+    - cls
+    - wallstreetcn
+    - gelonghui
+  collects:
+    - read_history
+    - favorites
+    - subscriptions
+    - searches
+    - alerts
+  excludes:
+    - public_news_full_crawl
+    - platform_wide_data
+    - credentials
+
+description: |
+  财经资讯 App 是投资垂直通道，但只采用户自己的阅读、收藏、订阅、搜索和提醒动作。
+  公共新闻全文库属于 FinClaw research tools，不进个人证据湖。

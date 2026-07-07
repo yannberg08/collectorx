@@ -1,0 +1,2 @@
+"""Filesystem collector package."""
+

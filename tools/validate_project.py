@@ -23,19 +23,27 @@ CLI_HELP_TARGETS = [
     "skills/feishu/scripts/feishu_api.py",
     "skills/ticktick-cli/scripts/ticktick_cli.py",
     "skills/email-collector/scripts/email_api.py",
+    "skills/filesystem-collector/scripts/filesystem_query.py",
     "skills/qq-export/scripts/qq_query.py",
     "skills/notes-collector/scripts/notes_api.py",
     "skills/ths-portfolio/scripts/ths_query.py",
     "skills/eastmoney-portfolio/scripts/eastmoney_query.py",
     "skills/xueqiu-watchlist/scripts/xueqiu_query.py",
+    "skills/xueqiu-investor-activity/scripts/xueqiu_activity.py",
+    "skills/china-wealth-assets/scripts/china_wealth.py",
+    "skills/investor-source-collectors/scripts/investor_sources.py",
 ]
 
 PARSER_TESTS = [
     "skills/email-collector/tests/test_events.py",
+    "skills/filesystem-collector/tests/test_filesystem_collector.py",
     "skills/qq-export/tests/test_parser.py",
     "skills/ths-portfolio/tests/test_parser.py",
     "skills/eastmoney-portfolio/tests/test_parser.py",
     "skills/xueqiu-watchlist/tests/test_parser.py",
+    "skills/xueqiu-investor-activity/tests/test_xueqiu_activity.py",
+    "skills/china-wealth-assets/tests/test_china_wealth.py",
+    "skills/investor-source-collectors/tests/test_investor_sources.py",
 ]
 
 EVENT_REQUIRED_KEYS = {

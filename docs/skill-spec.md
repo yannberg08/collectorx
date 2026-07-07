@@ -62,12 +62,16 @@ skill-name/
 | feishu | 5+ | 迁移 skill，需确认上游许可与真实环境 |
 | ticktick-cli | 12+ | 迁移 skill，需确认上游许可与真实环境 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
+| filesystem-collector | 7+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界 |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
 | xueqiu-watchlist | 9 | 草稿实现，CSV parser 已有基础测试 |
+| xueqiu-investor-activity | 7+ | 雪球个人活动垂直采集器，本地授权导出 baseline 已测试 |
+| china-wealth-assets | 7+ | 中国基金理财资产垂直采集器，本地授权导出 baseline 已测试 |
 | email-collector | 8+ | 已有多邮箱前置识别与邮件事件输出基线，需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
 | notes-collector | 6 | 草稿实现，需真实 Notion/Obsidian 验证 |
+| investor-source-collectors | 7+ | 投资分身分类、路由和 lens 证据包工具，不替代通用/垂直源采集器 |
 
 ## 输出契约
 

@@ -1,0 +1,29 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: social-investment-influence
+display_name: 社交投资影响源 Lens
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: lens
+owner_scope: personal
+upstream_collectors:
+  - social-activity
+skill: investor-source-collectors
+
+scope:
+  consumes:
+    - lake/social-activity/events.jsonl
+  collects:
+    - investment_creators
+    - investment_favorites
+    - investment_video_watch_history
+    - comments
+  excludes:
+    - platform_wide_scraping
+    - unrelated_entertainment_activity
+    - other_people_full_profiles
+
+description: |
+  微博/B站/小红书等通用活动先入 social-activity lake；本 lens 只筛投资影响源。

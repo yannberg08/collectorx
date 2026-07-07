@@ -10,7 +10,6 @@ import os
 import re
 import sys
 import time
-import subprocess
 from pathlib import Path
 
 # Windows 控制台默认 cp936 不能输出非 GBK 字符——把 stdout/stderr 切成 utf-8
@@ -20,15 +19,25 @@ try:
 except (AttributeError, OSError):
     pass
 
-# 自动装 requests 依赖（首次跑 skill 时不让用户卡在 ModuleNotFoundError）
-try:
-    import requests
-except ImportError:
-    print("[deps] feishu_api 缺 requests，现在装上", file=sys.stderr)
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "requests"]
-    )
-    import requests
+requests = None
+
+
+def _requests():
+    """Load requests only when an API command actually needs it."""
+    global requests
+    if requests is not None:
+        return requests
+    try:
+        import requests as requests_module
+    except ImportError:
+        print(
+            "ERROR: feishu_api 需要 requests。请在项目虚拟环境或运行环境中安装依赖，"
+            "不要在受管理的系统 Python 中自动 pip install。",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    requests = requests_module
+    return requests
 
 FEISHU_API = "https://open.feishu.cn/open-apis"
 
@@ -109,7 +118,7 @@ def _load_app_credentials():
 def get_app_token():
     """飞书 user OAuth 流程多一层：先用 app_id+secret 拿 app_access_token。"""
     aid, sec = _load_app_credentials()
-    resp = requests.post(f"{FEISHU_API}/auth/v3/app_access_token/internal",
+    resp = _requests().post(f"{FEISHU_API}/auth/v3/app_access_token/internal",
                          json={"app_id": aid, "app_secret": sec})
     return resp.json().get("app_access_token", "")
 
@@ -142,7 +151,7 @@ def get_user_token():
     rt = state.get("refresh_token")
     if rt:
         app_token = get_app_token()
-        resp = requests.post(
+        resp = _requests().post(
             f"{FEISHU_API}/authen/v1/oidc/refresh_access_token",
             headers={"Authorization": f"Bearer {app_token}", "Content-Type": "application/json"},
             json={"grant_type": "refresh_token", "refresh_token": rt},
@@ -168,7 +177,7 @@ def get_user_token():
 def cmd_auth(code):
     """[已废弃] 用授权码换取 token——保留兼容性，建议改用 auth.py authorize 一条龙。"""
     app_token = get_app_token()
-    resp = requests.post(f"{FEISHU_API}/authen/v1/oidc/access_token",
+    resp = _requests().post(f"{FEISHU_API}/authen/v1/oidc/access_token",
                          headers={"Authorization": f"Bearer {app_token}", "Content-Type": "application/json"},
                          json={"grant_type": "authorization_code", "code": code})
     if resp.json().get("code") != 0:
@@ -185,7 +194,7 @@ def cmd_read_doc(doc_token):
     token = get_user_token()
 
     url = f"{FEISHU_API}/docx/v1/documents/{doc_token}"
-    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"})
+    resp = _requests().get(url, headers={"Authorization": f"Bearer {token}"})
 
     if resp.status_code == 200 and resp.json().get("code") == 0:
         doc = resp.json()["data"]["document"]
@@ -193,7 +202,7 @@ def cmd_read_doc(doc_token):
         print(f"修改时间: {doc.get('revision_id', '')}")
 
     url = f"{FEISHU_API}/docx/v1/documents/{doc_token}/blocks"
-    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, params={"page_size": 500})
+    resp = _requests().get(url, headers={"Authorization": f"Bearer {token}"}, params={"page_size": 500})
 
     if resp.status_code == 200 and resp.json().get("code") == 0:
         blocks = resp.json()["data"].get("items", [])
@@ -235,7 +244,7 @@ def extract_block_text(block):
 def cmd_search_docs(keyword):
     """搜索飞书文档"""
     token = get_user_token()
-    resp = requests.post(f"{FEISHU_API}/suite/docs-api/search/object",
+    resp = _requests().post(f"{FEISHU_API}/suite/docs-api/search/object",
                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                          json={"search_key": keyword, "count": 20, "offset": 0})
     if resp.json().get("code") == 0:
@@ -252,7 +261,7 @@ def cmd_search_docs(keyword):
 def cmd_chats():
     """列出聊天列表"""
     token = get_user_token()
-    resp = requests.get(f"{FEISHU_API}/im/v1/chats", params={"page_size": 50},
+    resp = _requests().get(f"{FEISHU_API}/im/v1/chats", params={"page_size": 50},
                         headers={"Authorization": f"Bearer {token}"})
     if resp.json().get("code") == 0:
         for c in resp.json()["data"].get("items", []):
@@ -504,7 +513,7 @@ def cmd_create_doc(title, md_file=None, folder_token=None):
     if folder_token:
         body["folder_token"] = folder_token
 
-    resp = requests.post(create_url,
+    resp = _requests().post(create_url,
                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                          json=body)
 
@@ -537,7 +546,7 @@ def cmd_create_doc(title, md_file=None, folder_token=None):
         print(f"解析到 {len(blocks)} 个内容块")
 
         # 3. 获取文档的根block_id
-        doc_resp = requests.get(f"{FEISHU_API}/docx/v1/documents/{doc_id}",
+        doc_resp = _requests().get(f"{FEISHU_API}/docx/v1/documents/{doc_id}",
                                 headers={"Authorization": f"Bearer {token}"})
         if doc_resp.json().get("code") != 0:
             print(f"获取文档信息失败: {doc_resp.json()}")
@@ -553,7 +562,7 @@ def cmd_create_doc(title, md_file=None, folder_token=None):
             batch = blocks[batch_start:batch_start + batch_size]
             add_url = f"{FEISHU_API}/docx/v1/documents/{doc_id}/blocks/{root_block_id}/children"
 
-            add_resp = requests.post(add_url,
+            add_resp = _requests().post(add_url,
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                                      json={"children": batch, "index": -1})
 
@@ -564,7 +573,7 @@ def cmd_create_doc(title, md_file=None, folder_token=None):
                 print(f"添加第{batch_start+1}-{batch_start+len(batch)}块失败: {add_resp.json().get('msg')}")
                 # 尝试逐个添加以跳过有问题的块
                 for j, block in enumerate(batch):
-                    single_resp = requests.post(add_url,
+                    single_resp = _requests().post(add_url,
                                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                                                 json={"children": [block], "index": -1})
                     if single_resp.json().get("code") == 0:
@@ -592,7 +601,7 @@ def cmd_send_msg(chat_id, msg_type, content):
     else:
         msg_content = content
 
-    resp = requests.post(f"{FEISHU_API}/im/v1/messages?receive_id_type=chat_id",
+    resp = _requests().post(f"{FEISHU_API}/im/v1/messages?receive_id_type=chat_id",
                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                          json={
                              "receive_id": chat_id,
@@ -620,7 +629,7 @@ def cmd_upload_file(file_path, file_type="doc"):
     filename = os.path.basename(file_path)
 
     # 上传为消息附件
-    resp = requests.post(f"{FEISHU_API}/im/v1/files",
+    resp = _requests().post(f"{FEISHU_API}/im/v1/files",
                          headers={"Authorization": f"Bearer {token}"},
                          data={"file_type": file_type, "file_name": filename},
                          files={"file": open(file_path, "rb")})
@@ -646,7 +655,7 @@ def cmd_list_folders(folder_token=None):
     else:
         # 根目录
         url = f"{FEISHU_API}/drive/explorer/v2/root_folder/meta"
-        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"})
+        resp = _requests().get(url, headers={"Authorization": f"Bearer {token}"})
         if resp.json().get("code") == 0:
             root_token = resp.json()["data"]["token"]
             print(f"根目录token: {root_token}")
@@ -656,7 +665,7 @@ def cmd_list_folders(folder_token=None):
             print(f"获取根目录失败: {resp.json().get('msg')}")
             return
 
-    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
+    resp = _requests().get(url, headers={"Authorization": f"Bearer {token}"}, params=params)
     if resp.json().get("code") == 0:
         files = resp.json()["data"].get("files", [])
         for f in files:
@@ -670,7 +679,7 @@ def cmd_list_folders(folder_token=None):
 def _get_doc_blocks(token, doc_token):
     """获取文档的所有block文本"""
     url = f"{FEISHU_API}/docx/v1/documents/{doc_token}/blocks"
-    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, params={"page_size": 500})
+    resp = _requests().get(url, headers={"Authorization": f"Bearer {token}"}, params={"page_size": 500})
     if resp.status_code == 200 and resp.json().get("code") == 0:
         blocks = resp.json()["data"].get("items", [])
         lines = []
@@ -702,7 +711,7 @@ def _search_docs(token, keyword, page_size=50, max_pages=20):
     """分页搜到底（飞书单次最多 50）。"""
     results = []
     for page in range(max_pages):
-        resp = requests.post(
+        resp = _requests().post(
             f"{FEISHU_API}/suite/docs-api/search/object",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
             json={"search_key": keyword, "count": page_size, "offset": page * page_size},
@@ -773,7 +782,7 @@ def cmd_recordings_get(doc_token):
 
     # 获取文档标题
     url = f"{FEISHU_API}/docx/v1/documents/{doc_token}"
-    resp = requests.get(url, headers={"Authorization": f"Bearer {token}"})
+    resp = _requests().get(url, headers={"Authorization": f"Bearer {token}"})
     if resp.status_code == 200 and resp.json().get("code") == 0:
         doc = resp.json()["data"]["document"]
         print(f"标题: {doc.get('title', '')}\n")

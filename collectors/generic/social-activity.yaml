@@ -1,0 +1,30 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: social-activity
+display_name: 社交平台用户活动
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: generic
+owner_scope: personal
+
+scope:
+  channels:
+    - weibo
+    - bilibili
+    - xiaohongshu
+  collects:
+    - follows
+    - likes
+    - favorites
+    - watch_history
+    - comments
+  excludes:
+    - platform_wide_scraping
+    - unrelated_entertainment_in_investor_wiki
+    - credentials
+
+description: |
+  微博、B站、小红书等平台的通用用户活动采集器占位。它不判断投资含义；
+  social-investment-influence lens 再筛选投资内容影响源。

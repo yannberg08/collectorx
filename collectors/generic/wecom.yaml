@@ -1,0 +1,32 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: wecom
+display_name: 企业微信
+refresh_interval: 30m
+retention: 14d
+mode: incremental
+time_field: time
+group_by: chat
+initial_window: 24h
+backfill:
+  span: 90d
+  page: 5000
+armed: false
+category: generic
+owner_scope: personal
+
+scope:
+  collects:
+    - messages
+    - chats
+    - contacts
+    - files_refs
+  excludes:
+    - investment_classification
+    - password
+    - session_token
+    - unauthorized_workspace_data
+
+description: |
+  企业微信通用通信采集器占位。它只负责用户授权的企业微信消息与文件指针。
+  投资讨论、调研协作和会议纪要分别由 investor lens 从 lake 中筛选。

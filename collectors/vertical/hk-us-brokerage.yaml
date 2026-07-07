@@ -1,0 +1,35 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: hk-us-brokerage
+display_name: 港美股券商
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: vertical
+owner_scope: personal
+local_only: true
+skill: investor-source-collectors
+
+scope:
+  channels:
+    - futu
+    - tiger
+    - ibkr
+  collects:
+    - assets
+    - positions
+    - executions
+    - orders
+    - cashflows
+    - dividends
+    - fx
+  excludes:
+    - login_password
+    - trading_password
+    - place_order
+    - cancel_order
+    - community_discussions
+
+description: |
+  港美股券商是投资垂直强交易源。后续按富途、老虎、盈透逐个做只读采集和真机验证。

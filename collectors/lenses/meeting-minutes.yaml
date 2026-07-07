@@ -1,0 +1,36 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: meeting-minutes
+display_name: 投研会议纪要 Lens
+refresh_interval: 12h
+mode: snapshot
+time_field: time
+armed: false
+category: lens
+owner_scope: personal
+upstream_collectors:
+  - meeting-artifacts
+  - feishu
+  - dingtalk
+  - wecom
+skill: investor-source-collectors
+
+scope:
+  consumes:
+    - lake/meeting-artifacts/events.jsonl
+    - lake/feishu/events.jsonl
+    - lake/dingtalk/events.jsonl
+    - lake/wecom/events.jsonl
+  collects:
+    - roadshow_minutes
+    - research_meetings
+    - investment_committee_records
+    - participants
+    - decision_points
+  excludes:
+    - all_meetings
+    - unauthorized_recordings
+    - non_investment_workspace_data
+
+description: |
+  会议通道先作为通用证据入 lake；本 lens 只识别投资调研、路演、投委会和复盘会议。

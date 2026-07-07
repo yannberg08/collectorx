@@ -1,0 +1,27 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: wechat-favorites
+display_name: 微信收藏与公众号文章
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: generic
+owner_scope: personal
+
+scope:
+  collects:
+    - favorite_items
+    - article_refs
+    - titles
+    - authors
+    - urls
+    - saved_at
+  excludes:
+    - public_account_full_crawl
+    - non_owner_read_history
+    - credentials
+
+description: |
+  微信收藏和公众号文章动作的通用采集器占位。它采用户自己的收藏、保存、转发和文章指针；
+  wechat-article-favorites lens 只筛投资类公众号和炒股文章。

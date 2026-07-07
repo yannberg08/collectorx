@@ -1,0 +1,31 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: task-calendar-investor
+display_name: 投资任务日历 Lens
+refresh_interval: 6h
+mode: snapshot
+time_field: time
+armed: false
+category: lens
+owner_scope: personal
+upstream_collectors:
+  - ticktick
+  - calendar
+skill: investor-source-collectors
+
+scope:
+  consumes:
+    - lake/ticktick/events.jsonl
+    - lake/calendar/events.jsonl
+  collects:
+    - research_tasks
+    - trade_plans
+    - earnings_calendar
+    - review_reminders
+  excludes:
+    - full_life_calendar
+    - unrelated_tasks
+    - credentials
+
+description: |
+  滴答清单和日历作为通用任务通道。本 lens 只筛投资研究、交易计划和复盘提醒。

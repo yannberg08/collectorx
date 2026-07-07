@@ -1,0 +1,33 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: research-documents
+display_name: 本地投研文档 Lens
+refresh_interval: 12h
+mode: snapshot
+time_field: mtime
+armed: false
+category: lens
+owner_scope: personal
+upstream_collectors:
+  - filesystem
+  - notes
+skill: investor-source-collectors
+
+scope:
+  consumes:
+    - lake/filesystem/events.jsonl
+    - lake/notes/events.jsonl
+  collects:
+    - research_reports
+    - financial_statements
+    - announcement_annotations
+    - valuation_models
+    - screenshots
+  excludes:
+    - whole_disk_scan
+    - unrelated_private_files
+    - public_report_database_crawl
+
+description: |
+  本 lens 不重新扫描硬盘。它消费 filesystem/notes 的已授权文件元数据，
+  筛选投研文档并把 raw_ref 路由到投资分身。

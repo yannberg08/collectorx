@@ -41,13 +41,27 @@ collector = skill implementation + collector YAML
 - `schemas/collectorx-event.schema.json` defines the normalized event contract.
 - `examples/events/` contains event examples for downstream app designers.
 
+## Collector Classes
+
+CollectorX separates channels by responsibility:
+
+- **Generic collectors** collect authorized personal channel evidence without
+  deciding whether it is investment-related.
+- **Vertical investor collectors** collect finance/investment-native sources
+  such as brokerages, Xueqiu, fund/wealth accounts, professional terminals, or
+  finance-app usage traces.
+- **Investor lenses** consume generic lake events and route only investment
+  evidence into `finclaw.investor_wiki_evidence.v1`.
+
+See `docs/collector-taxonomy.md` for the full boundary table.
+
 ## Current Collectors
 
 ### Generic Collectors
 
 | Collector | Skill | Status |
 | --- | --- | --- |
-| `filesystem` | daemon/driver | Config only; depends on host runtime |
+| `filesystem` | `filesystem-collector` | Metadata-only local file collector aligned with SoulMirror driver boundary |
 | `wechat` | `wechat-export` | Migrated skill; provenance review required |
 | `feishu` | `feishu` | Migrated skill; provenance review required |
 | `ticktick` | `ticktick-cli` | Migrated skill; provenance review required |
@@ -56,15 +70,38 @@ collector = skill implementation + collector YAML
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |
 | `notes` | `notes-collector` | Draft implementation |
 | `dingtalk` | none yet | YAML placeholder; skill not implemented |
+| `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
+| `calendar` | none yet | YAML placeholder; generic calendar channel |
+| `meeting-artifacts` | none yet | YAML placeholder; meeting minutes/transcripts channel |
+| `wechat-favorites` | none yet | YAML placeholder; WeChat favorites/public-account article actions |
+| `social-activity` | none yet | YAML placeholder; Weibo/Bilibili/Xiaohongshu user activity |
 
 ### Vertical Investor Collectors
 
 | Collector | Skill | Status |
 | --- | --- | --- |
-| `ths-portfolio` | `ths-portfolio` | Draft CSV parser |
+| `ths-portfolio` | `ths-portfolio` | Local metadata + trade package; ongoing real-device validation |
 | `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake Beta; strong trade tables require unlocked trading account |
 | `xueqiu-watchlist` | `xueqiu-watchlist` | Draft CSV parser |
+| `xueqiu-investor-activity` | `xueqiu-investor-activity` | Local export parser baseline for watchlists, posts, comments, favorites, follows, owner portfolios |
+| `china-wealth-assets` | `china-wealth-assets` | Local export parser baseline for fund/wealth holdings and transactions |
+| `financial-news-usage` | `investor-source-collectors` | YAML placeholder; finance-app usage traces |
+| `hk-us-brokerage` | `investor-source-collectors` | YAML placeholder; Futu/Tiger/IBKR future adapters |
+| `pro-terminal-usage` | `investor-source-collectors` | YAML placeholder; Wind/Choice/iFinD workflow traces |
 | `ths-watchlist` | none yet | YAML placeholder; skill not implemented |
+
+### Investor Lenses
+
+| Lens | Upstream | Status |
+| --- | --- | --- |
+| `wechat-investment-dialogue` | `wechat` | Routes investment discussions; does not read WeChat DB directly |
+| `research-documents` | `filesystem`, `notes` | Routes research files and valuation docs |
+| `email-research` | `email` | Routes broker research, roadshow, and IR mail |
+| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Routes roadshow/research/IC minutes |
+| `investment-notes` | `notes` | Routes investment notes, reviews, rules, checklists |
+| `task-calendar-investor` | `ticktick`, `calendar` | Routes research tasks, trade plans, review reminders |
+| `wechat-article-favorites` | `wechat-favorites` | Routes investment public-account articles |
+| `social-investment-influence` | `social-activity` | Routes investment creators and social influence signals |
 
 Status legend:
 

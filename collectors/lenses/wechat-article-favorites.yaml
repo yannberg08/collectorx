@@ -1,0 +1,29 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: wechat-article-favorites
+display_name: 投资公众号收藏 Lens
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: lens
+owner_scope: personal
+upstream_collectors:
+  - wechat-favorites
+skill: investor-source-collectors
+
+scope:
+  consumes:
+    - lake/wechat-favorites/events.jsonl
+  collects:
+    - investment_public_account_articles
+    - saved_articles
+    - shared_articles
+    - source_authors
+  excludes:
+    - public_account_full_crawl
+    - non_investment_favorites
+    - non_owner_read_history
+
+description: |
+  微信收藏/公众号通用采集器负责用户动作。本 lens 只筛投资类公众号、炒股文章和收藏来源。

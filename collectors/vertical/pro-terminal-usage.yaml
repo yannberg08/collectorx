@@ -1,0 +1,34 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: pro-terminal-usage
+display_name: 专业终端使用痕迹
+refresh_interval: 24h
+mode: snapshot
+time_field: time
+armed: false
+category: vertical
+owner_scope: personal
+local_only: true
+skill: investor-source-collectors
+
+scope:
+  channels:
+    - wind
+    - choice
+    - ifind
+    - bloomberg
+  collects:
+    - workspaces
+    - watchlists
+    - searches
+    - downloads
+    - model_templates
+    - factor_attention
+  excludes:
+    - vendor_database_mirror
+    - licensed_content_redistribution
+    - credentials
+
+description: |
+  专业终端是投资垂直工作流源。只采用户工作台、搜索、自选和模型使用痕迹，
+  不复制厂商数据库内容。
