@@ -244,6 +244,25 @@ Current status:
 - Preserves business numbers needed by the investor avatar.
 - Does not ask for passwords and does not place, cancel, or modify orders.
 
+### 专业金融终端使用痕迹
+
+```bash
+python3 skills/pro-terminal-usage/scripts/pro_terminal_usage.py collect \
+  --input <authorized-wind-choice-ifind-workflow-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, INI/CONF, and
+  log-like workflow records into `pro-terminal-usage` events.
+- Captures workspaces, watchlists, searches, downloads, model templates, and
+  factor attention.
+- Outputs workflow evidence for capability circle, research workflow, monitoring
+  rules, and information-source dimensions.
+- Does not copy vendor databases, public market data, reports, or licensed
+  content bodies.
+
 ### 投资 Lens / 分类工具
 
 ```bash

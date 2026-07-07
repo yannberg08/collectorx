@@ -98,7 +98,7 @@ Operational docs:
 | `china-wealth-assets` | `china-wealth-assets` | Local export parser baseline for fund/wealth holdings and transactions |
 | `financial-news-usage` | `financial-news-usage` | Local usage export/saved-page baseline for finance-app read, favorite, subscribe, search, and alert actions |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, and FX |
-| `pro-terminal-usage` | `investor-source-collectors` | YAML placeholder; Wind/Choice/iFinD workflow traces |
+| `pro-terminal-usage` | `pro-terminal-usage` | Local workflow export baseline for Wind/Choice/iFinD/Bloomberg workspaces, watchlists, searches, downloads, templates, and factors |
 | `ths-watchlist` | none yet | YAML placeholder; skill not implemented |
 
 ### Investor Lenses

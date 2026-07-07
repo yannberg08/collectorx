@@ -200,6 +200,24 @@ Findings:
   read-only brokerage exports; the collector emitted a gap event and did not
   enter FinClaw.
 
+### Wave I: P2 professional terminal usage productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-pro-terminal-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `pro-terminal-usage` vertical collector for authorized
+  Wind/Choice/iFinD/Bloomberg workflow exports.
+- Fixture validation covers workspaces, watchlists, searches, downloads,
+  model templates, factor attention, and license-safe evidence output.
+- Real local candidate validation produced 20 workflow events, but only 9 were
+  clearly recognized as Wind; the run is not enough to claim native licensed
+  terminal validation.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -225,7 +243,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1 baseline for authorized local read-only exports; real local export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, per-broker column maps, multi-currency validation |
-| 2 | `pro-terminal-usage` | G0 | G1/G2: licensed workflow collectors for Wind/Choice/iFinD |
+| 2 | `pro-terminal-usage` | G1 baseline for authorized local workflow exports; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, license-safe validation |
 | 3 | `social-investment-influence` | G1 | G2: generic social activity adapters and investment influence classifier validation |
 
 ## Git Practice
