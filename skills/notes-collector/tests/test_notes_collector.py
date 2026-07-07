@@ -47,10 +47,17 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         assert event["kind"] == "note"
         assert event["data"]["source_app"] == "obsidian"
         assert event["data"]["content_preview"].startswith("#复盘")
+        assert event["data"]["content_length"] == len("#复盘\n贵州茅台 估值和买入纪律\n")
+        assert event["data"]["content_included"] is False
+        assert len(event["data"]["content_digest"]) == 64
         assert "content" not in event["data"]
         assert event["wiki_targets"] == ["internal.knowledge.notes"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_notes"] is False
+        assert manifest["content_policy"]["full_content_event_count"] == 0
+        assert manifest["content_policy"]["preview_only_event_count"] == 1
+        assert manifest["evidence_policy"]["required_lens"] == "investment-notes"
+        assert manifest["field_coverage"]["field_counts"]["content_length"] == 1
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian"]
         assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"notion", "youdao", "evernote"}
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
@@ -151,6 +158,8 @@ def test_import_zip_and_all_expected_platform_coverage() -> None:
         with zipfile.ZipFile(zip_path, "w") as archive:
             archive.writestr("Notion Export/半导体研究.md", "# 半导体研究\n库存周期和订单验证\n")
             archive.writestr("../unsafe.md", "# 不应读取\n")
+            archive.writestr("..\\windows-traversal.md", "# 不应读取\n")
+            archive.writestr("C:\\unsafe.md", "# 不应读取\n")
 
         export = root / "notes.json"
         out = root / "out"
@@ -176,11 +185,24 @@ def test_import_zip_and_all_expected_platform_coverage() -> None:
         assert len(events) == 4
         assert {event["data"]["source_app"] for event in events} == {"obsidian", "notion", "youdao", "evernote"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("windows-traversal" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("C:/unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        notion_event = next(event for event in events if event["data"]["source_app"] == "notion")
+        assert notion_event["raw_ref"]["source_archive"] == str(zip_path)
+        assert notion_event["raw_ref"]["archive_member"] == "Notion Export/半导体研究.md"
+        assert notion_event["data"]["path"] == f"{zip_path}::Notion Export/半导体研究.md"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian", "notion", "youdao", "evernote"]
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
         assert manifest["platform_coverage"]["real_account_validation"] is False
+        assert manifest["field_coverage"]["field_counts"]["source_app"] == 4
+        assert manifest["field_coverage"]["field_counts"]["content_length"] == 4
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["content_policy"]["full_content_event_count"] == 0
+        assert manifest["content_policy"]["investment_classification_done"] is False
 
 
 if __name__ == "__main__":

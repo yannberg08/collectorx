@@ -1,7 +1,6 @@
 ---
 name: notes-collector
 description: 采集笔记应用数据。当用户说"导出笔记"、"采集笔记"、"笔记备份"时使用此skill。
-version: 0.2.1
 ---
 
 # 笔记采集器
@@ -66,12 +65,21 @@ python <SKILL_DIR>/scripts/notes_api.py import \
 
 `notes-collector` 是 generic collector：它采集用户授权笔记事实，不直接判断哪些是投资笔记，也不直接写投资 Wiki。
 
-默认事件只包含 `content_preview`，不包含完整正文；如用户明确授权，可加 `--include-content`。投资分身应把 `lake/notes/events.jsonl` 交给 `investment-notes` lens，由 lens 负责筛选复盘、规则库、估值假设和交易 checklist。
+默认事件只包含 `content_preview`、`content_length` 和 `content_digest`，不包含完整正文；如用户明确授权，可加 `--include-content`。投资分身应把 `lake/notes/events.jsonl` 交给 `investment-notes` lens，由 lens 负责筛选复盘、规则库、估值假设和交易 checklist。
+
+ZIP 导入会保留 `source_archive` 和 `archive_member`，并跳过绝对路径、`..`
+路径穿越和 Windows 盘符路径成员。采集器只记录用户授权导出内的来源引用，不采
+Notion token、服务端 cookie 或账号密码。
 
 `manifest.json` 会写入 `platform_coverage`，列出 P1 笔记通道预期平台
 `obsidian/notion/youdao/evernote`、本次实际观察到的平台、缺失平台、各
 平台事件数，以及 `real_account_validation` 状态。FinClaw 应用它判断这次
 采集是否只是局部导入，还是已经覆盖用户授权的主要笔记平台。
+
+`manifest.field_coverage` 会报告标题、路径/URL、正文预览、正文长度、标签、
+更新时间等推荐字段覆盖情况；`source_audit` 报告来源引用、ZIP 成员来源和路径
+安全边界；`content_policy` 明确本次是预览模式还是全文授权模式。`evidence_policy`
+固定声明：generic notes 不能直接写投资 Wiki，也不能直接声称“投资笔记已识别”。
 
 ## 数据流向Wiki
 

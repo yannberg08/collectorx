@@ -17,11 +17,17 @@ scope:
     - note_path_or_url
     - source_app
     - platform_coverage_manifest
+    - field_coverage_manifest
+    - content_policy_manifest
+    - source_audit_manifest
+    - archive_member_provenance
   excludes:
     - note_service_tokens
     - unrelated_investment_classification
     - wiki_conclusions
+    - archive_path_traversal_members
+    - windows_drive_path_archive_members
 
 # 采集逻辑由 skill 定义。
 # skill 会处理：Notion API、Obsidian 本地 vault、有道云/印象笔记/Markdown/HTML/JSON/ZIP 授权导出。
-# generic notes 只进入 lake/notes/events.jsonl；投资笔记由 investment-notes lens 筛选。
+# generic notes 只进入 lake/notes/events.jsonl；manifest 记录字段覆盖、内容策略和来源审计；投资笔记由 investment-notes lens 筛选。

@@ -279,11 +279,15 @@ python3 skills/notes-collector/scripts/notes_api.py import \
 Current status:
 
 - Emits generic `notes` events and a standard package.
-- Supports authorized local import for Markdown, HTML, TXT, JSON/JSONL, and
-  Evernote ENEX exports, including ZIP packages containing those formats.
+- Supports authorized local import for Markdown, HTML, TXT, JSON/JSONL,
+  Evernote ENEX, and ZIP packages containing those formats.
 - Writes `manifest.platform_coverage` with expected P1 note platforms
   (`obsidian`, `notion`, `youdao`, `evernote`), observed platforms, missing
   platforms, event counts, and `real_account_validation`.
+- Writes `manifest.field_coverage`, `source_audit`, and `content_policy` so
+  FinClaw can tell whether title/path/content preview/tags/time fields are
+  present, whether ZIP member provenance exists, and whether the run used
+  preview-only or full-content authorization.
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.

@@ -14,6 +14,18 @@ COLLECTOR = "notes"
 CN_TZ = timezone(timedelta(hours=8))
 EXPECTED_P1_NOTE_PLATFORMS = ("obsidian", "notion", "youdao", "evernote")
 GENERIC_NOTE_SOURCES = {"markdown", "notes-export"}
+RECOMMENDED_NOTE_FIELDS = (
+    "source_app",
+    "title",
+    "path",
+    "content_preview",
+    "has_content",
+    "content_length",
+    "tags",
+    "url",
+    "time",
+)
+CONTENT_PREVIEW_MAX_CHARS = 1200
 
 
 def now_iso() -> str:
@@ -52,18 +64,32 @@ def note_to_event(
     title = first(note, ["title", "name", "标题"]) or "Untitled"
     content = first(note, ["content", "text", "body", "正文", "内容"]) or ""
     path = first(note, ["path", "file", "url", "id"])
+    url = first(note, ["url", "link", "链接"])
+    event_time = normalize_time(first(note, ["updated", "last_edited", "last_edited_time", "mtime", "created", "created_time"]))
     data = {
         "source_app": actual_source_app,
         "title": title,
         "path": path,
-        "content_preview": content[:1200],
+        "url": url,
+        "content_preview": content[:CONTENT_PREVIEW_MAX_CHARS],
         "has_content": bool(content),
+        "content_length": len(content),
+        "content_digest": content_digest(content),
+        "content_included": include_content,
         "tags": tags_for(note, content),
     }
     if include_content:
         data["content"] = content
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
-    event_time = first(note, ["updated", "last_edited", "last_edited_time", "mtime", "created", "created_time"])
+    raw_ref = {
+        "source_app": actual_source_app,
+        "path": path,
+        "id": first(note, ["id"]),
+        "url": url,
+        "source_archive": first(note, ["source_archive"]),
+        "archive_member": first(note, ["archive_member"]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(actual_source_app, path, title, event_time, content[:120]),
@@ -71,14 +97,10 @@ def note_to_event(
         "source": source_label,
         "owner_scope": "personal",
         "kind": "note",
-        "time": normalize_time(event_time),
+        "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "source_app": actual_source_app,
-            "path": path,
-            "id": first(note, ["id"]),
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -113,6 +135,16 @@ def build_manifest(events: List[Dict[str, Any]], *, source_app: str, collected_a
             "missing_expected_platforms": missing_expected,
             "source_app_counts": dict(sorted(source_app_counts.items())),
             "unknown_event_count": unknown_event_count,
+            "real_account_validation": False,
+        },
+        "field_coverage": field_coverage(events),
+        "source_audit": source_audit(events),
+        "content_policy": content_policy(events),
+        "evidence_policy": {
+            "generic_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_note_classification_done": False,
+            "required_lens": "investment-notes",
             "real_account_validation": False,
         },
         "collection_readiness": {
@@ -151,6 +183,9 @@ def write_package(out_dir: Path, events: List[Dict[str, Any]], *, source_app: st
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
+        f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- full_content_events: {manifest['content_policy']['full_content_event_count']}",
         "",
         "Generic notes are not written to the investor Wiki directly. Use the investment-notes lens.",
     ]
@@ -168,6 +203,65 @@ def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: Lis
     if not missing_expected:
         return "all_expected_platforms_observed"
     return "partial_expected_platforms_observed"
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    field_counts = {
+        field: sum(1 for event in events if note_field_present(event, field))
+        for field in RECOMMENDED_NOTE_FIELDS
+    }
+    return {
+        "recommended_fields": list(RECOMMENDED_NOTE_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_content": sum(1 for event in events if event.get("data", {}).get("has_content")),
+        "events_with_tags": sum(1 for event in events if event.get("data", {}).get("tags")),
+    }
+
+
+def note_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    data = event.get("data", {})
+    value = data.get(field)
+    if field == "content_length":
+        return isinstance(value, int) and value > 0
+    if field == "has_content":
+        return value is True
+    return value not in (None, "", [], {})
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    archive_members = [
+        event.get("raw_ref", {}).get("archive_member")
+        for event in events
+        if event.get("raw_ref", {}).get("archive_member")
+    ]
+    archives = [
+        event.get("raw_ref", {}).get("source_archive")
+        for event in events
+        if event.get("raw_ref", {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in events if event.get("raw_ref", {}).get("path") or event.get("raw_ref", {}).get("url")),
+        "archive_member_event_count": len(archive_members),
+        "archive_count": len(set(archives)),
+        "events_with_url": sum(1 for event in events if event.get("data", {}).get("url") or event.get("raw_ref", {}).get("url")),
+        "events_with_path": sum(1 for event in events if event.get("data", {}).get("path") or event.get("raw_ref", {}).get("path")),
+        "archive_path_traversal_members_collected": False,
+    }
+
+
+def content_policy(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    full_content_event_count = sum(1 for event in events if "content" in event.get("data", {}))
+    return {
+        "default_full_content_included": False,
+        "full_content_event_count": full_content_event_count,
+        "preview_only_event_count": max(len(events) - full_content_event_count, 0),
+        "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
+        "content_digest_algorithm": "sha256",
+        "investment_classification_done": False,
+    }
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
@@ -203,6 +297,12 @@ def normalize_time(value: Optional[str]) -> Optional[str]:
     if numeric > 10_000_000_000:
         numeric = numeric / 1000
     return datetime.fromtimestamp(numeric, CN_TZ).isoformat(timespec="seconds")
+
+
+def content_digest(content: str) -> Optional[str]:
+    if not content:
+        return None
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def stable_id(*parts: Any) -> str:

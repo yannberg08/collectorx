@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import List, Dict, Any, Iterable, Optional
 
 
@@ -172,18 +173,19 @@ def parse_enex_notes_text(text: str, *, path_label: str) -> List[Dict[str, Any]]
 def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     notes: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
             text = archive.read(member).decode("utf-8-sig", errors="replace")
-            path_label = f"{path.name}::{member.filename}"
+            path_label = f"{path}::{member_name}"
             try:
                 if suffix in {".json", ".jsonl", ".ndjson"}:
                     parsed = parse_json_notes_text(
                         text,
                         suffix=suffix,
-                        default_title=Path(member.filename).stem,
+                        default_title=Path(member_name).stem,
                         path_label=path_label,
                     )
                 elif suffix == ".enex":
@@ -193,7 +195,7 @@ def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None)
                         parse_text_note_text(
                             text,
                             suffix=suffix,
-                            default_title=Path(member.filename).stem,
+                            default_title=Path(member_name).stem,
                             path_label=path_label,
                             mtime=zip_member_mtime(member),
                         )
@@ -202,8 +204,8 @@ def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None)
                 parsed = []
             for note in parsed:
                 note.setdefault("source_archive", str(path))
-                note.setdefault("archive_member", member.filename)
-                note["source_app"] = normalize_source_app(source_app, Path(path.name) / member.filename, note)
+                note.setdefault("archive_member", member_name)
+                note["source_app"] = normalize_source_app(source_app, Path(path.name) / member_name, note)
                 notes.append(note)
                 if limit is not None and len(notes) >= limit:
                     return notes[:limit]
@@ -211,12 +213,18 @@ def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None)
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_NOTE_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_NOTE_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def zip_member_mtime(member: zipfile.ZipInfo) -> float:
