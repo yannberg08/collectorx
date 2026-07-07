@@ -146,7 +146,6 @@ def file_event(path: Path, stat: os.stat_result, *, collected_at: str) -> Dict[s
         },
         "wiki_targets": [
             "internal.knowledge.files",
-            "external.investor.research_documents",
         ],
     }
 

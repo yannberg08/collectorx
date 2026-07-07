@@ -32,8 +32,8 @@ every upstream source collector is production-ready.
 
 | Need | Current implementation | Status | Gap to reach Tonghuashun/EastMoney standard |
 | --- | --- | --- | --- |
-| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline` | Real WeChat lake validation, contact/group allowlists, entity/time matching, backtest against trade events |
-| 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier | `baseline` | Optional content extraction under explicit authorization, PDF/Excel fixtures, Windows/Linux path validation |
+| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline`; real-source validation blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, contact/group allowlists, entity/time matching, backtest against trade events |
+| 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier | `baseline`; macOS metadata real validation passed | Optional content extraction under explicit authorization, PDF/Excel fixtures, Windows/Linux path validation, false-positive review |
 | 雪球投资活动 | `xueqiu-investor-activity` | `baseline` | Real Xueqiu login/export discovery, activity pagination, favorites/posts/comments/follows validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline` | Per-platform export/UI adapters, product field mapping, real account validation, cross-platform import fixtures |
 | 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline` | Real mailbox validation, expanded broker/IR sender classifiers, attachment refs, no full-body Wiki leakage |

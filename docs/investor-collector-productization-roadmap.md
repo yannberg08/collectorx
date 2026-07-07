@@ -62,12 +62,31 @@ Remaining to production:
 - Backtest false positives and false negatives against real investor histories.
 - Add entity extraction beyond keyword/security-code matching.
 
+### Wave B: P0 real validation pass 1
+
+Status: `in-progress`
+
+Validation record:
+
+- `docs/validations/investor-p0-real-validation-2026-07-08.md`
+
+Findings:
+
+- `wechat-investment-dialogue`: real source collection is blocked on this Mac
+  because WeChat 4.x per-DB keys are not available and SIP is enabled. No
+  messages were read.
+- `research-documents`: real local metadata validation passed on macOS; 1000
+  filesystem metadata events yielded 454 research-document lens events and 10
+  usable investor subdimensions.
+- `filesystem`: generic collector route was corrected so it no longer suggests
+  investor Wiki targets for every file.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `wechat-investment-dialogue` | G1 | G2/G3: run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
-| 2 | `research-documents` | G1 | G2: content extraction under explicit authorization, PDF/Excel/Markdown fixtures, Windows/Linux path validation |
+| 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
+| 2 | `research-documents` | G2 partial / G3 partial on macOS metadata | Content extraction under explicit authorization, PDF/Excel/Markdown fixtures, Windows/Linux path validation |
 | 3 | `email-research` | G1 | G2/G3: run on real mailbox events, broker/IR sender classifier, attachment raw refs |
 | 4 | `xueqiu-investor-activity` | G1 | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments validation |
 | 5 | `china-wealth-assets` | G1 | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |

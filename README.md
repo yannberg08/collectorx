@@ -72,7 +72,7 @@ Operational docs:
 
 | Collector | Skill | Status |
 | --- | --- | --- |
-| `filesystem` | `filesystem-collector` | Metadata-only local file collector aligned with SoulMirror driver boundary |
+| `filesystem` | `filesystem-collector` | Metadata-only generic file collector aligned with SoulMirror driver boundary; investor routing is handled by lenses |
 | `wechat` | `wechat-export` | Migrated skill; provenance review required |
 | `feishu` | `feishu` | Migrated skill; provenance review required |
 | `ticktick` | `ticktick-cli` | Migrated skill; provenance review required |

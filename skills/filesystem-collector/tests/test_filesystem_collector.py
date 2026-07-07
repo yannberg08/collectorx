@@ -44,6 +44,7 @@ def test_collect_metadata_only() -> None:
         assert event["data"]["metadata_only"] is True
         assert event["data"]["content_read"] is False
         assert "content" not in event["data"]
+        assert event["wiki_targets"] == ["internal.knowledge.files"]
 
 
 if __name__ == "__main__":
