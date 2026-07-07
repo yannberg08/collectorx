@@ -1168,12 +1168,52 @@ def collect_trade_ui_events(
     try:
         snapshot = collect_trade_ui_snapshot(copy_tables=True)
     except Exception as exc:
+        snapshot = TradeUISnapshot(
+            attempted=True,
+            platform_supported=sys.platform == "darwin",
+            app_running=False,
+            window_found=False,
+            trade_page_requested=False,
+            account={
+                "account_status": "collection_failed",
+                "needs_unlock": False,
+                "visible_trade_labels": [],
+                "observed_fields": {},
+                "asset_fields": {},
+            },
+            gaps=[
+                {
+                    "gap": "trade_ui_collect_failed",
+                    "status": "error",
+                    "note": f"东方财富交易页自动采集失败：{type(exc).__name__}",
+                }
+            ],
+        )
+
+    if snapshot.gaps and any(gap.get("gap") == "trade_ui_collect_failed" for gap in snapshot.gaps):
+        account_status_event = make_event(
+            kind="broker_trade_ui_status",
+            data=build_trade_ui_account_data(snapshot),
+            collected_at=collected_at,
+            source=f"{source_prefix} 交易页自动只读采集",
+            privacy_contains=["portfolio", "trade"],
+            raw_ref={
+                "capture_method": "mac_accessibility_and_table_copy",
+                "window_found": snapshot.window_found,
+                "ax_line_count": snapshot.ax_line_count,
+            },
+            wiki_targets=[
+                "vertical/investor/risk-portfolio",
+                "vertical/investor/record-review",
+            ],
+        )
         return [
+            account_status_event,
             gap_event(
                 collected_at,
                 gap="trade_ui_collect_failed",
                 status="error",
-                note=f"东方财富交易页自动采集失败：{type(exc).__name__}",
+                note=str(snapshot.gaps[0].get("note") or "东方财富交易页自动采集失败。"),
                 wiki_targets=["vertical/investor/record-review", "vertical/investor/risk-portfolio"],
                 source_prefix=source_prefix,
             )
@@ -1883,6 +1923,7 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
     ui_status = next((event["data"] for event in events if event["kind"] == "broker_trade_ui_status"), {})
     account_status = ui_status.get("account_status") or "unknown"
+    trade_ui_attempted = bool(ui_status) or any(gap.startswith("trade_ui_") for gap in gaps)
     required = {
         "asset_snapshot": counts.get("broker_asset_snapshot", 0),
         "position_detail": counts.get("broker_position_detail", 0),
@@ -1898,7 +1939,10 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     elif account_status == "locked" or "broker_account_locked" in gaps:
         status = "blocked_by_account_lock"
         next_action = "在东方财富交易页手动解锁证券账户后，重新运行 FinClaw 一键采集；采集器不会读取或请求交易密码。"
-    elif not counts.get("broker_trade_ui_status"):
+    elif account_status == "collection_failed" or "trade_ui_collect_failed" in gaps:
+        status = "trade_ui_collect_failed"
+        next_action = "东方财富交易页自动采集已尝试但被窗口/可访问性超时阻塞；确认客户端主窗口可见并授予辅助功能权限后重试。"
+    elif not trade_ui_attempted:
         status = "auto_trade_ui_not_run"
         next_action = "运行时启用 --auto-trade-ui，让采集器自动打开交易页并只读采集强交易表。"
     elif strong_total:

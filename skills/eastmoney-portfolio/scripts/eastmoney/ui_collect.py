@@ -363,13 +363,13 @@ def _extract_ax_text(line: str) -> str:
 
 def _process_exists() -> bool:
     script = f'tell application "System Events" to exists process "{APP_NAME}"'
-    return _osascript(script).strip().lower() == "true"
+    return _osascript(script, check=False).strip().lower() == "true"
 
 
 def _open_or_activate_app() -> None:
     subprocess.run(["open", "-a", APP_NAME], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(0.8)
-    _osascript(f'tell application "{APP_NAME}" to activate')
+    _osascript(f'tell application "{APP_NAME}" to activate', check=False)
     time.sleep(0.4)
 
 
@@ -469,14 +469,19 @@ end tell
 
 
 def _osascript(script: str, check: bool = True, timeout: int = 8) -> str:
-    completed = subprocess.run(
-        ["osascript", "-e", script],
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        timeout=timeout,
-    )
+    try:
+        completed = subprocess.run(
+            ["osascript", "-e", script],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        if check:
+            raise
+        return ""
     if check and completed.returncode != 0:
         raise RuntimeError(completed.stderr.strip() or completed.stdout.strip())
     if completed.returncode != 0:

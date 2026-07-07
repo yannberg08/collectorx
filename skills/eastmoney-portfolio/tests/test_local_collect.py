@@ -11,8 +11,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from eastmoney.local_collect import (
     build_local_probe_report,
+    build_collection_readiness,
     collect_local,
     find_eastmoney_homes,
+    gap_event,
     mask_identifier,
     parse_stock_list,
     parse_stock_token,
@@ -179,6 +181,21 @@ def test_trade_ui_unlocked_asset_field_parser():
     assert state["asset_fields"]["currency"] == "人民币"
 
 
+def test_trade_ui_collect_failed_readiness():
+    events = [
+        gap_event(
+            "2026-07-07T19:30:00+08:00",
+            gap="trade_ui_collect_failed",
+            status="error",
+            note="东方财富交易页自动采集失败：TimeoutExpired",
+        )
+    ]
+    readiness = build_collection_readiness(events)
+    assert readiness["status"] == "trade_ui_collect_failed"
+    assert readiness["can_claim_complete_trade_collection"] is False
+    assert readiness["needs_manual_export"] is False
+
+
 def test_trade_ui_copied_position_table_text():
     text = "\t".join(
         [
@@ -227,5 +244,6 @@ if __name__ == "__main__":
     test_trade_export_detail_fixture()
     test_trade_ui_locked_state_parser()
     test_trade_ui_unlocked_asset_field_parser()
+    test_trade_ui_collect_failed_readiness()
     test_trade_ui_copied_position_table_text()
     print("All local collect tests passed!")
