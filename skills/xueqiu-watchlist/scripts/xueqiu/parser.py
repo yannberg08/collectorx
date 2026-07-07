@@ -6,10 +6,13 @@ import csv
 import hashlib
 import json
 import re
+import tempfile
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 try:
@@ -33,7 +36,9 @@ SUPPORTED_EXTENSIONS = {
     ".txt",
     ".md",
     ".markdown",
+    ".zip",
 }
+ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 
 
@@ -80,7 +85,40 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
         return parse_json(path)
     if suffix in {".xlsx", ".xlsm"}:
         return parse_workbook(path)
+    if suffix == ".zip":
+        return parse_zip(path)
     return parse_text_watchlist(path)
+
+
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-xueqiu-watchlist-") as tmp:
+        tmp_root = Path(tmp)
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            member_name = info.filename.replace("\\", "/")
+            member_path = PurePosixPath(member_name)
+            suffix = Path(member_name).suffix.lower()
+            if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                continue
+            target = tmp_root.joinpath(*member_path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read(info))
+            for member_row, record in enumerate(parse_path(target), start=1):
+                if isinstance(record, dict):
+                    record["_collectorx_raw_ref"] = {
+                        "path": f"{path}::{member_name}",
+                        "archive": str(path),
+                        "archive_member": member_name,
+                        "member_row": member_row,
+                    }
+                records.append(record)
+    return records
+
+
+def is_safe_archive_member(member_path: PurePosixPath) -> bool:
+    return bool(member_path.parts) and not member_path.is_absolute() and ".." not in member_path.parts
 
 
 def parse_watchlist_csv(file_path: str) -> List[Dict[str, Any]]:
@@ -248,6 +286,11 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "broker_confirmed_trade": False,
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {"path": str(path), "row": row, "symbol": symbol}
+    if isinstance(record.get("_collectorx_raw_ref"), dict):
+        raw_ref.update(record["_collectorx_raw_ref"])
+        raw_ref["row"] = row
+        raw_ref["symbol"] = symbol
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, symbol, group, followed_at),
@@ -258,7 +301,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": followed_at,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {"path": str(path), "row": row, "symbol": symbol},
+        "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
         "wiki_targets": [
             "investor.opportunity_watchlist.watchlist",
@@ -300,6 +343,13 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(kind_counts.items())),
         "market_counts": dict(sorted(market_counts.items())),
         "group_counts": dict(sorted(group_counts.items())),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "evidence_policy": {
+            "xueqiu_watchlist_is_strong_trade_source": False,
+            "broker_confirmed_trade_collection": False,
+            "evidence_role": "attention_universe_only",
+            "requires_corroboration_with": ["broker_trades", "portfolio_holdings", "research_documents", "investment_notes", "reviews"],
+        },
         "collection_readiness": {
             "status": "needs_xueqiu_watchlist_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -443,6 +493,8 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, dict):
         clean: Dict[str, Any] = {}
         for key, item in value.items():
+            if str(key).startswith("_collectorx_"):
+                continue
             if any(fragment in str(key).lower() for fragment in SECRET_KEY_FRAGMENTS):
                 continue
             clean[str(key)] = sanitized(item)

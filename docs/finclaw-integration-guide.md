@@ -168,9 +168,11 @@ Current status for `xueqiu-watchlist`:
 
 - Converts authorized Xueqiu watchlist exports into `xueqiu-watchlist`
   `watchlist` events.
-- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, and TXT.
+- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, TXT, and ZIP
+  packages.
 - Captures symbol, code, market, name, group, industry, tags, note/reason, and
-  followed time when present.
+  followed time when present; ZIP packages preserve `archive.zip::member`
+  provenance and skip path-traversal members.
 - Recursively filters credential-like raw keys.
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows.
@@ -184,11 +186,12 @@ python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect \
 
 Current status:
 
-- Parses authorized JSON/JSONL/CSV/TSV/HTML/TXT exports for watchlists, follows,
-  posts, comments, favorites, saved pages, and owner portfolio/rebalance records.
+- Parses authorized JSON/JSONL/CSV/TSV/XLSX/XLSM/HTML/TXT/ZIP exports for
+  watchlists, follows, posts, comments, favorites, saved pages, and owner
+  portfolio/rebalance records.
 - Normalizes Snowball-like `statuses/list/data/items/stocks/cubes` payloads,
-  strips credential-like keys from retained raw metadata, and writes a standard
-  `investor_wiki_evidence.v1.json`.
+  preserves ZIP member provenance, strips credential-like keys from retained raw
+  metadata, and writes a standard `investor_wiki_evidence.v1.json`.
 - Not yet a real login/session collector.
 - Not a broker-confirmed trade source.
 

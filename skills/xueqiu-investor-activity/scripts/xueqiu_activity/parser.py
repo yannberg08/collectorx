@@ -6,16 +6,25 @@ import csv
 import hashlib
 import json
 import re
+import tempfile
+import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
+
+try:
+    import openpyxl
+except ImportError:  # pragma: no cover - optional dependency for runtime installs
+    openpyxl = None
 
 
 COLLECTOR = "xueqiu-investor-activity"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".txt", ".html", ".htm", ".md", ".markdown"}
+SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".xlsx", ".xlsm", ".txt", ".html", ".htm", ".md", ".markdown", ".zip"}
+ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 EXPECTED_ACTIVITY_TYPES = ("watchlist", "follow_user", "follow_portfolio", "portfolio_activity", "comment", "favorite", "post")
 
@@ -54,9 +63,44 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
         return parse_table(path)
+    if suffix in {".xlsx", ".xlsm"}:
+        return parse_workbook(path)
     if suffix in {".html", ".htm"}:
         return [parse_html(path)]
+    if suffix == ".zip":
+        return parse_zip(path)
     return [parse_text(path)]
+
+
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-xueqiu-activity-") as tmp:
+        tmp_root = Path(tmp)
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            member_name = info.filename.replace("\\", "/")
+            member_path = PurePosixPath(member_name)
+            suffix = Path(member_name).suffix.lower()
+            if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                continue
+            target = tmp_root.joinpath(*member_path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read(info))
+            for member_row, record in enumerate(parse_path(target), start=1):
+                if isinstance(record, dict):
+                    record["_collectorx_raw_ref"] = {
+                        "path": f"{path}::{member_name}",
+                        "archive": str(path),
+                        "archive_member": member_name,
+                        "member_row": member_row,
+                    }
+                records.append(record)
+    return records
+
+
+def is_safe_archive_member(member_path: PurePosixPath) -> bool:
+    return bool(member_path.parts) and not member_path.is_absolute() and ".." not in member_path.parts
 
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
@@ -114,6 +158,32 @@ def parse_table(path: Path) -> List[Dict[str, Any]]:
     return [{str(k): v for k, v in row.items() if k is not None} for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
 
 
+def parse_workbook(path: Path) -> List[Dict[str, Any]]:
+    if openpyxl is None:
+        return []
+    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    records: List[Dict[str, Any]] = []
+    try:
+        for sheet in workbook.worksheets:
+            rows = list(sheet.iter_rows(values_only=True))
+            header_index = next((idx for idx, row in enumerate(rows) if any(cell not in (None, "") for cell in row)), None)
+            if header_index is None:
+                continue
+            headers = [str(cell).strip() if cell not in (None, "") else f"column_{idx + 1}" for idx, cell in enumerate(rows[header_index])]
+            for row in rows[header_index + 1 :]:
+                record = {
+                    headers[idx]: value
+                    for idx, value in enumerate(row)
+                    if idx < len(headers) and value not in (None, "")
+                }
+                if record:
+                    record["sheet"] = sheet.title
+                    records.append(record)
+    finally:
+        workbook.close()
+    return records
+
+
 def sniff_delimiter(text: str) -> str:
     try:
         return csv.Sniffer().sniff(text[:4096], delimiters=",\t;").delimiter
@@ -124,6 +194,12 @@ def sniff_delimiter(text: str) -> str:
 def parse_html(path: Path) -> Dict[str, Any]:
     html = path.read_text(encoding="utf-8", errors="replace")
     text = html_to_text(html)
+    raw_ref = {"path": str(path), "row": row, "activity_type": activity_type, "source_surface": data.get("source_surface")}
+    if isinstance(record.get("_collectorx_raw_ref"), dict):
+        raw_ref.update(record["_collectorx_raw_ref"])
+        raw_ref["row"] = row
+        raw_ref["activity_type"] = activity_type
+        raw_ref["source_surface"] = data.get("source_surface")
     return {
         "activity_type": "saved_page",
         "title": meta_content(html, "og:title") or title_tag(html) or infer_title(path, text),
@@ -198,6 +274,12 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "broker_confirmed_trade": False,
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [], {})}
+    raw_ref = {"path": str(path), "row": row, "activity_type": activity_type, "source_surface": data.get("source_surface")}
+    if isinstance(record.get("_collectorx_raw_ref"), dict):
+        raw_ref.update(record["_collectorx_raw_ref"])
+        raw_ref["row"] = row
+        raw_ref["activity_type"] = activity_type
+        raw_ref["source_surface"] = data.get("source_surface")
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, activity_type, event_time, symbol, name, url, json.dumps(sanitized(record), ensure_ascii=False, sort_keys=True)),
@@ -208,7 +290,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {"path": str(path), "row": row, "activity_type": activity_type, "source_surface": data.get("source_surface")},
+        "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "personal_message", "contact"]},
         "wiki_targets": wiki_targets_for_activity(activity_type),
     }
@@ -340,8 +422,15 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(counts.items())),
         "activity_counts": dict(sorted(activity_counts.items())),
         "surface_counts": dict(sorted(surface_counts.items())),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "observed_activity_types": observed,
         "missing_expected_activity_types": missing,
+        "evidence_policy": {
+            "xueqiu_is_broker_trade_source": False,
+            "broker_confirmed_trade_collection": False,
+            "evidence_role": "attention_network_opinion_and_model_portfolio_only",
+            "requires_corroboration_with": ["broker_trades", "portfolio_holdings", "research_documents", "investment_notes", "reviews"],
+        },
         "collection_readiness": {
             "status": "needs_xueqiu_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events),
@@ -500,6 +589,8 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, dict):
         cleaned: Dict[str, Any] = {}
         for key, item in value.items():
+            if str(key).startswith("_collectorx_"):
+                continue
             lowered = str(key).lower()
             if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
                 continue

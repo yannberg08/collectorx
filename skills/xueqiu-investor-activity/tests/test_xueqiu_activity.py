@@ -7,7 +7,10 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
+
+import openpyxl
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -145,9 +148,58 @@ def test_syncs_package_to_soulmirror_lake() -> None:
         assert (soulmirror / "lake" / "xueqiu-investor-activity" / "latest" / "soulmirror_sync.json").exists()
 
 
+def test_collects_zip_excel_activity_package() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        workbook_path = root / "portfolio.xlsx"
+        zip_path = root / "xueqiu-package.zip"
+        out = root / "out"
+
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "组合调仓"
+        sheet.append(["type", "cube_symbol", "cube_name", "stock_symbol", "stock_name", "target_weight"])
+        sheet.append(["portfolio", "ZH100001", "AI组合", "300750", "宁德时代", "12.5"])
+        workbook.save(workbook_path)
+
+        with zipfile.ZipFile(zip_path, "w") as package:
+            package.write(workbook_path, "nested/portfolio.xlsx")
+            package.writestr("../escape.json", json.dumps({"type": "post", "text": "must skip"}, ensure_ascii=False))
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(zip_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["kind"] == "holding"
+        assert events[0]["data"]["activity_type"] == "portfolio_activity"
+        assert events[0]["data"]["symbol"] == "SZ300750"
+        assert events[0]["raw_ref"]["archive_member"] == "nested/portfolio.xlsx"
+        assert events[0]["raw_ref"]["member_row"] == 1
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "must skip" not in serialized
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["archive_member_event_count"] == 1
+        assert manifest["evidence_policy"]["xueqiu_is_broker_trade_source"] is False
+
+
 if __name__ == "__main__":
     test_collect_watchlist_csv()
     test_collect_posts_json()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
     test_syncs_package_to_soulmirror_lake()
+    test_collects_zip_excel_activity_package()
     print("xueqiu-investor-activity tests passed.")

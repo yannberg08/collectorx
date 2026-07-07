@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import openpyxl
@@ -51,6 +52,7 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         json_path = root / "xueqiu_watchlist.json"
         xlsx_path = root / "xueqiu_watchlist.xlsx"
         text_path = root / "watchlist.txt"
+        zip_path = root / "watchlist-package.zip"
         out = root / "out"
 
         csv_path.write_text(
@@ -79,6 +81,9 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         sheet.append(["00700", "腾讯控股", "港股代码保持港股市场"])
         workbook.save(xlsx_path)
         text_path.write_text("短线观察：SZ002475 立讯精密\n忽略普通文字\n", encoding="utf-8")
+        with zipfile.ZipFile(zip_path, "w") as package:
+            package.writestr("nested/zip-watchlist.csv", "代码,名称,分组\n300750,宁德时代,新能源\n")
+            package.writestr("../escape.csv", "代码,名称\n600000,浦发银行\n")
 
         subprocess.run(
             [
@@ -97,7 +102,7 @@ def test_collect_xueqiu_watchlist_exports() -> None:
             capture_output=True,
         )
         events = read_events(out)
-        assert len(events) == 6
+        assert len(events) == 7
         assert {event["collector"] for event in events} == {"xueqiu-watchlist"}
         assert {event["kind"] for event in events} == {"watchlist"}
         assert all("investor.opportunity_watchlist.watchlist" in event["wiki_targets"] for event in events)
@@ -113,9 +118,14 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         assert all(event["data"]["market"] == "HK" for event in hk)
         text_event = next(event for event in events if event["data"]["symbol"] == "SZ002475")
         assert "立讯精密" in text_event["data"]["name"]
+        zip_event = next(event for event in events if event["data"]["symbol"] == "SZ300750")
+        assert zip_event["raw_ref"]["archive_member"] == "nested/zip-watchlist.csv"
+        assert zip_event["raw_ref"]["member_row"] == 1
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_xueqiu_watchlist_boundary"] is False
         assert manifest["market_counts"]["HK"] == 2
+        assert manifest["archive_member_event_count"] == 1
+        assert manifest["evidence_policy"]["xueqiu_watchlist_is_strong_trade_source"] is False
 
 
 def test_gap_event() -> None:

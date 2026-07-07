@@ -1,7 +1,7 @@
 ---
 name: xueqiu-watchlist
 description: 雪球关注/自选列表垂直采集器。采集用户授权导出的雪球关注池，输出 watchlist 事件；关注池不能单独证明持仓、交易或完整投资意图。
-version: 0.2.0
+version: 0.2.1
 ---
 
 # Xueqiu Watchlist Collector
@@ -11,7 +11,7 @@ version: 0.2.0
 采集：
 
 - 雪球关注/自选列表中的股票代码、名称、市场、分组、行业、标签、备注、关注时间。
-- CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT 中的授权关注列表。
+- CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT、ZIP 中的授权关注列表。
 - 简单文本中的 A 股、港股雪球代码。
 
 不采集：
@@ -51,3 +51,6 @@ python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py \
 关注列表是 attention-universe 证据，流向 `investor.opportunity_watchlist.watchlist`
 和 `investor.capability_circle.attention_universe`。FinClaw 应与雪球活动、
 券商交易、笔记、研报和复盘交叉验证。
+
+ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会明确
+标注 `xueqiu_watchlist_is_strong_trade_source: false`。

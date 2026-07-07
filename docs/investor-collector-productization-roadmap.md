@@ -149,6 +149,28 @@ Findings:
 - Current local machine did not have a clearly named authorized Xueqiu export,
   so this pass still does not claim real account validation.
 
+### Wave B3b: P0 Xueqiu package provenance and evidence policy
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-xueqiu-package-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `xueqiu-watchlist` to `0.2.1` and `xueqiu-investor-activity` to
+  `0.2.1`.
+- Added authorized ZIP package import for watchlist and broad activity exports.
+- ZIP packages preserve `archive.zip::member` provenance and skip unsafe path
+  traversal members.
+- Added XLSX/XLSM workbook parsing to `xueqiu-investor-activity`.
+- Added manifest evidence policies that explicitly mark Xueqiu as attention,
+  network, opinion, and model-portfolio evidence only, not broker-confirmed
+  trade evidence.
+- Fixture validation covers watchlist ZIP, activity ZIP with Excel workbook,
+  archive member provenance, traversal skipping, and broker-trade boundary flags.
+
 ### Wave B4: P0 China wealth assets productization pass 2
 
 Status: `completed-baseline`
@@ -826,7 +848,7 @@ Findings:
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, screenshot OCR decision, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, import audit, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
-| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths; watchlist and broad activity baselines exist; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
+| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage manifest; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue
