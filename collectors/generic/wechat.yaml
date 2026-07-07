@@ -14,7 +14,8 @@ backfill:
   page: 5000
 armed: false
 
-prompt: |
-  使用wechat-export skill导出微信聊天记录。
-  解析JSON格式，提取：sender/chat/time/content
-  输出格式：JSON数组
+# 采集器使用的skill
+skill: wechat-export
+
+# 采集逻辑由skill定义
+# skill会处理：数据库解密、数据查询、数据导出

@@ -1,0 +1,13 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: ticktick
+display_name: 滴答清单
+refresh_interval: 15m
+mode: snapshot
+armed: false
+
+# 采集器使用的skill
+skill: ticktick-cli
+
+# 采集逻辑由skill定义
+# skill会处理：API认证、任务获取、数据导出

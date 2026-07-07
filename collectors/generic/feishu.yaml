@@ -14,7 +14,8 @@ backfill:
   page: 5000
 armed: false
 
-prompt: |
-  使用feishu-lark skill导出飞书消息。
-  解析JSON格式，提取：sender/chat/time/content
-  输出格式：JSON数组
+# 采集器使用的skill
+skill: feishu
+
+# 采集逻辑由skill定义
+# skill会处理：API认证、消息获取、数据导出
