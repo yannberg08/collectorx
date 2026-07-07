@@ -1,0 +1,4 @@
+[2026-07-07 10:00:00] [188888888 Business] CHSStockPosition::OnGetPositionResponse MSG_303_RET(响应持仓请求成功),count:0,msg:
+[2026-07-07 10:00:01] [188888888 Business] CHSStockAsset::OnGetAssetResponse,MSG_RET_302(响应资产查询请求成功),count:1,msg:
+[2026-07-07 10:00:02] [188888888 UI] [EMTradeOrderPageView loadUserInfo] L372 【交易接口统计】 股票[600519]
+[2026-07-07 10:00:03] [188888888 Business] 已有用户登录

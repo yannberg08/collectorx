@@ -1,5 +1,5 @@
 {
   "slug": "eastmoney-portfolio",
-  "version": "0.1.0",
-  "description": "东方财富交割单导出工具"
+  "version": "0.6.0",
+  "description": "东方财富投资行为本机采集、交易页自动只读深采、强交易 readiness、投资分身证据包、SoulMirror Wiki 路由、平台探测与兼容交割单解析工具"
 }

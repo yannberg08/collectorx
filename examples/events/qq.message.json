@@ -1,0 +1,30 @@
+{
+  "schema": "collectorx.event.v1",
+  "id": "qq:sample-message-001",
+  "collector": "qq",
+  "source": "QQ 本地聊天记录",
+  "owner_scope": "personal",
+  "kind": "message",
+  "time": "2026-07-07T10:21:00+08:00",
+  "collected_at": "2026-07-07T16:30:00+08:00",
+  "data": {
+    "chat": "投资讨论群",
+    "sender": "10001",
+    "sender_is_owner": true,
+    "text": "这家公司先放观察池，等半年报出来再看。",
+    "message_type": "text"
+  },
+  "raw_ref": {
+    "chat_id": "group-1",
+    "message_id": "m-001"
+  },
+  "privacy": {
+    "sensitive": true,
+    "local_only": true,
+    "contains": ["personal_message", "contact"]
+  },
+  "wiki_targets": [
+    "external.relationships.conversations",
+    "investor.network_collaboration.discussions"
+  ]
+}

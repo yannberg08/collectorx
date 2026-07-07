@@ -1,0 +1,29 @@
+{
+  "schema": "collectorx.event.v1",
+  "id": "xueqiu-watchlist:600519",
+  "collector": "xueqiu-watchlist",
+  "source": "雪球关注列表 CSV",
+  "owner_scope": "personal",
+  "kind": "watchlist",
+  "time": null,
+  "collected_at": "2026-07-07T15:00:00+08:00",
+  "data": {
+    "symbol": "600519",
+    "name": "贵州茅台",
+    "industry": "白酒",
+    "note": "核心关注"
+  },
+  "raw_ref": {
+    "file": "fixtures/private/xueqiu-watchlist.csv",
+    "row": 2
+  },
+  "privacy": {
+    "sensitive": true,
+    "local_only": true,
+    "contains": ["portfolio"]
+  },
+  "wiki_targets": [
+    "investor.competence_circle.watchlist",
+    "investor.information_sources"
+  ]
+}

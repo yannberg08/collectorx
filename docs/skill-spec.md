@@ -58,13 +58,42 @@ skill-name/
 
 | 采集器 | 文件数 | 状态 |
 |--------|--------|------|
-| wechat-export | 15 | ✅ 完整 |
-| feishu | 5 | ✅ 完整 |
-| ticktick-cli | 12 | ✅ 完整 |
-| doubao-chat-export | 19 | ✅ 完整 |
-| ths-portfolio | 9 | ✅ 已补齐 |
-| eastmoney-portfolio | 2 | ❌ 需补齐 |
-| xueqiu-watchlist | 2 | ❌ 需补齐 |
-| email-collector | 2 | ❌ 需补齐 |
-| qq-export | 2 | ❌ 需补齐 |
-| notes-collector | 2 | ❌ 需补齐 |
+| wechat-export | 15+ | 迁移 skill，需确认上游许可与真实环境 |
+| feishu | 5+ | 迁移 skill，需确认上游许可与真实环境 |
+| ticktick-cli | 12+ | 迁移 skill，需确认上游许可与真实环境 |
+| doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
+| ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
+| eastmoney-portfolio | 9+ | macOS 本机与交易页自动只读采集 Beta，强交易表需账户解锁真机验证 |
+| xueqiu-watchlist | 9 | 草稿实现，CSV parser 已有基础测试 |
+| email-collector | 8+ | 已有多邮箱前置识别与邮件事件输出基线，需真实邮箱验证与安全评审 |
+| qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
+| notes-collector | 6 | 草稿实现，需真实 Notion/Obsidian 验证 |
+
+## 输出契约
+
+采集器不直接写 Wiki。所有采集器必须先输出 `collectorx.event.v1`，再由 lake 和 distill app 处理。
+
+必读文件：
+
+- `docs/event-contract.md`
+- `schemas/collectorx-event.schema.json`
+- `examples/events/*.json`
+
+最小规则：
+
+1. `id` 必须稳定，不能每次采集随机生成。
+2. `owner_scope` 默认是 `personal`，公共市场数据不要混入用户个人证据。
+3. `privacy.local_only` 默认是 `true`。
+4. `raw_ref` 保存原始证据指针，避免下游 prompt 无限制暴露原文。
+5. `wiki_targets` 只是路由建议，不能替代 distill app 的判断。
+
+## 验收标准
+
+一个采集器达到可进入 FinClaw/SoulMirror 闭环前，至少要通过：
+
+1. CLI `--help` 可执行。
+2. Python 语法编译通过。
+3. 有不会泄露隐私的 fixture。
+4. 能输出 `collectorx.event.v1`。
+5. 文档说明授权方式、平台状态、限制和错误降级。
+6. 明确映射到通用 Wiki 或垂直 Wiki 的哪些维度。

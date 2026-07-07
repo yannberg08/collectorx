@@ -1,0 +1,34 @@
+{
+  "schema": "collectorx.event.v1",
+  "id": "email:sample-message-001",
+  "collector": "email",
+  "source": "IMAP 邮件",
+  "owner_scope": "personal",
+  "kind": "email",
+  "time": "Tue, 07 Jul 2026 10:00:00 +0800",
+  "collected_at": "2026-07-07T16:30:00+08:00",
+  "data": {
+    "mailbox": "owner@example.com",
+    "folder": "INBOX",
+    "from": "Analyst <analyst@example.com>",
+    "to": "Owner <owner@example.com>",
+    "cc": "",
+    "subject": "调研纪要",
+    "body_preview": "这是一封邮件正文预览。",
+    "has_body": true
+  },
+  "raw_ref": {
+    "imap_uid": "42",
+    "message_id": "<sample@example.com>",
+    "folder": "INBOX"
+  },
+  "privacy": {
+    "sensitive": true,
+    "local_only": true,
+    "contains": ["email", "contact", "personal_message"]
+  },
+  "wiki_targets": [
+    "external.relationships.contacts",
+    "investor.network_collaboration.discussions"
+  ]
+}

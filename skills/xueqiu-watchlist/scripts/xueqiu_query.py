@@ -33,7 +33,7 @@ def main():
         print(f"\n关注列表")
         print("=" * 40)
         for r in records:
-            print(f"{r["code"]} {r["name"]} {r["industry"]} {r["note"]}")
+            print(f"{r['code']} {r['name']} {r['industry']} {r['note']}")
     
     if args.export:
         with open(args.export, "w", encoding="utf-8") as f:

@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://collectorx.local/schemas/collectorx-event.schema.json",
+  "title": "CollectorX Event",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "collector",
+    "source",
+    "owner_scope",
+    "kind",
+    "time",
+    "collected_at",
+    "data",
+    "raw_ref",
+    "privacy"
+  ],
+  "properties": {
+    "schema": {
+      "const": "collectorx.event.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 8,
+      "description": "Stable deterministic event id generated from collector id plus source-native id or content hash."
+    },
+    "collector": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable evidence source, such as a chat name, mailbox, file path, or export file."
+    },
+    "owner_scope": {
+      "type": "string",
+      "enum": ["personal", "workspace", "public", "unknown"],
+      "description": "Whether the event describes the user's own private/work behavior or external public data."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "message",
+        "file",
+        "note",
+        "email",
+        "calendar",
+        "task",
+        "trade",
+        "holding",
+        "watchlist",
+        "a2a",
+        "profile",
+        "other"
+      ]
+    },
+    "time": {
+      "type": ["string", "null"],
+      "description": "Source event time in ISO-8601 when available; null only when the source has no time field."
+    },
+    "collected_at": {
+      "type": "string",
+      "description": "Collection time in ISO-8601."
+    },
+    "data": {
+      "type": "object",
+      "description": "Collector-normalized payload. Shape depends on kind."
+    },
+    "raw_ref": {
+      "type": "object",
+      "description": "Pointer to raw evidence without forcing raw sensitive content into downstream prompts."
+    },
+    "privacy": {
+      "type": "object",
+      "required": ["sensitive", "local_only"],
+      "properties": {
+        "sensitive": {
+          "type": "boolean"
+        },
+        "local_only": {
+          "type": "boolean"
+        },
+        "contains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "personal_message",
+              "contact",
+              "credential",
+              "money",
+              "portfolio",
+              "trade",
+              "health",
+              "legal",
+              "work_confidential",
+              "none"
+            ]
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "wiki_targets": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Optional hints for downstream distill apps. Collectors may suggest, apps decide."
+    }
+  },
+  "additionalProperties": true
+}

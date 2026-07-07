@@ -1,0 +1,35 @@
+{
+  "schema": "collectorx.event.v1",
+  "id": "ths-portfolio:2024-01-15T09:30:00+08:00:600519:buy:1800.00:100",
+  "collector": "ths-portfolio",
+  "source": "同花顺交割单 CSV",
+  "owner_scope": "personal",
+  "kind": "trade",
+  "time": "2024-01-15T09:30:00+08:00",
+  "collected_at": "2026-07-07T15:00:00+08:00",
+  "data": {
+    "account": "default",
+    "symbol": "600519",
+    "name": "贵州茅台",
+    "side": "buy",
+    "price": 1800.0,
+    "quantity": 100,
+    "amount": 180000.0,
+    "fee": 54.0,
+    "tax": 0.0
+  },
+  "raw_ref": {
+    "file": "fixtures/private/ths-sample.csv",
+    "row": 2
+  },
+  "privacy": {
+    "sensitive": true,
+    "local_only": true,
+    "contains": ["trade", "money", "portfolio"]
+  },
+  "wiki_targets": [
+    "investor.decisions.records",
+    "investor.risk.portfolio_constraints",
+    "external.capital.assets"
+  ]
+}

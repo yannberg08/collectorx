@@ -1,1 +1,1 @@
-{"slug": "qq-export", "version": "0.1.0", "description": "QQ聊天记录导出工具"}
+{"slug": "qq-export", "version": "0.5.0", "description": "QQ通用通信采集器：发现真实QQ NT联系人/群/消息库，支持key诊断、clean库准备、解密后联系人/群/消息读取，并对齐微信采集器过滤和CollectorX事件输出"}

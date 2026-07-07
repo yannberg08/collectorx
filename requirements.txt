@@ -1,0 +1,2 @@
+# CollectorX currently uses only the Python standard library for validation.
+# Keep this file so CI can install future dependencies deterministically.

@@ -1,1 +1,1 @@
-{"slug": "email-collector", "version": "0.1.0", "description": "邮箱邮件采集器"}
+{"slug": "email-collector", "version": "0.3.0", "description": "邮箱邮件采集器，支持多邮箱前置识别、接入清单和CollectorX邮件事件输出"}

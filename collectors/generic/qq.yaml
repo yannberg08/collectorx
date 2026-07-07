@@ -10,4 +10,4 @@ armed: false
 skill: qq-export
 
 # 采集逻辑由skill定义
-# skill会处理：数据库发现、SQLite查询、数据导出
+# skill会处理：QQ NT数据库发现、加密状态探测、clean库准备、SQLite查询、数据导出

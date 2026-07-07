@@ -1,14 +1,79 @@
 apiVersion: collectorx/v1
 kind: Collector
 id: eastmoney-portfolio
-display_name: 东方财富交割单
+display_name: 东方财富投资行为
 refresh_interval: 24h
 mode: snapshot
-time_field: date
+time_field: time
 armed: false
+category: client
+owner_scope: personal
+local_only: true
+product_stage: beta
+capability_stage: strong-trade-readiness
+platforms:
+  macos:
+    status: verified-current-machine
+    supports:
+      - local_watchlist
+      - recent_stock
+      - stock_notes
+      - chart_drawings
+      - custom_panels
+      - trade_interface_status_log
+      - trade_ui_readonly_capture
+  windows:
+    status: code-level-simulation
+    supports:
+      - candidate_local_home_probe
+      - fixture_validation
+  generic:
+    status: fallback-only
 
-# 采集器使用的skill
+outputs:
+  event_schema: collectorx.event.v1
+  lake_path: lake/eastmoney-investor-v2/events.jsonl
+  evidence_schema: finclaw.investor_wiki_evidence.v1
+  evidence_path: investor_wiki_evidence.v1.json
+  wiki_routes:
+    - wiki/external/investor/
+    - wiki/vertical/investor/
+
+privacy:
+  sensitive: true
+  local_only: true
+  excludes:
+    - trading_password
+    - login_password
+    - cookie
+    - token
+    - session
+    - signature
+    - device_fingerprint
+    - raw_trade_payload
+
+readiness_gate:
+  required_strong_tables:
+    - asset_snapshot
+    - position_detail
+    - trade_execution
+    - entrust_order
+    - fund_flow
+  account_locked_behavior: emit_gap_no_password_request
+  manual_export_required: false
+
 skill: eastmoney-portfolio
 
-# 采集逻辑由skill定义
-# skill会处理：CSV解析、数据标准化、统计分析
+command:
+  - python3
+  - skills/eastmoney-portfolio/scripts/eastmoney_query.py
+  - --collect-local
+  - --auto-trade-ui
+  - --sync-soulmirror
+  - --output
+  - "{output_dir}"
+
+description: |
+  采集东方财富用户自己的投资行为证据：自选、近期查看、股票笔记、画线、看盘面板、
+  交易接口状态，以及东方财富 Mac 交易页自动只读采集的资产、持仓、成交、委托、
+  资金流水。采集器不会读取或请求交易密码，不绕过账户锁定，不下单、不撤单、不转账。

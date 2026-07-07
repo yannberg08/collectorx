@@ -1,0 +1,31 @@
+{
+  "schema": "collectorx.event.v1",
+  "id": "wechat:chat-abc:msg-001",
+  "collector": "wechat",
+  "source": "微信群「投资讨论」· 2026-07-07 的聊天",
+  "owner_scope": "personal",
+  "kind": "message",
+  "time": "2026-07-07T10:21:00+08:00",
+  "collected_at": "2026-07-07T15:00:00+08:00",
+  "data": {
+    "chat": "投资讨论",
+    "sender": "我",
+    "sender_is_owner": true,
+    "text": "这家公司我先放进观察池，等半年报出来再看。",
+    "message_type": "text"
+  },
+  "raw_ref": {
+    "chat_id": "chat-abc",
+    "message_id": "msg-001"
+  },
+  "privacy": {
+    "sensitive": true,
+    "local_only": true,
+    "contains": ["personal_message", "contact"]
+  },
+  "wiki_targets": [
+    "investor.decision_framework.triggers",
+    "investor.watchlist",
+    "internal.cognition.decision"
+  ]
+}

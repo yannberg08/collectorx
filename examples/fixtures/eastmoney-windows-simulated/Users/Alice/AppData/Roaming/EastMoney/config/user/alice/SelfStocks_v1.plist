@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+  <dict>
+    <key>groupName</key>
+    <string>默认自选</string>
+    <key>groupId</key>
+    <string>windows-sim-default</string>
+    <key>groupVersion</key>
+    <integer>1</integer>
+    <key>selfStocks</key>
+    <string>1:600519;0:002738;</string>
+  </dict>
+</array>
+</plist>
