@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+"""Tests for collaboration-exports collector."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "scripts" / "collaboration_exports.py"
+
+
+def read_events(out: Path, collector: str) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (out / "lake" / collector / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def test_collect_dingtalk_package() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "dingtalk-export.json"
+        html = root / "dingtalk-minutes.html"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                {
+                    "platform": "钉钉",
+                    "messages": [
+                        {
+                            "chat": "投研讨论群",
+                            "sender": "研究员A",
+                            "time": "2026-07-08T09:00:00+08:00",
+                            "content": "讨论半导体订单和估值。",
+                            "auth": {"token": "must-not-leak"},
+                        }
+                    ],
+                    "files": [{"file_name": "调研纪要.pdf", "sender": "研究员B", "link": "https://dingtalk.example/file"}],
+                    "contacts": [{"name": "基金经理C", "department": "投资部"}],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        html.write_text(
+            "<html><head><title>钉钉会议纪要</title></head><body>参会人：研究员A，基金经理C https://dingtalk.example/meeting</body></html>",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--platform",
+                "dingtalk",
+                "--input",
+                str(root),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = read_events(out, "dingtalk")
+        assert len(events) == 4
+        assert {event["collector"] for event in events} == {"dingtalk"}
+        assert {event["data"]["record_kind"] for event in events} == {"contact", "file", "meeting", "message"}
+        assert {event["kind"] for event in events} == {"calendar", "file", "message", "profile"}
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "must-not-leak" not in serialized
+        message = next(event for event in events if event["data"]["record_kind"] == "message")
+        assert message["wiki_targets"] == ["internal.collaboration.messages"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collector"] == "dingtalk"
+        assert manifest["collection_readiness"]["can_claim_investment_collaboration"] is False
+
+
+def test_collect_wecom_csv_and_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        csv_path = root / "wecom-messages.csv"
+        out = root / "out"
+        gap_out = root / "gap"
+        csv_path.write_text(
+            "平台,类型,会话,发送人,内容,时间,会议链接\n"
+            "企业微信,message,调研群,投资经理A,明天讨论现金流模型,2026-07-08T10:00:00+08:00,\n"
+            "企业微信,meeting,投委会,秘书,会议纪要已生成,2026-07-08T11:00:00+08:00,https://work.weixin.qq.com/meeting\n",
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--platform", "wecom", "--input", str(root), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = read_events(out, "wecom")
+        assert len(events) == 2
+        assert {event["collector"] for event in events} == {"wecom"}
+        assert {event["data"]["record_kind"] for event in events} == {"meeting", "message"}
+        assert any(event["data"].get("meeting_url") == "https://work.weixin.qq.com/meeting" for event in events)
+
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--platform", "wecom", "--out-dir", str(gap_out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        gap_events = read_events(gap_out, "wecom")
+        assert len(gap_events) == 1
+        assert gap_events[0]["data"]["record_kind"] == "collector_gap"
+        gap_manifest = json.loads((gap_out / "manifest.json").read_text(encoding="utf-8"))
+        assert gap_manifest["collection_readiness"]["can_enter_finclaw"] is False
+
+
+if __name__ == "__main__":
+    test_collect_dingtalk_package()
+    test_collect_wecom_csv_and_gap()
+    print("collaboration-exports tests passed.")

@@ -80,8 +80,8 @@ Operational docs:
 | `email` | `email-collector` | Multi-account preflight/event baseline; needs real mailbox validation |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |
 | `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion plus authorized Youdao/Evernote/Markdown/HTML/JSON/ENEX imports; macOS Obsidian-style validation done |
-| `dingtalk` | none yet | YAML placeholder; skill not implemented |
-| `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
+| `dingtalk` | `collaboration-exports` | Authorized local export baseline for DingTalk messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
+| `wecom` | `collaboration-exports` | Authorized local export baseline for WeCom messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |
 | `meeting-artifacts` | `meeting-artifacts` | Authorized local/platform-export baseline for meeting minutes, transcripts, HTML/CSV/JSON exports, participants, links, platform normalization; account API adapters pending |
 | `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |

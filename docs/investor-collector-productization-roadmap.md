@@ -448,6 +448,33 @@ Findings:
 - Fixture validation covers Xiaohongshu nested packages and Bilibili/Weibo Excel
   activity sheets.
 
+### Wave K: P1 DingTalk/WeCom collaboration exports pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-collaboration-exports-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `collaboration-exports` generic skill for `dingtalk` and
+  `wecom`.
+- Replaced `dingtalk` and `wecom` YAML-only placeholders with a real shared CLI:
+  `collaboration_exports.py collect --platform dingtalk|wecom`.
+- Supports authorized JSON/JSONL/NDJSON, CSV/TSV, HTML, Markdown, and TXT
+  exports.
+- Captures messages, chats, contacts, file refs, meeting refs, sender/receiver,
+  departments, participants, meeting links, file names, tags, and content
+  previews.
+- Emits `collectorx.event.v1` with collector IDs matching the channel:
+  `dingtalk` or `wecom`.
+- Generic collaboration events route to internal collaboration Wiki targets;
+  investment filtering remains in investor lenses.
+- Fixture validation covers DingTalk multi-section packages, DingTalk HTML
+  meeting refs, WeCom CSV messages/meetings, gap events, and credential-key
+  sanitization.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -464,7 +491,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON and generic calendar exports; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones |
-| 3 | `meeting-minutes` | G2/G3 partial for local authorized meeting files | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
+| 3 | `meeting-minutes` | G1/G2 strengthened for local meeting files plus DingTalk/WeCom collaboration exports; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages and Chromium/Safari browser-history copies | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 

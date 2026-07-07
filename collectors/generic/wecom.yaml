@@ -2,6 +2,7 @@ apiVersion: collectorx/v1
 kind: Collector
 id: wecom
 display_name: 企业微信
+skill: collaboration-exports
 refresh_interval: 30m
 retention: 14d
 mode: incremental
@@ -21,12 +22,14 @@ scope:
     - chats
     - contacts
     - files_refs
+    - meeting_refs
   excludes:
     - investment_classification
     - password
     - session_token
     - unauthorized_workspace_data
+    - file_body_mirroring
 
 description: |
-  企业微信通用通信采集器占位。它只负责用户授权的企业微信消息与文件指针。
+  企业微信通用通信采集器。它只负责用户授权的企业微信消息、会话、联系人、文件指针和会议指针。
   投资讨论、调研协作和会议纪要分别由 investor lens 从 lake 中筛选。

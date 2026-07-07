@@ -234,6 +234,36 @@ Current status:
 - Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
   trading plans, earnings events, research meetings, and review reminders.
 
+### 钉钉 / 企业微信协作导出
+
+```bash
+python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
+  --platform dingtalk \
+  --input <authorized-dingtalk-export> \
+  --out-dir <out-dir>
+```
+
+```bash
+python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
+  --platform wecom \
+  --input <authorized-wecom-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized JSON/JSONL/NDJSON, CSV/TSV, HTML, Markdown, and TXT
+  collaboration exports into `dingtalk` or `wecom` events.
+- Captures messages, chats, contacts, file refs, meeting refs, sender, receiver,
+  department, participants, meeting links, file names, tags, and content
+  previews.
+- Filters credential-like raw keys and keeps file bodies out of the generic
+  collaboration collector.
+- Does not claim investment collaboration directly.
+- Feed `lake/dingtalk/events.jsonl` and `lake/wecom/events.jsonl` into
+  downstream investor lenses such as `meeting-minutes`, future collaboration
+  dialogue lenses, and research-document routing.
+
 ### 会议产物
 
 ```bash

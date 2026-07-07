@@ -2,6 +2,7 @@ apiVersion: collectorx/v1
 kind: Collector
 id: dingtalk
 display_name: 钉钉消息
+skill: collaboration-exports
 refresh_interval: 30m
 retention: 14d
 mode: incremental
@@ -13,8 +14,24 @@ backfill:
   span: 90d
   page: 5000
 armed: false
+category: generic
+owner_scope: personal
+
+scope:
+  collects:
+    - messages
+    - chats
+    - contacts
+    - files_refs
+    - meeting_refs
+  excludes:
+    - investment_classification
+    - password
+    - session_token
+    - unauthorized_workspace_data
+    - file_body_mirroring
 
 prompt: |
-  使用dingtalk skill导出钉钉消息。
-  解析JSON格式，提取：sender/chat/time/content
-  输出格式：JSON数组
+  使用 collaboration-exports skill 采集用户授权的钉钉本地导出。
+  CLI: python3 skills/collaboration-exports/scripts/collaboration_exports.py collect --platform dingtalk --input <authorized-export> --out-dir <out>
+  只输出通用协作事件；投资讨论由后续 lens 筛选。
