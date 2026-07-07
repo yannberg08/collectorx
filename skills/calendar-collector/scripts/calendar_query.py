@@ -32,6 +32,10 @@ def write_summary(path: Path, manifest: dict) -> None:
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
+        f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+        f"- meeting_url_events: {manifest['time_surface_summary']['events_with_meeting_url']}",
+        f"- reminder_events: {manifest['time_surface_summary']['events_with_reminders']}",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         "",
         "Generic calendar events are not written to the investor Wiki directly. Use the task-calendar-investor lens.",
     ]

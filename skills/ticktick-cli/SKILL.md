@@ -1,7 +1,6 @@
 ---
 name: ticktick-cli
 description: 使用 Python CLI 与 Dida365 Open API 交互以管理滴答清单任务/项目，适用于需要通过脚本或命令行调用滴答清单接口的场景（如项目/任务的查询、创建、更新、完成、删除）。
-version: 0.1.7
 ---
 
 ## 调用约定（AI 必读）
@@ -14,6 +13,12 @@ python <SKILL_DIR>/scripts/auth.py register <id> <sec>
 python <SKILL_DIR>/scripts/auth.py authorize
 python <SKILL_DIR>/scripts/ticktick_events.py collect --input <tasks.json-or-zip> --out-dir <out-dir>
 ```
+
+`ticktick_events.py collect` 是 CollectorX/FinClaw 的只读事件导入路径：它
+解析用户授权的 TickTick/Dida JSON/JSONL/ZIP 导出，输出 `lake/ticktick/events.jsonl`
+和 `manifest.json`。manifest 会报告平台覆盖、任务字段覆盖、开始/截止/完成/
+过期/循环/提醒统计、ZIP 来源审计和 `task-calendar-investor` lens 边界。
+generic task events 不能直接写投资 Wiki。
 
 `<SKILL_DIR>` 通常：
 - macOS / Linux: `~/.qclaw/skills/ticktick-cli` 或 `~/.claude/skills/ticktick-cli`

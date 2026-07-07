@@ -10,6 +10,7 @@ import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 
@@ -30,6 +31,24 @@ EXPECTED_P1_CALENDAR_PLATFORMS = (
 GENERIC_CALENDAR_PLATFORMS = {"ics_export", "csv_export", "calendar_export"}
 SOURCE_PATH_KEY = "_collectorx_source_path"
 SOURCE_PLATFORM_KEY = "_collectorx_source_platform"
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+CALENDAR_RECOMMENDED_FIELDS = (
+    "source_platform",
+    "title",
+    "calendar_name",
+    "event_id",
+    "start",
+    "end",
+    "timezone",
+    "location",
+    "meeting_url",
+    "organizer",
+    "attendees",
+    "recurrence",
+    "reminders",
+    "time",
+)
 
 
 def now_iso() -> str:
@@ -183,10 +202,11 @@ def parse_ics_text(text: str) -> List[Dict[str, Any]]:
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
             text = archive.read(member).decode("utf-8-sig", errors="replace")
             try:
                 if suffix == ".ics":
@@ -197,22 +217,30 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
                     parsed = parse_json_text(text, suffix=suffix)
             except Exception:
                 parsed = []
-            path_label = f"{path.name}::{member.filename}"
+            path_label = f"{path}::{member_name}"
             for record in parsed:
                 if isinstance(record, dict):
                     record[SOURCE_PATH_KEY] = path_label
                     record[SOURCE_PLATFORM_KEY] = infer_source_platform(record, path_label)
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
                     events.append(record)
     return events
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def unfold_ics(lines: List[str]) -> List[str]:
@@ -250,6 +278,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source_platform": source_platform,
         "title": title,
         "description_preview": description[:1000],
+        "description_length": len(description),
+        "has_description": bool(description),
         "calendar_name": first(record, ["calendar", "calendar_name", "日历", "日历名称"]),
         "event_id": first(record, ["id", "uid", "event_id"]),
         "start": normalize_time(start),
@@ -265,6 +295,15 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [], {})}
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "event_id": data.get("event_id"),
+        "source_platform": source_platform,
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [], {})}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, data.get("event_id"), title, start, end),
@@ -275,7 +314,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": data.get("start") or data.get("end"),
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {"path": path_label, "row": row, "event_id": data.get("event_id"), "source_platform": source_platform},
+        "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar", "work_confidential", "contact"]},
         "wiki_targets": ["internal.calendar.events"],
     }
@@ -329,6 +368,16 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "unknown_event_count": unknown_event_count,
             "real_account_validation": False,
         },
+        "field_coverage": field_coverage(events),
+        "time_surface_summary": time_surface_summary(events),
+        "source_audit": source_audit(events),
+        "evidence_policy": {
+            "generic_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_calendar_classification_done": False,
+            "required_lens": "task-calendar-investor",
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_calendar_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -351,6 +400,59 @@ def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: Lis
     if not missing_expected:
         return "all_expected_platforms_observed"
     return "partial_expected_platforms_observed"
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    calendar_events = [event for event in events if event.get("kind") == "calendar"]
+    field_counts = {
+        field: sum(1 for event in calendar_events if calendar_field_present(event, field))
+        for field in CALENDAR_RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(CALENDAR_RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_description": sum(1 for event in calendar_events if (event.get("data") or {}).get("has_description")),
+    }
+
+
+def calendar_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    data = event.get("data") or {}
+    value = data.get(field)
+    if field == "attendees":
+        return bool(value)
+    return value not in (None, "", [], {})
+
+
+def time_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    calendar_events = [event for event in events if event.get("kind") == "calendar"]
+    return {
+        "calendar_event_count": len(calendar_events),
+        "events_with_start": sum(1 for event in calendar_events if (event.get("data") or {}).get("start")),
+        "events_with_end": sum(1 for event in calendar_events if (event.get("data") or {}).get("end")),
+        "all_day_event_count": sum(1 for event in calendar_events if (event.get("data") or {}).get("is_all_day") is True),
+        "events_with_meeting_url": sum(1 for event in calendar_events if (event.get("data") or {}).get("meeting_url")),
+        "events_with_location": sum(1 for event in calendar_events if (event.get("data") or {}).get("location")),
+        "events_with_attendees": sum(1 for event in calendar_events if (event.get("data") or {}).get("attendees")),
+        "events_with_recurrence": sum(1 for event in calendar_events if (event.get("data") or {}).get("recurrence")),
+        "events_with_reminders": sum(1 for event in calendar_events if (event.get("data") or {}).get("reminders")),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "archive_path_traversal_members_collected": False,
+    }
 
 
 def infer_source_platform(record: Dict[str, Any], path_label: str) -> str:

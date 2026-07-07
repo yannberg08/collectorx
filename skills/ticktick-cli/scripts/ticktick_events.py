@@ -10,6 +10,7 @@ import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 
@@ -20,6 +21,24 @@ EXPECTED_P1_TASK_PLATFORMS = ("ticktick", "dida365")
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 SOURCE_PATH_KEY = "_collectorx_source_path"
 SOURCE_APP_KEY = "_collectorx_source_app"
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+TASK_RECOMMENDED_FIELDS = (
+    "source_app",
+    "title",
+    "project_name",
+    "task_id",
+    "status",
+    "priority",
+    "start",
+    "due",
+    "completed_at",
+    "is_completed",
+    "tags",
+    "recurrence",
+    "reminders",
+    "time",
+)
 
 
 def now_iso() -> str:
@@ -72,30 +91,39 @@ def parse_json_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     tasks: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
             text = archive.read(member).decode("utf-8-sig", errors="replace")
             try:
                 parsed = parse_json_text(text, suffix=suffix)
             except Exception:
                 parsed = []
-            path_label = f"{path.name}::{member.filename}"
+            path_label = f"{path}::{member_name}"
             for record in parsed:
                 record[SOURCE_PATH_KEY] = path_label
                 record[SOURCE_APP_KEY] = infer_task_source(record, path_label)
+                record[SOURCE_ARCHIVE_KEY] = str(path)
+                record[SOURCE_MEMBER_KEY] = member_name
                 tasks.append(record)
     return tasks
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def extract_tasks(loaded: Any) -> List[Dict[str, Any]]:
@@ -126,10 +154,14 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
     status = first(record, ["status", "状态"])
     path_label = first(record, [SOURCE_PATH_KEY]) or str(path)
     source_app = first(record, [SOURCE_APP_KEY]) or infer_task_source(record, path_label)
+    recurrence = first(record, ["recurrence", "repeat", "repeatFlag", "rrule", "重复", "重复规则"])
+    reminders = reminders_for(record)
+    event_time = normalize_time(due or start or completed)
     data = {
         "source_app": source_app,
         "title": title,
         "content_preview": content[:1000],
+        "content_length": len(content),
         "project_id": first(record, ["projectId", "project_id", "清单ID"]),
         "project_name": first(record, ["projectName", "project_name", "清单", "项目"]),
         "task_id": first(record, ["id", "task_id"]),
@@ -139,10 +171,22 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
         "due": due,
         "completed_at": completed,
         "is_completed": is_completed(status, completed),
+        "is_overdue": is_overdue(due, completed, collected_at),
+        "recurrence": recurrence,
+        "reminders": reminders,
         "tags": tags_for(record),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "source_app": source_app,
+        "task_id": data.get("task_id"),
+        "project_id": data.get("project_id"),
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, data.get("task_id"), title, due, completed),
@@ -150,15 +194,10 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
         "source": "滴答清单用户授权任务数据",
         "owner_scope": "personal",
         "kind": "task",
-        "time": normalize_time(due or start or completed),
+        "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "source_app": source_app,
-            "task_id": data.get("task_id"),
-            "project_id": data.get("project_id"),
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -211,6 +250,16 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "unknown_event_count": unknown_event_count,
             "real_account_validation": False,
         },
+        "field_coverage": field_coverage(events),
+        "time_status_summary": time_status_summary(events),
+        "source_audit": source_audit(events),
+        "evidence_policy": {
+            "generic_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_task_classification_done": False,
+            "required_lens": "task-calendar-investor",
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_ticktick_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -257,6 +306,9 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
+        f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+        f"- overdue_tasks: {manifest['time_status_summary']['overdue_task_count']}",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         "",
         "Generic task events are not written to the investor Wiki directly. Use the task-calendar-investor lens.",
     ]
@@ -315,6 +367,15 @@ def tags_for(record: Dict[str, Any]) -> List[str]:
     return []
 
 
+def reminders_for(record: Dict[str, Any]) -> List[str]:
+    raw = record.get("reminders") or record.get("reminder") or record.get("alerts") or record.get("提醒") or []
+    if isinstance(raw, str):
+        return [item.strip() for item in raw.replace("，", ",").split(",") if item.strip()]
+    if isinstance(raw, list):
+        return [str(item) for item in raw if str(item)]
+    return []
+
+
 def is_completed(status: Optional[str], completed: Optional[str]) -> bool:
     if completed:
         return True
@@ -328,6 +389,86 @@ def normalize_time(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
     return value
+
+
+def is_overdue(due: Optional[str], completed: Optional[str], collected_at: Optional[str]) -> bool:
+    if not due or completed:
+        return False
+    due_dt = parse_datetime(due)
+    collected_dt = parse_datetime(collected_at) if collected_at else datetime.now(CN_TZ)
+    if due_dt is None or collected_dt is None:
+        return False
+    return due_dt < collected_dt
+
+
+def parse_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    try:
+        if text.endswith("Z"):
+            return datetime.fromisoformat(text[:-1] + "+00:00")
+        if len(text) == 10 and text[4] == "-" and text[7] == "-":
+            return datetime.fromisoformat(text + "T23:59:59+08:00")
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=CN_TZ)
+        return parsed
+    except ValueError:
+        return None
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    task_events = [event for event in events if event.get("kind") == "task"]
+    field_counts = {
+        field: sum(1 for event in task_events if task_field_present(event, field))
+        for field in TASK_RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(TASK_RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_content": sum(1 for event in task_events if (event.get("data") or {}).get("content_length")),
+    }
+
+
+def task_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    data = event.get("data") or {}
+    value = data.get(field)
+    if field in {"is_completed", "is_overdue"}:
+        return isinstance(value, bool)
+    return value not in (None, "", [], {})
+
+
+def time_status_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    task_events = [event for event in events if event.get("kind") == "task"]
+    return {
+        "task_event_count": len(task_events),
+        "completed_task_count": sum(1 for event in task_events if (event.get("data") or {}).get("is_completed") is True),
+        "pending_task_count": sum(1 for event in task_events if (event.get("data") or {}).get("is_completed") is False),
+        "overdue_task_count": sum(1 for event in task_events if (event.get("data") or {}).get("is_overdue") is True),
+        "events_with_start": sum(1 for event in task_events if (event.get("data") or {}).get("start")),
+        "events_with_due": sum(1 for event in task_events if (event.get("data") or {}).get("due")),
+        "events_with_completion_time": sum(1 for event in task_events if (event.get("data") or {}).get("completed_at")),
+        "events_with_recurrence": sum(1 for event in task_events if (event.get("data") or {}).get("recurrence")),
+        "events_with_reminders": sum(1 for event in task_events if (event.get("data") or {}).get("reminders")),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "archive_path_traversal_members_collected": False,
+    }
 
 
 def infer_task_source(record: Dict[str, Any], path_label: str) -> str:

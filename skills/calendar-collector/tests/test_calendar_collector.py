@@ -58,11 +58,18 @@ def test_collect_ics_event() -> None:
         assert event["data"]["start"] == "2026-07-08T09:30:00+08:00"
         assert event["data"]["meeting_url"] == "https://meeting.tencent.com/test"
         assert event["data"]["attendees"][0]["name"] == "研究员"
+        assert event["data"]["has_description"] is True
+        assert event["data"]["description_length"] == len("跟踪贵州茅台二季度财报")
         assert event["wiki_targets"] == ["internal.calendar.events"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_calendar"] is False
         assert manifest["platform_coverage"]["observed_platforms"] == ["ics_export"]
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
+        assert manifest["field_coverage"]["field_counts"]["meeting_url"] == 1
+        assert manifest["field_coverage"]["field_counts"]["attendees"] == 1
+        assert manifest["time_surface_summary"]["events_with_recurrence"] == 1
+        assert manifest["time_surface_summary"]["events_with_reminders"] == 1
+        assert manifest["evidence_policy"]["required_lens"] == "task-calendar-investor"
 
 
 def test_collect_json_and_csv_events() -> None:
@@ -148,6 +155,8 @@ def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
                 ),
             )
             archive.writestr("../unsafe.ics", "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:不应读取\nEND:VEVENT\nEND:VCALENDAR\n")
+            archive.writestr("..\\windows-traversal.ics", "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:不应读取\nEND:VEVENT\nEND:VCALENDAR\n")
+            archive.writestr("C:\\unsafe.ics", "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:不应读取\nEND:VEVENT\nEND:VCALENDAR\n")
 
         out = root / "out"
         subprocess.run(
@@ -159,6 +168,11 @@ def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
         events = [json.loads(line) for line in (out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert len(events) == 7
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("windows-traversal" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("C:/unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        tencent_event = next(event for event in events if event["data"]["source_platform"] == "tencent_meeting_calendar")
+        assert tencent_event["raw_ref"]["source_archive"] == str(zip_path)
+        assert tencent_event["raw_ref"]["archive_member"] == "tencent-meeting.ics"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["platform_coverage"]["observed_expected_platforms"] == [
             "apple_calendar",
@@ -172,6 +186,11 @@ def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
         assert manifest["platform_coverage"]["real_account_validation"] is False
+        assert manifest["field_coverage"]["field_counts"]["source_platform"] == 7
+        assert manifest["time_surface_summary"]["events_with_start"] == 7
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
 
 
 def test_collect_without_input_gap() -> None:
