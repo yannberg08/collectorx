@@ -97,7 +97,7 @@ Operational docs:
 | `xueqiu-investor-activity` | `xueqiu-investor-activity` | Local export parser baseline for watchlists, posts, comments, favorites, follows, owner portfolios |
 | `china-wealth-assets` | `china-wealth-assets` | Local export parser baseline for fund/wealth holdings and transactions |
 | `financial-news-usage` | `financial-news-usage` | Local usage export/saved-page baseline for finance-app read, favorite, subscribe, search, and alert actions |
-| `hk-us-brokerage` | `investor-source-collectors` | YAML placeholder; Futu/Tiger/IBKR future adapters |
+| `hk-us-brokerage` | `hk-us-brokerage` | Local read-only export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, and FX |
 | `pro-terminal-usage` | `investor-source-collectors` | YAML placeholder; Wind/Choice/iFinD workflow traces |
 | `ths-watchlist` | none yet | YAML placeholder; skill not implemented |
 

@@ -229,6 +229,21 @@ Current status:
   monitoring-rule evidence.
 - Does not crawl public news or platform-wide content.
 
+### 港美股券商
+
+```bash
+python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
+  --input <authorized-futu-tiger-ibkr-readonly-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized CSV/TSV/JSON/JSONL exports into `hk-us-brokerage` events.
+- Captures assets, positions, executions, orders, cashflows, dividends, and FX.
+- Preserves business numbers needed by the investor avatar.
+- Does not ask for passwords and does not place, cancel, or modify orders.
+
 ### 投资 Lens / 分类工具
 
 ```bash

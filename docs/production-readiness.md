@@ -52,7 +52,7 @@ every upstream source collector is production-ready.
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` YAML | `placeholder` | Build per-broker read-only adapters for assets, positions, executions, orders, cashflows |
+| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only export collector | `baseline`; fixture validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, per-broker column maps, multi-currency assets, dividends, FX, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` YAML | `placeholder` | Build licensed-workflow collectors; do not mirror vendor databases |
 | B站/微博/小红书投资内容痕迹 | `social-activity` YAML + `social-investment-influence` lens classifier | `placeholder` / `baseline` | Build user activity collectors and validate investment influence classifier |
 

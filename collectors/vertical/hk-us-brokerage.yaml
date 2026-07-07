@@ -9,7 +9,7 @@ armed: false
 category: vertical
 owner_scope: personal
 local_only: true
-skill: investor-source-collectors
+skill: hk-us-brokerage
 
 scope:
   channels:

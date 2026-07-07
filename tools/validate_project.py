@@ -35,6 +35,7 @@ CLI_HELP_TARGETS = [
     "skills/xueqiu-investor-activity/scripts/xueqiu_activity.py",
     "skills/china-wealth-assets/scripts/china_wealth.py",
     "skills/financial-news-usage/scripts/financial_news_usage.py",
+    "skills/hk-us-brokerage/scripts/hk_us_brokerage.py",
     "skills/investor-source-collectors/scripts/investor_sources.py",
 ]
 
@@ -52,6 +53,7 @@ PARSER_TESTS = [
     "skills/xueqiu-investor-activity/tests/test_xueqiu_activity.py",
     "skills/china-wealth-assets/tests/test_china_wealth.py",
     "skills/financial-news-usage/tests/test_financial_news_usage.py",
+    "skills/hk-us-brokerage/tests/test_hk_us_brokerage.py",
     "skills/investor-source-collectors/tests/test_investor_sources.py",
 ]
 

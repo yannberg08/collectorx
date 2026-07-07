@@ -182,6 +182,24 @@ Findings:
   files.
 - Platform inference remains partial: 25 real local events were `unknown`.
 
+### Wave H: P2 HK/US brokerage productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-hk-us-brokerage-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `hk-us-brokerage` vertical collector for authorized read-only
+  Futu/Tiger/IBKR exports.
+- Fixture validation covers asset snapshots, positions, executions, orders,
+  cashflows, numeric fields, and strong-trade evidence output.
+- Real local candidate search found 5 candidate files, but none were valid
+  read-only brokerage exports; the collector emitted a gap event and did not
+  enter FinClaw.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -206,7 +224,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `hk-us-brokerage` | G0 | G1/G2: Futu/Tiger/IBKR read-only exports for assets, positions, executions, orders, cashflows |
+| 1 | `hk-us-brokerage` | G1 baseline for authorized local read-only exports; real local export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, per-broker column maps, multi-currency validation |
 | 2 | `pro-terminal-usage` | G0 | G1/G2: licensed workflow collectors for Wind/Choice/iFinD |
 | 3 | `social-investment-influence` | G1 | G2: generic social activity adapters and investment influence classifier validation |
 
