@@ -25,6 +25,12 @@ from ths.local import (
     parse_xcs_lscj,
 )
 from ths.metadata import parse_watchlist_value
+from ths.package import (
+    build_investor_wiki_evidence,
+    sync_package_to_soulmirror,
+    write_collection_package,
+)
+from ths_query import _build_events, build_gui_collection_gap
 
 
 def test_parse_csv():
@@ -307,6 +313,99 @@ def test_gui_snapshot_to_events():
     print("test_gui_snapshot_to_events: PASSED")
 
 
+def test_gui_collection_gap_event():
+    gap = build_gui_collection_gap(
+        RuntimeError("macOS Accessibility APIs are unavailable"),
+        platform="mac",
+        screenshot_dir="/tmp/ths-gui",
+        collected_at="2026-07-07T15:00:00+08:00",
+    )
+    events = _build_events(
+        records=[],
+        holdings=[],
+        metadata=None,
+        gui_snapshot=None,
+        gui_error_status=gap,
+        source="同花顺Mac交易界面确认快照",
+        raw_file=None,
+        collected_at="2026-07-07T15:00:00+08:00",
+        include_holding_events=False,
+        include_gap_event=False,
+        include_metadata_events=False,
+        include_gui_events=True,
+        container_root=None,
+        platform="mac",
+        gui_screenshot_dir="/tmp/ths-gui",
+    )
+
+    assert len(events) == 1
+    assert events[0]["kind"] == "profile"
+    assert events[0]["data"]["profile_type"] == "ths_gui_collection_gap"
+    assert events[0]["data"]["status"] == "gui_collection_failed"
+    assert events[0]["data"]["is_confirmed"] is False
+    assert "investor.data_quality.collection_gaps" in events[0]["wiki_targets"]
+
+    print("test_gui_collection_gap_event: PASSED")
+
+
+def test_write_collection_package_and_sync():
+    records = [
+        {
+            "date": "2024-01-15",
+            "time": "09:30:00",
+            "code": "600519",
+            "name": "样本A",
+            "direction": "买入",
+            "price": 10.0,
+            "quantity": 100,
+            "amount": 1000.0,
+            "fee": 1.0,
+            "tax": 0.0,
+            "account": "sample",
+        }
+    ]
+    holdings = infer_holdings(records)
+    events = records_to_events(records, collected_at="2026-07-07T15:00:00+08:00")
+    events.extend(
+        holdings_to_events(
+            holdings,
+            source="同花顺估算持仓",
+            collected_at="2026-07-07T15:00:00+08:00",
+        )
+    )
+
+    output = Path("/tmp/ths_portfolio_package_test")
+    if output.exists():
+        import shutil
+        shutil.rmtree(output)
+    manifest = write_collection_package(
+        output,
+        events=events,
+        collected_at="2026-07-07T15:00:00+08:00",
+        records=records,
+        holdings=holdings,
+    )
+
+    evidence = build_investor_wiki_evidence(events, generated_at="2026-07-07T15:00:00+08:00")
+    assert manifest["collector"] == "ths-portfolio"
+    assert manifest["event_count"] == len(events)
+    assert evidence["coverage_summary"]["dimension_count"] == 7
+    assert evidence["coverage_summary"]["subdimension_count"] == 20
+    assert (output / "lake" / "ths-portfolio" / "events.jsonl").exists()
+    assert (output / "investor_wiki_evidence.v1.json").exists()
+
+    soulmirror_home = Path("/tmp/ths_portfolio_soulmirror_test")
+    if soulmirror_home.exists():
+        import shutil
+        shutil.rmtree(soulmirror_home)
+    sync_report = sync_package_to_soulmirror(output, soulmirror_home=soulmirror_home)
+    assert sync_report["collector"] == "ths-portfolio"
+    assert (soulmirror_home / "lake" / "ths-portfolio" / "latest" / "events.jsonl").exists()
+    assert not (soulmirror_home / "wiki").exists()
+
+    print("test_write_collection_package_and_sync: PASSED")
+
+
 if __name__ == "__main__":
     test_parse_csv()
     test_parse_empty_csv()
@@ -318,4 +417,6 @@ if __name__ == "__main__":
     test_personal_metadata_to_events()
     test_parse_axis_table_records()
     test_gui_snapshot_to_events()
+    test_gui_collection_gap_event()
+    test_write_collection_package_and_sync()
     print("\nAll tests passed!")

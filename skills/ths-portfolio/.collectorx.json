@@ -1,5 +1,5 @@
 {
   "slug": "ths-portfolio",
-  "version": "0.1.0",
-  "description": "同花顺交割单导出工具"
+  "version": "0.5.0",
+  "description": "同花顺本机历史成交、个人化元数据、交易界面只读快照、CollectorX事件、投资Wiki证据包与SoulMirror lake同步工具"
 }

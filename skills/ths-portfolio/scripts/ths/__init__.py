@@ -11,6 +11,11 @@ from .local import (
 )
 from .metadata import collect_personal_metadata, metadata_summary_for_wiki
 from .gui import collect_gui_snapshot
+from .package import (
+    build_investor_wiki_evidence,
+    sync_package_to_soulmirror,
+    write_collection_package,
+)
 
 __all__ = [
     "parse_portfolio_csv",
@@ -22,6 +27,9 @@ __all__ = [
     "collect_personal_metadata",
     "metadata_summary_for_wiki",
     "collect_gui_snapshot",
+    "build_investor_wiki_evidence",
+    "write_collection_package",
+    "sync_package_to_soulmirror",
     "infer_holdings",
     "calculate_stats",
     "calculate_stock_stats",

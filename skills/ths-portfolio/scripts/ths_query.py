@@ -29,6 +29,7 @@ from ths.local import (
     parse_xcs_lscj,
 )
 from ths.metadata import collect_personal_metadata
+from ths.package import sync_package_to_soulmirror, write_collection_package
 from ths.stats import calculate_stats, calculate_stock_stats, format_stats
 
 # Windows控制台utf-8
@@ -53,6 +54,9 @@ def main():
     parser.add_argument("--gui-snapshot-export", help="导出同花顺已打开交易界面的真实账户快照JSON路径")
     parser.add_argument("--gui-screenshot-dir", help="导出GUI快照截图目录；默认不截图")
     parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
+    parser.add_argument("--output", help="导出完整采集包目录，包含 lake/events、manifest、投资 Wiki 证据包和摘要")
+    parser.add_argument("--sync-soulmirror", action="store_true", help="采集后把事件和投资证据包同步到 ~/.soulmirror/lake/ths-portfolio")
+    parser.add_argument("--soulmirror-home", help="SoulMirror 根目录，默认 ~/.soulmirror")
     parser.add_argument("--include-holding-events", action="store_true", help="在事件JSONL中加入估算持仓事件")
     parser.add_argument("--include-metadata-events", action="store_true", help="在事件JSONL中加入自选/策略/资讯/组件等个人化元数据事件")
     parser.add_argument("--include-gui-events", action="store_true", help="在事件JSONL中加入已打开同花顺交易界面的真实账户/持仓/委托/成交快照事件")
@@ -62,6 +66,7 @@ def main():
     parser.add_argument("--stats", action="store_true", help="显示统计信息")
     
     args = parser.parse_args()
+    package_requested = bool(args.output or args.sync_soulmirror)
 
     records = []
     raw_labels = []
@@ -97,7 +102,7 @@ def main():
         print(f"探测报告导出完成: {args.probe_export}")
 
     metadata = None
-    if args.metadata_export or args.include_metadata_events:
+    if args.metadata_export or args.include_metadata_events or package_requested:
         metadata = collect_personal_metadata(args.container_root, platform=args.platform)
 
     if args.metadata_export:
@@ -106,20 +111,33 @@ def main():
         print(f"个人化元数据导出完成: {args.metadata_export}")
 
     gui_snapshot = None
+    gui_error_status = None
     if args.gui_snapshot_export or args.include_gui_events:
-        gui_snapshot = collect_gui_snapshot(
-            screenshot_dir=args.gui_screenshot_dir,
-            collected_at=args.collected_at,
-        )
+        try:
+            gui_snapshot = collect_gui_snapshot(
+                screenshot_dir=args.gui_screenshot_dir,
+                collected_at=args.collected_at,
+            )
+        except Exception as exc:
+            gui_error_status = build_gui_collection_gap(
+                exc,
+                platform=args.platform,
+                screenshot_dir=args.gui_screenshot_dir,
+                collected_at=args.collected_at,
+            )
+            print(f"GUI真实账户快照采集失败，已记录缺口事件: {exc}", file=sys.stderr)
 
     if args.gui_snapshot_export:
         with open(args.gui_snapshot_export, "w", encoding="utf-8") as f:
-            json.dump(gui_snapshot, f, ensure_ascii=False, indent=2)
-        print(f"GUI真实账户快照导出完成: {args.gui_snapshot_export}")
+            json.dump(gui_snapshot or gui_error_status, f, ensure_ascii=False, indent=2)
+        if gui_snapshot:
+            print(f"GUI真实账户快照导出完成: {args.gui_snapshot_export}")
+        else:
+            print(f"GUI采集缺口导出完成: {args.gui_snapshot_export}")
 
     if not args.file and not seen_local_files:
         if args.metadata_export or args.include_metadata_events or args.gui_snapshot_export or args.include_gui_events:
-            if not args.event_export:
+            if not args.event_export and not package_requested:
                 return
         elif args.probe_export:
             print("未发现本机Xcs文件，仅导出探测报告")
@@ -161,7 +179,7 @@ def main():
         print(f"导出完成: {args.export}")
 
     holdings = []
-    if args.holdings_export or args.include_holding_events or args.gap_event:
+    if args.holdings_export or args.include_holding_events or args.gap_event or package_requested:
         holdings = infer_holdings(records)
 
     if args.holdings_export:
@@ -169,54 +187,162 @@ def main():
             json.dump(holdings, f, ensure_ascii=False, indent=2)
         print(f"估算持仓导出完成: {len(holdings)} 条 -> {args.holdings_export}")
 
-    if args.event_export:
-        events = records_to_events(
-            records,
+    if args.event_export or package_requested:
+        events = _build_events(
+            records=records,
+            holdings=holdings,
+            metadata=metadata,
+            gui_snapshot=gui_snapshot,
+            gui_error_status=gui_error_status,
             source=source,
             raw_file=raw_file,
             collected_at=args.collected_at,
+            include_holding_events=args.include_holding_events or package_requested,
+            include_gap_event=args.gap_event or package_requested,
+            include_metadata_events=args.include_metadata_events or package_requested,
+            include_gui_events=args.include_gui_events or gui_snapshot is not None,
+            container_root=args.container_root,
+            platform=args.platform,
+            gui_screenshot_dir=args.gui_screenshot_dir,
         )
-        if args.include_holding_events:
-            events.extend(
-                holdings_to_events(
-                    holdings,
-                    source=f"{source} / 估算持仓",
-                    raw_file=raw_file,
-                    collected_at=args.collected_at,
-                )
-            )
-        if args.gap_event:
-            events.append(
-                gap_status_to_event(
-                    build_gap_status(records, holdings),
-                    source=f"{source} / 本机采集状态",
-                    collected_at=args.collected_at,
-                )
-            )
-        if args.include_metadata_events:
-            events.extend(
-                personal_metadata_to_events(
-                    metadata or collect_personal_metadata(args.container_root, platform=args.platform),
-                    source=f"{source} / 个人化元数据",
-                    collected_at=args.collected_at,
-                )
-            )
-        if args.include_gui_events:
-            events.extend(
-                gui_snapshot_to_events(
-                    gui_snapshot or collect_gui_snapshot(
-                        screenshot_dir=args.gui_screenshot_dir,
-                        collected_at=args.collected_at,
-                    ),
-                    source=f"{source} / GUI确认快照",
-                    collected_at=args.collected_at,
-                )
-            )
+
+    if args.event_export:
         with open(args.event_export, "w", encoding="utf-8") as f:
             for event in events:
                 f.write(json.dumps(event, ensure_ascii=False, sort_keys=True))
                 f.write("\n")
         print(f"事件导出完成: {len(events)} 条 -> {args.event_export}")
+
+    if package_requested:
+        output_dir = Path(args.output).expanduser() if args.output else Path.cwd() / "ths-portfolio-collect"
+        probe_report = build_local_probe_report(
+            platform=args.platform,
+            container_root=args.container_root,
+            files=seen_local_files,
+        )
+        manifest = write_collection_package(
+            output_dir,
+            events=events,
+            collected_at=args.collected_at,
+            records=records,
+            holdings=holdings,
+            metadata=metadata,
+            gui_snapshot=gui_snapshot,
+            probe_report=probe_report,
+        )
+        print(f"完整采集包导出完成: {output_dir} ({manifest['event_count']} 条事件)")
+        if args.sync_soulmirror:
+            sync_report = sync_package_to_soulmirror(
+                output_dir,
+                soulmirror_home=Path(args.soulmirror_home).expanduser() if args.soulmirror_home else None,
+            )
+            print(f"SoulMirror lake 同步完成: {sync_report['latest_dir']}")
+
+
+def _build_events(
+    *,
+    records,
+    holdings,
+    metadata,
+    gui_snapshot,
+    gui_error_status,
+    source,
+    raw_file,
+    collected_at,
+    include_holding_events,
+    include_gap_event,
+    include_metadata_events,
+    include_gui_events,
+    container_root,
+    platform,
+    gui_screenshot_dir,
+):
+    events = records_to_events(
+        records,
+        source=source,
+        raw_file=raw_file,
+        collected_at=collected_at,
+    )
+    if include_holding_events:
+        events.extend(
+            holdings_to_events(
+                holdings,
+                source=f"{source} / 估算持仓",
+                raw_file=raw_file,
+                collected_at=collected_at,
+            )
+        )
+    if include_gap_event:
+        events.append(
+            gap_status_to_event(
+                build_gap_status(records, holdings),
+                source=f"{source} / 本机采集状态",
+                collected_at=collected_at,
+            )
+        )
+    if include_metadata_events:
+        events.extend(
+            personal_metadata_to_events(
+                metadata or collect_personal_metadata(container_root, platform=platform),
+                source=f"{source} / 个人化元数据",
+                collected_at=collected_at,
+            )
+        )
+    if include_gui_events:
+        if gui_snapshot:
+            events.extend(
+                gui_snapshot_to_events(
+                    gui_snapshot,
+                    source=f"{source} / GUI确认快照",
+                    collected_at=collected_at,
+                )
+            )
+        elif gui_error_status:
+            events.append(
+                gap_status_to_event(
+                    gui_error_status,
+                    source=f"{source} / GUI采集缺口",
+                    collected_at=collected_at,
+                )
+            )
+        else:
+            events.extend(
+                gui_snapshot_to_events(
+                    collect_gui_snapshot(
+                        screenshot_dir=gui_screenshot_dir,
+                        collected_at=collected_at,
+                    ),
+                    source=f"{source} / GUI确认快照",
+                    collected_at=collected_at,
+                )
+            )
+    return events
+
+
+def build_gui_collection_gap(
+    error,
+    *,
+    platform,
+    screenshot_dir,
+    collected_at,
+):
+    return {
+        "profile_type": "ths_gui_collection_gap",
+        "status": "gui_collection_failed",
+        "snapshot_type": "broker_gui_current_snapshot",
+        "is_confirmed": False,
+        "evidence_level": "collection_gap",
+        "platform": platform,
+        "screenshot_requested": bool(screenshot_dir),
+        "error_type": error.__class__.__name__,
+        "message": str(error),
+        "collected_at": collected_at,
+        "next_action": (
+            "确认同花顺交易页已打开、macOS 辅助功能授权已开启；"
+            "如使用 Homebrew/pyenv Python，请改用带 ApplicationServices 的系统 Python，"
+            "或安装对应 PyObjC 组件。"
+        ),
+    }
 
 
 if __name__ == "__main__":

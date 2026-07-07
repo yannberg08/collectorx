@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import py_compile
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -13,10 +14,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
+MIN_PYTHON = (3, 10)
 
 PY_COMPILE_EXCLUDES = {".git", "__pycache__", ".pytest_cache"}
 
 CLI_HELP_TARGETS = [
+    "skills/wechat-export/scripts/wechat_query.py",
+    "skills/feishu/scripts/feishu_api.py",
+    "skills/ticktick-cli/scripts/ticktick_cli.py",
     "skills/email-collector/scripts/email_api.py",
     "skills/qq-export/scripts/qq_query.py",
     "skills/notes-collector/scripts/notes_api.py",
@@ -62,6 +67,21 @@ EVENT_KINDS = {
     "other",
 }
 
+EXECUTABLE_TARGETS = [
+    "skills/doubao-chat-export/scripts/bin/doubao-export-darwin-amd64",
+    "skills/doubao-chat-export/scripts/bin/doubao-export-darwin-arm64",
+    "skills/doubao-chat-export/scripts/bin/doubao-export-linux-amd64",
+]
+
+
+def check_python_version() -> None:
+    if sys.version_info < MIN_PYTHON:
+        major, minor = MIN_PYTHON
+        raise SystemExit(
+            f"CollectorX validation requires Python {major}.{minor}+; "
+            f"current interpreter is {sys.version.split()[0]}"
+        )
+
 
 def iter_python_files() -> list[Path]:
     files: list[Path] = []
@@ -94,6 +114,15 @@ def compile_python() -> None:
 def check_cli_help() -> None:
     for rel in CLI_HELP_TARGETS:
         run([PYTHON, rel, "--help"])
+
+
+def check_prebuilt_executables() -> None:
+    for rel in EXECUTABLE_TARGETS:
+        path = ROOT / rel
+        if not path.exists():
+            raise SystemExit(f"Missing prebuilt executable: {rel}")
+        if not os.access(path, os.X_OK):
+            raise SystemExit(f"Prebuilt executable is not executable: {rel}")
 
 
 def run_parser_tests() -> None:
@@ -155,9 +184,11 @@ def run_first_loop_smoke_test() -> None:
 
 
 def main() -> int:
+    check_python_version()
     check_no_ds_store()
     compile_python()
     check_cli_help()
+    check_prebuilt_executables()
     run_parser_tests()
     validate_event_examples()
     run_first_loop_smoke_test()

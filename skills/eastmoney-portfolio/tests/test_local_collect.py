@@ -21,7 +21,7 @@ from eastmoney.local_collect import (
     resolve_platform,
 )
 from eastmoney.trade_export import parse_trade_export_file, parse_trade_export_text
-from eastmoney.ui_collect import parse_ax_trade_state
+from eastmoney.ui_collect import parse_ax_trade_state, parse_screen_trade_state
 
 
 def test_parse_stock_token():
@@ -181,6 +181,23 @@ def test_trade_ui_unlocked_asset_field_parser():
     assert state["asset_fields"]["currency"] == "人民币"
 
 
+def test_trade_ui_screen_ocr_locked_state_parser():
+    text = """
+    账户信息
+    证券账户 彭应安 (3303)
+    登录状态 已锁定
+    解锁证券账户
+    总资产 --
+    可用资金 --
+    """
+    state = parse_screen_trade_state(text)
+    assert state["account_status"] == "locked"
+    assert state["needs_unlock"] is True
+    assert state["status_evidence"] == "screen_ocr"
+    assert "登录状态" in state["visible_trade_labels"]
+    assert state["asset_fields"] == {}
+
+
 def test_trade_ui_collect_failed_readiness():
     events = [
         gap_event(
@@ -192,6 +209,21 @@ def test_trade_ui_collect_failed_readiness():
     ]
     readiness = build_collection_readiness(events)
     assert readiness["status"] == "trade_ui_collect_failed"
+    assert readiness["can_claim_complete_trade_collection"] is False
+    assert readiness["needs_manual_export"] is False
+
+
+def test_trade_ui_accessibility_blocked_readiness():
+    events = [
+        gap_event(
+            "2026-07-07T19:30:00+08:00",
+            gap="trade_ui_accessibility_tree_empty",
+            status="blocked_by_accessibility",
+            note="窗口存在但辅助功能树为空。",
+        )
+    ]
+    readiness = build_collection_readiness(events)
+    assert readiness["status"] == "trade_ui_accessibility_blocked"
     assert readiness["can_claim_complete_trade_collection"] is False
     assert readiness["needs_manual_export"] is False
 
@@ -244,6 +276,8 @@ if __name__ == "__main__":
     test_trade_export_detail_fixture()
     test_trade_ui_locked_state_parser()
     test_trade_ui_unlocked_asset_field_parser()
+    test_trade_ui_screen_ocr_locked_state_parser()
     test_trade_ui_collect_failed_readiness()
+    test_trade_ui_accessibility_blocked_readiness()
     test_trade_ui_copied_position_table_text()
     print("All local collect tests passed!")

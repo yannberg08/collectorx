@@ -1,7 +1,7 @@
 apiVersion: collectorx/v1
 kind: Collector
 id: ths-portfolio
-display_name: 同花顺交割单
+display_name: 同花顺投资组合
 refresh_interval: 24h
 mode: snapshot
 time_field: date
@@ -11,4 +11,5 @@ armed: false
 skill: ths-portfolio
 
 # 采集逻辑由skill定义
-# skill会处理：CSV解析、数据标准化、统计分析
+# skill会处理：本机历史成交、个人化元数据、交易页只读快照、
+# CollectorX事件、投资Wiki证据包，以及按需同步到SoulMirror lake

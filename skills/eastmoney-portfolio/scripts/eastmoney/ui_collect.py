@@ -10,10 +10,13 @@ sessions, signatures, raw protocol payloads, or submits trading actions.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from eastmoney.trade_export import ParsedTradeRow, parse_number, parse_trade_export_text
@@ -109,6 +112,7 @@ class TradeUISnapshot:
     tables: List[CopiedTable] = field(default_factory=list)
     gaps: List[Dict[str, Any]] = field(default_factory=list)
     ax_line_count: int = 0
+    ocr_line_count: int = 0
 
 
 def collect_trade_ui_snapshot(copy_tables: bool = True) -> TradeUISnapshot:
@@ -154,6 +158,21 @@ def collect_trade_ui_snapshot(copy_tables: bool = True) -> TradeUISnapshot:
     ax_lines = _dump_accessibility_lines()
     snapshot.ax_line_count = len(ax_lines)
     snapshot.account = parse_ax_trade_state(ax_lines)
+
+    if snapshot.ax_line_count == 0:
+        ocr_text = _ocr_window_text(window_rect)
+        snapshot.ocr_line_count = len([line for line in ocr_text.splitlines() if line.strip()])
+        snapshot.account = _merge_account_state(
+            snapshot.account,
+            parse_screen_trade_state(ocr_text),
+        )
+        snapshot.gaps.append(
+            {
+                "gap": "trade_ui_accessibility_tree_empty",
+                "status": "blocked_by_accessibility",
+                "note": "System Events 能看到东方财富窗口，但没有返回可读取的控件文本；已尝试只读截图文字识别作为账户状态兜底。",
+            }
+        )
 
     if snapshot.account.get("account_status") == "locked":
         snapshot.gaps.append(
@@ -214,6 +233,47 @@ def parse_ax_trade_state(lines: Iterable[str]) -> Dict[str, Any]:
         "observed_fields": observed_fields,
         "asset_fields": asset_fields,
     }
+
+
+def parse_screen_trade_state(text: str) -> Dict[str, Any]:
+    cleaned = _clean_ax_value(text)
+    status = "unknown"
+    if "已锁定" in cleaned or "解锁证券账户" in cleaned:
+        status = "locked"
+    elif "未登录" in cleaned:
+        status = "logged_out"
+    elif "已登录" in cleaned or "保持在线" in cleaned:
+        status = "unlocked_or_online"
+
+    return {
+        "account_status": status,
+        "account_label": "",
+        "needs_unlock": status == "locked",
+        "visible_trade_labels": sorted(
+            label
+            for label in TRADE_LABELS
+            if label in cleaned
+        ),
+        "observed_fields": {},
+        "asset_fields": {},
+        "status_evidence": "screen_ocr" if cleaned else "",
+    }
+
+
+def _merge_account_state(primary: Dict[str, Any], fallback: Dict[str, Any]) -> Dict[str, Any]:
+    merged = dict(primary or {})
+    if (merged.get("account_status") in {None, "", "unknown"}) and fallback.get("account_status") != "unknown":
+        merged["account_status"] = fallback.get("account_status")
+        merged["needs_unlock"] = fallback.get("needs_unlock", False)
+        merged["status_evidence"] = fallback.get("status_evidence")
+    if not merged.get("visible_trade_labels") and fallback.get("visible_trade_labels"):
+        merged["visible_trade_labels"] = fallback.get("visible_trade_labels")
+    merged.setdefault("observed_fields", {})
+    merged.setdefault("asset_fields", {})
+    merged.setdefault("account_label", "")
+    merged.setdefault("account_status", "unknown")
+    merged.setdefault("needs_unlock", False)
+    return merged
 
 
 def copy_trade_tables(window_rect: Dict[str, int]) -> List[CopiedTable]:
@@ -439,6 +499,46 @@ end tell
 """
     output = _osascript(script, check=False, timeout=12)
     return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _ocr_window_text(window_rect: Dict[str, int]) -> str:
+    tesseract = shutil.which("tesseract")
+    if not tesseract:
+        return ""
+    if window_rect["width"] <= 0 or window_rect["height"] <= 0:
+        return ""
+    with tempfile.TemporaryDirectory(prefix="eastmoney-ui-ocr-") as tmpdir:
+        screenshot = Path(tmpdir) / "window.png"
+        region = (
+            f"{window_rect['x']},{window_rect['y']},"
+            f"{window_rect['width']},{window_rect['height']}"
+        )
+        try:
+            capture = subprocess.run(
+                ["screencapture", "-x", "-R", region, str(screenshot)],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=8,
+            )
+        except subprocess.TimeoutExpired:
+            return ""
+        if capture.returncode != 0 or not screenshot.exists():
+            return ""
+        try:
+            completed = subprocess.run(
+                [tesseract, str(screenshot), "stdout", "-l", "chi_sim+eng", "--psm", "6"],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                timeout=12,
+            )
+        except subprocess.TimeoutExpired:
+            return ""
+        if completed.returncode != 0:
+            return ""
+        return completed.stdout
 
 
 def _click_relative(window_rect: Dict[str, int], relative_xy: Any) -> None:

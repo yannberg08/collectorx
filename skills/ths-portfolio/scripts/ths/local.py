@@ -64,13 +64,17 @@ def find_xcs_lscj_files(
     roots = _scan_roots(container_root, resolved_platform)
     found: List[Path] = []
 
+    exhaustive = container_root is not None
     for root in roots:
         if not root.exists():
             continue
-        for pattern in _xcs_patterns_for_platform(resolved_platform):
-            for path in root.glob(pattern):
-                if path.is_file() and path.name.startswith("XcsLscjDataFile_"):
-                    found.append(path)
+        for pattern in _xcs_patterns_for_platform(resolved_platform, exhaustive=exhaustive):
+            try:
+                for path in root.glob(pattern):
+                    if path.is_file() and path.name.startswith("XcsLscjDataFile_"):
+                        found.append(path)
+            except OSError:
+                continue
 
     return _dedupe_paths(found)
 
@@ -364,29 +368,38 @@ def _scan_roots(container_root: Optional[str], platform: str) -> List[Path]:
     return [Path.home()]
 
 
-def _xcs_patterns_for_platform(platform: str) -> List[str]:
+def _xcs_patterns_for_platform(platform: str, *, exhaustive: bool = False) -> List[str]:
     if platform == "mac":
-        return [
+        patterns = [
             "Documents/XcsFold/XcsLscjDataFile_*",
             "XcsFold/XcsLscjDataFile_*",
-            "**/XcsFold/XcsLscjDataFile_*",
         ]
+        if exhaustive:
+            patterns.append("**/XcsFold/XcsLscjDataFile_*")
+        return patterns
     if platform == "windows":
-        return [
+        patterns = [
             "XcsFold/XcsLscjDataFile_*",
             "AppData/Roaming/同花顺/XcsFold/XcsLscjDataFile_*",
             "AppData/Local/同花顺/XcsFold/XcsLscjDataFile_*",
-            "Users/*/AppData/Roaming/同花顺/XcsFold/XcsLscjDataFile_*",
-            "Users/*/AppData/Local/同花顺/XcsFold/XcsLscjDataFile_*",
-            "ProgramData/同花顺/**/XcsLscjDataFile_*",
-            "**/XcsFold/XcsLscjDataFile_*",
-            "**/XcsLscjDataFile_*",
         ]
-    return [
+        if exhaustive:
+            patterns.extend(
+                [
+                    "Users/*/AppData/Roaming/同花顺/XcsFold/XcsLscjDataFile_*",
+                    "Users/*/AppData/Local/同花顺/XcsFold/XcsLscjDataFile_*",
+                    "ProgramData/同花顺/**/XcsLscjDataFile_*",
+                    "**/XcsFold/XcsLscjDataFile_*",
+                    "**/XcsLscjDataFile_*",
+                ]
+            )
+        return patterns
+    patterns = [
         "XcsFold/XcsLscjDataFile_*",
-        "**/XcsFold/XcsLscjDataFile_*",
-        "**/XcsLscjDataFile_*",
     ]
+    if exhaustive:
+        patterns.extend(["**/XcsFold/XcsLscjDataFile_*", "**/XcsLscjDataFile_*"])
+    return patterns
 
 
 def _dedupe_paths(paths: Iterable[Path]) -> List[Path]:

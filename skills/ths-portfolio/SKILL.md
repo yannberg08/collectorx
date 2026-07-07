@@ -1,7 +1,7 @@
 ---
 name: ths-portfolio
 description: 采集同花顺交易记录、估算持仓与个人化投资元数据。当用户说"同花顺记录"、"交易记录"、"交割单"、"持仓画像"、"自选股"、"投资者画像"时使用此skill。
-version: 0.4.0
+version: 0.5.0
 ---
 
 # 同花顺投资数据采集工具
@@ -51,6 +51,15 @@ python <SKILL_DIR>/scripts/ths_query.py --gui-snapshot-export ~/Desktop/ths-gui-
 
 # Windows代码层模拟：指定一个模拟根目录,验证扫描/解析/事件输出链路
 python <SKILL_DIR>/scripts/ths_query.py --platform windows --container-root <SIM_ROOT> --local-scan --probe-export ~/Desktop/ths-probe.json --event-export ~/Desktop/ths-events.jsonl --include-holding-events --gap-event
+
+# 输出完整采集包：lake/events、manifest、投资 Wiki 证据包、摘要
+python <SKILL_DIR>/scripts/ths_query.py --local-scan --output ~/Desktop/ths-portfolio-collect
+
+# 输出完整采集包并同步到 SoulMirror lake；最终 Wiki 仍由 investor-portrait app 组织
+python <SKILL_DIR>/scripts/ths_query.py --local-scan --output ~/Desktop/ths-portfolio-collect --sync-soulmirror
+
+# 若同花顺交易页已登录并打开,可一起采集当前资产/持仓/委托/成交快照
+python <SKILL_DIR>/scripts/ths_query.py --local-scan --include-gui-events --gui-screenshot-dir ~/Desktop/ths-gui-screens --output ~/Desktop/ths-portfolio-collect --sync-soulmirror
 
 # 查看统计
 python <SKILL_DIR>/scripts/ths_query.py --file ~/Downloads/交割单.csv --stats
@@ -175,6 +184,50 @@ python <SKILL_DIR>/scripts/ths_query.py --file ~/Downloads/交割单.csv --stats
 - 当日委托/撤单快照
 
 这些事件进入 lake 后,由 `investor-portrait` 这类应用负责组织到投资分身 Wiki。
+
+## SoulMirror lake 同步
+
+`--output` 会创建完整采集包：
+
+```text
+ths-portfolio-collect/
+├── manifest.json
+├── investor_wiki_evidence.v1.json
+├── SUMMARY.md
+├── trades.normalized.json
+├── estimated_holdings.json
+├── metadata.json
+├── gui_snapshot.json              # 仅在采集 GUI 时存在
+├── probe.json
+└── lake/ths-portfolio/events.jsonl
+```
+
+`--sync-soulmirror` 会把以下文件同步到：
+
+```text
+~/.soulmirror/lake/ths-portfolio/<run-id>/
+~/.soulmirror/lake/ths-portfolio/latest/
+```
+
+同步文件包括：
+
+- `events.jsonl`
+- `investor_wiki_evidence.v1.json`
+- `manifest.json`
+- `SUMMARY.md`
+- `soulmirror_sync.json`
+
+同步只写 lake，不直接写最终 Wiki。SoulMirror 的 `investor-portrait` app 负责把证据蒸馏并组织到 `wiki/external/investor/`。
+
+## 投资 Wiki 证据包
+
+`investor_wiki_evidence.v1.json` 按当前 SoulMirror 投资分身 schema 输出：
+
+- 7 大维度
+- 20 个产品子维度
+- 每个子维度包含：`support_level`、`suggested_maturity`、`evidence_count`、`evidence_kinds`、`signals`、`gaps`
+
+这份证据包是 Wiki 组织输入，不是最终 Wiki 页面。原始交易金额、账户、合同号、成交号、截图和完整流水仍留在本地证据包，不应直接暴露到 Wiki 正文。
 
 ## 数据流向Wiki
 

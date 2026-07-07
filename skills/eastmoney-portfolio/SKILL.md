@@ -173,6 +173,7 @@ python <SKILL_DIR>/scripts/eastmoney_query.py --file ~/Downloads/交割单.csv -
 
 - 激活东方财富经典版并进入交易页。
 - 读取交易页可见账户状态，判断证券账户是否锁定。
+- 如果 macOS 辅助功能树为空，会临时截取东方财富窗口做本机 OCR，只用于识别“已锁定/未登录/已登录”等状态。
 - 先从交易页可访问文本提取可见资产字段；在账户未锁定时，依次尝试只读复制资产、持仓、成交、委托、资金表。
 - 把复制出的表格直接解析为强交易事实事件。
 - 采集完成后恢复系统剪贴板。
@@ -238,6 +239,9 @@ python <SKILL_DIR>/scripts/eastmoney_query.py --file ~/Downloads/交割单.csv -
 
 - `ready_for_investor_avatar`：资产、持仓、成交、委托、资金流水强表均已形成事件。
 - `blocked_by_account_lock`：交易页存在但证券账户锁定；采集器不会读取或请求交易密码。
+- `trade_ui_accessibility_blocked`：交易窗口存在，但 macOS 未返回可读取控件；需要确认交易页在前台、账户已解锁、辅助功能权限可用。
+- `trade_ui_collect_failed`：交易页自动采集执行异常或超时。
+- `auto_trade_ui_not_run`：本轮未启用交易页自动只读采集。
 - `partial_strong_trade_data`：已取得部分强交易事实，仍缺若干强表。
 - `strong_trade_data_missing`：交易页已尝试但没有形成强交易明细。
 
@@ -289,6 +293,7 @@ python <SKILL_DIR>/scripts/eastmoney_query.py --file ~/Downloads/交割单.csv -
 - 本机采集不读取原始登录材料。
 - 当前 Mac 东方财富本地 `TradeLog.log` 只落出接口状态和返回记录数，没有逐笔明细字段；逐笔强证据优先来自 `--auto-trade-ui` 交易页自动只读采集。
 - 如果东方财富交易页显示证券账户已锁定，采集器不会读取或请求交易密码，只输出锁定缺口。
+- 截图 OCR 只用于账户状态兜底，不把 OCR 识别到的金额、持仓或交易数字写成强证据。
 - 如果交易页表格为空或不可复制，采集器会输出表格不可读缺口，不虚构金额或交易记录。
 - 如果交易页已显示资产字段但表格不可复制，采集器仍会把可见资产字段写成 `broker_asset_snapshot`，并将表格缺口单独记录。
 - Windows 适配目前只有候选目录规则和模拟夹具，需要真实 Windows 东方财富安装后验证。

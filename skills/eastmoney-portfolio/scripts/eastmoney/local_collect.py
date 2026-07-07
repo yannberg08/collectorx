@@ -1201,6 +1201,7 @@ def collect_trade_ui_events(
                 "capture_method": "mac_accessibility_and_table_copy",
                 "window_found": snapshot.window_found,
                 "ax_line_count": snapshot.ax_line_count,
+                "ocr_line_count": snapshot.ocr_line_count,
             },
             wiki_targets=[
                 "vertical/investor/risk-portfolio",
@@ -1231,6 +1232,7 @@ def collect_trade_ui_events(
                 "capture_method": "mac_accessibility_and_table_copy",
                 "window_found": snapshot.window_found,
                 "ax_line_count": snapshot.ax_line_count,
+                "ocr_line_count": snapshot.ocr_line_count,
             },
             wiki_targets=[
                 "vertical/investor/risk-portfolio",
@@ -1252,6 +1254,7 @@ def collect_trade_ui_events(
                     "capture_method": "mac_accessibility_account_fields",
                     "window_found": snapshot.window_found,
                     "ax_line_count": snapshot.ax_line_count,
+                    "ocr_line_count": snapshot.ocr_line_count,
                 },
                 wiki_targets=trade_export_wiki_targets("broker_asset_snapshot"),
             )
@@ -1319,6 +1322,12 @@ def build_trade_ui_account_data(snapshot: TradeUISnapshot) -> Dict[str, Any]:
         "trade_page_requested": snapshot.trade_page_requested,
         "account_status": account.get("account_status") or "unknown",
         "needs_unlock": bool(account.get("needs_unlock")),
+        "accessibility_status": "readable" if snapshot.ax_line_count else "empty",
+        "accessibility_line_count": snapshot.ax_line_count,
+        "screen_ocr_line_count": snapshot.ocr_line_count,
+        "status_evidence": account.get("status_evidence") or (
+            "mac_accessibility" if snapshot.ax_line_count else ""
+        ),
         "visible_trade_labels": account.get("visible_trade_labels") or [],
         "observed_field_count": len(account.get("observed_fields") or {}),
         "asset_field_count": len(account.get("asset_fields") or {}),
@@ -1396,6 +1405,11 @@ def add_global_gap_events(
         and str(event["data"].get("gap", "")).startswith("trade_ui_")
         for event in events
     )
+    ui_accessibility_blocked = any(
+        event["kind"] == "data_gap"
+        and event["data"].get("gap") == "trade_ui_accessibility_tree_empty"
+        for event in events
+    )
     if not kinds.get("broker_position_status"):
         events.append(
             gap_event(
@@ -1433,6 +1447,7 @@ def add_global_gap_events(
                     note=missing_trade_detail_note(
                         ui_attempted,
                         ui_locked,
+                        ui_accessibility_blocked,
                         ui_copy_blocked,
                         "交易日志显示存在持仓记录，但自动采集未取得逐笔持仓明细。",
                     ),
@@ -1449,6 +1464,7 @@ def add_global_gap_events(
                 note=missing_trade_detail_note(
                     ui_attempted,
                     ui_locked,
+                    ui_accessibility_blocked,
                     ui_copy_blocked,
                     "未发现可安全解析的成交/委托明细。",
                 ),
@@ -1468,6 +1484,7 @@ def add_global_gap_events(
                 note=missing_trade_detail_note(
                     ui_attempted,
                     ui_locked,
+                    ui_accessibility_blocked,
                     ui_copy_blocked,
                     "资产查询状态存在，但未取得可用资金、总资产、市值、盈亏等金额字段。",
                 ),
@@ -1480,11 +1497,14 @@ def add_global_gap_events(
 def missing_trade_detail_note(
     ui_attempted: bool,
     ui_locked: bool,
+    ui_accessibility_blocked: bool,
     ui_copy_blocked: bool,
     base: str,
 ) -> str:
     if ui_locked:
         return f"{base} 东方财富交易页显示证券账户已锁定，采集器不会读取或请求交易密码。"
+    if ui_accessibility_blocked:
+        return f"{base} 东方财富窗口已打开，但 macOS 未返回可读取控件；请确认交易页已解锁、窗口在前台，并允许辅助功能访问。"
     if ui_copy_blocked:
         return f"{base} 自动交易页表格复制未返回可解析内容。"
     if ui_attempted:
@@ -1933,6 +1953,7 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
     missing_required = [name for name, count in required.items() if not count]
     strong_total = sum(required.values())
+    accessibility_blocked = "trade_ui_accessibility_tree_empty" in gaps
     if not missing_required:
         status = "ready_for_investor_avatar"
         next_action = "可进入 FinClaw 投资分身蒸馏；继续结合投研笔记、聊天和复盘补原因层。"
@@ -1948,6 +1969,9 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     elif strong_total:
         status = "partial_strong_trade_data"
         next_action = "已取得部分强交易事实；重新运行采集以补齐缺失的资产、持仓、成交、委托或资金流水表。"
+    elif accessibility_blocked:
+        status = "trade_ui_accessibility_blocked"
+        next_action = "交易页已打开，但系统没有返回可读取控件；请确认东方财富交易页在前台、证券账户已解锁，并检查 macOS 辅助功能权限后重跑。"
     else:
         status = "strong_trade_data_missing"
         next_action = "交易页已尝试但没有形成强交易明细；需确认交易页已解锁且表格可见，再重新运行。"
@@ -2338,6 +2362,8 @@ def write_risk_boundary_wiki(root: Path, events: List[Dict[str, Any]]) -> None:
         "trade_ui_app_not_running",
         "trade_ui_window_missing",
         "trade_ui_collect_failed",
+        "trade_ui_accessibility_tree_empty",
+        "trade_ui_assets_copy_unavailable",
         "trade_ui_positions_copy_unavailable",
         "trade_ui_executions_copy_unavailable",
         "trade_ui_entrusts_copy_unavailable",

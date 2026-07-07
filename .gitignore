@@ -10,3 +10,5 @@ build/
 fixtures/private/
 *.local.json
 *.local.yaml
+*.log
+skills/*/logs/
