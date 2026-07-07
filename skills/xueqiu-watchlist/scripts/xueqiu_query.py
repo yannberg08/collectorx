@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xueqiu.parser import build_manifest, collect_from_inputs, now_iso, parse_watchlist_csv, write_json, write_jsonl, write_summary
+from xueqiu.parser import build_manifest, collect_from_inputs_with_audit, now_iso, parse_watchlist_csv, write_json, write_jsonl, write_summary
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -21,13 +21,13 @@ except (AttributeError, OSError):
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
         out_dir = Path(args.out_dir).expanduser()
         write_jsonl(out_dir / "lake" / "xueqiu-watchlist" / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)
     print(json.dumps({"collector": "xueqiu-watchlist", "event_count": len(events)}, ensure_ascii=False, sort_keys=True))

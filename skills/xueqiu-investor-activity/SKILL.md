@@ -1,7 +1,6 @@
 ---
 name: xueqiu-investor-activity
 description: 雪球投资者活动垂直采集器。采集用户授权的雪球自选、关注用户、关注组合、个人发帖、评论、收藏和用户自己的组合调仓等个人投资活动，输出 CollectorX 事件和 FinClaw 投资分身证据包。用于能力圈、关注池、信息源、人脉网络和投资观点表达；不采全站舆情，不把雪球组合当券商强交易事实。
-version: 0.2.1
 ---
 
 # 雪球投资者活动采集器
@@ -41,6 +40,7 @@ python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
 
 ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会明确
 标注 `xueqiu_is_broker_trade_source: false`，雪球只作为关注网络、观点表达和
-模拟组合证据，不能替代券商强交易事实。
+模拟组合证据，不能替代券商强交易事实。manifest 还会记录输入文件数、扩展名覆盖、
+ZIP 成员/跳过成员、解析记录数、分页标记字段、字段覆盖和来源面覆盖。
 
 没有授权输入时，采集器只输出缺口状态，不伪造数据。

@@ -52,18 +52,72 @@ def collect_from_inputs(
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    paths = list(iter_paths(inputs))
+    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    input_list = list(inputs)
+    paths = list(iter_paths(input_list))
+    audit = {
+        "source_type": "authorized_local_xueqiu_watchlist_export",
+        "input_count": len(input_list),
+        "resolved_input_file_count": len(paths),
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "parsed_record_count": 0,
+        "filtered_record_count": 0,
+        "emitted_event_count": 0,
+        "limit": limit,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "broker_trade_source": False,
+        "path_results": [],
+    }
     if not paths:
-        return [gap_event(collected_at=collected_at, reason="xueqiu_watchlist_authorized_input_missing")]
+        events = [gap_event(collected_at=collected_at, reason="xueqiu_watchlist_authorized_input_missing")]
+        audit["emitted_event_count"] = len(events)
+        finalize_audit(audit)
+        return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        for row, record in enumerate(parse_path(path), start=1):
+        path_result = {
+            "path": str(path),
+            "extension": path.suffix.lower() or "<none>",
+            "parsed_record_count": 0,
+            "filtered_record_count": 0,
+            "emitted_event_count": 0,
+            "status": "parsed",
+        }
+        audit["path_results"].append(path_result)
+        increment_counter(audit, "extension_counts", path_result["extension"])
+        records = parse_path(path, audit=audit)
+        path_result["parsed_record_count"] = len(records)
+        audit["parsed_record_count"] += len(records)
+        for row, record in enumerate(records, start=1):
             if not watchlist_symbol(record):
+                path_result["filtered_record_count"] += 1
+                audit["filtered_record_count"] += 1
                 continue
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events or [gap_event(collected_at=collected_at, reason="xueqiu_watchlist_records_empty")]
+                audit["emitted_event_count"] = len(events[:limit])
+                finalize_audit(audit)
+                return events[:limit], audit
+    if not events:
+        events = [gap_event(collected_at=collected_at, reason="xueqiu_watchlist_records_empty")]
+    audit["emitted_event_count"] = len(events)
+    finalize_audit(audit)
+    return events, audit
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -77,7 +131,7 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
             yield path
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix in {".csv", ".tsv"}:
         return parse_table(path)
@@ -86,11 +140,11 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
     if suffix in {".xlsx", ".xlsm"}:
         return parse_workbook(path)
     if suffix == ".zip":
-        return parse_zip(path)
+        return parse_zip(path, audit=audit)
     return parse_text_watchlist(path)
 
 
-def parse_zip(path: Path) -> List[Dict[str, Any]]:
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-xueqiu-watchlist-") as tmp:
         tmp_root = Path(tmp)
@@ -100,7 +154,13 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
             member_name = info.filename.replace("\\", "/")
             member_path = PurePosixPath(member_name)
             suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
             if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
                 continue
             target = tmp_root.joinpath(*member_path.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -330,7 +390,12 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     market_counts = Counter((event.get("data") or {}).get("market", "unknown") for event in events if event["kind"] == "watchlist")
     group_counts = Counter((event.get("data") or {}).get("group", "unknown") for event in events if event["kind"] == "watchlist")
@@ -344,6 +409,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "market_counts": dict(sorted(market_counts.items())),
         "group_counts": dict(sorted(group_counts.items())),
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "field_coverage": build_watchlist_field_coverage(events),
         "evidence_policy": {
             "xueqiu_watchlist_is_strong_trade_source": False,
             "broker_confirmed_trade_collection": False,
@@ -357,6 +423,31 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
             "next_action": "Provide authorized Xueqiu watchlist export." if gap_only else "Use as attention-universe evidence; corroborate with Xueqiu activity and broker trades.",
         },
+        "collection_audit": collection_audit or {},
+    }
+
+
+def build_watchlist_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    watchlist_events = [event for event in events if event.get("kind") == "watchlist"]
+    fields = [
+        "symbol",
+        "code",
+        "market",
+        "name",
+        "group",
+        "industry",
+        "note",
+        "tags",
+        "followed_at",
+        "source_section",
+    ]
+    coverage: Dict[str, Dict[str, int]] = {}
+    for field in fields:
+        count = sum(1 for event in watchlist_events if (event.get("data") or {}).get(field) not in (None, "", [], {}))
+        coverage[field] = {"present": count, "missing": max(len(watchlist_events) - count, 0)}
+    return {
+        "watchlist_event_count": len(watchlist_events),
+        "fields": coverage,
     }
 
 
@@ -504,6 +595,20 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, str):
         return value[:4000]
     return value
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_audit(audit: Dict[str, Any]) -> None:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
 
 def strip_tags(value: str) -> str:

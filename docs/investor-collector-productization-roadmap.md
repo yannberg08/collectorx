@@ -233,6 +233,32 @@ Findings:
 - Fixture validation covers watchlist ZIP, activity ZIP with Excel workbook,
   archive member provenance, traversal skipping, and broker-trade boundary flags.
 
+### Wave B3c: P0 Xueqiu source audit and saved-page fix
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-xueqiu-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `xueqiu-watchlist` and `xueqiu-investor-activity` to `0.3.0`.
+- Fixed saved HTML page parsing in `xueqiu-investor-activity`; saved pages now
+  enter as `saved_page` activity instead of crashing on undefined variables.
+- Added source audit to both Xueqiu collectors: input count, resolved file
+  count, extension coverage, ZIP member counts, skipped member counts, parsed
+  records, emitted events, and path-level results.
+- Added field coverage to both manifests.
+- Added pagination marker audit to `xueqiu-investor-activity` for fields such as
+  `page`, `total`, `max_id`, `next_max_id`, `since_id`, and cursor-like fields.
+- Preserved the evidence boundary: Xueqiu is attention, network, opinion,
+  saved-page, and model-portfolio evidence, not broker-confirmed trade evidence.
+- Fixture validation covers saved HTML pages, source audit, field coverage,
+  pagination marker audit, ZIP skip accounting, and watchlist filtered-record
+  accounting.
+- Real Xueqiu account adapter and real pagination validation remain pending.
+
 ### Wave B4: P0 China wealth assets productization pass 2
 
 Status: `completed-baseline`

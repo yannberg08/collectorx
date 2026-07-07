@@ -68,6 +68,7 @@ def test_collect_xueqiu_watchlist_exports() -> None:
                     "watchlist": [
                         {"symbol": "SH688981", "name": "中芯国际", "tags": ["芯片"], "auth": {"token": "must-not-leak"}},
                         {"symbol": "HK00700", "name": "腾讯控股", "market": "HK"},
+                        {"name": "缺少代码的观察项"},
                     ],
                 },
                 ensure_ascii=False,
@@ -126,6 +127,10 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         assert manifest["market_counts"]["HK"] == 2
         assert manifest["archive_member_event_count"] == 1
         assert manifest["evidence_policy"]["xueqiu_watchlist_is_strong_trade_source"] is False
+        assert manifest["collection_audit"]["archive_member_count"] == 2
+        assert manifest["collection_audit"]["skipped_archive_member_count"] == 1
+        assert manifest["collection_audit"]["filtered_record_count"] >= 1
+        assert manifest["field_coverage"]["fields"]["symbol"]["present"] == 7
 
 
 def test_gap_event() -> None:

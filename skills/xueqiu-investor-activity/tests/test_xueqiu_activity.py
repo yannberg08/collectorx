@@ -71,6 +71,7 @@ def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:
                             {
                                 "type": "status",
                                 "id": 1001,
+                                "max_id": 1001,
                                 "text": "继续跟踪 $贵州茅台(SH600519)$，估值进入可研究区间。",
                                 "created_at": "2026-07-08T09:30:00+08:00",
                                 "user": {"id": 42, "screen_name": "价值研究员"},
@@ -115,6 +116,54 @@ def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["activity_counts"] == {"favorite": 1, "portfolio_activity": 1, "post": 1}
         assert manifest["collection_readiness"]["can_claim_complete_xueqiu_activity_boundary"] is False
+        assert manifest["collection_audit"]["pagination_marker_count"] == 1
+        assert manifest["collection_audit"]["pagination_marker_field_counts"]["max_id"] == 1
+        assert manifest["field_coverage"]["fields"]["content_preview"]["present"] >= 1
+
+
+def test_collects_html_saved_page_and_manifest_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        html_path = root / "saved-xueqiu.html"
+        out = root / "out"
+        html_path.write_text(
+            """
+            <html>
+              <head>
+                <meta property="og:title" content="半导体行业收藏">
+                <meta name="author" content="雪球用户">
+                <link rel="canonical" href="https://xueqiu.com/123/456">
+              </head>
+              <body>收藏了一篇关于 $中芯国际(SH688981)$ 的讨论。</body>
+            </html>
+            """,
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(html_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T10:30:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["activity_type"] == "saved_page"
+        assert events[0]["data"]["source_surface"] == "saved_page"
+        assert events[0]["data"]["url"] == "https://xueqiu.com/123/456"
+        assert "SH688981" in events[0]["data"]["symbols"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_audit"]["extension_counts"] == {".html": 1}
+        assert manifest["field_coverage"]["fields"]["url"]["present"] == 1
 
 
 def test_syncs_package_to_soulmirror_lake() -> None:
@@ -200,6 +249,7 @@ if __name__ == "__main__":
     test_collect_watchlist_csv()
     test_collect_posts_json()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
+    test_collects_html_saved_page_and_manifest_audit()
     test_syncs_package_to_soulmirror_lake()
     test_collects_zip_excel_activity_package()
     print("xueqiu-investor-activity tests passed.")

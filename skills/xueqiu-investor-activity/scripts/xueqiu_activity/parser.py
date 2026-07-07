@@ -34,16 +34,69 @@ def now_iso() -> str:
 
 
 def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    paths = list(iter_paths(inputs))
+    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    input_list = list(inputs)
+    paths = list(iter_paths(input_list))
+    audit = {
+        "source_type": "authorized_local_xueqiu_export",
+        "input_count": len(input_list),
+        "resolved_input_file_count": len(paths),
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "parsed_record_count": 0,
+        "emitted_event_count": 0,
+        "pagination_marker_count": 0,
+        "pagination_marker_field_counts": {},
+        "limit": limit,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "broker_trade_source": False,
+        "path_results": [],
+    }
     if not paths:
-        return [gap_event(collected_at=collected_at, reason="xueqiu_authorized_input_missing")]
+        events = [gap_event(collected_at=collected_at, reason="xueqiu_authorized_input_missing")]
+        audit["emitted_event_count"] = len(events)
+        finalize_audit(audit)
+        return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        for row, record in enumerate(parse_path(path), start=1):
+        path_result = {
+            "path": str(path),
+            "extension": path.suffix.lower() or "<none>",
+            "parsed_record_count": 0,
+            "emitted_event_count": 0,
+            "status": "parsed",
+        }
+        audit["path_results"].append(path_result)
+        increment_counter(audit, "extension_counts", path_result["extension"])
+        records = parse_path(path, audit=audit)
+        path_result["parsed_record_count"] = len(records)
+        audit["parsed_record_count"] += len(records)
+        for row, record in enumerate(records, start=1):
+            record_pagination_markers(record, audit)
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events
+                audit["emitted_event_count"] = len(events[:limit])
+                finalize_audit(audit)
+                return events[:limit], audit
+    if not events:
+        events = [gap_event(collected_at=collected_at, reason="xueqiu_records_empty")]
+    audit["emitted_event_count"] = len(events)
+    finalize_audit(audit)
+    return events, audit
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -57,7 +110,7 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
             yield path
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
@@ -68,11 +121,11 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
     if suffix in {".html", ".htm"}:
         return [parse_html(path)]
     if suffix == ".zip":
-        return parse_zip(path)
+        return parse_zip(path, audit=audit)
     return [parse_text(path)]
 
 
-def parse_zip(path: Path) -> List[Dict[str, Any]]:
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-xueqiu-activity-") as tmp:
         tmp_root = Path(tmp)
@@ -82,7 +135,13 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
             member_name = info.filename.replace("\\", "/")
             member_path = PurePosixPath(member_name)
             suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
             if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
                 continue
             target = tmp_root.joinpath(*member_path.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -119,6 +178,11 @@ def extract_records(loaded: Any) -> List[Any]:
         return loaded
     if not isinstance(loaded, dict):
         return [{"value": loaded}]
+    context = {
+        str(key): value
+        for key, value in loaded.items()
+        if not isinstance(value, (list, dict)) and value not in (None, "")
+    }
     for key in (
         "activities",
         "statuses",
@@ -139,15 +203,23 @@ def extract_records(loaded: Any) -> List[Any]:
     ):
         value = loaded.get(key)
         if isinstance(value, list):
-            return value
+            return [with_context(item, key, context) for item in value]
         if isinstance(value, dict):
             nested = extract_records(value)
             if not (len(nested) == 1 and nested[0] == value):
-                return nested
+                return [with_context(item, key, context) for item in nested]
     for value in loaded.values():
         if isinstance(value, list):
-            return value
+            return [with_context(item, "list", context) for item in value]
     return [loaded]
+
+
+def with_context(item: Any, section: str, context: Dict[str, Any]) -> Any:
+    if not isinstance(item, dict):
+        return {**context, "value": item, "source_section": section}
+    record = {**context, **item}
+    record.setdefault("source_section", section)
+    return record
 
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
@@ -194,12 +266,6 @@ def sniff_delimiter(text: str) -> str:
 def parse_html(path: Path) -> Dict[str, Any]:
     html = path.read_text(encoding="utf-8", errors="replace")
     text = html_to_text(html)
-    raw_ref = {"path": str(path), "row": row, "activity_type": activity_type, "source_surface": data.get("source_surface")}
-    if isinstance(record.get("_collectorx_raw_ref"), dict):
-        raw_ref.update(record["_collectorx_raw_ref"])
-        raw_ref["row"] = row
-        raw_ref["activity_type"] = activity_type
-        raw_ref["source_surface"] = data.get("source_surface")
     return {
         "activity_type": "saved_page",
         "title": meta_content(html, "og:title") or title_tag(html) or infer_title(path, text),
@@ -360,6 +426,8 @@ def infer_activity_type(record: Dict[str, Any], path: Optional[Path] = None) -> 
 
 
 def infer_source_surface(record: Dict[str, Any], path: Path) -> str:
+    if first(record, ["activity_type", "type", "kind"]) == "saved_page" or path.suffix.lower() in {".html", ".htm"}:
+        return "saved_page"
     text = json.dumps(sanitized(record), ensure_ascii=False).lower() + " " + str(path).lower()
     if "cube" in text or "组合" in text or "portfolio" in text:
         return "portfolio"
@@ -373,8 +441,6 @@ def infer_source_surface(record: Dict[str, Any], path: Path) -> str:
         return "follow"
     if "status" in text or "timeline" in text:
         return "status"
-    if path.suffix.lower() in {".html", ".htm"}:
-        return "saved_page"
     return "unknown"
 
 
@@ -406,7 +472,12 @@ def wiki_targets_for_activity(activity_type: str) -> List[str]:
     return targets.get(activity_type, ["investor.data_quality.collection_gaps"])
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in events)
     surface_counts = Counter((event.get("data") or {}).get("source_surface", "unknown") for event in events)
@@ -425,6 +496,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "observed_activity_types": observed,
         "missing_expected_activity_types": missing,
+        "field_coverage": build_activity_field_coverage(events),
         "evidence_policy": {
             "xueqiu_is_broker_trade_source": False,
             "broker_confirmed_trade_collection": False,
@@ -439,6 +511,36 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "activity_boundary_scope": "none" if gap_only else "partial_authorized_input",
             "next_action": "提供雪球个人活动导出或授权输入后重跑。" if gap_only else "可进入投资分身蒸馏；后续补真实账号分页/关注/收藏/组合覆盖验证。",
         },
+        "collection_audit": collection_audit or {},
+    }
+
+
+def build_activity_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    activity_events = [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
+    fields = [
+        "activity_type",
+        "source_surface",
+        "symbol",
+        "symbols",
+        "name",
+        "author",
+        "author_id",
+        "target_user",
+        "portfolio_symbol",
+        "portfolio_name",
+        "portfolio_changes",
+        "content_preview",
+        "url",
+        "tags",
+        "metrics",
+    ]
+    coverage: Dict[str, Dict[str, int]] = {}
+    for field in fields:
+        count = sum(1 for event in activity_events if (event.get("data") or {}).get(field) not in (None, "", [], {}))
+        coverage[field] = {"present": count, "missing": max(len(activity_events) - count, 0)}
+    return {
+        "activity_event_count": len(activity_events),
+        "fields": coverage,
     }
 
 
@@ -601,6 +703,54 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, str):
         return value[:2000]
     return value
+
+
+PAGINATION_KEYS = {
+    "count",
+    "cursor",
+    "last_id",
+    "max_id",
+    "next",
+    "next_cursor",
+    "next_max_id",
+    "page",
+    "page_no",
+    "page_size",
+    "since_id",
+    "total",
+}
+
+
+def record_pagination_markers(record: Dict[str, Any], audit: Dict[str, Any]) -> None:
+    seen: set[str] = set()
+    for key in record:
+        normalized = normalize_audit_key(key)
+        if normalized in PAGINATION_KEYS:
+            seen.add(normalized)
+    if not seen:
+        return
+    audit["pagination_marker_count"] += 1
+    for key in sorted(seen):
+        increment_counter(audit, "pagination_marker_field_counts", key)
+
+
+def normalize_audit_key(value: Any) -> str:
+    return str(value).strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_audit(audit: Dict[str, Any]) -> None:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+        "pagination_marker_field_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
 
 def html_to_text(html: str) -> str:

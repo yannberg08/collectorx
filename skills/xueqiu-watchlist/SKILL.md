@@ -1,7 +1,6 @@
 ---
 name: xueqiu-watchlist
 description: 雪球关注/自选列表垂直采集器。采集用户授权导出的雪球关注池，输出 watchlist 事件；关注池不能单独证明持仓、交易或完整投资意图。
-version: 0.2.1
 ---
 
 # Xueqiu Watchlist Collector
@@ -53,4 +52,5 @@ python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py \
 券商交易、笔记、研报和复盘交叉验证。
 
 ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会明确
-标注 `xueqiu_watchlist_is_strong_trade_source: false`。
+标注 `xueqiu_watchlist_is_strong_trade_source: false`，并记录输入文件数、
+扩展名覆盖、ZIP 成员/跳过成员、解析记录数、过滤记录数和字段覆盖。

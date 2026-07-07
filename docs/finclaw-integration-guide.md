@@ -239,6 +239,8 @@ Current status for `xueqiu-watchlist`:
 - Captures symbol, code, market, name, group, industry, tags, note/reason, and
   followed time when present; ZIP packages preserve `archive.zip::member`
   provenance and skip path-traversal members.
+- Manifest records source audit, extension coverage, ZIP member/skipped-member
+  counts, parsed/filtered record counts, and watchlist field coverage.
 - Recursively filters credential-like raw keys.
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows.
@@ -258,6 +260,11 @@ Current status:
 - Normalizes Snowball-like `statuses/list/data/items/stocks/cubes` payloads,
   preserves ZIP member provenance, strips credential-like keys from retained raw
   metadata, and writes a standard `investor_wiki_evidence.v1.json`.
+- Manifest records source audit, extension coverage, ZIP member/skipped-member
+  counts, parsed records, pagination marker fields, activity field coverage, and
+  source-surface coverage.
+- Saved HTML pages are parsed as `saved_page` activity and stay non-trade
+  evidence.
 - Not yet a real login/session collector.
 - Not a broker-confirmed trade source.
 

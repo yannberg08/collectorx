@@ -98,8 +98,8 @@ Operational docs:
 | --- | --- | --- |
 | `ths-portfolio` | `ths-portfolio` | Local metadata + trade package; ongoing real-device validation |
 | `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake Beta; strong trade tables require unlocked trading account |
-| `xueqiu-watchlist` | `xueqiu-watchlist` | Authorized local export baseline for Xueqiu watchlists; attention-universe evidence only |
-| `xueqiu-investor-activity` | `xueqiu-investor-activity` | Normalized local export/package baseline for watchlists, follows, posts, comments, favorites, owner portfolios, and SoulMirror lake sync; real account adapter pending |
+| `xueqiu-watchlist` | `xueqiu-watchlist` | Authorized local export/package baseline for Xueqiu watchlists with source audit and field coverage; attention-universe evidence only |
+| `xueqiu-investor-activity` | `xueqiu-investor-activity` | Normalized local export/package baseline for watchlists, follows, posts, comments, favorites, saved pages, owner portfolios, source/pagination audit, field coverage, and SoulMirror lake sync; real account adapter pending |
 | `china-wealth-assets` | `china-wealth-assets` | Normalized local export/package baseline for fund, wealth, cash-management holdings, transactions, asset snapshots, Excel/JSON/CSV inputs, platform coverage manifest, and SoulMirror lake sync |
 | `financial-news-usage` | `financial-news-usage` | Local usage export, saved-page, ZIP, and browser-history baseline for finance-app read, favorite, subscribe, search, and alert actions with platform/action coverage manifest |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only CSV/JSON/Excel/ZIP export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, FX, margin, tax, settlement fields, and broker/trade-surface/field coverage manifests |

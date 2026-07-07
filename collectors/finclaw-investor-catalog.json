@@ -128,9 +128,9 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-import",
       "cli": "python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect --input <authorized-xueqiu-watchlist-export> --out-dir <out-dir>",
-      "collects": "Xueqiu watchlists, symbols, groups, industries, tags, notes, followed time, and archive provenance.",
+      "collects": "Xueqiu watchlists, symbols, groups, industries, tags, notes, followed time, archive provenance, source audit, and field coverage.",
       "must_not_collect": "Broker-confirmed holdings, executions, orders, or fund flows.",
-      "production_gap": "Real Xueqiu account export discovery and watchlist pagination validation."
+      "production_gap": "Real Xueqiu account export discovery and real watchlist pagination validation."
     },
     {
       "id": "xueqiu-investor-activity",
@@ -141,9 +141,9 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-package-import",
       "cli": "python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect --input <authorized-xueqiu-export> --out-dir <out-dir> --sync-soulmirror",
-      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, and rebalance records.",
+      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, source audit, pagination marker audit, and field coverage.",
       "must_not_collect": "Trading facts unless corroborated by broker sources, login secrets, or platform-wide public scraping.",
-      "production_gap": "Real account adapter/export workflow, pagination, and rate/terms boundary review."
+      "production_gap": "Real account adapter/export workflow, real pagination coverage, and rate/terms boundary review."
     },
     {
       "id": "china-wealth-assets",

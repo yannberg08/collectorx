@@ -68,8 +68,8 @@ skill-name/
 | filesystem-collector | 7+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界 |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
-| xueqiu-watchlist | 9 | 草稿实现，CSV parser 已有基础测试 |
-| xueqiu-investor-activity | 7+ | 雪球个人活动垂直采集器，本地授权导出 baseline 已测试 |
+| xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计和字段覆盖已测试，仍需真实账号/分页验证 |
+| xueqiu-investor-activity | 8+ | 雪球个人活动垂直采集器；本地授权导出、保存页、分页标记审计、字段覆盖和 SoulMirror 同步已测试，仍需真实账号 adapter |
 | china-wealth-assets | 7+ | 中国基金理财资产垂直采集器，本地授权导出 baseline 已测试 |
 | financial-news-usage | 7+ | 财经资讯使用痕迹垂直采集器 baseline；支持授权文件/目录/ZIP/浏览器历史副本、平台/动作覆盖 manifest 和凭证字段过滤，仍需真实财联社/华尔街见闻/格隆汇账号验证 |
 | hk-us-brokerage | 7+ | 港美股券商强交易垂直采集器 baseline；支持授权 CSV/JSON/Excel/ZIP、券商/交易表/字段覆盖 manifest 和凭证字段过滤，仍需真实富途/老虎/盈透账号验证 |
