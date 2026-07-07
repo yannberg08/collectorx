@@ -163,6 +163,25 @@ Findings:
 - Real WeChat favorites database/public-account read-history adapters are still
   not done.
 
+### Wave G: P1 financial news usage productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `financial-news-usage` vertical collector for authorized local
+  finance-news usage exports and saved pages.
+- Captures read, favorite, subscribe, search, and alert actions without crawling
+  public news content.
+- Fixture validation covers CLS, WallstreetCN, Gelonghui, and saved HTML.
+- Real local candidate validation produced 41 usage events from 16 candidate
+  files.
+- Platform inference remains partial: 25 real local events were `unknown`.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -181,7 +200,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON; real API token missing | Complete TickTick OAuth validation, implement generic calendar collector, validate recurring tasks/timezones |
 | 3 | `meeting-minutes` | G2/G3 partial for local authorized meeting files | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
-| 5 | `financial-news-usage` | G0 | G1/G2: build user activity adapters for CLS/WallstreetCN/Gelonghui |
+| 5 | `financial-news-usage` | G2/G3 partial for local authorized usage/saved pages | Real CLS/WallstreetCN/Gelonghui app/account adapters, browser-history import, subscription/alert normalization, platform inference |
 
 ## P2 Work Queue
 

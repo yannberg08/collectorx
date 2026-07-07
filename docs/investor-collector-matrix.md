@@ -37,7 +37,7 @@
 | `task-calendar-investor` | `investor-source-collectors` | lens：交易计划、复盘提醒、研究任务 |
 | `wechat-favorites` | `wechat-favorites` | generic：微信收藏/公众号文章动作 |
 | `wechat-article-favorites` | `investor-source-collectors` | lens：投资公众号阅读、收藏、转发 |
-| `financial-news-usage` | dedicated skill | vertical：财联社、华尔街见闻、格隆汇等用户阅读/收藏/订阅痕迹 |
+| `financial-news-usage` | `financial-news-usage` | vertical：财联社、华尔街见闻、格隆汇等用户阅读/收藏/订阅痕迹 |
 
 ## P2
 

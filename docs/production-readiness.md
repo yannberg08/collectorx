@@ -46,7 +46,7 @@ every upstream source collector is production-ready.
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + `investment-notes` lens classifier | `baseline`; macOS Obsidian-style real validation passed | Validate Notion API events, add Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 日历/任务/滴答清单 | `ticktick-cli` API tool + `ticktick_events.py`; `calendar` YAML; `task-calendar-investor` lens classifier | `baseline`; real TickTick API validation blocked by missing token; calendar placeholder | Complete TickTick OAuth validation, build calendar collector, validate recurring tasks/timezones, backtest investment task classifier |
 | 公众号/微信收藏文章 | `wechat-favorites` local file collector + `wechat-article-favorites` lens classifier | `baseline`; macOS saved-article validation passed; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
-| 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` YAML | `placeholder` | Build user activity adapters; do not crawl public news as personal evidence |
+| 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage collector | `baseline`; fixture validation passed; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui authorized exports, browser histories, account APIs, and alert/subscription stores; do not crawl public news as personal evidence |
 
 ## P2 Status
 

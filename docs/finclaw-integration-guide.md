@@ -212,6 +212,23 @@ Current status:
 - Real WeChat favorites database/public-account read-history adapters still
   require version-specific validation.
 
+### 财经资讯使用痕迹
+
+```bash
+python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
+  --input <authorized-cls-wallstreetcn-gelonghui-usage-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, and TXT usage records
+  into `financial-news-usage` events.
+- Captures user actions: read, favorite, subscribe, search, and alert.
+- Outputs `investor_wiki_evidence.v1.json` for information-consumption and
+  monitoring-rule evidence.
+- Does not crawl public news or platform-wide content.
+
 ### 投资 Lens / 分类工具
 
 ```bash
