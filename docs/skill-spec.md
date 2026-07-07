@@ -60,7 +60,8 @@ skill-name/
 |--------|--------|------|
 | wechat-export | 15+ | 迁移 skill，需确认上游许可与真实环境 |
 | feishu | 5+ | 迁移 skill，需确认上游许可与真实环境 |
-| ticktick-cli | 12+ | 迁移 skill，需确认上游许可与真实环境 |
+| ticktick-cli | 12+ | 滴答清单 API 工具 + CollectorX 任务事件转换 baseline；支持授权 JSON/ZIP、平台覆盖 manifest 和凭证字段过滤，仍需真实 OAuth 账号验证 |
+| calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖 manifest，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
 | filesystem-collector | 7+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界 |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |

@@ -75,14 +75,14 @@ Operational docs:
 | `filesystem` | `filesystem-collector` | Metadata-only generic file collector aligned with SoulMirror driver boundary; manifest includes macOS/Windows/Linux default-root plan; investor routing is handled by lenses |
 | `wechat` | `wechat-export` | Migrated skill; provenance review required |
 | `feishu` | `feishu` | Migrated skill; provenance review required |
-| `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus event-conversion baseline; real OAuth validation pending |
+| `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus authorized JSON/ZIP event-conversion baseline; manifest reports TickTick/Dida source coverage; real OAuth validation pending |
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
 | `email` | `email-collector` | Multi-account IMAP baseline plus authorized local EML/MBOX/JSON/CSV import packages; real mailbox validation still pending |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |
 | `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion plus authorized Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP imports; manifest reports P1 note-platform coverage and missing platforms |
 | `dingtalk` | `collaboration-exports` | Authorized local export baseline for DingTalk messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
 | `wecom` | `collaboration-exports` | Authorized local export baseline for WeCom messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
-| `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |
+| `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV/ZIP event-package baseline with Apple/Google/Outlook/Feishu/DingTalk/WeCom/Tencent Meeting platform coverage; investment filtering handled by `task-calendar-investor` |
 | `meeting-artifacts` | `meeting-artifacts` | Authorized local/platform-export baseline for meeting minutes, transcripts, HTML/CSV/JSON exports, participants, links, platform normalization; account API adapters pending |
 | `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |
 | `social-activity` | `social-activity` | Local JSON/CSV/Excel activity baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, engagement counts, and weak influence signals |
@@ -110,7 +110,7 @@ Operational docs:
 | `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists; note adapters pending |
-| `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; calendar validation pending |
+| `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; upstream task/calendar platform coverage manifests available |
 | `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; saved-article validation done |
 | `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator and social influence signals |
 

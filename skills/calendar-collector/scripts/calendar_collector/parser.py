@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import re
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,8 +15,21 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 COLLECTOR = "calendar"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".ics", ".json", ".jsonl", ".ndjson", ".csv", ".tsv"}
+SUPPORTED_RECORD_EXTENSIONS = {".ics", ".json", ".jsonl", ".ndjson", ".csv", ".tsv"}
+SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
+EXPECTED_P1_CALENDAR_PLATFORMS = (
+    "apple_calendar",
+    "google_calendar",
+    "outlook_calendar",
+    "feishu_calendar",
+    "dingtalk_calendar",
+    "wecom_calendar",
+    "tencent_meeting_calendar",
+)
+GENERIC_CALENDAR_PLATFORMS = {"ics_export", "csv_export", "calendar_export"}
+SOURCE_PATH_KEY = "_collectorx_source_path"
+SOURCE_PLATFORM_KEY = "_collectorx_source_platform"
 
 
 def now_iso() -> str:
@@ -48,6 +62,8 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
 
 def parse_path(path: Path) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return parse_zip(path)
     if suffix == ".ics":
         return parse_ics(path)
     if suffix in {".csv", ".tsv"}:
@@ -57,9 +73,13 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return parse_table_text(text, suffix=path.suffix.lower())
+
+
+def parse_table_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else sniff_delimiter(text)
+    delimiter = "\t" if suffix == ".tsv" else sniff_delimiter(text)
     return [{str(k): v for k, v in row.items() if k is not None} for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
 
 
@@ -72,9 +92,14 @@ def sniff_delimiter(text: str) -> str:
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig").strip()
+    return parse_json_text(text, suffix=path.suffix.lower())
+
+
+def parse_json_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
+    text = text.strip()
     if not text:
         return []
-    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+    if suffix in {".jsonl", ".ndjson"}:
         rows = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
         rows = extract_events(json.loads(text))
@@ -98,7 +123,11 @@ def extract_events(loaded: Any) -> List[Any]:
 
 
 def parse_ics(path: Path) -> List[Dict[str, Any]]:
-    lines = unfold_ics(path.read_text(encoding="utf-8-sig", errors="replace").splitlines())
+    return parse_ics_text(path.read_text(encoding="utf-8-sig", errors="replace"))
+
+
+def parse_ics_text(text: str) -> List[Dict[str, Any]]:
+    lines = unfold_ics(text.splitlines())
     events: List[Dict[str, Any]] = []
     current: Optional[Dict[str, Any]] = None
     in_alarm = False
@@ -151,6 +180,41 @@ def parse_ics(path: Path) -> List[Dict[str, Any]]:
     return events
 
 
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    events: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive:
+        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+            if should_skip_zip_member(member):
+                continue
+            suffix = Path(member.filename).suffix.lower()
+            text = archive.read(member).decode("utf-8-sig", errors="replace")
+            try:
+                if suffix == ".ics":
+                    parsed = parse_ics_text(text)
+                elif suffix in {".csv", ".tsv"}:
+                    parsed = parse_table_text(text, suffix=suffix)
+                else:
+                    parsed = parse_json_text(text, suffix=suffix)
+            except Exception:
+                parsed = []
+            path_label = f"{path.name}::{member.filename}"
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_PATH_KEY] = path_label
+                    record[SOURCE_PLATFORM_KEY] = infer_source_platform(record, path_label)
+                    events.append(record)
+    return events
+
+
+def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    member_path = Path(member.filename)
+    if member.is_dir():
+        return True
+    if member_path.is_absolute() or ".." in member_path.parts:
+        return True
+    return member_path.suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+
+
 def unfold_ics(lines: List[str]) -> List[str]:
     unfolded: List[str] = []
     for line in lines:
@@ -180,7 +244,10 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     description = first(record, ["description", "content", "body", "notes", "备注", "描述", "内容"]) or ""
     start = first(record, ["start", "start_time", "started_at", "dtstart", "开始时间", "开始"])
     end = first(record, ["end", "end_time", "ended_at", "dtend", "结束时间", "结束"])
+    path_label = first(record, [SOURCE_PATH_KEY]) or str(path)
+    source_platform = first(record, [SOURCE_PLATFORM_KEY]) or infer_source_platform(record, path_label)
     data = {
+        "source_platform": source_platform,
         "title": title,
         "description_preview": description[:1000],
         "calendar_name": first(record, ["calendar", "calendar_name", "日历", "日历名称"]),
@@ -208,7 +275,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": data.get("start") or data.get("end"),
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {"path": str(path), "row": row, "event_id": data.get("event_id")},
+        "raw_ref": {"path": path_label, "row": row, "event_id": data.get("event_id"), "source_platform": source_platform},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar", "work_confidential", "contact"]},
         "wiki_targets": ["internal.calendar.events"],
     }
@@ -237,6 +304,15 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
 def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    source_platform_counts = Counter(source_platform_for(event) for event in events if source_platform_for(event) != "unknown")
+    observed_platforms = sorted(platform for platform, count in source_platform_counts.items() if count)
+    observed_expected = [platform for platform in EXPECTED_P1_CALENDAR_PLATFORMS if source_platform_counts.get(platform)]
+    missing_expected = [platform for platform in EXPECTED_P1_CALENDAR_PLATFORMS if not source_platform_counts.get(platform)]
+    unknown_event_count = sum(
+        count
+        for platform, count in source_platform_counts.items()
+        if platform not in EXPECTED_P1_CALENDAR_PLATFORMS and platform not in GENERIC_CALENDAR_PLATFORMS
+    )
     return {
         "schema": "collectorx.calendar.manifest.v1",
         "collector": COLLECTOR,
@@ -244,14 +320,61 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "event_count": len(events),
         "source_file_count": len({(event.get("raw_ref") or {}).get("path") for event in events if (event.get("raw_ref") or {}).get("path")}),
         "kind_counts": dict(sorted(kind_counts.items())),
+        "platform_coverage": {
+            "expected_p1_platforms": list(EXPECTED_P1_CALENDAR_PLATFORMS),
+            "observed_platforms": observed_platforms,
+            "observed_expected_platforms": observed_expected,
+            "missing_expected_platforms": missing_expected,
+            "source_platform_counts": dict(sorted(source_platform_counts.items())),
+            "unknown_event_count": unknown_event_count,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_calendar_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_investment_calendar": False,
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "platform_coverage_status": platform_coverage_status(events, missing_expected),
             "next_action": "Provide authorized ICS/JSON/CSV calendar export." if gap_only else "Feed calendar events into task-calendar-investor lens.",
         },
     }
+
+
+def source_platform_for(event: Dict[str, Any]) -> str:
+    value = event.get("data", {}).get("source_platform") or event.get("raw_ref", {}).get("source_platform") or "unknown"
+    return str(value)
+
+
+def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:
+    if not events or all((event.get("data") or {}).get("gap") for event in events):
+        return "no_platform_observed"
+    if not missing_expected:
+        return "all_expected_platforms_observed"
+    return "partial_expected_platforms_observed"
+
+
+def infer_source_platform(record: Dict[str, Any], path_label: str) -> str:
+    explicit = first(record, ["source_platform", "source_app", "calendar_source", "provider", "platform", "app", "来源", "平台"]) or ""
+    probe = f"{explicit} {path_label} {first(record, ['calendar', 'calendar_name', '日历', '日历名称']) or ''}".lower()
+    if "tencent" in probe or "腾讯会议" in probe:
+        return "tencent_meeting_calendar"
+    if "wecom" in probe or "work.weixin" in probe or "企业微信" in probe:
+        return "wecom_calendar"
+    if "dingtalk" in probe or "钉钉" in probe:
+        return "dingtalk_calendar"
+    if "feishu" in probe or "lark" in probe or "飞书" in probe:
+        return "feishu_calendar"
+    if "outlook" in probe or "office365" in probe or "microsoft" in probe:
+        return "outlook_calendar"
+    if "google" in probe or "gmail" in probe:
+        return "google_calendar"
+    if "apple" in probe or "icloud" in probe or "苹果" in probe:
+        return "apple_calendar"
+    if ".csv" in probe or ".tsv" in probe:
+        return "csv_export"
+    if ".ics" in probe:
+        return "ics_export"
+    return "calendar_export"
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
@@ -330,6 +453,8 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, dict):
         cleaned: Dict[str, Any] = {}
         for key, item in value.items():
+            if str(key).startswith("_collectorx_"):
+                continue
             lowered = str(key).lower()
             if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
                 continue

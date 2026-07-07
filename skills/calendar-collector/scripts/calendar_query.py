@@ -30,6 +30,8 @@ def write_summary(path: Path, manifest: dict) -> None:
         "- collector: `calendar`",
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
+        f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         "",
         "Generic calendar events are not written to the investor Wiki directly. Use the task-calendar-investor lens.",
     ]
@@ -55,7 +57,7 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized calendar exports into CollectorX events.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p_collect = sub.add_parser("collect", help="Parse ICS/JSON/CSV calendar exports.")
+    p_collect = sub.add_parser("collect", help="Parse ICS/JSON/CSV/TSV/ZIP calendar exports.")
     p_collect.add_argument("--input", action="append", help="Authorized calendar export file/folder.")
     p_collect.add_argument("--out-dir", help="Output package directory.")
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")

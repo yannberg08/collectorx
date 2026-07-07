@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -31,6 +32,7 @@ def test_ticktick_json_to_task_events() -> None:
                         "dueDate": "2026-07-09T10:00:00+08:00",
                         "status": 0,
                         "tags": ["投资"],
+                        "token": "must-not-leak",
                     }
                 ],
                 ensure_ascii=False,
@@ -49,14 +51,58 @@ def test_ticktick_json_to_task_events() -> None:
         assert event["schema"] == "collectorx.event.v1"
         assert event["collector"] == "ticktick"
         assert event["kind"] == "task"
+        assert event["data"]["source_app"] == "ticktick"
         assert event["data"]["title"] == "复盘贵州茅台财报"
         assert event["data"]["is_completed"] is False
+        assert "must-not-leak" not in json.dumps(event, ensure_ascii=False)
         assert event["wiki_targets"] == ["internal.productivity.tasks"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_tasks"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["ticktick"]
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == ["dida365"]
+
+
+def test_ticktick_zip_dida_export_and_unsafe_member_skip() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "dida365-export.zip"
+        out = root / "out"
+        with zipfile.ZipFile(source, "w") as archive:
+            archive.writestr(
+                "dida365/tasks.json",
+                json.dumps(
+                    {
+                        "tasks": [
+                            {
+                                "source": "滴答清单",
+                                "id": "task-2",
+                                "projectName": "交易计划",
+                                "title": "检查仓位上限",
+                                "dueDate": "2026-07-10T09:00:00+08:00",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            archive.writestr("../unsafe.json", json.dumps([{"title": "不应读取"}], ensure_ascii=False))
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(source), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["source_app"] == "dida365"
+        assert "../unsafe" not in events[0]["raw_ref"]["path"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["dida365"]
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
 
 
 if __name__ == "__main__":
     test_ticktick_json_to_task_events()
+    test_ticktick_zip_dida_export_and_unsafe_member_skip()
     print("ticktick event tests passed.")

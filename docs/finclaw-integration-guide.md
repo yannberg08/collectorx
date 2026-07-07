@@ -279,13 +279,18 @@ Current status:
 
 ```bash
 python3 skills/ticktick-cli/scripts/ticktick_events.py collect \
-  --input <authorized-ticktick-task-json> \
+  --input <authorized-ticktick-task-json-or-zip> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized TickTick task JSON into generic `ticktick` task events.
+- Converts authorized TickTick/Dida task JSON/JSONL/ZIP exports into generic
+  `ticktick` task events.
+- Writes `manifest.platform_coverage` with `ticktick`/`dida365` source
+  coverage, missing sources, event counts, and `real_account_validation`.
+- Filters credential-like raw keys such as password, cookie, token, session,
+  secret, authorization, and credential.
 - Does not claim investment-task status directly.
 - Feed `lake/ticktick/events.jsonl` into `task-calendar-investor` lens for
   trading plans, research tasks, and review reminders.
@@ -295,16 +300,19 @@ Current status:
 
 ```bash
 python3 skills/calendar-collector/scripts/calendar_query.py collect \
-  --input <authorized-calendar-ics-json-or-csv> \
+  --input <authorized-calendar-ics-json-csv-or-zip> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized ICS, JSON/JSONL, CSV, and TSV exports into generic
+- Converts authorized ICS, JSON/JSONL, CSV, TSV, and ZIP exports into generic
   `calendar` events.
 - Captures title, start/end time, all-day status, location, meeting links,
   organizer, attendees, recurrence, and reminders.
+- Writes `manifest.platform_coverage` with expected P1 calendar platforms
+  (Apple, Google, Outlook, Feishu, DingTalk, WeCom, Tencent Meeting), observed
+  platforms, missing platforms, event counts, and `real_account_validation`.
 - Does not claim investment-calendar status directly.
 - Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
   trading plans, earnings events, research meetings, and review reminders.

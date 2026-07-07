@@ -16,12 +16,16 @@ scope:
     - attendees
     - meeting_links
     - reminders
+    - source_platform
+    - platform_coverage_manifest
   excludes:
     - investment_classification
     - private_calendar_content_in_investor_wiki
     - credentials
 
 description: |
-  通用日历采集器占位。它只采用户授权的日历事件原始证据，不判断是否投资相关。
+  通用日历采集器。它只采用户授权的日历事件原始证据，不判断是否投资相关。
+  支持 ICS/JSON/CSV/TSV/ZIP 授权导出，并在 manifest 中记录 Apple、Google、
+  Outlook、飞书、钉钉、企业微信、腾讯会议等来源平台覆盖情况。
   投资分身需要的交易计划、财报日程、复盘提醒由 task-calendar-investor lens
   从 calendar/ticktick lake 中筛选。

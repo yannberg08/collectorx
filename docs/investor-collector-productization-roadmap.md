@@ -604,6 +604,30 @@ Findings:
 - Fixture validation now proves partial platform coverage, all-expected-platform
   coverage, and ZIP path traversal skipping.
 
+### Wave R: P1 task/calendar platform coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-task-calendar-platform-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Added authorized ZIP export import to `calendar-collector` and
+  `ticktick_events.py`.
+- Added `manifest.platform_coverage` to generic `calendar` packages for Apple,
+  Google, Outlook, Feishu, DingTalk, WeCom, Tencent Meeting, and generic
+  calendar exports.
+- Added `manifest.platform_coverage` to generic `ticktick` packages for
+  TickTick/Dida source coverage.
+- Added source fields (`source_platform`/`source_app`) to task and calendar
+  events so FinClaw can see which platform each event came from before lens
+  filtering.
+- Hardened TickTick event raw snapshots to remove credential-like fields.
+- Fixture validation covers partial coverage, all expected calendar platforms,
+  Dida ZIP exports, and ZIP path traversal skipping.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -619,7 +643,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; manifest reports observed/missing P1 note platforms | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON and generic calendar exports; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones |
+| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report task/calendar platform coverage; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local meeting files plus DingTalk/WeCom collaboration exports; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages and Chromium/Safari browser-history copies | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |

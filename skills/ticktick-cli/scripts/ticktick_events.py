@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -14,6 +15,11 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 COLLECTOR = "ticktick"
 CN_TZ = timezone(timedelta(hours=8))
+SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
+EXPECTED_P1_TASK_PLATFORMS = ("ticktick", "dida365")
+SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
+SOURCE_PATH_KEY = "_collectorx_source_path"
+SOURCE_APP_KEY = "_collectorx_source_app"
 
 
 def now_iso() -> str:
@@ -38,22 +44,58 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
         path = Path(raw).expanduser()
         if path.is_dir():
             for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in {".json", ".jsonl", ".ndjson"}:
+                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS | {".zip"}:
                     yield child
-        elif path.is_file():
+        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS | {".zip"}:
             yield path
 
 
 def parse_path(path: Path) -> List[Dict[str, Any]]:
+    if path.suffix.lower() == ".zip":
+        return parse_zip(path)
     text = path.read_text(encoding="utf-8-sig").strip()
+    return parse_json_text(text, suffix=path.suffix.lower())
+
+
+def parse_json_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
+    text = text.strip()
     if not text:
         return []
-    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+    if suffix in {".jsonl", ".ndjson"}:
         rows = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
         loaded = json.loads(text)
         rows = extract_tasks(loaded)
     return [row for row in rows if isinstance(row, dict)]
+
+
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    tasks: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive:
+        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+            if should_skip_zip_member(member):
+                continue
+            suffix = Path(member.filename).suffix.lower()
+            text = archive.read(member).decode("utf-8-sig", errors="replace")
+            try:
+                parsed = parse_json_text(text, suffix=suffix)
+            except Exception:
+                parsed = []
+            path_label = f"{path.name}::{member.filename}"
+            for record in parsed:
+                record[SOURCE_PATH_KEY] = path_label
+                record[SOURCE_APP_KEY] = infer_task_source(record, path_label)
+                tasks.append(record)
+    return tasks
+
+
+def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    member_path = Path(member.filename)
+    if member.is_dir():
+        return True
+    if member_path.is_absolute() or ".." in member_path.parts:
+        return True
+    return member_path.suffix.lower() not in SUPPORTED_EXTENSIONS
 
 
 def extract_tasks(loaded: Any) -> List[Dict[str, Any]]:
@@ -82,7 +124,10 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
     start = first(record, ["startDate", "start_date", "start", "开始时间"])
     completed = first(record, ["completedTime", "completed_time", "完成时间"])
     status = first(record, ["status", "状态"])
+    path_label = first(record, [SOURCE_PATH_KEY]) or str(path)
+    source_app = first(record, [SOURCE_APP_KEY]) or infer_task_source(record, path_label)
     data = {
+        "source_app": source_app,
         "title": title,
         "content_preview": content[:1000],
         "project_id": first(record, ["projectId", "project_id", "清单ID"]),
@@ -95,12 +140,12 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
         "completed_at": completed,
         "is_completed": is_completed(status, completed),
         "tags": tags_for(record),
-        "raw": record,
+        "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(path, data.get("task_id"), title, due, completed),
+        "id": stable_id(path_label, data.get("task_id"), title, due, completed),
         "collector": COLLECTOR,
         "source": "滴答清单用户授权任务数据",
         "owner_scope": "personal",
@@ -109,7 +154,8 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
         "collected_at": collected_at or now_iso(),
         "data": data,
         "raw_ref": {
-            "path": str(path),
+            "path": path_label,
+            "source_app": source_app,
             "task_id": data.get("task_id"),
             "project_id": data.get("project_id"),
         },
@@ -145,20 +191,48 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
 def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    source_app_counts = Counter(source_app_for(event) for event in events if source_app_for(event) != "unknown")
+    observed_apps = sorted(app for app, count in source_app_counts.items() if count)
+    observed_expected = [app for app in EXPECTED_P1_TASK_PLATFORMS if source_app_counts.get(app)]
+    missing_expected = [app for app in EXPECTED_P1_TASK_PLATFORMS if not source_app_counts.get(app)]
+    unknown_event_count = sum(count for app, count in source_app_counts.items() if app not in EXPECTED_P1_TASK_PLATFORMS)
     return {
         "schema": "collectorx.ticktick.manifest.v1",
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
         "kind_counts": dict(sorted(kind_counts.items())),
+        "platform_coverage": {
+            "expected_p1_platforms": list(EXPECTED_P1_TASK_PLATFORMS),
+            "observed_platforms": observed_apps,
+            "observed_expected_platforms": observed_expected,
+            "missing_expected_platforms": missing_expected,
+            "source_app_counts": dict(sorted(source_app_counts.items())),
+            "unknown_event_count": unknown_event_count,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_ticktick_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_investment_tasks": False,
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "platform_coverage_status": platform_coverage_status(events, missing_expected),
             "next_action": "Provide authorized TickTick export/API output." if gap_only else "Feed task events into task-calendar-investor lens.",
         },
     }
+
+
+def source_app_for(event: Dict[str, Any]) -> str:
+    value = event.get("data", {}).get("source_app") or event.get("raw_ref", {}).get("source_app") or "unknown"
+    return str(value)
+
+
+def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:
+    if not events or all((event.get("data") or {}).get("gap") for event in events):
+        return "no_platform_observed"
+    if not missing_expected:
+        return "all_expected_platforms_observed"
+    return "partial_expected_platforms_observed"
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -181,6 +255,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
+        f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         "",
         "Generic task events are not written to the investor Wiki directly. Use the task-calendar-investor lens.",
     ]
@@ -206,8 +282,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Convert authorized TickTick task exports to CollectorX events.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p_collect = sub.add_parser("collect", help="Parse local TickTick task JSON exports.")
-    p_collect.add_argument("--input", action="append", help="Authorized task JSON/JSONL file or folder.")
+    p_collect = sub.add_parser("collect", help="Parse local TickTick/Dida task JSON or ZIP exports.")
+    p_collect.add_argument("--input", action="append", help="Authorized task JSON/JSONL/ZIP file or folder.")
     p_collect.add_argument("--out-dir", help="Output package directory.")
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
@@ -251,6 +327,32 @@ def is_completed(status: Optional[str], completed: Optional[str]) -> bool:
 def normalize_time(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
+    return value
+
+
+def infer_task_source(record: Dict[str, Any], path_label: str) -> str:
+    explicit = first(record, ["source_app", "source", "platform", "app", "来源", "平台"]) or ""
+    probe = f"{explicit} {path_label}".lower()
+    if "dida" in probe or "滴答" in probe:
+        return "dida365"
+    return "ticktick"
+
+
+def sanitized(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: Dict[str, Any] = {}
+        for key, item in value.items():
+            if str(key).startswith("_collectorx_"):
+                continue
+            lowered = str(key).lower()
+            if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
+                continue
+            cleaned[str(key)] = sanitized(item)
+        return cleaned
+    if isinstance(value, list):
+        return [sanitized(item) for item in value[:200]]
+    if isinstance(value, str):
+        return value[:2000]
     return value
 
 

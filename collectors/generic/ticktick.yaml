@@ -9,5 +9,22 @@ armed: false
 # 采集器使用的skill
 skill: ticktick-cli
 
-# 采集逻辑由skill定义
-# skill会处理：API认证、任务获取、数据导出
+scope:
+  collects:
+    - task_title
+    - task_content_preview
+    - project_name
+    - due_time
+    - completion_status
+    - tags
+    - source_app
+    - platform_coverage_manifest
+  excludes:
+    - oauth_token
+    - application_secret
+    - investment_classification
+    - full_life_tasks_in_investor_wiki
+
+# 采集逻辑由 skill 定义。
+# ticktick_cli.py 处理 API 认证和任务获取；ticktick_events.py 把用户授权 JSON/ZIP 导出转成 lake/ticktick/events.jsonl。
+# 投资分身只通过 task-calendar-investor lens 筛交易计划、复盘提醒和研究任务。

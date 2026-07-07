@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -53,22 +54,25 @@ def test_collect_ics_event() -> None:
         assert event["collector"] == "calendar"
         assert event["kind"] == "calendar"
         assert event["data"]["title"] == "财报电话会"
+        assert event["data"]["source_platform"] == "ics_export"
         assert event["data"]["start"] == "2026-07-08T09:30:00+08:00"
         assert event["data"]["meeting_url"] == "https://meeting.tencent.com/test"
         assert event["data"]["attendees"][0]["name"] == "研究员"
         assert event["wiki_targets"] == ["internal.calendar.events"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_calendar"] is False
+        assert manifest["platform_coverage"]["observed_platforms"] == ["ics_export"]
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
 
 
 def test_collect_json_and_csv_events() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         json_path = root / "events.json"
-        csv_path = root / "events.csv"
+        csv_path = root / "outlook-events.csv"
         out = root / "out"
         json_path.write_text(
-            json.dumps({"events": [{"title": "复盘提醒", "start": "2026-07-08T20:00:00+08:00", "token": "must-not-leak"}]}, ensure_ascii=False),
+            json.dumps({"events": [{"source_platform": "Google Calendar", "title": "复盘提醒", "start": "2026-07-08T20:00:00+08:00", "token": "must-not-leak"}]}, ensure_ascii=False),
             encoding="utf-8",
         )
         csv_path.write_text("标题,开始时间,结束时间,地点\n行业会议,2026-07-09T10:00:00+08:00,2026-07-09T11:00:00+08:00,线上\n", encoding="utf-8")
@@ -84,6 +88,90 @@ def test_collect_json_and_csv_events() -> None:
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         assert all(target == "internal.calendar.events" for event in events for target in event["wiki_targets"])
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_coverage"]["source_platform_counts"] == {
+            "google_calendar": 1,
+            "outlook_calendar": 1,
+        }
+
+
+def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        exports = root / "exports"
+        exports.mkdir()
+        (exports / "apple-calendar.ics").write_text(
+            "\n".join(
+                [
+                    "BEGIN:VCALENDAR",
+                    "BEGIN:VEVENT",
+                    "UID:apple-1",
+                    "SUMMARY:苹果日历复盘",
+                    "DTSTART:20260708T090000",
+                    "END:VEVENT",
+                    "END:VCALENDAR",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (exports / "google.json").write_text(
+            json.dumps({"events": [{"platform": "google", "title": "Google 财报提醒", "start": "2026-07-08T10:00:00+08:00"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (exports / "outlook.csv").write_text("title,start\nOutlook 投委会,2026-07-08T11:00:00+08:00\n", encoding="utf-8")
+        (exports / "feishu.json").write_text(
+            json.dumps({"events": [{"来源": "飞书", "title": "飞书路演", "start": "2026-07-08T12:00:00+08:00"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (exports / "dingtalk.json").write_text(
+            json.dumps({"events": [{"platform": "钉钉", "title": "钉钉调研", "start": "2026-07-08T13:00:00+08:00"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (exports / "wecom.json").write_text(
+            json.dumps({"events": [{"platform": "企业微信", "title": "企业微信复盘", "start": "2026-07-08T14:00:00+08:00"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        zip_path = exports / "tencent-meeting-calendar.zip"
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr(
+                "tencent-meeting.ics",
+                "\n".join(
+                    [
+                        "BEGIN:VCALENDAR",
+                        "BEGIN:VEVENT",
+                        "UID:tencent-1",
+                        "SUMMARY:腾讯会议纪要跟进",
+                        "DTSTART:20260708T150000",
+                        "END:VEVENT",
+                        "END:VCALENDAR",
+                    ]
+                ),
+            )
+            archive.writestr("../unsafe.ics", "BEGIN:VCALENDAR\nBEGIN:VEVENT\nSUMMARY:不应读取\nEND:VEVENT\nEND:VCALENDAR\n")
+
+        out = root / "out"
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(exports), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 7
+        assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == [
+            "apple_calendar",
+            "google_calendar",
+            "outlook_calendar",
+            "feishu_calendar",
+            "dingtalk_calendar",
+            "wecom_calendar",
+            "tencent_meeting_calendar",
+        ]
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == []
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
+        assert manifest["platform_coverage"]["real_account_validation"] is False
 
 
 def test_collect_without_input_gap() -> None:
@@ -97,5 +185,6 @@ def test_collect_without_input_gap() -> None:
 if __name__ == "__main__":
     test_collect_ics_event()
     test_collect_json_and_csv_events()
+    test_collect_all_expected_calendar_platforms_and_zip_safety()
     test_collect_without_input_gap()
     print("calendar-collector tests passed.")

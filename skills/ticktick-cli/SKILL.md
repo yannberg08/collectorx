@@ -1,7 +1,7 @@
 ---
 name: ticktick-cli
 description: 使用 Python CLI 与 Dida365 Open API 交互以管理滴答清单任务/项目，适用于需要通过脚本或命令行调用滴答清单接口的场景（如项目/任务的查询、创建、更新、完成、删除）。
-version: 0.1.6
+version: 0.1.7
 ---
 
 ## 调用约定（AI 必读）
@@ -12,7 +12,7 @@ version: 0.1.6
 python <SKILL_DIR>/scripts/ticktick_cli.py --json project list
 python <SKILL_DIR>/scripts/auth.py register <id> <sec>
 python <SKILL_DIR>/scripts/auth.py authorize
-python <SKILL_DIR>/scripts/ticktick_events.py collect --input <tasks.json> --out-dir <out-dir>
+python <SKILL_DIR>/scripts/ticktick_events.py collect --input <tasks.json-or-zip> --out-dir <out-dir>
 ```
 
 `<SKILL_DIR>` 通常：
@@ -152,6 +152,9 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect \
 ```
 
 - 输出：`lake/ticktick/events.jsonl`、`manifest.json`、`SUMMARY.md`。
+- 支持用户授权 JSON/JSONL/NDJSON 文件、目录或 ZIP 导出包。
+- `manifest.platform_coverage` 会记录 `ticktick`/`dida365` 来源覆盖、缺失来源、事件数和 `real_account_validation`。
+- 事件 raw 会过滤 password/cookie/token/session 等凭证字段。
 - generic `ticktick` 事件只路由到 `internal.productivity.tasks`，不直接写投资 Wiki。
 - 投资分身应把 `lake/ticktick/events.jsonl` 交给 `task-calendar-investor` lens，筛选交易计划、复盘提醒、研究任务。
 
@@ -209,6 +212,7 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect \
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.1.7 | 2026-07-08 | CollectorX 事件转换增强：支持授权 ZIP 导出包，manifest 增加 `platform_coverage`，事件 raw 过滤凭证字段，并补充 ZIP 安全测试 |
 | 0.1.6 | 2026-04-30 | 修浏览器自动打开在 Windows/客户端环境失败的问题：原本 `os.startfile(url)` 在 QClaw/Claude Code 的 subprocess 沙箱里偶发 silent 失败（找不到默认浏览器关联或没 GUI session），用户看到『终端没反应』。三层兜底：① 优先用 stdlib `webbrowser.open()`（内部针对 Windows 试 cmd start 比裸 os.startfile 兼容性好）；② 再显式 `cmd /c start "" <url>`（`""` 是窗口标题占位，不加会把 URL 当标题）；③ 都失败时把 URL 用分隔线包起来打印得**很**显眼，用户能 1 秒看到然后手动复制 |
 | 0.1.5 | 2026-04-30 | 简化状态文件——0.1.4 拆成两个文件（`ticktick-app.json` + `ticktick.json`）是过度设计，合并到一个 `~/.covo/ticktick.json`，里面含 `oauth_app` + `access_token` 两个字段。`auth.py register` 写 oauth_app；`authorize` 写 access_token；互不破坏。状态文件从 2 个减到 1 个 |
 | 0.1.4 | 2026-04-30 | 同模式"dcjanus 个人开发假设"清理（共 6 处）：① ticktick_cli.py 加 `~/.covo/ticktick.json` 文件 fallback——授权后 CLI 自动读 token，不再要用户分平台 setx/export；② auth.py 删掉 setx/export 平台分支输出，token 落盘后只提示一句"可以直接用了"；③ ticktick_cli.py "缺 token" 错误信息从老命令 `auth.py url` 改为新一条龙 `auth.py register + authorize`；④ SKILL.md 调用约定改成 `python <SKILL_DIR>/scripts/foo.py`，不再误导 AI 用 `./scripts/foo.py`（Windows 不识别 shebang）；⑤ 删除内嵌真 token 的 my_tasks.sh（dcjanus 留的便利脚本，0.1.0~0.1.3 暴露了校长 04-03 的滴答 token）；⑥ SKILL.md 删除硬编码的 inbox project-id `inbox1013277052`（这是某个特定用户的收件箱 ID，每个滴答账号 user_id 不同），改成"不传 --project-id 时 CLI 默认查当前 token 用户的收件箱" |

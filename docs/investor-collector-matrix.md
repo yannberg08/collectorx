@@ -33,7 +33,7 @@
 | `meeting-minutes` | `investor-source-collectors` | lens：路演、调研、投委会纪要 |
 | `notes` | `notes-collector` | generic：Obsidian、Notion、有道云、印象笔记，含授权 ZIP 导入和平台覆盖 manifest |
 | `investment-notes` | `investor-source-collectors` | lens：投资笔记、规则库、复盘 |
-| `ticktick`/`calendar` | `ticktick-cli`/placeholder | generic：任务和日历原始通道 |
+| `ticktick`/`calendar` | `ticktick-cli`/`calendar-collector` | generic：任务和日历原始通道，含授权 ZIP 导入和平台覆盖 manifest |
 | `task-calendar-investor` | `investor-source-collectors` | lens：交易计划、复盘提醒、研究任务 |
 | `wechat-favorites` | `wechat-favorites` | generic：微信收藏/公众号文章动作 |
 | `wechat-article-favorites` | `investor-source-collectors` | lens：投资公众号阅读、收藏、转发 |

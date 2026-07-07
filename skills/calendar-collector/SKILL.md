@@ -1,6 +1,7 @@
 ---
 name: calendar-collector
-description: 通用日历采集器。采集用户授权的 ICS、JSON、CSV、TSV 日历导出，输出 CollectorX calendar 事件。它只采日程原始证据，不判断是否投资相关；投资计划、财报提醒、复盘提醒由 task-calendar-investor lens 筛选。
+description: 通用日历采集器。采集用户授权的 ICS、JSON、CSV、TSV、ZIP 日历导出，输出 CollectorX calendar 事件和平台覆盖 manifest。它只采日程原始证据，不判断是否投资相关；投资计划、财报提醒、复盘提醒由 task-calendar-investor lens 筛选。
+version: 0.1.1
 ---
 
 # 通用日历采集器
@@ -13,6 +14,7 @@ description: 通用日历采集器。采集用户授权的 ICS、JSON、CSV、TS
 - 地点、会议链接、组织者、参与人。
 - 重复规则、提醒时间。
 - 用户授权导出中的日历/项目名称。
+- 来源平台：Apple/Google/Outlook/飞书/钉钉/企业微信/腾讯会议/通用导出。
 
 ## 不采什么
 
@@ -28,7 +30,10 @@ python <SKILL_DIR>/scripts/calendar_query.py collect \
   --out-dir ~/Desktop/calendar-collect
 ```
 
-支持 ICS、JSON、JSONL、CSV、TSV。没有授权输入时，只输出缺口事件。
+支持 ICS、JSON、JSONL、CSV、TSV 和 ZIP 授权导出包。没有授权输入时，只输出缺口事件。
+
+`manifest.json` 会写入 `platform_coverage`，记录 P1 日历通道预期平台、
+本次实际观察平台、缺失平台、事件数和 `real_account_validation` 状态。
 
 投资分身使用时，应把 `lake/calendar/events.jsonl` 交给
 `task-calendar-investor` lens，由 lens 只筛交易计划、研究任务、财报日程和复盘提醒。
