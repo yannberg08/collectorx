@@ -378,6 +378,30 @@ Findings:
   clearly recognized as Wind; the run is not enough to claim native licensed
   terminal validation.
 
+### Wave I2: P2 professional terminal export package pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-pro-terminal-export-package-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `pro-terminal-usage` to `0.2.0`.
+- Added XLSX/XLSM workbook parsing for authorized terminal workflow exports.
+- Expanded multi-section JSON packages so workspaces, dashboards, watchlists,
+  searches, downloads, exports, templates, models, factors, and indicators can
+  be collected in one run.
+- Added richer workflow metadata fields: source section, project/strategy,
+  function code, menu path, universe, regions, datasets, fields, frequency,
+  date range, download format, file name, and file path hint.
+- Strengthened field-name normalization, list parsing, recursive secret/license
+  filtering, and content/body preview capping.
+- Fixture validation covers Bloomberg-style nested workflow packages and
+  Choice/Wind-style Excel workflow sheets.
+- Real licensed terminal export validation remains pending.
+
 ### Wave J: P2 social activity productization pass 1
 
 Status: `completed-baseline`
@@ -423,7 +447,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel export packages; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
-| 2 | `pro-terminal-usage` | G1 baseline for authorized local workflow exports; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, license-safe validation |
+| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel workflow packages; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
 | 3 | `social-investment-influence` | G2/G3 partial for strict local saved social records | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, weak-evidence backtest |
 
 ## Git Practice

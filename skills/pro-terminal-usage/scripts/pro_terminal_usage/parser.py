@@ -12,11 +12,47 @@ from html import unescape
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
+try:
+    import openpyxl
+except ImportError:  # pragma: no cover - optional dependency for runtime installs
+    openpyxl = None
+
 
 COLLECTOR = "pro-terminal-usage"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".html", ".htm", ".md", ".markdown", ".txt", ".ini", ".conf", ".log"}
+SUPPORTED_EXTENSIONS = {
+    ".json",
+    ".jsonl",
+    ".ndjson",
+    ".csv",
+    ".tsv",
+    ".xlsx",
+    ".xlsm",
+    ".html",
+    ".htm",
+    ".md",
+    ".markdown",
+    ".txt",
+    ".ini",
+    ".conf",
+    ".log",
+}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session", "license")
+CONTENT_KEY_FRAGMENTS = ("content", "body", "正文", "全文", "payload", "result")
+SECTION_ACTIVITY_TYPES = {
+    "usage": None,
+    "workspaces": "workspace",
+    "dashboards": "workspace",
+    "watchlists": "watchlist",
+    "searches": "search",
+    "queries": "search",
+    "downloads": "download",
+    "exports": "download",
+    "templates": "model_template",
+    "models": "model_template",
+    "factors": "factor_attention",
+    "indicators": "factor_attention",
+}
 VENDOR_TERMS = {
     "wind": ("wind", "万得"),
     "choice": ("choice", "东方财富choice"),
@@ -39,7 +75,7 @@ def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = 
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
             if limit is not None and len(events) >= limit:
                 return events[:limit]
-    return events
+    return events or [gap_event(collected_at=collected_at, reason="pro_terminal_usage_records_empty")]
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -59,6 +95,8 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
         return parse_table(path)
+    if suffix in {".xlsx", ".xlsm"}:
+        return parse_workbook(path)
     if suffix in {".html", ".htm"}:
         return [parse_html(path)]
     return [parse_text(path)]
@@ -80,11 +118,49 @@ def extract_records(loaded: Any) -> List[Any]:
         return loaded
     if not isinstance(loaded, dict):
         return [{"value": loaded}]
-    for key in ("usage", "workspaces", "watchlists", "searches", "downloads", "templates", "models", "factors", "records", "items", "data", "list"):
+    context = {
+        str(key): value
+        for key, value in loaded.items()
+        if not isinstance(value, (list, dict)) and value not in (None, "")
+    }
+    collected: List[Any] = []
+    for key in (
+        "usage",
+        "workspaces",
+        "dashboards",
+        "watchlists",
+        "searches",
+        "queries",
+        "downloads",
+        "exports",
+        "templates",
+        "models",
+        "factors",
+        "indicators",
+        "records",
+        "items",
+        "data",
+        "list",
+    ):
         value = loaded.get(key)
         if isinstance(value, list):
-            return value
+            collected.extend(with_section_context(item, key, context) for item in value)
+        elif isinstance(value, dict):
+            collected.extend(with_section_context(item, key, context) for item in extract_records(value))
+    if collected:
+        return collected
     return [loaded]
+
+
+def with_section_context(item: Any, section: str, context: Dict[str, Any]) -> Any:
+    activity_type = SECTION_ACTIVITY_TYPES.get(section)
+    if not isinstance(item, dict):
+        return {"value": item, "source_section": section, "activity_type": activity_type}
+    record = {**context, **item}
+    record.setdefault("source_section", section)
+    if activity_type:
+        record.setdefault("activity_type", activity_type)
+    return record
 
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
@@ -100,6 +176,33 @@ def sniff_delimiter(text: str) -> str:
         return csv.Sniffer().sniff(text[:4096], delimiters=",\t;").delimiter
     except csv.Error:
         return ","
+
+
+def parse_workbook(path: Path) -> List[Dict[str, Any]]:
+    if openpyxl is None:
+        return []
+    workbook = openpyxl.load_workbook(path, read_only=True, data_only=True)
+    records: List[Dict[str, Any]] = []
+    try:
+        for sheet in workbook.worksheets:
+            rows = list(sheet.iter_rows(values_only=True))
+            header_index = next((idx for idx, row in enumerate(rows) if any(cell not in (None, "") for cell in row)), None)
+            if header_index is None:
+                continue
+            headers = [str(cell).strip() if cell not in (None, "") else f"column_{idx + 1}" for idx, cell in enumerate(rows[header_index])]
+            for row in rows[header_index + 1 :]:
+                record = {
+                    headers[idx]: value
+                    for idx, value in enumerate(row)
+                    if idx < len(headers) and value not in (None, "")
+                }
+                if record:
+                    record["sheet"] = sheet.title
+                    record.setdefault("source_section", sheet.title)
+                    records.append(record)
+    finally:
+        workbook.close()
+    return records
 
 
 def parse_html(path: Path) -> Dict[str, Any]:
@@ -135,14 +238,28 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "activity_type": activity_type,
         "terminal": terminal,
         "title": title,
+        "source_section": first(record, ["source_section", "sheet"]),
         "workspace": first(record, ["workspace", "workspace_name", "工作区", "工作台"]),
+        "project": first(record, ["project", "project_name", "strategy", "portfolio", "项目", "策略", "组合"]),
         "module": first(record, ["module", "function", "page", "screen", "模块", "功能", "页面"]),
+        "function_code": first(record, ["function_code", "command", "api", "formula", "函数", "命令", "公式"]),
+        "menu_path": first(record, ["menu_path", "navigation", "path", "菜单路径", "导航路径"]),
         "query": query,
         "symbols": symbols_for(record),
+        "universe": list_values(record, ["universe", "scope", "stock_pool", "股票池", "样本空间"]),
         "industries": list_values(record, ["industries", "industry", "行业"]),
+        "regions": list_values(record, ["regions", "region", "markets", "market", "地区", "市场"]),
         "factors": list_values(record, ["factors", "factor", "因子", "指标"]),
+        "datasets": list_values(record, ["datasets", "dataset", "database", "table", "数据集", "数据库", "表"]),
+        "fields": list_values(record, ["fields", "field", "columns", "indicators", "字段", "列", "指标"]),
         "template_name": first(record, ["template_name", "template", "model_name", "模板名称", "模型名称"]),
+        "frequency": first(record, ["frequency", "freq", "周期", "频率"]),
+        "date_range": first(record, ["date_range", "range", "区间", "日期区间"]),
+        "start_date": first(record, ["start_date", "from_date", "开始日期"]),
+        "end_date": first(record, ["end_date", "to_date", "结束日期"]),
+        "download_format": first(record, ["download_format", "format", "file_type", "文件格式", "格式"]),
         "file_name": first(record, ["file_name", "filename", "export_name", "文件名", "导出文件"]),
+        "file_path_hint": first(record, ["file_path", "local_path", "path_hint", "文件路径"]),
         "content_preview": text[:800],
         "has_content_preview": bool(text),
         "raw": sanitized(record),
@@ -316,33 +433,76 @@ def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
         value = record.get(key)
         if value not in (None, ""):
             return str(value)
+    normalized = {normalize_key(key): value for key, value in record.items()}
+    for key in keys:
+        value = normalized.get(normalize_key(key))
+        if value not in (None, ""):
+            return str(value)
     return None
+
+
+def normalize_key(value: Any) -> str:
+    return re.sub(r"[\s_\-/%()（）]+", "", str(value).lower())
 
 
 def list_values(record: Dict[str, Any], keys: Iterable[str]) -> List[str]:
     for key in keys:
-        value = record.get(key)
+        value = first_raw(record, key)
         if value in (None, ""):
             continue
         if isinstance(value, str):
-            return [item.strip() for item in value.replace("，", ",").replace("、", ",").split(",") if item.strip()]
+            return split_terms(value)
         if isinstance(value, list):
-            return [str(item.get("name") if isinstance(item, dict) else item) for item in value if str(item)]
+            return clean_list_items(value)
     return []
+
+
+def first_raw(record: Dict[str, Any], key: str) -> Any:
+    if key in record:
+        return record.get(key)
+    normalized_key = normalize_key(key)
+    for candidate, value in record.items():
+        if normalize_key(candidate) == normalized_key:
+            return value
+    return None
+
+
+def split_terms(text: str) -> List[str]:
+    return [item.strip() for item in re.split(r"[,，、;；|\n]+", text) if item.strip()]
+
+
+def clean_list_items(items: List[Any]) -> List[str]:
+    cleaned: List[str] = []
+    for item in items:
+        if isinstance(item, dict):
+            value = first(item, ["name", "title", "code", "symbol", "field", "字段", "名称"])
+        else:
+            value = str(item)
+        if value and value != "None":
+            cleaned.append(value.strip())
+    return cleaned
 
 
 def symbols_for(record: Dict[str, Any]) -> List[str]:
     return list_values(record, ["symbols", "codes", "tickers", "securities", "证券", "代码", "股票"])
 
 
-def sanitized(record: Dict[str, Any]) -> Dict[str, Any]:
-    clean: Dict[str, Any] = {}
-    for key, value in record.items():
-        lowered = str(key).lower()
-        if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
-            continue
-        clean[key] = value
-    return clean
+def sanitized(value: Any, key_hint: str = "") -> Any:
+    lowered_hint = key_hint.lower()
+    if isinstance(value, dict):
+        clean: Dict[str, Any] = {}
+        for key, item in value.items():
+            lowered = str(key).lower()
+            if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
+                continue
+            clean[str(key)] = sanitized(item, str(key))
+        return clean
+    if isinstance(value, list):
+        return [sanitized(item, key_hint) for item in value[:200]]
+    if isinstance(value, str):
+        cap = 800 if any(fragment in lowered_hint for fragment in CONTENT_KEY_FRAGMENTS) else 4000
+        return value[:cap]
+    return value
 
 
 def title_tag(html: str) -> Optional[str]:
