@@ -926,6 +926,30 @@ Findings:
   credential filtering, all expected brokers, all expected trade surfaces, all
   recommended strong fields, and ZIP path traversal skipping.
 
+### Wave V2: P2 HK/US brokerage audit and value pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-hk-us-brokerage-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added ZIP `source_archive` and `archive_member` provenance to raw refs.
+- Added `manifest.strong_trade_surface_summary` for assets, positions,
+  executions, orders, cashflows, dividends, FX, account IDs, currencies,
+  symbols, amounts, fees, tax, margin, and PnL availability.
+- Added `manifest.asset_value_summary` with reported total assets, cash, and
+  buying power by currency, plus multi-currency observation.
+- Added `manifest.source_audit` for source refs, archive member events, archive
+  count, and section/sheet provenance.
+- Added `manifest.evidence_policy` to keep the collector read-only and explicit
+  that no complete brokerage boundary is claimed without real account
+  validation.
+- Hardened ZIP import against POSIX traversal and Windows drive/traversal
+  members.
+
 ### Wave W: P2 professional terminal coverage pass 1
 
 Status: `completed-baseline`
@@ -1006,7 +1030,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, and strong-field coverage manifests; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
+| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, asset value summary, source audit, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, and workflow-field coverage manifests; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, and weak-field coverage manifests; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 

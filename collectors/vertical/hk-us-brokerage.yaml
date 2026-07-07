@@ -30,14 +30,22 @@ scope:
     - broker_coverage_manifest
     - trade_surface_coverage_manifest
     - field_coverage_manifest
+    - strong_trade_surface_summary
+    - asset_value_summary
+    - source_audit_manifest
+    - archive_member_provenance
+    - read_only_evidence_policy
   excludes:
     - login_password
     - trading_password
     - place_order
     - cancel_order
     - community_discussions
+    - archive_path_traversal_members
+    - windows_drive_path_archive_members
 
 description: |
   港美股券商是投资垂直强交易源。支持用户授权 CSV/JSON/Excel/ZIP 只读导出包。
-  manifest 会报告富途/老虎/盈透、七类强交易表和关键金额字段覆盖。
+  manifest 会报告富途/老虎/盈透、七类强交易表、关键金额字段覆盖、资产数值汇总、
+  来源审计和只读证据边界。
   后续按富途、老虎、盈透逐个做真实账号只读采集和真机验证。

@@ -478,14 +478,19 @@ Current status:
 - Converts authorized CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM/ZIP exports into
   `hk-us-brokerage` events.
 - Expands multi-section JSON packages, including assets, positions, executions,
-  orders, cashflows, dividends, and FX; ZIP packages preserve
-  `archive.zip::member` provenance.
+  orders, cashflows, dividends, and FX; ZIP packages preserve source archive
+  and member provenance.
 - Captures strong brokerage fields: assets, positions, executions, orders,
   cashflows, dividends, FX, margin, tax, settlement dates, order type, time in
   force, net liquidation, and multi-currency amounts.
 - Writes broker, trade-surface, and recommended strong-field coverage manifests
   so FinClaw can see missing brokers/tables/fields before treating the package
   as a full brokerage boundary.
+- Writes `manifest.strong_trade_surface_summary`,
+  `manifest.asset_value_summary`, `manifest.source_audit`, and
+  `manifest.evidence_policy` so Lake can see account/currency/amount/tax/
+  margin availability, reported asset totals by currency, export package
+  provenance, and read-only boundaries.
 - Preserves business numbers needed by the investor avatar.
 - Does not ask for passwords and does not place, cancel, or modify orders.
 - Real Futu/Tiger/IBKR account exports or read-only screens still require

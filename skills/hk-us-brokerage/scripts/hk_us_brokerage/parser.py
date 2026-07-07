@@ -11,6 +11,7 @@ import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 try:
@@ -27,6 +28,8 @@ SUPPORTED_ZIP_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 EXPECTED_HK_US_BROKERS = ("futu", "tiger", "ibkr")
 EXPECTED_STRONG_TRADE_SUBTYPES = ("asset_snapshot", "position", "execution", "order", "cashflow", "dividend", "fx")
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 RECOMMENDED_STRONG_FIELDS = (
     "total_assets",
     "cash",
@@ -186,11 +189,12 @@ def parse_workbook(path_or_stream: Any, *, path_label: str) -> List[Dict[str, An
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
-            path_label = f"{path.name}::{member.filename}"
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
+            path_label = f"{path}::{member_name}"
             try:
                 if suffix in {".json", ".jsonl", ".ndjson"}:
                     parsed = parse_json_text(archive.read(member).decode("utf-8-sig", errors="replace"), suffix=suffix, path_label=path_label)
@@ -200,17 +204,27 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
                     parsed = parse_workbook(io.BytesIO(archive.read(member)), path_label=path_label)
             except Exception:
                 parsed = []
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
             records.extend(parsed)
     return records
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def extract_records(loaded: Any) -> List[Any]:
@@ -330,6 +344,16 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
     data = {key: value for key, value in data.items() if value not in (None, "")}
     event_time = first(record, ["time", "date", "trade_time", "order_time", "settled_at", "交易时间", "成交时间", "委托时间", "日期"])
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "broker": broker,
+        "subtype": subtype,
+        "source_section": data.get("source_section"),
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, row, broker, subtype, json.dumps(sanitized(record), ensure_ascii=False, sort_keys=True)),
@@ -340,12 +364,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "row": row,
-            "broker": broker,
-            "subtype": subtype,
-        },
+        "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "trade"]},
         "wiki_targets": wiki_targets_for_subtype(subtype),
     }
@@ -483,6 +502,18 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "field_counts": dict(sorted(field_counts.items())),
             "real_account_validation": False,
         },
+        "strong_trade_surface_summary": strong_trade_surface_summary(events),
+        "asset_value_summary": asset_value_summary(events),
+        "source_audit": source_audit(events),
+        "evidence_policy": {
+            "vertical_collector": True,
+            "strong_trade_source": True,
+            "collector_writes_investor_wiki_directly": False,
+            "read_only_collection": True,
+            "order_side_effects_allowed": False,
+            "complete_trade_boundary_claimed": False,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_hk_us_brokerage_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -502,6 +533,99 @@ def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], n
     if not missing_expected:
         return f"all_expected_{noun}s_observed"
     return f"partial_expected_{noun}s_observed"
+
+
+def usable_brokerage_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if (event.get("data") or {}).get("subtype") != "collector_gap"]
+
+
+def strong_trade_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    usable_events = usable_brokerage_events(events)
+    return {
+        "strong_trade_event_count": len(usable_events),
+        "asset_snapshot_count": subtype_event_count(usable_events, "asset_snapshot"),
+        "position_count": subtype_event_count(usable_events, "position"),
+        "execution_count": subtype_event_count(usable_events, "execution"),
+        "order_count": subtype_event_count(usable_events, "order"),
+        "cashflow_count": subtype_event_count(usable_events, "cashflow"),
+        "dividend_count": subtype_event_count(usable_events, "dividend"),
+        "fx_count": subtype_event_count(usable_events, "fx"),
+        "events_with_account_id": sum(1 for event in usable_events if (event.get("data") or {}).get("account_id")),
+        "events_with_currency": sum(1 for event in usable_events if (event.get("data") or {}).get("currency")),
+        "events_with_symbol": sum(1 for event in usable_events if (event.get("data") or {}).get("symbol")),
+        "events_with_amount": sum(1 for event in usable_events if (event.get("data") or {}).get("amount")),
+        "events_with_fees": sum(1 for event in usable_events if (event.get("data") or {}).get("fees") is not None),
+        "events_with_tax": sum(1 for event in usable_events if (event.get("data") or {}).get("tax") is not None),
+        "events_with_margin": sum(
+            1
+            for event in usable_events
+            if (event.get("data") or {}).get("margin_requirement") is not None
+            or (event.get("data") or {}).get("maintenance_margin") is not None
+        ),
+        "events_with_pnl": sum(
+            1
+            for event in usable_events
+            if (event.get("data") or {}).get("pnl") is not None
+            or (event.get("data") or {}).get("realized_pnl") is not None
+            or (event.get("data") or {}).get("unrealized_pnl") is not None
+        ),
+    }
+
+
+def subtype_event_count(events: List[Dict[str, Any]], subtype: str) -> int:
+    return sum(1 for event in events if (event.get("data") or {}).get("subtype") == subtype)
+
+
+def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    asset_events = [event for event in usable_events if (event.get("data") or {}).get("subtype") == "asset_snapshot"]
+    totals_by_currency: Dict[str, float] = defaultdict(float)
+    cash_by_currency: Dict[str, float] = defaultdict(float)
+    buying_power_by_currency: Dict[str, float] = defaultdict(float)
+    brokers = set()
+    currencies = set()
+    for event in asset_events:
+        data = event.get("data") or {}
+        broker = data.get("broker")
+        currency = str(data.get("currency") or data.get("base_currency") or "unknown")
+        if broker:
+            brokers.add(str(broker))
+        currencies.add(currency)
+        total_assets = data.get("total_assets")
+        if total_assets is None:
+            total_assets = data.get("net_liquidation")
+        if isinstance(total_assets, (int, float)):
+            totals_by_currency[currency] += float(total_assets)
+        if isinstance(data.get("cash"), (int, float)):
+            cash_by_currency[currency] += float(data["cash"])
+        if isinstance(data.get("buying_power"), (int, float)):
+            buying_power_by_currency[currency] += float(data["buying_power"])
+    return {
+        "asset_snapshot_count": len(asset_events),
+        "brokers_with_asset_snapshots": sorted(brokers),
+        "currencies_observed": sorted(currencies),
+        "reported_total_assets_by_currency": dict(sorted(totals_by_currency.items())),
+        "reported_cash_by_currency": dict(sorted(cash_by_currency.items())),
+        "reported_buying_power_by_currency": dict(sorted(buying_power_by_currency.items())),
+        "multi_currency_observed": len(currencies) > 1,
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in usable_events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "source_section_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("source_section")),
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+    }
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -529,6 +653,8 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         "coverage_summary": {
             "strong_trade_source": True,
             "complete_trade_boundary_claimed": False,
+            "read_only_collection": True,
+            "order_side_effects_allowed": False,
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

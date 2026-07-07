@@ -149,7 +149,7 @@ def test_collect_nested_sections_and_workbook() -> None:
                                 "record_type": "asset",
                                 "broker": "IBKR",
                                 "account_id": "U123",
-                                "currency": "USD",
+                                "currency": "HKD",
                                 "total_assets": "25000",
                                 "cash": "5000",
                             }
@@ -159,6 +159,8 @@ def test_collect_nested_sections_and_workbook() -> None:
                 ),
             )
             archive.writestr("../unsafe.json", json.dumps([{"broker": "IBKR", "record_type": "order"}], ensure_ascii=False))
+            archive.writestr("..\\windows-traversal.json", json.dumps([{"broker": "IBKR", "record_type": "order"}], ensure_ascii=False))
+            archive.writestr("C:\\unsafe.json", json.dumps([{"broker": "IBKR", "record_type": "order"}], ensure_ascii=False))
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -191,8 +193,13 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert fx["data"]["from_amount"] == 100.0
         workbook_dividend = next(event for event in events if event["data"].get("net_amount") == 90.0)
         assert workbook_dividend["data"]["broker"] == "futu"
-        assert any(event["raw_ref"]["path"] == "ibkr_activity.zip::statements/ibkr_asset.json" for event in events)
+        zip_event = next(event for event in events if event["data"].get("broker") == "ibkr")
+        assert zip_event["raw_ref"]["path"] == f"{ibkr_zip}::statements/ibkr_asset.json"
+        assert zip_event["raw_ref"]["source_archive"] == str(ibkr_zip)
+        assert zip_event["raw_ref"]["archive_member"] == "statements/ibkr_asset.json"
         assert all("../unsafe" not in event["raw_ref"]["path"] for event in events)
+        assert all("windows-traversal" not in event["raw_ref"]["path"] for event in events)
+        assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["subtype_counts"]["position"] == 2
         assert manifest["broker_coverage"]["observed_expected_brokers"] == ["futu", "tiger", "ibkr"]
@@ -208,9 +215,27 @@ def test_collect_nested_sections_and_workbook() -> None:
         ]
         assert manifest["trade_surface_coverage"]["missing_expected_subtypes"] == []
         assert manifest["field_coverage"]["missing_recommended_fields"] == []
+        assert manifest["strong_trade_surface_summary"]["strong_trade_event_count"] == 10
+        assert manifest["strong_trade_surface_summary"]["asset_snapshot_count"] == 2
+        assert manifest["strong_trade_surface_summary"]["events_with_margin"] == 1
+        assert manifest["strong_trade_surface_summary"]["events_with_tax"] == 2
+        assert manifest["asset_value_summary"]["multi_currency_observed"] is True
+        assert manifest["asset_value_summary"]["reported_total_assets_by_currency"]["USD"] == 100000.5
+        assert manifest["asset_value_summary"]["reported_total_assets_by_currency"]["HKD"] == 25000.0
+        assert manifest["asset_value_summary"]["reported_cash_by_currency"]["USD"] == 12000.0
+        assert manifest["asset_value_summary"]["reported_cash_by_currency"]["HKD"] == 5000.0
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
+        assert manifest["evidence_policy"]["read_only_collection"] is True
+        assert manifest["evidence_policy"]["order_side_effects_allowed"] is False
         assert manifest["collection_readiness"]["broker_coverage_status"] == "all_expected_brokers_observed"
         assert manifest["collection_readiness"]["trade_surface_coverage_status"] == "all_expected_trade_surfaces_observed"
         assert manifest["collection_readiness"]["field_coverage_status"] == "all_expected_fields_observed"
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["read_only_collection"] is True
+        assert evidence["coverage_summary"]["order_side_effects_allowed"] is False
 
 
 if __name__ == "__main__":

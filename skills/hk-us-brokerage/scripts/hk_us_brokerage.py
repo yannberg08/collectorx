@@ -50,6 +50,9 @@ def collect(args: argparse.Namespace) -> int:
                     f"- missing_expected_brokers：`{', '.join(manifest['broker_coverage']['missing_expected_brokers']) or 'none'}`",
                     f"- observed_trade_surfaces：`{', '.join(manifest['trade_surface_coverage']['observed_subtypes']) or 'none'}`",
                     f"- missing_trade_surfaces：`{', '.join(manifest['trade_surface_coverage']['missing_expected_subtypes']) or 'none'}`",
+                    f"- asset_currencies：`{', '.join(manifest['asset_value_summary']['currencies_observed']) or 'none'}`",
+                    f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
+                    f"- source_section_events：{manifest['source_audit']['source_section_event_count']}",
                     "- 边界：只读资产、持仓、成交、委托、资金流水；不下单、不撤单。",
                 ]
             ),

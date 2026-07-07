@@ -1,7 +1,6 @@
 ---
 name: hk-us-brokerage
-description: 港美股券商强交易采集器。采集用户授权的富途、老虎、盈透等券商只读导出/ZIP 包中的资产、持仓、成交、委托、资金流水、分红、换汇，输出 CollectorX 事件、券商/交易表/字段覆盖 manifest 和 FinClaw 投资分身证据包；不读取密码，不下单，不撤单。
-version: 0.2.1
+description: 港美股券商强交易采集器。采集用户授权的富途、老虎、盈透等券商只读导出/ZIP 包中的资产、持仓、成交、委托、资金流水、分红、换汇，输出 CollectorX 事件、券商/交易表/字段覆盖、强交易可用面、资产数值汇总、来源审计 manifest 和 FinClaw 投资分身证据包；不读取密码，不下单，不撤单。
 ---
 
 # HK/US Brokerage Collector
@@ -19,6 +18,10 @@ version: 0.2.1
 - 多币种字段：本位币、现金、可用现金、已结算现金、保证金、维持保证金、净清算值。
 - 授权 ZIP 包：支持券商 statement/export 打包文件，保留包内成员路径。
 - `manifest.broker_coverage`、`manifest.trade_surface_coverage`、`manifest.field_coverage`：记录富途/老虎/盈透、七类强交易表和关键金额字段覆盖。
+- `manifest.strong_trade_surface_summary`：记录资产、持仓、成交、委托、资金流水、分红、换汇以及账户、币种、金额、费用、税、保证金、盈亏可用面。
+- `manifest.asset_value_summary`：按币种汇总导出包中报告的总资产、现金和购买力，并标记是否观察到多币种。
+- `manifest.source_audit`：记录文件/ZIP 成员来源、section/sheet 来源，并声明未采集危险路径成员。
+- `manifest.evidence_policy`：声明只读采集、强交易源、不直接写 Wiki、不允许下单/撤单副作用、不声称完整交易边界。
 
 不采集：
 
