@@ -55,6 +55,15 @@ CollectorX separates channels by responsibility:
 
 See `docs/collector-taxonomy.md` for the full boundary table.
 
+Operational docs:
+
+- `docs/production-readiness.md` records what is genuinely runnable versus what
+  is still a placeholder or lens.
+- `docs/finclaw-integration-guide.md` describes how FinClaw should discover,
+  authorize, call, and gate collectors.
+- `docs/soulmirror-migration-policy.md` records the rule for copying existing
+  SoulMirror/Hermes collectors without unnecessary rewrites.
+
 ## Current Collectors
 
 ### Generic Collectors
