@@ -11,6 +11,7 @@ from xueqiu.parser import parse_watchlist_csv
 
 
 def test_parse_csv():
+    """测试CSV解析"""
     test_csv = Path("/tmp/test_xueqiu.csv")
     test_csv.write_text("""代码,名称,行业,备注
 600519,贵州茅台,白酒,核心持仓
