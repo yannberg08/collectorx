@@ -270,6 +270,77 @@ def test_research_documents_extracts_office_and_pdf_content_when_authorized() ->
         assert any("DCF低估" in event["data"]["payload"].get("content", "") for event in events)
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "events_collected"
+        audit = manifest["collection_audit"]
+        assert audit["content_extraction_policy"]["include_content_enabled"] is True
+        assert audit["content_extraction_policy"]["content_read_requires_explicit_include_content"] is True
+        assert audit["content_read_event_count"] == 3
+        assert audit["content_extract_status_counts"] == {"extracted": 3}
+        assert audit["parser_counts"] == {"openpyxl": 1, "pdfplumber": 1, "python-docx": 1}
+        assert audit["filtered_candidate_count"] == 0
+
+
+def test_research_documents_without_include_content_keeps_binary_metadata_only() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        from docx import Document
+
+        root = Path(tmp)
+        out_dir = root / "out"
+        docx_path = root / "财报复盘.docx"
+        document = Document()
+        document.add_paragraph("这段正文包含 DCF 低估和买入理由，但本轮没有授权读取正文。")
+        document.save(docx_path)
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:20:00+08:00",
+        )
+        event = json.loads((out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["kind"] == "file"
+        assert event["raw_ref"]["parser"] == "metadata"
+        assert event["data"]["payload"]["metadata_only"] is True
+        assert "content" not in event["data"]["payload"]
+        assert "content_extract" not in event["data"]["payload"]
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["content_extraction_policy"]["include_content_enabled"] is False
+        assert audit["content_read_event_count"] == 0
+
+
+def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out_dir = root / "out"
+        (root / "股票计划.png").write_bytes(b"not-an-image-but-metadata-only")
+        (root / "研报工具.py").write_text("print('internal helper')\n", encoding="utf-8")
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:30:00+08:00",
+        )
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "no_investment_evidence_matched"
+        audit = manifest["collection_audit"]
+        assert audit["candidate_record_count"] == 1
+        assert audit["filtered_candidate_count"] == 1
+        assert audit["skipped_file_count"] == 1
+        assert audit["skipped_extension_counts"] == {".py": 1}
+        assert audit["content_extraction_policy"]["unsupported_extensions_are_skipped"] is True
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
 
 
 def test_task_calendar_lens_keeps_investment_task_and_calendar_only() -> None:

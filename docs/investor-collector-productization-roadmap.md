@@ -106,6 +106,30 @@ Findings:
   candidates and confirmed 6 PDF content extractions via `pdfplumber`.
 - Wiki coverage reached 10 usable investor subdimensions.
 
+### Wave B2b: P0 research scope audit and false-positive guard
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-research-scope-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added `manifest.collection_audit` for `research-documents`: input file counts,
+  candidate counts, filtered counts, skipped extension counts, parser counts,
+  content-read counts, and content extraction status counts.
+- Added a machine-readable content policy that keeps the generic `filesystem`
+  collector metadata-only and requires explicit `--include-content` before
+  DOCX/PDF/XLSX/XLSM body/table extraction.
+- Registered the same policy in `collectors/lenses/research-documents.yaml`.
+- Tightened file-title classification so a lone broad title hint such as
+  `股票` or `基金` does not enter Wiki evidence without stronger research
+  context.
+- Fixture validation covers authorized content extraction, metadata-only binary
+  handling without `--include-content`, unsupported extension skipping, and weak
+  title false-positive filtering.
+
 ### Wave B3: P0 Xueqiu activity productization pass 2
 
 Status: `completed-baseline`
@@ -773,7 +797,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
-| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
+| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, screenshot OCR decision, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender classifier, attachment raw refs |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths; watchlist and broad activity baselines exist; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage manifest; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |

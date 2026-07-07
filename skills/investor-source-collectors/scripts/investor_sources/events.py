@@ -136,7 +136,13 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
     return event
 
 
-def build_manifest(source_id: str, events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    source_id: str,
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     profile = get_profile(source_id)
     kind_counts = Counter(event["kind"] for event in events)
     only_gap = bool(events) and all(is_gap_event(event) for event in events)
@@ -185,6 +191,7 @@ def build_manifest(source_id: str, events: List[Dict[str, Any]], *, collected_at
             "sensitive": True,
             "contains": profile.get("contains", []),
         },
+        "collection_audit": collection_audit or {},
     }
 
 

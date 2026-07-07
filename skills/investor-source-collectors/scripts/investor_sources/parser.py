@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
@@ -17,7 +18,21 @@ TABLE_EXTENSIONS = {".csv", ".tsv"}
 JSON_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
 CONTENT_EXTRACT_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".xlsm"}
 METADATA_ONLY_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".pptx", ".png", ".jpg", ".jpeg", ".webp"}
+RESEARCH_DOCUMENT_EXTENSIONS = (
+    TEXT_EXTENSIONS
+    | TABLE_EXTENSIONS
+    | JSON_EXTENSIONS
+    | CONTENT_EXTRACT_EXTENSIONS
+    | METADATA_ONLY_EXTENSIONS
+    | {".doc", ".ppt", ".key", ".numbers", ".bmp", ".gif", ".heic", ".heif"}
+)
 MAX_EXTRACTED_CHARS = 20000
+
+
+class CollectionResult:
+    def __init__(self, *, events: List[Dict[str, Any]], audit: Dict[str, Any]) -> None:
+        self.events = events
+        self.audit = audit
 
 
 def collect_events(
@@ -30,10 +45,43 @@ def collect_events(
     min_score: float = 0.30,
     include_non_matches: bool = False,
 ) -> List[Dict[str, Any]]:
+    return collect_events_with_audit(
+        source_id,
+        inputs,
+        collected_at=collected_at,
+        include_content=include_content,
+        limit=limit,
+        min_score=min_score,
+        include_non_matches=include_non_matches,
+    ).events
+
+
+def collect_events_with_audit(
+    source_id: str,
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    include_content: bool = False,
+    limit: Optional[int] = None,
+    min_score: float = 0.30,
+    include_non_matches: bool = False,
+) -> CollectionResult:
     get_profile(source_id)
-    paths = list(iter_input_paths(inputs))
+    input_list = list(inputs)
+    paths = list(iter_input_paths(input_list))
+    audit = initial_collection_audit(
+        source_id,
+        input_list,
+        paths,
+        include_content=include_content,
+        limit=limit,
+        min_score=min_score,
+        include_non_matches=include_non_matches,
+    )
     if not paths:
-        return [build_gap_event(source_id, collected_at=collected_at)]
+        events = [build_gap_event(source_id, collected_at=collected_at)]
+        finalize_collection_audit(audit, events, parsed_count=0)
+        return CollectionResult(events=events, audit=audit)
 
     events: List[Dict[str, Any]] = []
     parsed_count = 0
@@ -45,15 +93,19 @@ def collect_events(
             include_content=include_content,
             min_score=min_score,
             include_non_matches=include_non_matches,
+            audit=audit,
         )
         parsed_count += len(parsed.candidates)
         events.extend(parsed.events)
         if limit is not None and len(events) >= limit:
-            return events[:limit]
+            events = events[:limit]
+            finalize_collection_audit(audit, events, parsed_count=parsed_count)
+            return CollectionResult(events=events, audit=audit)
     if not events:
         reason = "no_readable_input" if parsed_count == 0 else "no_investment_evidence_matched"
-        return [build_gap_event(source_id, collected_at=collected_at, reason=reason)]
-    return events
+        events = [build_gap_event(source_id, collected_at=collected_at, reason=reason)]
+    finalize_collection_audit(audit, events, parsed_count=parsed_count)
+    return CollectionResult(events=events, audit=audit)
 
 
 def iter_input_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -77,8 +129,16 @@ def parse_path(
     include_content: bool,
     min_score: float,
     include_non_matches: bool,
+    audit: Optional[Dict[str, Any]] = None,
 ) -> "ParseResult":
     suffix = path.suffix.lower()
+    if audit is not None:
+        audit_counter(audit, "extension_counts")[suffix or "<none>"] += 1
+    if source_id == "research-documents" and suffix not in RESEARCH_DOCUMENT_EXTENSIONS:
+        if audit is not None:
+            audit["skipped_file_count"] += 1
+            audit_counter(audit, "skipped_extension_counts")[suffix or "<none>"] += 1
+        return ParseResult(candidates=[], events=[])
     if suffix in TABLE_EXTENSIONS:
         return parse_table(
             source_id,
@@ -128,6 +188,108 @@ class ParseResult:
     def __init__(self, *, candidates: List[Any], events: List[Dict[str, Any]]) -> None:
         self.candidates = candidates
         self.events = events
+
+
+def initial_collection_audit(
+    source_id: str,
+    inputs: List[str],
+    paths: List[Path],
+    *,
+    include_content: bool,
+    limit: Optional[int],
+    min_score: float,
+    include_non_matches: bool,
+) -> Dict[str, Any]:
+    return {
+        "source_id": source_id,
+        "input_count": len(inputs),
+        "resolved_input_file_count": len(paths),
+        "candidate_record_count": 0,
+        "matched_event_count": 0,
+        "non_matched_event_count": 0,
+        "filtered_candidate_count": 0,
+        "skipped_file_count": 0,
+        "extension_counts": {},
+        "skipped_extension_counts": {},
+        "parser_counts": {},
+        "content_read_event_count": 0,
+        "content_extract_status_counts": {},
+        "include_content": include_content,
+        "include_non_matches": include_non_matches,
+        "min_score": min_score,
+        "limit": limit,
+        "content_extraction_policy": content_extraction_policy(source_id, include_content),
+    }
+
+
+def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]], *, parsed_count: int) -> None:
+    usable_events = [event for event in events if (event.get("data") or {}).get("payload", {}).get("signal_type") != "collector_preflight_gap"]
+    audit["candidate_record_count"] = parsed_count
+    audit["matched_event_count"] = sum(
+        1
+        for event in usable_events
+        if ((event.get("data") or {}).get("classification") or {}).get("is_investment_evidence")
+    )
+    audit["non_matched_event_count"] = sum(
+        1
+        for event in usable_events
+        if not ((event.get("data") or {}).get("classification") or {}).get("is_investment_evidence")
+    )
+    audit["filtered_candidate_count"] = max(0, parsed_count - len(usable_events))
+
+    parser_counts: Counter[str] = Counter()
+    content_status_counts: Counter[str] = Counter()
+    content_read_count = 0
+    for event in usable_events:
+        raw_ref = event.get("raw_ref") or {}
+        payload = (event.get("data") or {}).get("payload") or {}
+        parser = raw_ref.get("parser")
+        if parser:
+            parser_counts[str(parser)] += 1
+        if raw_ref.get("content_read"):
+            content_read_count += 1
+        extract = payload.get("content_extract") if isinstance(payload, dict) else None
+        if isinstance(extract, dict):
+            status = extract.get("status") or "unknown"
+            content_status_counts[str(status)] += 1
+    audit["parser_counts"] = dict(sorted(parser_counts.items()))
+    audit["content_read_event_count"] = content_read_count
+    audit["content_extract_status_counts"] = dict(sorted(content_status_counts.items()))
+    audit["extension_counts"] = dict(sorted(audit_counter(audit, "extension_counts").items()))
+    audit["skipped_extension_counts"] = dict(sorted(audit_counter(audit, "skipped_extension_counts").items()))
+
+
+def content_extraction_policy(source_id: str, include_content: bool) -> Dict[str, Any]:
+    if source_id != "research-documents":
+        return {
+            "include_content_enabled": include_content,
+            "applies_to": "generic investor-source input parser",
+        }
+    return {
+        "applies_to": "research-documents lens",
+        "input_boundary": "user_selected_files_or_folders_only",
+        "generic_filesystem_collector": "metadata_only",
+        "content_read_requires_explicit_include_content": True,
+        "include_content_enabled": include_content,
+        "text_files_read_for_preview_extensions": sorted(TEXT_EXTENSIONS),
+        "table_files_read_as_rows_extensions": sorted(TABLE_EXTENSIONS),
+        "binary_content_extract_extensions": sorted(CONTENT_EXTRACT_EXTENSIONS),
+        "binary_metadata_only_extensions_without_include_content": sorted(METADATA_ONLY_EXTENSIONS),
+        "screenshots_are_metadata_only_no_ocr": True,
+        "unsupported_extensions_are_skipped": True,
+        "preview_char_limit": 1200,
+        "extracted_text_char_limit": MAX_EXTRACTED_CHARS,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def audit_counter(audit: Dict[str, Any], key: str) -> Counter[str]:
+    value = audit.get(key)
+    if isinstance(value, Counter):
+        return value
+    counter: Counter[str] = Counter(value or {})
+    audit[key] = counter
+    return counter
 
 
 def parse_table(

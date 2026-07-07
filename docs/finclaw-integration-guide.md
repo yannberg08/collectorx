@@ -149,6 +149,10 @@ Current status:
 - Reads content only when `--include-content` is explicitly supplied.
 - Supports Markdown/TXT/HTML, CSV/TSV, XLSX/XLSM, DOCX, and PDF extraction.
 - Extracted text is capped and carries parser/status metadata.
+- `manifest.collection_audit` records candidate counts, filtered counts, skipped
+  extensions, parser counts, content-read counts, and the active content policy.
+- Broad file-title hints such as a lone "股票" or "基金" do not enter Wiki
+  evidence without stronger research context.
 - Generic `filesystem` remains metadata-only; investment routing stays in the
   `research-documents` lens.
 

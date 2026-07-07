@@ -108,6 +108,12 @@ P2 必做：
 
 事件使用 `collectorx.event.v1`，证据包使用 `finclaw.investor_wiki_evidence.v1`，并按投资分身七大维度、20 个子维度提供覆盖情况。
 
+`manifest.json` 会带 `collection_audit`：
+
+- 记录输入文件数、候选记录数、命中/过滤数量、扩展名分布和跳过数量。
+- 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM 正文/表格读取必须显式传入 `--include-content`；截图目前只保留元数据，不做 OCR。
+- 不支持的研究文档扩展名会被跳过，不会因为文件名里有弱投资词就污染 Wiki 覆盖率。
+
 ## Lens 分类器
 
 `lens` 类型的数据源默认会先做投资证据筛选，再写入证据包：

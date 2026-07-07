@@ -15,7 +15,7 @@ from investor_sources.events import (
     write_json,
     write_jsonl,
 )
-from investor_sources.parser import collect_events
+from investor_sources.parser import collect_events_with_audit
 from investor_sources.profiles import all_profiles, assert_profiles_cover_dimensions, get_profile
 
 
@@ -37,7 +37,7 @@ def collect(args: argparse.Namespace) -> int:
     profile = get_profile(args.source)
     collected_at = args.collected_at or now_iso()
     out_dir = Path(args.out_dir).expanduser()
-    events = collect_events(
+    result = collect_events_with_audit(
         args.source,
         args.input or [],
         collected_at=collected_at,
@@ -46,6 +46,7 @@ def collect(args: argparse.Namespace) -> int:
         min_score=args.min_score,
         include_non_matches=args.include_non_matches,
     )
+    events = result.events
 
     lake_path = out_dir / "lake" / args.source / "events.jsonl"
     manifest_path = out_dir / "manifest.json"
@@ -53,7 +54,7 @@ def collect(args: argparse.Namespace) -> int:
     summary_path = out_dir / "SUMMARY.md"
 
     write_jsonl(lake_path, events)
-    manifest = build_manifest(args.source, events, collected_at=collected_at)
+    manifest = build_manifest(args.source, events, collected_at=collected_at, collection_audit=result.audit)
     evidence = build_investor_wiki_evidence(events, generated_at=collected_at)
     write_json(manifest_path, manifest)
     write_json(evidence_path, evidence)

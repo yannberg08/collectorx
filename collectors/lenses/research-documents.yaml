@@ -27,7 +27,32 @@ scope:
     - whole_disk_scan
     - unrelated_private_files
     - public_report_database_crawl
+    - credential_or_cookie_material
+
+content_policy:
+  generic_filesystem_metadata_only: true
+  content_read_requires_explicit_include_content: true
+  supported_content_extract_extensions:
+    - .docx
+    - .pdf
+    - .xlsx
+    - .xlsm
+  supported_metadata_only_extensions:
+    - .doc
+    - .xls
+    - .ppt
+    - .pptx
+    - .png
+    - .jpg
+    - .jpeg
+    - .webp
+    - .heic
+  screenshots_are_metadata_only_no_ocr: true
+  unsupported_extensions_are_skipped: true
+  writes_final_wiki_directly: false
 
 description: |
   本 lens 不重新扫描硬盘。它消费 filesystem/notes 的已授权文件元数据，
-  筛选投研文档并把 raw_ref 路由到投资分身。
+  筛选投研文档并把 raw_ref 路由到投资分身。若用户显式授权
+  --include-content，可读取 DOCX/PDF/XLSX/XLSM 的正文或表格文本，
+  但仍只写 CollectorX lake 与 investor_wiki_evidence.v1 证据包。
