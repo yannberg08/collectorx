@@ -29,9 +29,10 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
   --sync-soulmirror
 ```
 
-支持 CSV/TSV/JSON/JSONL/Excel/HTML/TXT/Markdown。解析器会归一化支付宝、
+支持 CSV/TSV/JSON/JSONL/Excel/HTML/TXT/Markdown/ZIP。解析器会归一化支付宝、
 天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
 成本、收益等数字字段，并剔除 cookie、token、password 等凭据类字段。
+ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。
 没有授权输入时，只输出缺口事件。
 
 ## 完整性口径
@@ -52,3 +53,7 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
 “输入覆盖”，不能说明已经完成真实账号边界证明。
 
 只有未来逐个平台完成只读真机/真实账号验证，并能证明账户覆盖范围时，FinClaw 才能把它当作完整资产边界。
+
+`manifest.field_coverage` 会列出平台、产品代码、产品名称、份额、净值、市值、
+总资产、现金、成本、收益、申赎金额等推荐字段覆盖情况；`asset_value_summary`
+会按平台汇总本次授权输入里的市值、总资产和交易金额。

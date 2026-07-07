@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -182,6 +183,40 @@ def test_manifest_reports_expected_platform_coverage() -> None:
         assert coverage["real_account_validation"] is False
 
 
+def test_collects_zip_package_with_value_summary() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        zip_path = root / "wealth-package.zip"
+        out = root / "out"
+        with zipfile.ZipFile(zip_path, "w") as package:
+            package.writestr(
+                "alipay/holding.csv",
+                "平台,类型,基金代码,基金名称,持有份额,单位净值,持有金额,持仓成本,持有收益\n"
+                "支付宝,持仓,001234,测试基金,100,1.5,150,120,30\n",
+            )
+            package.writestr("../escape.csv", "平台,类型,基金代码,基金名称,持有金额\n天天基金,持仓,000001,应跳过,999\n")
+
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(zip_path), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["platform"] == "alipay"
+        assert events[0]["data"]["market_value"] == 150.0
+        assert events[0]["raw_ref"]["archive_member"] == "alipay/holding.csv"
+        assert events[0]["raw_ref"]["member_row"] == 1
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "应跳过" not in serialized
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["archive_member_event_count"] == 1
+        assert manifest["asset_value_summary"]["alipay"]["market_value"] == 150.0
+        assert manifest["field_coverage"]["field_counts"]["market_value"] == 1
+        assert manifest["evidence_policy"]["complete_asset_boundary_claimed"] is False
+
+
 if __name__ == "__main__":
     test_collect_fund_holding_and_transaction()
     test_collect_without_input_gap()
@@ -189,4 +224,5 @@ if __name__ == "__main__":
     test_collects_xlsx_exports()
     test_syncs_package_to_soulmirror_lake()
     test_manifest_reports_expected_platform_coverage()
+    test_collects_zip_package_with_value_summary()
     print("china-wealth-assets tests passed.")

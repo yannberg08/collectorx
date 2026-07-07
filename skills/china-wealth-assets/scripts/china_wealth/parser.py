@@ -6,18 +6,39 @@ import csv
 import hashlib
 import json
 import re
+import tempfile
+import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 
 COLLECTOR = "china-wealth-assets"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm", ".html", ".htm", ".txt", ".md", ".markdown"}
+SUPPORTED_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm", ".html", ".htm", ".txt", ".md", ".markdown", ".zip"}
+ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session", "paypass")
 EXPECTED_P0_PLATFORMS = ("alipay", "tiantian-fund", "danjuan", "qieman", "bank-wealth")
+RECOMMENDED_FIELDS = (
+    "platform",
+    "product_code",
+    "product_name",
+    "product_type",
+    "quantity",
+    "nav",
+    "market_value",
+    "total_asset",
+    "available_cash",
+    "cost",
+    "pnl",
+    "pnl_rate",
+    "transaction_amount",
+    "fee",
+    "side",
+)
 
 
 def now_iso() -> str:
@@ -58,7 +79,40 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
         return parse_json(path)
     if suffix in {".html", ".htm"}:
         return [parse_html(path)]
+    if suffix == ".zip":
+        return parse_zip(path)
     return [parse_text(path)]
+
+
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-china-wealth-") as tmp:
+        tmp_root = Path(tmp)
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            member_name = info.filename.replace("\\", "/")
+            member_path = PurePosixPath(member_name)
+            suffix = Path(member_name).suffix.lower()
+            if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                continue
+            target = tmp_root.joinpath(*member_path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read(info))
+            for member_row, record in enumerate(parse_path(target), start=1):
+                if isinstance(record, dict):
+                    record["_collectorx_raw_ref"] = {
+                        "path": f"{path}::{member_name}",
+                        "archive": str(path),
+                        "archive_member": member_name,
+                        "member_row": member_row,
+                    }
+                records.append(record)
+    return records
+
+
+def is_safe_archive_member(member_path: PurePosixPath) -> bool:
+    return bool(member_path.parts) and not member_path.is_absolute() and ".." not in member_path.parts
 
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
@@ -182,6 +236,19 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [], {})}
+    raw_ref = {
+        "path": str(path),
+        "row": row,
+        "sheet": first(record, ["source_sheet"]),
+        "subtype": subtype,
+        "platform": platform,
+    }
+    if isinstance(record.get("_collectorx_raw_ref"), dict):
+        raw_ref.update(record["_collectorx_raw_ref"])
+        raw_ref["row"] = row
+        raw_ref["sheet"] = first(record, ["source_sheet"])
+        raw_ref["subtype"] = subtype
+        raw_ref["platform"] = platform
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, json.dumps(sanitized(record), ensure_ascii=False, sort_keys=True)),
@@ -192,13 +259,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": str(path),
-            "row": row,
-            "sheet": first(record, ["source_sheet"]),
-            "subtype": subtype,
-            "platform": platform,
-        },
+        "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "trade"]},
         "wiki_targets": wiki_targets_for_subtype(subtype),
     }
@@ -295,11 +356,20 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(kind_counts.items())),
         "subtype_counts": dict(sorted(subtype_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "numeric_coverage": {
             "events_with_value_fields": len(value_events),
             "events_without_value_fields": max(len(events) - len(value_events), 0),
         },
+        "field_coverage": field_coverage(events),
+        "asset_value_summary": asset_value_summary(events),
         "platform_coverage": platform_coverage(platform_counts),
+        "evidence_policy": {
+            "complete_asset_boundary_claimed": False,
+            "real_account_validation": False,
+            "payment_or_bank_credentials_collected": False,
+            "requires_corroboration_with": ["brokerage_accounts", "bank_statements", "fund_platform_exports", "investment_notes"],
+        },
         "collection_readiness": {
             "status": "needs_china_wealth_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events),
@@ -335,6 +405,8 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "subtype_counts": dict(sorted(subtype_counts.items())),
             "platform_counts": dict(sorted(platform_counts.items())),
             "platform_coverage": platform_coverage(platform_counts),
+            "field_coverage": field_coverage(events),
+            "asset_value_summary": asset_value_summary(events),
             "asset_boundary_source": True,
             "complete_asset_boundary_claimed": False,
         },
@@ -351,6 +423,42 @@ def platform_coverage(platform_counts: Counter) -> Dict[str, Any]:
         "unknown_event_count": platform_counts.get("unknown", 0),
         "complete_expected_platforms_observed": not missing,
         "real_account_validation": False,
+    }
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if (event.get("data") or {}).get("subtype") != "collector_gap"]
+    field_counts = {
+        field: sum(1 for event in usable_events if (event.get("data") or {}).get(field) is not None)
+        for field in RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_product_identity": sum(
+            1
+            for event in usable_events
+            if (event.get("data") or {}).get("product_code") or (event.get("data") or {}).get("product_name")
+        ),
+    }
+
+
+def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    summary: Dict[str, Dict[str, float]] = defaultdict(lambda: {"market_value": 0.0, "total_asset": 0.0, "transaction_amount": 0.0})
+    for event in events:
+        data = event.get("data") or {}
+        if data.get("subtype") == "collector_gap":
+            continue
+        platform = str(data.get("platform") or "unknown")
+        for key in ("market_value", "total_asset", "transaction_amount"):
+            value = data.get(key)
+            if isinstance(value, (int, float)):
+                summary[platform][key] += float(value)
+    return {
+        platform: {key: round(value, 6) for key, value in values.items() if value}
+        for platform, values in sorted(summary.items())
+        if any(values.values())
     }
 
 
@@ -435,6 +543,8 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, dict):
         cleaned: Dict[str, Any] = {}
         for key, item in value.items():
+            if str(key).startswith("_collectorx_"):
+                continue
             lowered = str(key).lower()
             if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
                 continue

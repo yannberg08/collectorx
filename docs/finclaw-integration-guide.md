@@ -206,18 +206,21 @@ python3 skills/china-wealth-assets/scripts/china_wealth.py collect \
 
 Current status:
 
-- Parses authorized CSV/TSV/JSON/JSONL/XLSX/XLSM/HTML/TXT exports for fund
+- Parses authorized CSV/TSV/JSON/JSONL/XLSX/XLSM/HTML/TXT/ZIP exports for fund
   holdings, wealth holdings, cash-management holdings, subscriptions,
   redemptions, dividends, and asset snapshots.
 - Normalizes platform names for Alipay, Tiantian Fund, Danjuan, Qieman, and
-  bank wealth exports, preserves numeric asset/trade fields, and strips
-  credential-like raw keys.
+  bank wealth exports, preserves numeric asset/trade fields, records ZIP member
+  provenance, and strips credential-like raw keys.
 - Per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/banks still need
   real validation.
 - Any parsed input is treated as partial authorized input until platform/account
   coverage is verified.
 - `manifest.platform_coverage` tells FinClaw which expected P0 platforms were
   observed in the authorized input and which are still missing.
+- `manifest.field_coverage` and `manifest.asset_value_summary` tell FinClaw
+  which key asset fields are present and summarize this run's authorized values
+  by platform.
 
 ### 邮件
 
