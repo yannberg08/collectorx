@@ -1,0 +1,13 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: ths-watchlist
+display_name: 同花顺自选股
+refresh_interval: 24h
+mode: snapshot
+armed: false
+
+prompt: |
+  使用同花顺导出的自选股列表，提取自选股信息。
+  文件路径：~/Downloads/自选股.csv
+  解析字段：证券代码、证券名称
+  输出格式：JSON数组

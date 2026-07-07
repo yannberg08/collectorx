@@ -1,0 +1,14 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: eastmoney-portfolio
+display_name: 东方财富交割单
+refresh_interval: 24h
+mode: snapshot
+time_field: date
+armed: false
+
+prompt: |
+  使用东方财富导出的CSV文件，提取交易记录。
+  文件路径：~/Downloads/交割单.csv
+  解析字段：成交日期、证券代码、证券名称、买卖方向、成交价格、成交数量、成交金额
+  输出格式：JSON数组

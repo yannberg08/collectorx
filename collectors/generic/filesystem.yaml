@@ -1,0 +1,13 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: filesystem
+display_name: 本地文件
+refresh_interval: 6h
+driver: filesystem
+armed: false
+
+filesystem:
+  extra_roots: []
+  extra_ignore_dirs: []
+  extensions: []
+  max_size_mb: 0

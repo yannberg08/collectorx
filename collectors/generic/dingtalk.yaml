@@ -1,0 +1,20 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: dingtalk
+display_name: 钉钉消息
+refresh_interval: 30m
+retention: 14d
+mode: incremental
+time_field: time
+event_template: "[{time}] 〈{sender}〉: {text}"
+group_by: chat
+initial_window: 24h
+backfill:
+  span: 90d
+  page: 5000
+armed: false
+
+prompt: |
+  使用dingtalk skill导出钉钉消息。
+  解析JSON格式，提取：sender/chat/time/content
+  输出格式：JSON数组
