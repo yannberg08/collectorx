@@ -1,0 +1,13 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: qq
+display_name: QQ聊天记录
+refresh_interval: 24h
+mode: snapshot
+armed: false
+
+# 采集器使用的skill
+skill: qq-export
+
+# 采集逻辑由skill定义
+# skill会处理：数据库发现、SQLite查询、数据导出

@@ -1,0 +1,13 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: notes
+display_name: 笔记应用
+refresh_interval: 24h
+mode: snapshot
+armed: false
+
+# 采集器使用的skill
+skill: notes-collector
+
+# 采集逻辑由skill定义
+# skill会处理：Notion API/Obsidian文件/有道云API

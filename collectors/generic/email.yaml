@@ -1,0 +1,14 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: email
+display_name: 邮箱邮件
+refresh_interval: 1h
+mode: incremental
+time_field: date
+armed: false
+
+# 采集器使用的skill
+skill: email-collector
+
+# 采集逻辑由skill定义
+# skill会处理：IMAP连接、邮件解析、数据导出

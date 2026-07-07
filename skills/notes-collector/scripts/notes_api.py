@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""
+笔记采集器 - 支持Notion/Obsidian/有道云笔记
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+# Windows控制台utf-8
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, OSError):
+    pass
+
+
+def collect_obsidian(vault_path: str, export_path: str, limit: int = None):
+    """采集Obsidian笔记（本地文件）"""
+    vault = Path(vault_path)
+    if not vault.exists():
+        print(f"ERROR: Vault目录不存在: {vault_path}")
+        return
+    
+    notes = []
+    md_files = list(vault.rglob("*.md"))
+    
+    if limit:
+        md_files = md_files[:limit]
+    
+    for md_file in md_files:
+        try:
+            content = md_file.read_text(encoding="utf-8")
+            note = {
+                "path": str(md_file.relative_to(vault)),
+                "name": md_file.stem,
+                "content": content,
+                "mtime": md_file.stat().st_mtime
+            }
+            notes.append(note)
+        except Exception as e:
+            print(f"读取失败 {md_file}: {e}")
+    
+    # 导出
+    with open(export_path, "w", encoding="utf-8") as f:
+        json.dump(notes, f, ensure_ascii=False, indent=2)
+    
+    print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
+
+
+def collect_notion(token: str, export_path: str, limit: int = None):
+    """采集Notion笔记（通过API）"""
+    import urllib.request
+    
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Notion-Version": "2022-06-28"
+    }
+    
+    # 搜索所有页面
+    url = "https://api.notion.com/v1/search"
+    data = json.dumps({"page_size": 100}).encode()
+    
+    req = urllib.request.Request(url, data=data, headers=headers)
+    
+    try:
+        with urllib.request.urlopen(req) as resp:
+            result = json.loads(resp.read().decode())
+        
+        pages = result.get("results", [])
+        if limit:
+            pages = pages[:limit]
+        
+        notes = []
+        for page in pages:
+            note = {
+                "id": page["id"],
+                "title": _extract_notion_title(page),
+                "url": page.get("url", ""),
+                "created": page.get("created_time", ""),
+                "last_edited": page.get("last_edited_time", "")
+            }
+            notes.append(note)
+        
+        # 导出
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump(notes, f, ensure_ascii=False, indent=2)
+        
+        print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
+        
+    except Exception as e:
+        print(f"采集失败: {e}")
+
+
+def _extract_notion_title(page):
+    """提取Notion页面标题"""
+    props = page.get("properties", {})
+    for prop_name, prop_value in props.items():
+        if prop_value.get("type") == "title":
+            title_parts = prop_value.get("title", [])
+            return "".join(part.get("plain_text", "") for part in title_parts)
+    return page.get("id", "Untitled")
+
+
+def cmd_status():
+    """显示状态"""
+    print("笔记采集器")
+    print("支持: Notion/Obsidian/有道云笔记")
+
+
+def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="笔记采集器")
+    subparsers = parser.add_subparsers(dest="command")
+    
+    # obsidian命令
+    obs_parser = subparsers.add_parser("obsidian", help="采集Obsidian笔记")
+    obs_parser.add_argument("--vault", required=True, help="Vault目录")
+    obs_parser.add_argument("--export", required=True, help="导出路径")
+    obs_parser.add_argument("--limit", type=int, help="限制数量")
+    
+    # notion命令
+    not_parser = subparsers.add_parser("notion", help="采集Notion笔记")
+    not_parser.add_argument("--token", required=True, help="API Token")
+    not_parser.add_argument("--export", required=True, help="导出路径")
+    not_parser.add_argument("--limit", type=int, help="限制数量")
+    
+    # status命令
+    subparsers.add_parser("status", help="显示状态")
+    
+    args = parser.parse_args()
+    
+    if args.command == "obsidian":
+        collect_obsidian(args.vault, args.export, args.limit)
+    elif args.command == "notion":
+        collect_notion(args.token, args.export, args.limit)
+    elif args.command == "status":
+        cmd_status()
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
