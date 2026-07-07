@@ -203,6 +203,24 @@ Current status:
   trading plans, research tasks, and review reminders.
 - Live TickTick API collection requires the user's OAuth token.
 
+### 日历
+
+```bash
+python3 skills/calendar-collector/scripts/calendar_query.py collect \
+  --input <authorized-calendar-ics-json-or-csv> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized ICS, JSON/JSONL, CSV, and TSV exports into generic
+  `calendar` events.
+- Captures title, start/end time, all-day status, location, meeting links,
+  organizer, attendees, recurrence, and reminders.
+- Does not claim investment-calendar status directly.
+- Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
+  trading plans, earnings events, research meetings, and review reminders.
+
 ### 会议产物
 
 ```bash

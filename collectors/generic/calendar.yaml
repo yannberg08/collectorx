@@ -8,6 +8,7 @@ time_field: start
 armed: false
 category: generic
 owner_scope: personal
+skill: calendar-collector
 
 scope:
   collects:

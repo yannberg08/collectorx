@@ -82,7 +82,7 @@ Operational docs:
 | `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion flows; macOS Obsidian-style validation done |
 | `dingtalk` | none yet | YAML placeholder; skill not implemented |
 | `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
-| `calendar` | none yet | YAML placeholder; generic calendar channel |
+| `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |
 | `meeting-artifacts` | `meeting-artifacts` | Local file event-package baseline for meeting minutes/transcripts; platform API adapters pending |
 | `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |
 | `social-activity` | `social-activity` | Local activity export/saved-record baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, and shares |

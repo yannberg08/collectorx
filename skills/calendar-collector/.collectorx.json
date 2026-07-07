@@ -1,0 +1,5 @@
+{
+  "slug": "calendar-collector",
+  "version": "0.1.0",
+  "description": "Generic calendar collector for authorized ICS, JSON, CSV, and TSV calendar exports."
+}

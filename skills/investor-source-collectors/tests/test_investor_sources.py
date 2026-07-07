@@ -272,7 +272,7 @@ def test_research_documents_extracts_office_and_pdf_content_when_authorized() ->
         assert manifest["collection_readiness"]["status"] == "events_collected"
 
 
-def test_task_calendar_lens_keeps_investment_task_only() -> None:
+def test_task_calendar_lens_keeps_investment_task_and_calendar_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         source_path = root / "ticktick-events.jsonl"
@@ -308,6 +308,36 @@ def test_task_calendar_lens_keeps_investment_task_only() -> None:
                 "raw_ref": {"task_id": "2"},
                 "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
             },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "calendar:1",
+                "collector": "calendar",
+                "source": "用户授权日历事件",
+                "owner_scope": "personal",
+                "kind": "calendar",
+                "time": "2026-07-10T09:30:00+08:00",
+                "collected_at": "2026-07-08T01:10:00+08:00",
+                "data": {
+                    "title": "贵州茅台财报电话会",
+                    "description_preview": "关注现金流、估值、卖出纪律和仓位计划",
+                    "calendar_name": "投资日历",
+                },
+                "raw_ref": {"event_id": "calendar-1"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "calendar:2",
+                "collector": "calendar",
+                "source": "用户授权日历事件",
+                "owner_scope": "personal",
+                "kind": "calendar",
+                "time": "2026-07-10T12:00:00+08:00",
+                "collected_at": "2026-07-08T01:10:00+08:00",
+                "data": {"title": "牙医预约", "calendar_name": "生活"},
+                "raw_ref": {"event_id": "calendar-2"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar"]},
+            },
         ]
         source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
         run_cli(
@@ -325,8 +355,8 @@ def test_task_calendar_lens_keeps_investment_task_only() -> None:
             json.loads(line)
             for line in (out_dir / "lake" / "task-calendar-investor" / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
-        assert len(lens_events) == 1
-        assert lens_events[0]["data"]["payload"]["title"] == "复盘贵州茅台财报"
+        assert len(lens_events) == 2
+        assert {event["data"]["payload"]["title"] for event in lens_events} == {"复盘贵州茅台财报", "贵州茅台财报电话会"}
 
 
 def test_meeting_minutes_lens_keeps_investment_minutes_only() -> None:
@@ -534,7 +564,7 @@ if __name__ == "__main__":
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
-    test_task_calendar_lens_keeps_investment_task_only()
+    test_task_calendar_lens_keeps_investment_task_and_calendar_only()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()
     test_social_investment_influence_lens_keeps_investment_activity_only()

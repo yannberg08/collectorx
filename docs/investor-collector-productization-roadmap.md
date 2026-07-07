@@ -182,6 +182,25 @@ Findings:
 - Real TickTick API validation is blocked because the local OAuth token is not
   present.
 
+### Wave D2: P1 generic calendar productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-calendar-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `calendar-collector` generic collector for authorized ICS,
+  JSON/JSONL, CSV, and TSV calendar exports.
+- Captures title, start/end time, all-day flag, location, meeting links,
+  organizer, attendees, recurrence, and reminders.
+- Generic calendar events route to `internal.calendar.events`; investment
+  filtering remains in `task-calendar-investor`.
+- Fixture validation covers ICS, JSON, CSV, gap events, and raw credential-key
+  sanitization.
+
 ### Wave E: P1 meeting artifacts productization pass 1
 
 Status: `completed-baseline`
@@ -312,7 +331,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes | Strengthen Notion/Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON; real API token missing | Complete TickTick OAuth validation, implement generic calendar collector, validate recurring tasks/timezones |
+| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON and generic calendar exports; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones |
 | 3 | `meeting-minutes` | G2/G3 partial for local authorized meeting files | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
 | 5 | `financial-news-usage` | G2/G3 partial for local authorized usage/saved pages | Real CLS/WallstreetCN/Gelonghui app/account adapters, browser-history import, subscription/alert normalization, platform inference |
