@@ -24,14 +24,20 @@ scope:
     - contacts
     - files_refs
     - meeting_refs
+    - field_coverage_manifest
+    - collaboration_surface_summary
+    - source_audit_manifest
+    - archive_member_provenance
   excludes:
     - investment_classification
     - password
     - session_token
     - unauthorized_workspace_data
     - file_body_mirroring
+    - archive_path_traversal_members
+    - windows_drive_path_archive_members
 
 prompt: |
   使用 collaboration-exports skill 采集用户授权的钉钉本地导出。
   CLI: python3 skills/collaboration-exports/scripts/collaboration_exports.py collect --platform dingtalk --input <authorized-export> --out-dir <out>
-  只输出通用协作事件；投资讨论由后续 lens 筛选。
+  只输出通用协作事件；manifest 记录字段覆盖、协作面和 ZIP 来源审计；投资讨论由后续 lens 筛选。

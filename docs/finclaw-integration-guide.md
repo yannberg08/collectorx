@@ -359,11 +359,14 @@ python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
 
 Current status:
 
-- Converts authorized JSON/JSONL/NDJSON, CSV/TSV, HTML, Markdown, and TXT
+- Converts authorized JSON/JSONL/NDJSON, CSV/TSV, HTML, Markdown, TXT, and ZIP
   collaboration exports into `dingtalk` or `wecom` events.
 - Captures messages, chats, contacts, file refs, meeting refs, sender, receiver,
   department, participants, meeting links, file names, tags, and content
   previews.
+- Writes `manifest.field_coverage`, `collaboration_surface_summary`,
+  `source_audit`, and `evidence_policy` so FinClaw can inspect message/meeting/
+  file/contact coverage, ZIP provenance, and required downstream lenses.
 - Filters credential-like raw keys and keeps file bodies out of the generic
   collaboration collector.
 - Does not claim investment collaboration directly.
@@ -391,6 +394,10 @@ Current status:
 - Writes `manifest.platform_coverage` with expected P1 meeting platforms,
   observed platforms, missing platforms, event counts, and
   `real_account_validation`.
+- Writes `manifest.field_coverage`, `meeting_surface_summary`, `source_audit`,
+  and `evidence_policy` so FinClaw can inspect text, participants, organizer,
+  meeting URL, attachments, duration, start/end time, ZIP provenance, and the
+  required `meeting-minutes` lens boundary.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-meeting status directly.

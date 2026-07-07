@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -26,6 +27,7 @@ def test_collect_dingtalk_package() -> None:
         root = Path(tmp)
         package = root / "dingtalk-export.json"
         html = root / "dingtalk-minutes.html"
+        zip_path = root / "dingtalk-package.zip"
         out = root / "out"
         package.write_text(
             json.dumps(
@@ -51,6 +53,11 @@ def test_collect_dingtalk_package() -> None:
             "<html><head><title>钉钉会议纪要</title></head><body>参会人：研究员A，基金经理C https://dingtalk.example/meeting</body></html>",
             encoding="utf-8",
         )
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("dingtalk/roadshow.md", "# 钉钉路演纪要\n参会人：研究员D，基金经理E\n讨论估值。\n")
+            archive.writestr("../unsafe.md", "# 不应读取\n")
+            archive.writestr("..\\windows-traversal.md", "# 不应读取\n")
+            archive.writestr("C:\\unsafe.md", "# 不应读取\n")
         subprocess.run(
             [
                 sys.executable,
@@ -70,10 +77,15 @@ def test_collect_dingtalk_package() -> None:
             capture_output=True,
         )
         events = read_events(out, "dingtalk")
-        assert len(events) == 4
+        assert len(events) == 5
         assert {event["collector"] for event in events} == {"dingtalk"}
         assert {event["data"]["record_kind"] for event in events} == {"contact", "file", "meeting", "message"}
         assert {event["kind"] for event in events} == {"calendar", "file", "message", "profile"}
+        assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("windows-traversal" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("C:/unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        zip_event = next(event for event in events if event["raw_ref"].get("archive_member") == "dingtalk/roadshow.md")
+        assert zip_event["raw_ref"]["source_archive"] == str(zip_path)
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         message = next(event for event in events if event["data"]["record_kind"] == "message")
@@ -81,6 +93,10 @@ def test_collect_dingtalk_package() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collector"] == "dingtalk"
         assert manifest["collection_readiness"]["can_claim_investment_collaboration"] is False
+        assert manifest["field_coverage"]["field_counts"]["platform"] == 5
+        assert manifest["collaboration_surface_summary"]["meeting_event_count"] == 2
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
 
 
 def test_collect_wecom_csv_and_gap() -> None:
@@ -106,6 +122,9 @@ def test_collect_wecom_csv_and_gap() -> None:
         assert {event["collector"] for event in events} == {"wecom"}
         assert {event["data"]["record_kind"] for event in events} == {"meeting", "message"}
         assert any(event["data"].get("meeting_url") == "https://work.weixin.qq.com/meeting" for event in events)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["field_coverage"]["field_counts"]["record_kind"] == 2
+        assert manifest["collaboration_surface_summary"]["meeting_event_count"] == 1
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--platform", "wecom", "--out-dir", str(gap_out)],

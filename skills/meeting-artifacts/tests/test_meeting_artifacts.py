@@ -49,6 +49,10 @@ def test_collect_minutes_and_transcript_events() -> None:
         assert manifest["collection_readiness"]["can_claim_investment_meeting_minutes"] is False
         assert manifest["platform_coverage"]["observed_platforms"] == ["local-file"]
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
+        assert manifest["field_coverage"]["field_counts"]["artifact_type"] == 2
+        assert manifest["meeting_surface_summary"]["events_with_text"] == 2
+        assert manifest["meeting_surface_summary"]["events_with_participants"] == 1
+        assert manifest["evidence_policy"]["required_lens"] == "meeting-minutes"
 
 
 def test_collect_platform_exports_and_sanitizes_raw() -> None:
@@ -67,8 +71,12 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
                             "platform": "钉钉",
                             "title": "投委会讨论",
                             "summary": "讨论仓位、估值和风险控制。",
+                            "start_time": "2026-07-08T09:00:00+08:00",
+                            "end_time": "2026-07-08T10:00:00+08:00",
+                            "duration": "60m",
                             "participants": [{"name": "研究员A"}, {"name": "基金经理B"}],
                             "meeting_url": "https://dingtalk.example/meeting",
+                            "attachments": [{"path": "recording-ref.mp3"}],
                             "token": "must-not-leak",
                         }
                     ]
@@ -85,6 +93,8 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
                 "# 飞书路演纪要\n参会人：研究员D，基金经理E\n讨论行业空间和竞争格局。\n",
             )
             archive.writestr("../unsafe.md", "# 不应读取\n")
+            archive.writestr("..\\windows-traversal.md", "# 不应读取\n")
+            archive.writestr("C:\\unsafe.md", "# 不应读取\n")
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
             check=True,
@@ -95,9 +105,15 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert len(events) == 4
         assert {event["data"]["platform"] for event in events} == {"feishu", "dingtalk", "wecom", "tencent-meeting"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("windows-traversal" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("C:/unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        feishu_event = next(event for event in events if event["data"]["platform"] == "feishu")
+        assert feishu_event["raw_ref"]["source_archive"] == str(feishu_zip)
+        assert feishu_event["raw_ref"]["archive_member"] == "feishu/roadshow.md"
         assert any(event["data"].get("meeting_url") == "https://meeting.tencent.com/test" for event in events)
         assert any("研究员C" in event["data"].get("participants", []) for event in events)
         assert any("分析师A" in event["data"].get("participants", []) for event in events)
+        assert any(event["data"].get("attachment_ref_count") == 1 for event in events)
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -106,6 +122,11 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
         assert manifest["platform_coverage"]["real_account_validation"] is False
+        assert manifest["field_coverage"]["field_counts"]["platform"] == 4
+        assert manifest["meeting_surface_summary"]["events_with_attachments"] == 1
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
 
 
 if __name__ == "__main__":

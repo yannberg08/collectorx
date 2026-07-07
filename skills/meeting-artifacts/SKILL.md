@@ -1,7 +1,6 @@
 ---
 name: meeting-artifacts
 description: 通用会议产物采集器。采集用户授权的会议纪要、逐字稿、字幕、参会人和附件指针，支持本地文件/ZIP/平台导出，输出 CollectorX note 事件和平台覆盖 manifest；用于 feeding meeting-minutes lens，不直接判断投资含义。
-version: 0.2.1
 ---
 
 # 会议产物采集器
@@ -17,6 +16,9 @@ version: 0.2.1
 - 参会人、会议标题、开始/结束时间、组织者、会议链接、来源平台、附件指针。
 - 平台枚举标准化：`feishu`、`dingtalk`、`wecom`、`tencent-meeting`、`local-file`。
 - `manifest.platform_coverage`：记录四个 P1 会议平台的观察、缺失、事件数和 `real_account_validation`。
+- `manifest.field_coverage`、`meeting_surface_summary`、`source_audit` 和
+  `evidence_policy`：记录文本、参会人、组织者、会议链接、附件、时长、开始/
+  结束时间、ZIP 来源和 generic/lens 边界。
 
 ## 不采什么
 
@@ -50,5 +52,5 @@ python <SKILL_DIR>/scripts/meeting_artifacts.py collect \
 
 ## 当前投产边界
 
-- 已验证：本地授权导出文件、平台导出字段归一化、参会人/会议链接/正文预览解析、敏感凭证字段过滤。
+- 已验证：本地授权导出文件、ZIP 包来源、平台导出字段归一化、参会人/会议链接/正文预览解析、敏感凭证字段过滤、manifest 审计字段。
 - 未验证：真实飞书/钉钉/企业微信/腾讯会议账号 API 拉取、录音转写授权链路、跨企业空间权限边界。

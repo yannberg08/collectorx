@@ -15,6 +15,22 @@ COLLECTOR = "meeting-artifacts"
 CN_TZ = timezone(timedelta(hours=8))
 EXPECTED_P1_MEETING_PLATFORMS = ("feishu", "dingtalk", "wecom", "tencent-meeting")
 GENERIC_MEETING_PLATFORMS = {"local-file"}
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+MEETING_RECOMMENDED_FIELDS = (
+    "artifact_type",
+    "platform",
+    "title",
+    "start_time",
+    "end_time",
+    "organizer",
+    "participants",
+    "meeting_url",
+    "text_preview",
+    "duration",
+    "attachment_refs",
+    "time",
+)
 
 
 def now_iso() -> str:
@@ -39,14 +55,25 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
         "end_time": end_time,
         "organizer": first(record, ["organizer", "host", "主持人", "组织者"]),
         "participants": participants,
+        "participant_count": len(participants),
         "meeting_url": first(record, ["meeting_url", "url", "link", "会议链接", "链接"]),
         "text_preview": text[:2000],
         "has_text": bool(text),
+        "text_length": len(text),
         "duration": first(record, ["duration", "时长"]),
         "attachment_refs": attachment_refs_for(record),
+        "attachment_ref_count": len(attachment_refs_for(record)),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "artifact_type": artifact_type,
+        "platform": platform,
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, title, start_time, text[:160]),
@@ -57,11 +84,7 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
         "time": start_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "artifact_type": artifact_type,
-            "platform": platform,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -125,6 +148,16 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "unknown_event_count": unknown_event_count,
             "real_account_validation": False,
         },
+        "field_coverage": field_coverage(events),
+        "meeting_surface_summary": meeting_surface_summary(events),
+        "source_audit": source_audit(events),
+        "evidence_policy": {
+            "generic_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_meeting_classification_done": False,
+            "required_lens": "meeting-minutes",
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_meeting_artifact_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -166,6 +199,10 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
+        f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+        f"- participant_events: {manifest['meeting_surface_summary']['events_with_participants']}",
+        f"- attachment_events: {manifest['meeting_surface_summary']['events_with_attachments']}",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         "",
         "Generic meeting artifacts are not written to the investor Wiki directly. Use the meeting-minutes lens.",
     ]
@@ -179,6 +216,57 @@ def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
         if value not in (None, ""):
             return str(value)
     return None
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    meeting_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "note"]
+    field_counts = {
+        field: sum(1 for event in meeting_events if meeting_field_present(event, field))
+        for field in MEETING_RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(MEETING_RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_text": sum(1 for event in meeting_events if (event.get("data") or {}).get("has_text")),
+    }
+
+
+def meeting_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    data = event.get("data") or {}
+    value = data.get(field)
+    return value not in (None, "", [], {})
+
+
+def meeting_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    meeting_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "note"]
+    return {
+        "artifact_event_count": len(meeting_events),
+        "events_with_text": sum(1 for event in meeting_events if (event.get("data") or {}).get("has_text")),
+        "events_with_participants": sum(1 for event in meeting_events if (event.get("data") or {}).get("participants")),
+        "events_with_organizer": sum(1 for event in meeting_events if (event.get("data") or {}).get("organizer")),
+        "events_with_meeting_url": sum(1 for event in meeting_events if (event.get("data") or {}).get("meeting_url")),
+        "events_with_attachments": sum(1 for event in meeting_events if (event.get("data") or {}).get("attachment_refs")),
+        "events_with_duration": sum(1 for event in meeting_events if (event.get("data") or {}).get("duration")),
+        "events_with_start_time": sum(1 for event in meeting_events if (event.get("data") or {}).get("start_time")),
+        "events_with_end_time": sum(1 for event in meeting_events if (event.get("data") or {}).get("end_time")),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "archive_path_traversal_members_collected": False,
+    }
 
 
 def participants_for(record: Dict[str, Any]) -> List[str]:

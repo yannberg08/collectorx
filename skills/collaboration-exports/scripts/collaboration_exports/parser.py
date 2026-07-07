@@ -6,19 +6,38 @@ import csv
 import hashlib
 import json
 import re
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.parse import urlparse
 
 
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".html", ".htm", ".md", ".markdown", ".txt"}
+SUPPORTED_RECORD_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".html", ".htm", ".md", ".markdown", ".txt"}
+SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session", "ticket")
 CONTENT_KEY_FRAGMENTS = ("content", "body", "text", "message", "正文", "内容", "消息")
 PLATFORMS = {"dingtalk", "wecom"}
+SOURCE_PATH_KEY = "_collectorx_source_path"
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+COLLAB_RECOMMENDED_FIELDS = (
+    "platform",
+    "record_kind",
+    "title",
+    "chat",
+    "sender",
+    "time",
+    "content_preview",
+    "url",
+    "file_name",
+    "meeting_url",
+    "participants",
+)
 PLATFORM_ALIASES = {
     "dingtalk": ("dingtalk", "dingding", "钉钉"),
     "wecom": ("wecom", "work.weixin", "企业微信", "企微"),
@@ -75,6 +94,8 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
 
 def parse_path(path: Path) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return parse_zip(path)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
@@ -84,11 +105,60 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
     return [parse_text(path)]
 
 
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive:
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
+            if should_skip_zip_member(member):
+                continue
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
+            text = archive.read(member).decode("utf-8-sig", errors="replace")
+            path_label = f"{path}::{member_name}"
+            try:
+                if suffix in {".json", ".jsonl", ".ndjson"}:
+                    parsed = parse_json_text(text, suffix=suffix)
+                elif suffix in {".csv", ".tsv"}:
+                    parsed = parse_table_text(text, suffix=suffix)
+                elif suffix in {".html", ".htm"}:
+                    parsed = [parse_html_text(text, path_label=path_label)]
+                else:
+                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member_name).stem)]
+            except Exception:
+                parsed = []
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_PATH_KEY] = path_label
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
+                    records.append(record)
+    return records
+
+
+def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
+    if member.is_dir():
+        return True
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
+        return True
+    return Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
+
+
 def parse_json(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig").strip()
+    return parse_json_text(text, suffix=path.suffix.lower())
+
+
+def parse_json_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
     if not text:
         return []
-    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+    if suffix in {".jsonl", ".ndjson"}:
         rows = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
         rows = extract_records(json.loads(text))
@@ -130,9 +200,13 @@ def with_section_context(item: Any, section: str, context: Dict[str, Any]) -> An
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return parse_table_text(text, suffix=path.suffix.lower())
+
+
+def parse_table_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else sniff_delimiter(text)
+    delimiter = "\t" if suffix == ".tsv" else sniff_delimiter(text)
     return [{str(key): value for key, value in row.items() if key is not None} for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
 
 
@@ -145,24 +219,32 @@ def sniff_delimiter(text: str) -> str:
 
 def parse_html(path: Path) -> Dict[str, Any]:
     html = path.read_text(encoding="utf-8", errors="replace")
+    return parse_html_text(html, path_label=str(path))
+
+
+def parse_html_text(html: str, *, path_label: str) -> Dict[str, Any]:
     text = html_to_text(html)
     return {
-        "record_kind": infer_kind_from_text(text, path),
-        "title": title_tag(html) or infer_title(path, text),
+        "record_kind": infer_kind_from_text(text, Path(path_label)),
+        "title": title_tag(html) or infer_title(Path(path_label), text),
         "content": text,
         "url": canonical_url(html) or first_url(html),
-        "path": str(path),
+        "path": path_label,
     }
 
 
 def parse_text(path: Path) -> Dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
+    return parse_text_text(text, path_label=str(path), default_title=path.stem)
+
+
+def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[str, Any]:
     return {
-        "record_kind": infer_kind_from_text(text, path),
-        "title": infer_title(path, text),
+        "record_kind": infer_kind_from_text(text, Path(path_label)),
+        "title": infer_title(Path(default_title), text),
         "content": text,
         "url": first_url(text),
-        "path": str(path),
+        "path": path_label,
     }
 
 
@@ -183,6 +265,7 @@ def record_to_event(
         record,
         ["time", "date", "created_at", "updated_at", "sent_at", "start_time", "时间", "日期", "发送时间", "开始时间"],
     )
+    path_label = first(record, [SOURCE_PATH_KEY, "path"]) or str(path)
     data = {
         "platform": platform,
         "source_section": first(record, ["source_section", "sheet"]),
@@ -203,9 +286,20 @@ def record_to_event(
         "tags": list_values(record, ["tags", "labels", "标签"]),
         "content_preview": text[:1500],
         "has_content": bool(text),
+        "content_length": len(text),
+        "participant_count": len(list_values(record, ["participants", "attendees", "members", "参会人", "成员"])),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "platform": platform,
+        "record_kind": kind,
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(platform, path, row, kind, title, event_time, text[:160]),
@@ -216,12 +310,7 @@ def record_to_event(
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": str(path),
-            "row": row,
-            "platform": platform,
-            "record_kind": kind,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -263,6 +352,16 @@ def build_manifest(events: List[Dict[str, Any]], *, platform: str, collected_at:
         "event_count": len(events),
         "kind_counts": dict(sorted(kind_counts.items())),
         "record_kind_counts": dict(sorted(record_counts.items())),
+        "field_coverage": field_coverage(events),
+        "collaboration_surface_summary": collaboration_surface_summary(events),
+        "source_audit": source_audit(events),
+        "evidence_policy": {
+            "generic_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_collaboration_classification_done": False,
+            "required_lenses": ["meeting-minutes", "research-documents"],
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": f"needs_{platform}_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -293,11 +392,69 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- collector: `{manifest['collector']}`",
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         "",
         "Generic collaboration events are not written to the investor Wiki directly. Use investor lenses for investment filtering.",
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [
+        event for event in events
+        if (event.get("data") or {}).get("record_kind") != "collector_gap"
+    ]
+    field_counts = {
+        field: sum(1 for event in usable_events if collaboration_field_present(event, field))
+        for field in COLLAB_RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(COLLAB_RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_content": sum(1 for event in usable_events if (event.get("data") or {}).get("has_content")),
+    }
+
+
+def collaboration_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    data = event.get("data") or {}
+    value = data.get(field)
+    return value not in (None, "", [], {})
+
+
+def collaboration_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    usable_events = [
+        event for event in events
+        if (event.get("data") or {}).get("record_kind") != "collector_gap"
+    ]
+    return {
+        "message_event_count": sum(1 for event in usable_events if (event.get("data") or {}).get("record_kind") == "message"),
+        "meeting_event_count": sum(1 for event in usable_events if (event.get("data") or {}).get("record_kind") == "meeting"),
+        "file_event_count": sum(1 for event in usable_events if (event.get("data") or {}).get("record_kind") == "file"),
+        "contact_event_count": sum(1 for event in usable_events if (event.get("data") or {}).get("record_kind") == "contact"),
+        "events_with_content": sum(1 for event in usable_events if (event.get("data") or {}).get("has_content")),
+        "events_with_meeting_url": sum(1 for event in usable_events if (event.get("data") or {}).get("meeting_url")),
+        "events_with_file_name": sum(1 for event in usable_events if (event.get("data") or {}).get("file_name")),
+        "events_with_participants": sum(1 for event in usable_events if (event.get("data") or {}).get("participants")),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "archive_path_traversal_members_collected": False,
+    }
 
 
 def normalize_platform(value: str) -> str:

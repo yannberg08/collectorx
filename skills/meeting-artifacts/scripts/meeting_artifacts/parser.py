@@ -8,6 +8,7 @@ import re
 import zipfile
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List
 
 
@@ -26,6 +27,8 @@ SUPPORTED_RECORD_EXTENSIONS = {
     ".srt",
 }
 SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -163,36 +166,47 @@ def parse_subtitle_text(text: str, *, path_label: str, default_title: str) -> Di
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
             text = archive.read(member).decode("utf-8-sig", errors="replace")
-            path_label = f"{path.name}::{member.filename}"
+            path_label = f"{path}::{member_name}"
             try:
                 if suffix in {".json", ".jsonl", ".ndjson"}:
                     parsed = parse_json_text(text, suffix=suffix, path_label=path_label)
                 elif suffix in {".csv", ".tsv"}:
                     parsed = parse_table_text(text, suffix=suffix, path_label=path_label)
                 elif suffix in {".vtt", ".srt"}:
-                    parsed = [parse_subtitle_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_subtitle_text(text, path_label=path_label, default_title=Path(member_name).stem)]
                 elif suffix in {".html", ".htm"}:
-                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member_name).stem)]
                 else:
-                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member_name).stem)]
             except Exception:
                 parsed = []
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
             records.extend(parsed)
     return records
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def subtitle_text(text: str) -> str:

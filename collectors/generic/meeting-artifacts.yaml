@@ -24,12 +24,19 @@ scope:
     - recording_refs
     - source_platform
     - platform_coverage_manifest
+    - field_coverage_manifest
+    - meeting_surface_summary
+    - source_audit_manifest
+    - archive_member_provenance
   excludes:
     - unauthorized_recording
     - investment_classification
     - credentials
+    - archive_path_traversal_members
+    - windows_drive_path_archive_members
 
 description: |
   通用会议产物采集器。飞书、钉钉、企业微信、腾讯会议的原始会议产物先作为
   通用证据进入 lake；本采集器支持本地文件、平台导出和 ZIP 授权包，并在
-  manifest 中报告平台覆盖。meeting-minutes lens 再筛选路演、调研、投委会和投资复盘。
+  manifest 中报告平台覆盖、字段覆盖、会议面、ZIP 来源审计。meeting-minutes
+  lens 再筛选路演、调研、投委会和投资复盘。
