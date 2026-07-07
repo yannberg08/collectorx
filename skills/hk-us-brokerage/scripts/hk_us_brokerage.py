@@ -46,6 +46,10 @@ def collect(args: argparse.Namespace) -> int:
                     f"- collector：`{COLLECTOR}`",
                     f"- 事件数：{len(events)}",
                     f"- readiness：`{manifest['collection_readiness']['status']}`",
+                    f"- observed_brokers：`{', '.join(manifest['broker_coverage']['observed_brokers']) or 'none'}`",
+                    f"- missing_expected_brokers：`{', '.join(manifest['broker_coverage']['missing_expected_brokers']) or 'none'}`",
+                    f"- observed_trade_surfaces：`{', '.join(manifest['trade_surface_coverage']['observed_subtypes']) or 'none'}`",
+                    f"- missing_trade_surfaces：`{', '.join(manifest['trade_surface_coverage']['missing_expected_subtypes']) or 'none'}`",
                     "- 边界：只读资产、持仓、成交、委托、资金流水；不下单、不撤单。",
                 ]
             ),
@@ -60,8 +64,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized Futu/Tiger/IBKR read-only brokerage exports.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("collect", help="Parse HK/US brokerage read-only exports.")
-    p.add_argument("--input", action="append", help="Authorized file or folder. Repeat for multiple inputs.")
+    p = sub.add_parser("collect", help="Parse HK/US brokerage read-only exports or ZIP packages.")
+    p.add_argument("--input", action="append", help="Authorized file, folder, or ZIP package. Repeat for multiple inputs.")
     p.add_argument("--out-dir")
     p.add_argument("--event-export")
     p.add_argument("--limit", type=int)

@@ -43,7 +43,7 @@
 
 | Collector | Skill | 目标 |
 | --- | --- | --- |
-| `hk-us-brokerage` | `hk-us-brokerage` | vertical：富途、老虎、盈透等港美股交易与持仓 |
+| `hk-us-brokerage` | `hk-us-brokerage` | vertical：富途、老虎、盈透等港美股资产、持仓、成交、委托、资金流水、分红、换汇，含授权 ZIP 和券商/交易表/字段覆盖 manifest |
 | `pro-terminal-usage` | `pro-terminal-usage` | vertical：Wind、Choice、同花顺 iFinD 等专业终端使用痕迹 |
 | `social-activity` | `social-activity` | generic：微博、B站、小红书用户活动 |
 | `social-investment-influence` | `investor-source-collectors` | lens：投资内容影响源、创作者、收藏/点赞/观看 |

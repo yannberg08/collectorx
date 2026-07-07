@@ -428,21 +428,27 @@ Current status:
 
 ```bash
 python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
-  --input <authorized-futu-tiger-ibkr-readonly-export> \
+  --input <authorized-futu-tiger-ibkr-readonly-export-or-zip> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM exports into
+- Converts authorized CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM/ZIP exports into
   `hk-us-brokerage` events.
 - Expands multi-section JSON packages, including assets, positions, executions,
-  orders, cashflows, dividends, and FX.
+  orders, cashflows, dividends, and FX; ZIP packages preserve
+  `archive.zip::member` provenance.
 - Captures strong brokerage fields: assets, positions, executions, orders,
   cashflows, dividends, FX, margin, tax, settlement dates, order type, time in
   force, net liquidation, and multi-currency amounts.
+- Writes broker, trade-surface, and recommended strong-field coverage manifests
+  so FinClaw can see missing brokers/tables/fields before treating the package
+  as a full brokerage boundary.
 - Preserves business numbers needed by the investor avatar.
 - Does not ask for passwords and does not place, cancel, or modify orders.
+- Real Futu/Tiger/IBKR account exports or read-only screens still require
+  account-level validation.
 
 ### 专业金融终端使用痕迹
 

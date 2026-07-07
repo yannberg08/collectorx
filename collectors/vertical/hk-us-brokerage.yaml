@@ -24,6 +24,12 @@ scope:
     - cashflows
     - dividends
     - fx
+    - margin
+    - tax
+    - settlement_fields
+    - broker_coverage_manifest
+    - trade_surface_coverage_manifest
+    - field_coverage_manifest
   excludes:
     - login_password
     - trading_password
@@ -32,4 +38,6 @@ scope:
     - community_discussions
 
 description: |
-  港美股券商是投资垂直强交易源。后续按富途、老虎、盈透逐个做只读采集和真机验证。
+  港美股券商是投资垂直强交易源。支持用户授权 CSV/JSON/Excel/ZIP 只读导出包。
+  manifest 会报告富途/老虎/盈透、七类强交易表和关键金额字段覆盖。
+  后续按富途、老虎、盈透逐个做真实账号只读采集和真机验证。

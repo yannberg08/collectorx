@@ -1,7 +1,7 @@
 ---
 name: hk-us-brokerage
-description: 港美股券商强交易采集器。采集用户授权的富途、老虎、盈透等券商只读导出中的资产、持仓、成交、委托、资金流水、分红、换汇，输出 CollectorX 事件和 FinClaw 投资分身证据包；不读取密码，不下单，不撤单。
-version: 0.2.0
+description: 港美股券商强交易采集器。采集用户授权的富途、老虎、盈透等券商只读导出/ZIP 包中的资产、持仓、成交、委托、资金流水、分红、换汇，输出 CollectorX 事件、券商/交易表/字段覆盖 manifest 和 FinClaw 投资分身证据包；不读取密码，不下单，不撤单。
+version: 0.2.1
 ---
 
 # HK/US Brokerage Collector
@@ -17,6 +17,8 @@ version: 0.2.0
 - 资金流水：入金、出金、利息、费用、税费、净额。
 - 分红和换汇：除息日、派息日、税前/税后金额、换出/换入币种、汇率。
 - 多币种字段：本位币、现金、可用现金、已结算现金、保证金、维持保证金、净清算值。
+- 授权 ZIP 包：支持券商 statement/export 打包文件，保留包内成员路径。
+- `manifest.broker_coverage`、`manifest.trade_surface_coverage`、`manifest.field_coverage`：记录富途/老虎/盈透、七类强交易表和关键金额字段覆盖。
 
 不采集：
 
@@ -28,7 +30,7 @@ version: 0.2.0
 
 ```bash
 python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
-  --input /path/to/authorized/broker-export \
+  --input /path/to/authorized/broker-export-or-zip \
   --out-dir /path/to/out
 ```
 
@@ -39,6 +41,6 @@ python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
 - `investor_wiki_evidence.v1.json`
 - `SUMMARY.md`
 
-当前支持 CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM 本地授权导出；JSON 包会全量展开
+当前支持 CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM/ZIP 本地授权导出；JSON/ZIP 包会展开
 assets、positions、executions、orders、cashflows、dividends、fx 等 section。真实富途、
 老虎、盈透只读适配器需要按平台逐个验证。

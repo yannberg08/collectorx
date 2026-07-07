@@ -14,7 +14,7 @@
 | P1 | `task-calendar-investor` | lens | `ticktick`/`calendar` | 交易计划、研究任务、复盘提醒 |
 | P1 | `wechat-article-favorites` | lens | `wechat-favorites` | 公众号阅读、收藏、转发、微信收藏 |
 | P1 | `financial-news-usage` | vertical | 财联社/华尔街见闻/格隆汇 | 阅读/收藏/订阅/搜索/提醒痕迹 |
-| P2 | `hk-us-brokerage` | vertical | 富途/老虎/盈透 | 港美股交易和持仓 |
+| P2 | `hk-us-brokerage` | vertical | 富途/老虎/盈透 | 港美股资产、持仓、成交、委托、资金、分红、换汇 |
 | P2 | `pro-terminal-usage` | vertical | Wind/Choice/iFinD | 专业终端使用痕迹 |
 | P2 | `social-investment-influence` | lens | `social-activity` | 微博、B站、小红书等投资内容影响源 |
 
