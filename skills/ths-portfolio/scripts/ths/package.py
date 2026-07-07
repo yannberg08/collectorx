@@ -91,6 +91,7 @@ def sync_package_to_soulmirror(
     lake_root = soulmirror_root / "lake" / COLLECTOR
     run_dir = lake_root / run_id
     latest_dir = lake_root / "latest"
+    root_event_file = lake_root / "events.jsonl"
     files = [
         output_dir / "manifest.json",
         output_dir / "investor_wiki_evidence.v1.json",
@@ -107,6 +108,12 @@ def sync_package_to_soulmirror(
             shutil.copy2(source, dest)
             copied.append(str(dest))
 
+    event_source = output_dir / "lake" / COLLECTOR / "events.jsonl"
+    if event_source.exists():
+        lake_root.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(event_source, root_event_file)
+        copied.append(str(root_event_file))
+
     bridge_manifest = {
         "schema": "finclaw.soulmirror_bridge.v1",
         "collector": COLLECTOR,
@@ -115,8 +122,9 @@ def sync_package_to_soulmirror(
         "soulmirror_home": str(soulmirror_root),
         "run_dir": str(run_dir),
         "latest_dir": str(latest_dir),
+        "root_event_file": str(root_event_file),
         "copied_files": sorted(set(copied)),
-        "note": "Copied collector evidence into SoulMirror lake only; final wiki organization remains app-controlled.",
+        "note": "Copied collector evidence into SoulMirror lake, including the native lake/<collector>/events.jsonl entrypoint; final wiki organization remains app-controlled.",
     }
     write_json(output_dir / "soulmirror_sync.json", bridge_manifest)
     write_json(latest_dir / "soulmirror_sync.json", bridge_manifest)

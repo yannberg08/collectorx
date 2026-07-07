@@ -17,7 +17,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from eastmoney.trade_export import ParsedTradeRow, parse_number, parse_trade_export_text
 
@@ -27,38 +27,32 @@ TRADE_KEY_CODE = 111  # F12 in the classic Mac client.
 
 TAB_SPECS = [
     {
-        "tab": "assets",
-        "label": "资产",
-        "kind": "broker_asset_snapshot",
-        "relative_click": (250, 455),
-    },
-    {
         "tab": "positions",
         "label": "持仓",
         "kind": "broker_position_detail",
-        "relative_click": (300, 455),
+        "relative_click": (445, 630),
     },
     {
         "tab": "executions",
         "label": "成交",
         "kind": "broker_trade_execution",
-        "relative_click": (355, 455),
+        "relative_click": (500, 630),
     },
     {
         "tab": "entrusts",
         "label": "委托",
         "kind": "broker_entrust_order",
-        "relative_click": (410, 455),
+        "relative_click": (555, 630),
     },
     {
         "tab": "funds",
         "label": "资金",
         "kind": "broker_fund_flow",
-        "relative_click": (465, 455),
+        "relative_click": (655, 630),
     },
 ]
 
-TABLE_RELATIVE_CLICK = (700, 520)
+TABLE_RELATIVE_CLICK = (720, 735)
 
 TRADE_LABELS = [
     "证券账户",
@@ -155,9 +149,14 @@ def collect_trade_ui_snapshot(copy_tables: bool = True) -> TradeUISnapshot:
         return snapshot
 
     snapshot.window_found = True
-    ax_lines = _dump_accessibility_lines()
-    snapshot.ax_line_count = len(ax_lines)
-    snapshot.account = parse_ax_trade_state(ax_lines)
+    ax_records = _dump_accessibility_records()
+    if ax_records:
+        snapshot.ax_line_count = len(ax_records)
+        snapshot.account = parse_ax_trade_records(ax_records)
+    else:
+        ax_lines = _dump_accessibility_lines()
+        snapshot.ax_line_count = len(ax_lines)
+        snapshot.account = parse_ax_trade_state(ax_lines)
 
     if snapshot.ax_line_count == 0:
         ocr_text = _ocr_window_text(window_rect)
@@ -187,7 +186,7 @@ def collect_trade_ui_snapshot(copy_tables: bool = True) -> TradeUISnapshot:
     if copy_tables:
         snapshot.tables = copy_trade_tables(window_rect)
         for table in snapshot.tables:
-            if table.status != "captured":
+            if table.status not in {"captured", "confirmed_empty"}:
                 snapshot.gaps.append(
                     {
                         "gap": f"trade_ui_{table.tab}_copy_unavailable",
@@ -233,6 +232,82 @@ def parse_ax_trade_state(lines: Iterable[str]) -> Dict[str, Any]:
         "observed_fields": observed_fields,
         "asset_fields": asset_fields,
     }
+
+
+def parse_ax_trade_records(records: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
+    usable = [
+        record
+        for record in records
+        if _clean_ax_value(record.get("text"))
+        and record.get("pos")
+    ]
+    texts = [_clean_ax_value(record.get("text")) for record in usable]
+    joined = "\n".join(texts)
+
+    account_label = ""
+    for text in texts:
+        if re.search(r"\(\d{2,}\)", text):
+            account_label = text
+            break
+
+    status = "unknown"
+    if "已锁定" in joined or "解锁证券账户" in joined:
+        status = "locked"
+    elif "未登录" in joined:
+        status = "logged_out"
+    elif "已登录" in joined or "保持在线" in joined:
+        status = "unlocked_or_online"
+
+    observed_fields: Dict[str, str] = {}
+    label_set = set(TRADE_LABELS)
+    for label_record in usable:
+        label = _clean_ax_value(label_record.get("text"))
+        if label not in label_set:
+            continue
+        label_x, _ = label_record["pos"]
+        if label_x > 220:
+            continue
+        value = _nearest_value_to_right(label_record, usable, label_set)
+        if value:
+            observed_fields[label] = value
+
+    asset_fields = _normalize_asset_fields(observed_fields)
+    return {
+        "account_status": status,
+        "account_label": account_label,
+        "needs_unlock": status == "locked",
+        "visible_trade_labels": sorted(label for label in TRADE_LABELS if label in joined),
+        "observed_fields": observed_fields,
+        "asset_fields": asset_fields,
+        "status_evidence": "mac_accessibility",
+    }
+
+
+def _nearest_value_to_right(
+    label_record: Dict[str, Any],
+    records: List[Dict[str, Any]],
+    label_set: set[str],
+) -> str:
+    label_x, label_y = label_record["pos"]
+    candidates = []
+    for record in records:
+        if record is label_record or not record.get("pos"):
+            continue
+        text = _clean_ax_value(record.get("text"))
+        if not text or text in label_set or text in {"--", "-", "—", "missing value"}:
+            continue
+        x, y = record["pos"]
+        if x <= label_x + 10:
+            continue
+        if abs(y - label_y) > 5:
+            continue
+        if x - label_x > 190:
+            continue
+        candidates.append((x - label_x, text))
+    if not candidates:
+        return ""
+    candidates.sort(key=lambda item: item[0])
+    return candidates[0][1]
 
 
 def parse_screen_trade_state(text: str) -> Dict[str, Any]:
@@ -282,6 +357,29 @@ def copy_trade_tables(window_rect: Dict[str, int]) -> List[CopiedTable]:
         for spec in TAB_SPECS:
             _click_relative(window_rect, spec["relative_click"])
             time.sleep(0.35)
+
+            ax_table_text = _extract_visible_table_text(window_rect)
+            if ax_table_text:
+                rows = parse_trade_export_text(
+                    ax_table_text,
+                    source_name=f"eastmoney-ax-{spec['label']}.tsv",
+                    forced_kind=spec["kind"],
+                )
+                for row in rows:
+                    row.data["snapshot_type"] = "broker_ui_accessibility_confirmed"
+                tables.append(
+                    CopiedTable(
+                        tab=spec["tab"],
+                        label=spec["label"],
+                        kind=spec["kind"],
+                        status="captured" if rows else "confirmed_empty",
+                        rows=rows,
+                        copied_text_chars=len(ax_table_text),
+                        note="" if rows else f"{spec['label']}表格可读取但当前没有数据行。",
+                    )
+                )
+                continue
+
             old_text = clipboard.current_text()
             _click_relative(window_rect, TABLE_RELATIVE_CLICK)
             _copy_focused_table()
@@ -463,6 +561,13 @@ end tell
 
 
 def _dump_accessibility_lines() -> List[str]:
+    records = _dump_accessibility_records()
+    if records:
+        return [
+            f"{record.get('role') or ''} | {record.get('text') or ''} | {record.get('text') or ''}"
+            for record in sorted(records, key=lambda item: (item.get("pos") or (0, 0))[1::-1])
+        ]
+
     script = f"""
 on dumpElem(e, depth)
   if depth > 7 then return ""
@@ -499,6 +604,231 @@ end tell
 """
     output = _osascript(script, check=False, timeout=12)
     return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _dump_accessibility_records(root: Any = None, max_depth: int = 14) -> List[Dict[str, Any]]:
+    AS = _application_services()
+    if AS is None:
+        return []
+    if root is None:
+        try:
+            pid = _find_app_pid()
+            app = AS.AXUIElementCreateApplication(pid)
+            err, windows = AS.AXUIElementCopyAttributeValue(app, "AXWindows", None)
+            if err != 0 or not windows:
+                return []
+            root = list(windows)[0]
+        except Exception:
+            return []
+
+    records: List[Dict[str, Any]] = []
+    queue: List[Tuple[Any, int]] = [(root, 0)]
+    while queue:
+        element, depth = queue.pop(0)
+        role = _ax_get(AS, element, "AXRole")
+        text = _ax_text(AS, element, role)
+        pos = _ax_position(AS, element)
+        size = _ax_size(AS, element)
+        if text not in (None, "") and pos:
+            records.append(
+                {
+                    "role": role,
+                    "text": str(text),
+                    "pos": pos,
+                    "size": size,
+                    "depth": depth,
+                }
+            )
+        if depth >= max_depth:
+            continue
+        children = _ax_get(AS, element, "AXChildren")
+        if children:
+            queue.extend((child, depth + 1) for child in list(children))
+    return records
+
+
+def _extract_visible_table_text(window_rect: Dict[str, int]) -> str:
+    records = _dump_accessibility_records()
+    if not records:
+        return ""
+
+    x_min = window_rect["x"] + 275
+    x_max = window_rect["x"] + min(window_rect["width"] - 150, 1265)
+    y_min = window_rect["y"] + 455
+    y_max = window_rect["y"] + window_rect["height"] - 25
+    table_records = [
+        record
+        for record in records
+        if record.get("pos")
+        and x_min <= record["pos"][0] <= x_max
+        and y_min <= record["pos"][1] <= y_max
+        and _clean_ax_value(record.get("text")) not in {"持仓", "成交", "委托", "资金", "查询"}
+    ]
+    if not table_records:
+        return ""
+
+    groups = _group_records_by_y(table_records)
+    header_index = _find_table_header_group(groups)
+    if header_index is None:
+        return ""
+
+    headers = _dedupe_preserve_order(
+        _clean_ax_value(record.get("text"))
+        for record in sorted(groups[header_index], key=lambda item: item["pos"][0])
+    )
+    headers = [header for header in headers if header]
+    if len(headers) < 2:
+        return ""
+
+    rows: List[List[str]] = []
+    for group in groups[header_index + 1 :]:
+        ordered = sorted(group, key=lambda item: item["pos"][0])
+        values = [_clean_ax_value(record.get("text")) for record in ordered]
+        values = [value for value in values if value]
+        if len(values) < 2:
+            continue
+        if values == headers:
+            continue
+        rows.append(_fit_row_to_headers(values, headers))
+
+    if not rows:
+        return "\t".join(headers) + "\n"
+    return "\t".join(headers) + "\n" + "\n".join("\t".join(row) for row in rows) + "\n"
+
+
+def _find_table_header_group(groups: List[List[Dict[str, Any]]]) -> Optional[int]:
+    best_index: Optional[int] = None
+    best_score = 0
+    for index, group in enumerate(groups):
+        texts = [_clean_ax_value(record.get("text")) for record in group]
+        score = sum(1 for text in texts if _looks_like_table_header(text))
+        if score > best_score and len(texts) >= 2:
+            best_index = index
+            best_score = score
+    return best_index if best_score >= 2 else None
+
+
+def _looks_like_table_header(text: str) -> bool:
+    return text in {
+        "发生日期",
+        "发生时间",
+        "日期",
+        "时间",
+        "证券代码",
+        "证券名称",
+        "股票代码",
+        "股票名称",
+        "操作",
+        "买卖方向",
+        "委托价格",
+        "委托数量",
+        "成交价格",
+        "成交数量",
+        "成交金额",
+        "资金余额",
+        "股票余额",
+        "可用数量",
+        "成本价",
+        "最新价",
+        "参考市值",
+        "浮动盈亏",
+        "盈亏比例",
+        "摘要",
+        "备注",
+        "币种",
+        "货币单位",
+    }
+
+
+def _fit_row_to_headers(values: List[str], headers: List[str]) -> List[str]:
+    if len(values) >= len(headers):
+        return values[: len(headers)]
+    return values + [""] * (len(headers) - len(values))
+
+
+def _group_records_by_y(records: List[Dict[str, Any]], tolerance: float = 7.0) -> List[List[Dict[str, Any]]]:
+    groups: List[List[Dict[str, Any]]] = []
+    for record in sorted(records, key=lambda item: (item["pos"][1], item["pos"][0])):
+        y = record["pos"][1]
+        if not groups or abs(groups[-1][0]["pos"][1] - y) > tolerance:
+            groups.append([record])
+        else:
+            groups[-1].append(record)
+    return groups
+
+
+def _dedupe_preserve_order(values: Iterable[str]) -> List[str]:
+    result: List[str] = []
+    seen = set()
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def _application_services() -> Any:
+    try:
+        import ApplicationServices as AS  # type: ignore
+    except Exception:
+        return None
+    return AS
+
+
+def _find_app_pid() -> int:
+    for command in (["pgrep", "-x", APP_NAME], ["pgrep", "-f", APP_NAME]):
+        try:
+            output = subprocess.check_output(command, text=True, timeout=4)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+        for line in output.splitlines():
+            line = line.strip()
+            if line.isdigit():
+                return int(line)
+    raise RuntimeError("东方财富经典版 is not running")
+
+
+def _ax_text(AS: Any, element: Any, role: Any) -> Optional[str]:
+    title = _ax_get(AS, element, "AXTitle")
+    value = _ax_get(AS, element, "AXValue")
+    description = _ax_get(AS, element, "AXDescription")
+    if role == "AXStaticText" and value not in (None, ""):
+        return str(value)
+    if title not in (None, ""):
+        return str(title)
+    if value not in (None, "") and str(value) != "None":
+        return str(value)
+    if description not in (None, ""):
+        return str(description)
+    return None
+
+
+def _ax_get(AS: Any, element: Any, attr: str) -> Any:
+    try:
+        err, value = AS.AXUIElementCopyAttributeValue(element, attr, None)
+        if err == 0:
+            return value
+    except Exception:
+        return None
+    return None
+
+
+def _ax_position(AS: Any, element: Any) -> Optional[Tuple[float, float]]:
+    return _parse_ax_pair(_ax_get(AS, element, "AXPosition"), "x", "y")
+
+
+def _ax_size(AS: Any, element: Any) -> Optional[Tuple[float, float]]:
+    return _parse_ax_pair(_ax_get(AS, element, "AXSize"), "w", "h")
+
+
+def _parse_ax_pair(value: Any, first: str, second: str) -> Optional[Tuple[float, float]]:
+    if value is None:
+        return None
+    match = re.search(rf"{first}:([\d.-]+) {second}:([\d.-]+)", str(value))
+    if not match:
+        return None
+    return float(match.group(1)), float(match.group(2))
 
 
 def _ocr_window_text(window_rect: Dict[str, int]) -> str:

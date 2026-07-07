@@ -62,7 +62,7 @@ collector = skill implementation + collector YAML
 | Collector | Skill | Status |
 | --- | --- | --- |
 | `ths-portfolio` | `ths-portfolio` | Draft CSV parser |
-| `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + trade UI evidence Beta; strong trade tables require unlocked trading account |
+| `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake Beta; strong trade tables require unlocked trading account |
 | `xueqiu-watchlist` | `xueqiu-watchlist` | Draft CSV parser |
 | `ths-watchlist` | none yet | YAML placeholder; skill not implemented |
 

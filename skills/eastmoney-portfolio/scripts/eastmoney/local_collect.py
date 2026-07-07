@@ -258,6 +258,7 @@ def collect_local(
                     "app_version": app_profile.get("app_version"),
                     "app_build": app_profile.get("app_build"),
                     "local_platform": resolved_platform,
+                    "login_name": selected_user,
                     "login_name_masked": mask_identifier(selected_user),
                     "login_name_sha256": sha256_text(selected_user),
                     "config_user_dir_found": True,
@@ -533,8 +534,8 @@ def build_local_probe_report(
             "entrust_or_cancel_detail",
         ],
         "privacy_policy": {
-            "account_names": "masked_and_hashed",
-            "broker_customer_ids": "masked_when_seen",
+            "authorized_business_identifiers": "preserved_in_local_lake",
+            "probe_path_labels": "redacted_for_probe_only",
             "login_material": "not_read",
             "raw_trade_payload": "not_written",
         },
@@ -1041,7 +1042,7 @@ def collect_trade_log_events(
                     data={
                         "status": "market_account_unavailable",
                         "message_class": "market_or_customer_code_unavailable",
-                        "note": "日志包含市场股东账号/客户代码不可用提示；已移除账号值。",
+                        "note": "日志包含市场股东账号/客户代码不可用提示；该日志行不是强交易事实，未写入原始通信内容。",
                     },
                     collected_at=collected_at,
                     source=f"{source_prefix} 交易接口日志",
@@ -1099,7 +1100,7 @@ def collect_sync_log_events(
                     kind="watchlist_local_load_status",
                     data={
                         "status": "local_watchlist_loaded",
-                        "note": "东方财富加载本地自选数据；用户标识已脱敏。",
+                        "note": "东方财富加载本地自选数据；采集包保留授权业务数据，不读取登录凭据。",
                     },
                     collected_at=collected_at,
                     source=f"{source_prefix} 自选同步日志",
@@ -1304,6 +1305,17 @@ def collect_trade_ui_events(
 def build_trade_ui_account_data(snapshot: TradeUISnapshot) -> Dict[str, Any]:
     account = snapshot.account or {}
     account_label = str(account.get("account_label") or "")
+    numeric_asset_keys = {
+        "total_asset",
+        "market_value",
+        "profit_loss",
+        "day_profit_loss",
+        "available_cash",
+        "withdrawable_cash",
+        "frozen_cash",
+        "cash_balance",
+    }
+    asset_fields = account.get("asset_fields") or {}
     table_statuses = [
         {
             "tab": table.tab,
@@ -1330,15 +1342,16 @@ def build_trade_ui_account_data(snapshot: TradeUISnapshot) -> Dict[str, Any]:
         ),
         "visible_trade_labels": account.get("visible_trade_labels") or [],
         "observed_field_count": len(account.get("observed_fields") or {}),
-        "asset_field_count": len(account.get("asset_fields") or {}),
+        "asset_field_count": sum(1 for key in numeric_asset_keys if key in asset_fields),
         "table_statuses": table_statuses,
         "note": "东方财富交易页自动只读采集状态；不包含交易密码、会话凭据或原始接口负载。",
     }
     if account_label:
         suffix = extract_account_suffix(account_label)
+        data["account_label"] = account_label
         data["account_display_hash"] = sha256_text(account_label)
         if suffix:
-            data["account_suffix_masked"] = mask_identifier(suffix)
+            data["account_suffix"] = suffix
     return data
 
 
@@ -1365,10 +1378,11 @@ def build_trade_ui_asset_snapshot(snapshot: TradeUISnapshot) -> Dict[str, Any]:
     }
     account_label = str(account.get("account_label") or "")
     if account_label:
+        data["account_label"] = account_label
         data["account_display_hash"] = sha256_text(account_label)
         suffix = extract_account_suffix(account_label)
         if suffix:
-            data["account_suffix_masked"] = mask_identifier(suffix)
+            data["account_suffix"] = suffix
     return scrub_value(data)
 
 
@@ -1951,7 +1965,19 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "entrust_order": counts.get("broker_entrust_order", 0),
         "fund_flow": counts.get("broker_fund_flow", 0),
     }
-    missing_required = [name for name, count in required.items() if not count]
+    table_statuses = {
+        table.get("tab"): table.get("status")
+        for table in ui_status.get("table_statuses", [])
+        if isinstance(table, dict)
+    }
+    table_materialized = {
+        "asset_snapshot": required["asset_snapshot"] > 0,
+        "position_detail": required["position_detail"] > 0 or table_statuses.get("positions") == "confirmed_empty",
+        "trade_execution": required["trade_execution"] > 0 or table_statuses.get("executions") == "confirmed_empty",
+        "entrust_order": required["entrust_order"] > 0 or table_statuses.get("entrusts") == "confirmed_empty",
+        "fund_flow": required["fund_flow"] > 0 or table_statuses.get("funds") == "confirmed_empty",
+    }
+    missing_required = [name for name, ready in table_materialized.items() if not ready]
     strong_total = sum(required.values())
     accessibility_blocked = "trade_ui_accessibility_tree_empty" in gaps
     if not missing_required:
@@ -1984,6 +2010,8 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "needs_manual_export": False,
         "account_status": account_status,
         "required_strong_tables": required,
+        "required_strong_table_statuses": table_statuses,
+        "required_strong_table_materialized": table_materialized,
         "missing_required_strong_tables": missing_required,
         "strong_trade_event_count": strong_total,
         "gap_count": len(gaps),
@@ -2414,7 +2442,7 @@ def write_risk_boundary_wiki(root: Path, events: List[Dict[str, Any]]) -> None:
                 f"可见字段 `{len(data.get('visible_trade_labels') or [])}` 个。"
             )
         elif event["kind"] == "broker_market_gap":
-            lines.append("- 市场/客户代码提示：存在不可用提示，账号值已脱敏。")
+            lines.append("- 市场/客户代码提示：存在不可用提示；未写入原始交易通信内容。")
         elif data.get("gap"):
             lines.append(f"- 缺口 `{data.get('gap')}`：{data.get('note')}")
     lines.append("")
@@ -2586,7 +2614,6 @@ def redacted_path(path: Optional[Path]) -> str:
 def scrub_text(text: str) -> str:
     text = str(text or "")
     text = re.sub(r"(?i)(cookie|token|password|passwd|secret|session|ticket|sign)\s*[:=]\s*\S+", r"\1=<redacted>", text)
-    text = re.sub(r"\b\d{7,}\b", lambda m: mask_identifier(m.group(0)), text)
     return text
 
 

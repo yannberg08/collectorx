@@ -10,7 +10,7 @@ category: client
 owner_scope: personal
 local_only: true
 product_stage: beta
-capability_stage: strong-trade-readiness
+capability_stage: authorized-full-trade-lake-readiness
 platforms:
   macos:
     status: verified-current-machine
@@ -42,6 +42,7 @@ outputs:
 privacy:
   sensitive: true
   local_only: true
+  preserves_authorized_business_fields: true
   excludes:
     - trading_password
     - login_password
@@ -76,4 +77,6 @@ command:
 description: |
   采集东方财富用户自己的投资行为证据：自选、近期查看、股票笔记、画线、看盘面板、
   交易接口状态，以及东方财富 Mac 交易页自动只读采集的资产、持仓、成交、委托、
-  资金流水。采集器不会读取或请求交易密码，不绕过账户锁定，不下单、不撤单、不转账。
+  资金流水。用户授权后的账户标识、股东账号、委托号、成交号、金额、数量、价格等
+  业务字段会保留在本地 Lake；采集器不会读取或请求交易密码，不绕过账户锁定，不下单、
+  不撤单、不转账。

@@ -400,6 +400,7 @@ def test_write_collection_package_and_sync():
         shutil.rmtree(soulmirror_home)
     sync_report = sync_package_to_soulmirror(output, soulmirror_home=soulmirror_home)
     assert sync_report["collector"] == "ths-portfolio"
+    assert (soulmirror_home / "lake" / "ths-portfolio" / "events.jsonl").exists()
     assert (soulmirror_home / "lake" / "ths-portfolio" / "latest" / "events.jsonl").exists()
     assert not (soulmirror_home / "wiki").exists()
 

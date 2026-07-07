@@ -179,7 +179,7 @@ def normalize_asset_rows(rows: List[Tuple[int, Dict[str, str]]]) -> Dict[str, An
         }
         account_id = pick(first, "account_id")
         if account_id:
-            asset["account_masked"] = mask_identifier(account_id)
+            asset["account_id"] = clean_text(account_id)
             asset["account_hash"] = stable_hash(account_id)
         if any(value is not None for key, value in asset.items() if key not in {"snapshot_type"}):
             return scrub_empty(asset)
@@ -234,8 +234,8 @@ def normalize_row(kind: str, row: Dict[str, str]) -> Dict[str, Any]:
             "transfer_fee": parse_number(pick(row, "transfer_fee")),
         }
         add_account_fields(data, row)
-        add_hash_field(data, "execution_hash", pick(row, "execution_id"))
-        add_hash_field(data, "order_hash", pick(row, "order_id"))
+        add_identifier_field(data, "execution_id", "execution_hash", pick(row, "execution_id"))
+        add_identifier_field(data, "order_id", "order_hash", pick(row, "order_id"))
         return scrub_empty(data) if data.get("symbol") or data.get("amount") is not None else {}
 
     if kind == "broker_entrust_order":
@@ -254,7 +254,7 @@ def normalize_row(kind: str, row: Dict[str, str]) -> Dict[str, Any]:
             "order_status": clean_text(pick(row, "order_status")),
         }
         add_account_fields(data, row)
-        add_hash_field(data, "order_hash", pick(row, "order_id"))
+        add_identifier_field(data, "order_id", "order_hash", pick(row, "order_id"))
         return scrub_empty(data) if data.get("symbol") or data.get("order_status") else {}
 
     if kind == "broker_fund_flow":
@@ -431,17 +431,18 @@ def add_account_fields(data: Dict[str, Any], row: Dict[str, str]) -> None:
     account_id = pick(row, "account_id")
     shareholder = pick(row, "shareholder_account")
     if account_id:
-        data["account_masked"] = mask_identifier(account_id)
+        data["account_id"] = clean_text(account_id)
         data["account_hash"] = stable_hash(account_id)
     if shareholder:
-        data["shareholder_account_masked"] = mask_identifier(shareholder)
+        data["shareholder_account"] = clean_text(shareholder)
         data["shareholder_account_hash"] = stable_hash(shareholder)
 
 
-def add_hash_field(data: Dict[str, Any], key: str, value: Any) -> None:
+def add_identifier_field(data: Dict[str, Any], raw_key: str, hash_key: str, value: Any) -> None:
     text = str(value or "").strip()
     if text:
-        data[key] = stable_hash(text)
+        data[raw_key] = text
+        data[hash_key] = stable_hash(text)
 
 
 def stable_hash(value: str) -> str:

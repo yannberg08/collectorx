@@ -63,7 +63,7 @@ skill-name/
 | ticktick-cli | 12+ | 迁移 skill，需确认上游许可与真实环境 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
-| eastmoney-portfolio | 9+ | macOS 本机与交易页自动只读采集 Beta，强交易表需账户解锁真机验证 |
+| eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
 | xueqiu-watchlist | 9 | 草稿实现，CSV parser 已有基础测试 |
 | email-collector | 8+ | 已有多邮箱前置识别与邮件事件输出基线，需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |

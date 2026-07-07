@@ -19,9 +19,10 @@ from eastmoney.local_collect import (
     parse_stock_list,
     parse_stock_token,
     resolve_platform,
+    scrub_value,
 )
 from eastmoney.trade_export import parse_trade_export_file, parse_trade_export_text
-from eastmoney.ui_collect import parse_ax_trade_state, parse_screen_trade_state
+from eastmoney.ui_collect import parse_ax_trade_records, parse_ax_trade_state, parse_screen_trade_state
 
 
 def test_parse_stock_token():
@@ -43,6 +44,19 @@ def test_parse_stock_list():
 def test_mask_identifier():
     assert mask_identifier("yannberg") == "yan***rg"
     assert mask_identifier("540123403") == "540****03"
+
+
+def test_scrub_value_keeps_authorized_business_numbers():
+    value = scrub_value(
+        {
+            "account_id": "188888888",
+            "order_id": "O18888888802",
+            "note": "token=abc123",
+        }
+    )
+    assert value["account_id"] == "188888888"
+    assert value["order_id"] == "O18888888802"
+    assert value["note"] == "token=<redacted>"
 
 
 def test_windows_code_level_probe_fixture():
@@ -114,7 +128,10 @@ def test_trade_export_detail_fixture():
     assert entrust_rows[0].kind == "broker_entrust_order"
     assert len(fund_flow_rows) == 1
     assert fund_flow_rows[0].kind == "broker_fund_flow"
-    assert "188888888" not in str(trade_rows[0].data)
+    assert asset_rows[0].data["account_id"] == "188888888"
+    assert position_rows[0].data["shareholder_account"] == "A188888888"
+    assert trade_rows[0].data["execution_id"] == "E18888888801"
+    assert trade_rows[0].data["order_id"] == "O18888888801"
 
     output = Path("/tmp/eastmoney_trade_export_sim_collect")
     shutil.rmtree(output, ignore_errors=True)
@@ -155,6 +172,24 @@ def test_trade_ui_locked_state_parser():
     assert "总资产" in state["visible_trade_labels"]
     assert "total_asset" not in state["asset_fields"]
     assert "available_cash" not in state["asset_fields"]
+
+
+def test_trade_ui_ax_record_parser_uses_same_row_value():
+    records = [
+        {"role": "AXStaticText", "text": "证券账户", "pos": (80.0, 137.0)},
+        {"role": "AXButton", "text": "彭应安 (3303)", "pos": (172.0, 137.0)},
+        {"role": "AXStaticText", "text": "登录状态", "pos": (80.0, 160.0)},
+        {"role": "AXStaticText", "text": "已锁定", "pos": (174.0, 160.0)},
+        {"role": "AXStaticText", "text": "总资产", "pos": (80.0, 206.0)},
+        {"role": "AXStaticText", "text": "证券代码", "pos": (390.0, 206.0)},
+        {"role": "AXStaticText", "text": "东方财富", "pos": (390.0, 229.0)},
+    ]
+    state = parse_ax_trade_records(records)
+    assert state["account_status"] == "locked"
+    assert state["account_label"] == "彭应安 (3303)"
+    assert state["observed_fields"]["证券账户"] == "彭应安 (3303)"
+    assert state["observed_fields"]["登录状态"] == "已锁定"
+    assert "total_asset" not in state["asset_fields"]
 
 
 def test_trade_ui_unlocked_asset_field_parser():
@@ -272,9 +307,11 @@ if __name__ == "__main__":
     test_parse_stock_token()
     test_parse_stock_list()
     test_mask_identifier()
+    test_scrub_value_keeps_authorized_business_numbers()
     test_windows_code_level_probe_fixture()
     test_trade_export_detail_fixture()
     test_trade_ui_locked_state_parser()
+    test_trade_ui_ax_record_parser_uses_same_row_value()
     test_trade_ui_unlocked_asset_field_parser()
     test_trade_ui_screen_ocr_locked_state_parser()
     test_trade_ui_collect_failed_readiness()
