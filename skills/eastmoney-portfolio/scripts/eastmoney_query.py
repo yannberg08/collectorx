@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--export", help="导出JSON路径")
     parser.add_argument("--stats", action="store_true", help="显示统计信息")
     parser.add_argument("--collect-local", action="store_true", help="采集东方财富本机投资行为证据")
-    parser.add_argument("--platform", choices=["auto", "mac", "windows", "generic"], default="auto", help="本机扫描平台适配器")
+    parser.add_argument("--platform", choices=["auto", "mac", "windows", "linux", "generic"], default="auto", help="本机扫描平台适配器")
     parser.add_argument("--container-root", help="本机扫描根目录；Mac 默认使用东方财富容器目录")
     parser.add_argument("--probe-export", help="导出本机平台探测报告JSON路径")
     parser.add_argument("--eastmoney-home", help="东方财富本机数据目录")

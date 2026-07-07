@@ -94,7 +94,7 @@ wiki_targets:
 ## 功能
 
 - 采集东方财富经典版 Mac 本机数据。
-- 支持 `--platform auto|mac|windows|generic` 与 `--probe-export` 进行平台探测。
+- 支持 `--platform auto|mac|windows|linux|generic` 与 `--probe-export` 进行平台探测。
 - 支持 Windows 目录规则的代码层模拟；真实 Windows 安装路径仍需真机验证。
 - 支持 `--auto-trade-ui` 自动打开东方财富交易页，识别账户锁定状态，并只读采集资产/持仓/成交/委托/资金表。
 - 解析自选股、分组、近期查看。
@@ -200,6 +200,7 @@ python <SKILL_DIR>/scripts/eastmoney_query.py --file ~/Downloads/交割单.csv -
 | --- | --- | --- |
 | macOS | 已在当前机器跑通 | 支持本机文件采集和 `--auto-trade-ui` 交易页只读采集 |
 | Windows | 代码层模拟 | 支持 `--platform windows --container-root <SIM_ROOT>` 验证扫描骨架，真实路径未验证 |
+| Linux | 代码层模拟 | 支持 `--platform linux --container-root <SIM_ROOT>` 验证兼容目录和强表解析；无交易页 UI 自动化承诺 |
 | 兼容文件入口 | 可跨平台 | 仅作兜底，不是主采集路径 |
 | generic | 兜底扫描 | 用于研究未知系统的数据结构，不作产品承诺 |
 

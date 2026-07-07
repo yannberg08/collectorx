@@ -106,6 +106,24 @@ def test_windows_code_level_probe_fixture():
     assert (output / "wiki" / "external" / "investor" / "risk-portfolio" / "东方财富资产持仓边界.md").exists()
 
 
+def test_linux_code_level_probe_fixture():
+    """Linux 代码层模拟只验证兼容目录/强表解析链路，不代表存在官方 Linux 客户端。"""
+    fixture_root = find_fixture_root("eastmoney-windows-simulated")
+
+    assert resolve_platform("linux") == "linux"
+    homes = find_eastmoney_homes(str(fixture_root), platform="linux")
+    assert len(homes) == 1
+
+    report = build_local_probe_report(
+        platform="linux",
+        container_root=str(fixture_root),
+        homes=homes,
+    )
+    assert report["platform"]["resolved"] == "linux"
+    assert report["platform"]["structure_status"] == "candidate_rules_need_real_machine_verification"
+    assert report["capabilities"]["trade_ui_automation"] == "not_supported_for_platform"
+
+
 def test_trade_export_detail_fixture():
     """测试交易界面导出的明细表能进入强证据事件。"""
     home_root = find_fixture_root("eastmoney-windows-simulated")
@@ -309,6 +327,7 @@ if __name__ == "__main__":
     test_mask_identifier()
     test_scrub_value_keeps_authorized_business_numbers()
     test_windows_code_level_probe_fixture()
+    test_linux_code_level_probe_fixture()
     test_trade_export_detail_fixture()
     test_trade_ui_locked_state_parser()
     test_trade_ui_ax_record_parser_uses_same_row_value()

@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from qq.collect import collect_records, collect_records_to_messages
 from qq.events import messages_to_events, write_events_jsonl
+from qq.keyprobe import assess_version_compatibility, build_flash_guide
 from qq.parser import (
     NT_HEADER,
     NT_HEADER_BYTES,
@@ -149,6 +150,65 @@ def test_nt_wrapped_probe_and_prepare():
     clean_path = Path(manifest["files"][0]["output"])
     assert clean_path.name == "nt_msg.clean.db"
     assert clean_path.stat().st_size == 4096
+
+
+def test_keyprobe_flash_guide_for_sip_enabled():
+    guide = build_flash_guide(
+        {"enabled": True, "status": "enabled"},
+        {"status": "attach_denied"},
+        {"qq_key_path_ready": True},
+    )
+    assert guide["show"] is True
+    assert guide["code"] == "SIP_ENABLED_BLOCKS_KEY_CAPTURE"
+    assert guide["can_disable_without_reboot"] is False
+    assert any("csrutil disable" in step for step in guide["minimal_steps"])
+
+
+def test_keyprobe_version_compatibility_flags_wechat_41():
+    compatibility = assess_version_compatibility(
+        {
+            "qq": {
+                "installed": True,
+                "version": "6.9.97",
+            },
+            "wechat": {
+                "installed": True,
+                "primary": {
+                    "installed": True,
+                    "version": "4.1.10",
+                },
+            },
+        },
+        wrapper_exists=True,
+        offset_found=True,
+    )
+    assert compatibility["qq_key_path_ready"] is True
+    assert any(
+        item["app"] == "WeChat" and item["level"] == "warn" and "4.1+" in item["message"]
+        for item in compatibility["items"]
+    )
+
+
+def test_keyprobe_version_compatibility_blocks_missing_qq_offset():
+    compatibility = assess_version_compatibility(
+        {
+            "qq": {
+                "installed": True,
+                "version": "6.9.97",
+            },
+            "wechat": {
+                "installed": False,
+                "primary": None,
+            },
+        },
+        wrapper_exists=True,
+        offset_found=False,
+    )
+    assert compatibility["qq_key_path_ready"] is False
+    assert any(
+        item["app"] == "QQ" and item["level"] == "block" and "nt_sqlite3_key_v2" in item["message"]
+        for item in compatibility["items"]
+    )
 
 
 def test_read_decrypted_nt_message_tables():

@@ -34,10 +34,11 @@ DEFAULT_HOME = Path.home() / (
     "Library/Containers/com.emmac.mac/Data/Library/Application Support/EastMoney"
 )
 APP_INFO_PLIST = Path("/Applications/东方财富经典版.app/Contents/Info.plist")
-SUPPORTED_LOCAL_PLATFORMS = {"auto", "mac", "windows", "generic"}
+SUPPORTED_LOCAL_PLATFORMS = {"auto", "mac", "windows", "linux", "generic"}
 LOCAL_SOURCE_PREFIX_BY_PLATFORM = {
     "mac": "东方财富 Mac",
     "windows": "东方财富 Windows",
+    "linux": "东方财富 Linux",
     "generic": "东方财富本机",
 }
 
@@ -177,6 +178,12 @@ SOURCE_KIND_EXTRA_WIKI_TARGETS = {
         "investor.data_quality.collection_gaps",
         "investor.risk_portfolio.current_assets",
         "investor.risk_portfolio.current_positions",
+    ],
+    "broker_trade_table_status": [
+        "investor.data_quality.collection_gaps",
+        "investor.record_review.decision_log",
+        "investor.execution.orders",
+        "external.capital.cashflows",
     ],
     "broker_market_gap": [
         "investor.data_quality.collection_gaps",
@@ -438,6 +445,8 @@ def resolve_platform(platform: str = "auto") -> str:
         return "mac"
     if sys.platform.startswith("win"):
         return "windows"
+    if sys.platform.startswith("linux"):
+        return "linux"
     return "generic"
 
 
@@ -557,6 +566,16 @@ def _scan_roots(container_root: Optional[str], platform: str) -> List[Path]:
             Path("C:/ProgramData/EastMoney"),
             Path("C:/ProgramData/东方财富"),
         ]
+    if platform == "linux":
+        home = Path.home()
+        return [
+            home / ".config" / "EastMoney",
+            home / ".config" / "东方财富",
+            home / ".local" / "share" / "EastMoney",
+            home / ".local" / "share" / "东方财富",
+            home / ".eastmoney",
+            home,
+        ]
     return [Path.home()]
 
 
@@ -579,6 +598,18 @@ def _eastmoney_home_patterns_for_platform(platform: str) -> List[str]:
             "AppData/Local/东方财富",
             "ProgramData/EastMoney",
             "ProgramData/东方财富",
+            "**/EastMoney",
+            "**/东方财富",
+        ]
+    if platform == "linux":
+        return [
+            ".config/EastMoney",
+            ".config/东方财富",
+            ".local/share/EastMoney",
+            ".local/share/东方财富",
+            ".eastmoney",
+            "EastMoney",
+            "东方财富",
             "**/EastMoney",
             "**/东方财富",
         ]
@@ -1262,6 +1293,33 @@ def collect_trade_ui_events(
         )
 
     for table in snapshot.tables:
+        if table.status == "confirmed_empty":
+            events.append(
+                make_event(
+                    kind="broker_trade_table_status",
+                    data={
+                        "profile_type": "eastmoney_trade_ui_confirmed_empty_table",
+                        "tab": table.tab,
+                        "label": table.label,
+                        "source_kind_for_table": table.kind,
+                        "status": table.status,
+                        "row_count": 0,
+                        "headers_detected": True,
+                        "snapshot_type": "broker_ui_accessibility_confirmed",
+                        "evidence_level": "confirmed_gui",
+                    },
+                    collected_at=collected_at,
+                    source=f"{source_prefix} 交易页自动只读采集 / {table.label}",
+                    privacy_contains=["portfolio", "trade"],
+                    raw_ref={
+                        "capture_method": "ui_accessibility_table_headers",
+                        "ui_tab": table.label,
+                        "copied_text_chars": table.copied_text_chars,
+                    },
+                    wiki_targets=trade_export_wiki_targets(table.kind),
+                )
+            )
+            continue
         for parsed in table.rows:
             contains = ["portfolio", "trade"]
             if parsed.kind in {"broker_asset_snapshot", "broker_fund_flow"}:
@@ -1419,6 +1477,17 @@ def add_global_gap_events(
         and str(event["data"].get("gap", "")).startswith("trade_ui_")
         for event in events
     )
+    ui_table_statuses = {
+        table.get("tab"): table.get("status")
+        for event in events
+        if event["kind"] == "broker_trade_ui_status"
+        for table in event["data"].get("table_statuses", [])
+        if isinstance(table, dict)
+    }
+    trade_tables_confirmed_empty = (
+        ui_table_statuses.get("executions") == "confirmed_empty"
+        and ui_table_statuses.get("entrusts") == "confirmed_empty"
+    )
     ui_accessibility_blocked = any(
         event["kind"] == "data_gap"
         and event["data"].get("gap") == "trade_ui_accessibility_tree_empty"
@@ -1469,7 +1538,11 @@ def add_global_gap_events(
                     source_prefix=source_prefix,
                 )
             )
-    if not kinds.get("broker_trade_execution") and not kinds.get("broker_entrust_order"):
+    if (
+        not kinds.get("broker_trade_execution")
+        and not kinds.get("broker_entrust_order")
+        and not trade_tables_confirmed_empty
+    ):
         events.append(
             gap_event(
                 collected_at,
