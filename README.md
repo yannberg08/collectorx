@@ -95,7 +95,7 @@ Operational docs:
 | `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake Beta; strong trade tables require unlocked trading account |
 | `xueqiu-watchlist` | `xueqiu-watchlist` | Draft CSV parser |
 | `xueqiu-investor-activity` | `xueqiu-investor-activity` | Normalized local export/package baseline for watchlists, follows, posts, comments, favorites, owner portfolios, and SoulMirror lake sync; real account adapter pending |
-| `china-wealth-assets` | `china-wealth-assets` | Local export parser baseline for fund/wealth holdings and transactions |
+| `china-wealth-assets` | `china-wealth-assets` | Normalized local export/package baseline for fund, wealth, cash-management holdings, transactions, asset snapshots, Excel/JSON/CSV inputs, and SoulMirror lake sync |
 | `financial-news-usage` | `financial-news-usage` | Local usage export/saved-page baseline for finance-app read, favorite, subscribe, search, and alert actions |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, and FX |
 | `pro-terminal-usage` | `pro-terminal-usage` | Local workflow export baseline for Wind/Choice/iFinD/Bloomberg workspaces, watchlists, searches, downloads, templates, and factors |

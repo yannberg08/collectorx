@@ -125,6 +125,28 @@ Findings:
 - Current local machine did not have a clearly named authorized Xueqiu export,
   so this pass still does not claim real account validation.
 
+### Wave B4: P0 China wealth assets productization pass 2
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-productization-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `china-wealth-assets` to normalize Alipay, Tiantian Fund, Danjuan,
+  Qieman, and bank-wealth local exports.
+- Added XLSX/XLSM parsing via `openpyxl` in addition to CSV/TSV/JSON/JSONL and
+  saved HTML/TXT screens.
+- Added numeric field normalization for market value, total assets, cash,
+  cost, PnL, PnL rate, transaction amount, and fees.
+- Added credential-key sanitization for retained raw metadata.
+- Added fixture validation for mixed platform JSON, Excel exports, partial
+  boundary manifests, and SoulMirror lake sync.
+- Current local machine did not have a clearly named authorized fund/wealth
+  export, so this pass still does not claim real account validation.
+
 ### Wave C: P1 notes productization pass 1
 
 Status: `completed-baseline`
@@ -283,7 +305,7 @@ Findings:
 | 2 | `research-documents` | G2/G3 partial on macOS metadata and explicit content extraction | Windows/Linux path validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
 | 3 | `email-research` | G1; mailbox registration missing | G2/G3: register mailbox, run on real mailbox events, broker/IR sender classifier, attachment raw refs |
 | 4 | `xueqiu-investor-activity` | G1/G2 strengthened local export/package path; prior local candidate parsing; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments/follows/portfolio validation |
-| 5 | `china-wealth-assets` | G2 partial local candidate parsing | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
+| 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue
 

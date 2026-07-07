@@ -154,13 +154,18 @@ Current status:
 ```bash
 python3 skills/china-wealth-assets/scripts/china_wealth.py collect \
   --input <authorized-fund-or-wealth-export> \
-  --out-dir <out-dir>
+  --out-dir <out-dir> \
+  --sync-soulmirror
 ```
 
 Current status:
 
-- Parses authorized CSV/JSON exports for fund holdings, wealth holdings,
-  subscriptions, redemptions, and asset snapshots.
+- Parses authorized CSV/TSV/JSON/JSONL/XLSX/XLSM/HTML/TXT exports for fund
+  holdings, wealth holdings, cash-management holdings, subscriptions,
+  redemptions, dividends, and asset snapshots.
+- Normalizes platform names for Alipay, Tiantian Fund, Danjuan, Qieman, and
+  bank wealth exports, preserves numeric asset/trade fields, and strips
+  credential-like raw keys.
 - Per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/banks still need
   real validation.
 - Any parsed input is treated as partial authorized input until platform/account
