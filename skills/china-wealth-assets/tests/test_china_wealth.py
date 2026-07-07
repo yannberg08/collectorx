@@ -37,6 +37,8 @@ def test_collect_fund_holding_and_transaction() -> None:
         assert events[0]["data"]["market_value"] == 1234.0
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["collection_readiness"]["can_claim_complete_asset_boundary"] is False
+        assert manifest["collection_readiness"]["asset_boundary_scope"] == "partial_authorized_input"
 
 
 def test_collect_without_input_gap() -> None:

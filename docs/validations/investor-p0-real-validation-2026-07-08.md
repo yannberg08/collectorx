@@ -81,3 +81,94 @@ Current gate:
 - Remaining before production: content extraction under explicit authorization,
   PDF/Excel fixture validation, Windows/Linux path validation, and false-positive
   review against a curated private sample.
+
+## Email Research
+
+Collector path:
+
+- Generic source: `email` via `skills/email-collector`
+- Lens: `email-research` via `skills/investor-source-collectors`
+
+Result: blocked before source collection.
+
+Observed condition:
+
+- The local email collector had no registered mailbox accounts.
+
+Outcome:
+
+- No email messages were read.
+- No mailbox evidence was generated.
+
+Required next action:
+
+- Register one or more user-authorized mailboxes with app-password or approved
+  IMAP authorization.
+- Run bounded mailbox collection into `collectorx.event.v1`.
+- Feed the event JSONL into `email-research` and validate broker/IR sender
+  classification and attachment raw refs.
+
+Current gate:
+
+- Lens code: G1 runnable baseline.
+- Real mailbox validation: blocked before G2/G3 by missing mailbox registration.
+
+## Xueqiu Investor Activity
+
+Collector path:
+
+- Vertical source: `xueqiu-investor-activity`
+
+Run boundary:
+
+- Searched local user-authorized directories for candidate Xueqiu-named files.
+- Created temporary symlinks under `/tmp/collectorx-real-validation`.
+- Raw paths, text previews, and source files were not committed.
+
+Result:
+
+- 22 candidate files were found.
+- The baseline parser emitted 100 events.
+- Manifest status: `events_collected`.
+- Kind counts: 88 note events and 12 message events.
+- Activity counts: 88 post-like records and 12 comment-like records.
+- Coverage: opinion/review/discussion routes, not broker-confirmed trades.
+
+Current gate:
+
+- Local candidate parsing: G2 partial.
+- Remaining before production: real account/export discovery, pagination,
+  favorites/follows/watchlists/owner portfolio validation, false-positive
+  review, and rate/terms boundary.
+
+## China Wealth Assets
+
+Collector path:
+
+- Vertical source: `china-wealth-assets`
+
+Run boundary:
+
+- Searched local user-authorized directories for candidate fund/wealth files.
+- Created temporary symlinks under `/tmp/collectorx-real-validation`.
+- Raw paths and source files were not committed.
+
+Result:
+
+- 20 candidate files were found.
+- The baseline parser emitted 1 holding event.
+- Manifest status: `events_collected`.
+- This is only partial authorized input, not a complete asset boundary.
+
+Product finding:
+
+- The manifest previously set `can_claim_complete_asset_boundary` to true when
+  any non-gap event existed. This was too strong. It was changed to false by
+  default with `asset_boundary_scope: partial_authorized_input`.
+
+Current gate:
+
+- Local candidate parsing: G2 partial.
+- Remaining before production: per-platform adapters and real validation for
+  Alipay, Tiantian Fund, Danjuan, Qieman, bank wealth products, and cash-like
+  assets.

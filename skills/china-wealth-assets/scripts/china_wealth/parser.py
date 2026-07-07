@@ -177,8 +177,9 @@ def build_manifest(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "collection_readiness": {
             "status": "needs_china_wealth_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events),
-            "can_claim_complete_asset_boundary": not gap_only,
-            "next_action": "提供支付宝/基金/理财授权导出后重跑。" if gap_only else "可进入投资分身蒸馏；后续按平台做只读真机验证。",
+            "can_claim_complete_asset_boundary": False,
+            "asset_boundary_scope": "none" if gap_only else "partial_authorized_input",
+            "next_action": "提供支付宝/基金/理财授权导出后重跑。" if gap_only else "可进入投资分身蒸馏；后续按平台做只读真机验证后，才能声明完整资产边界。",
         },
     }
 

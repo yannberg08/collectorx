@@ -80,6 +80,13 @@ Findings:
   usable investor subdimensions.
 - `filesystem`: generic collector route was corrected so it no longer suggests
   investor Wiki targets for every file.
+- `email-research`: real mailbox validation is blocked because no mailbox is
+  registered in the local email collector.
+- `xueqiu-investor-activity`: local candidate parsing produced 100 events from
+  22 candidate files, but this is not yet a real account adapter.
+- `china-wealth-assets`: local candidate parsing produced 1 holding event from
+  20 candidate files; manifest was corrected to avoid claiming complete asset
+  boundary from partial input.
 
 ## P0 Work Queue
 
@@ -87,9 +94,9 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2 partial / G3 partial on macOS metadata | Content extraction under explicit authorization, PDF/Excel/Markdown fixtures, Windows/Linux path validation |
-| 3 | `email-research` | G1 | G2/G3: run on real mailbox events, broker/IR sender classifier, attachment raw refs |
-| 4 | `xueqiu-investor-activity` | G1 | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments validation |
-| 5 | `china-wealth-assets` | G1 | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
+| 3 | `email-research` | G1; mailbox registration missing | G2/G3: register mailbox, run on real mailbox events, broker/IR sender classifier, attachment raw refs |
+| 4 | `xueqiu-investor-activity` | G2 partial local candidate parsing | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments validation |
+| 5 | `china-wealth-assets` | G2 partial local candidate parsing | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue
 

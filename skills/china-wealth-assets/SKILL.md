@@ -29,3 +29,10 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
 ```
 
 支持 CSV/TSV/JSON/JSONL。没有授权输入时，只输出缺口事件。
+
+## 完整性口径
+
+本技能解析到基金/理财记录后，manifest 会标记为 `partial_authorized_input`。
+这代表“采到了用户授权输入里的资产证据”，不代表已经覆盖用户全部支付宝、天天基金、蛋卷、且慢、银行理财和现金管理账户。
+
+只有未来逐个平台完成只读真机/真实账号验证，并能证明账户覆盖范围时，FinClaw 才能把它当作完整资产边界。
