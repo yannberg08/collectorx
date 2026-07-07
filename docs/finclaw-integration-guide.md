@@ -351,19 +351,22 @@ Current status:
 
 ```bash
 python3 skills/meeting-artifacts/scripts/meeting_artifacts.py collect \
-  --input <authorized-meeting-minutes-or-transcript-folder> \
+  --input <authorized-meeting-minutes-transcript-folder-or-zip> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized local minutes/transcript/subtitle files and common
-  platform export files into generic `meeting-artifacts` events.
+- Converts authorized local minutes/transcript/subtitle files, ZIP packages,
+  and common platform export files into generic `meeting-artifacts` events.
 - Supported export shapes include Markdown, TXT, HTML, JSON/JSONL/NDJSON,
   CSV/TSV, VTT, and SRT.
 - Normalizes Feishu, DingTalk, WeCom, and Tencent Meeting platform evidence
   into stable platform values and captures participants, organizer, meeting
   links, start/end time, text preview, and attachment refs where present.
+- Writes `manifest.platform_coverage` with expected P1 meeting platforms,
+  observed platforms, missing platforms, event counts, and
+  `real_account_validation`.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-meeting status directly.

@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -46,6 +47,8 @@ def test_collect_minutes_and_transcript_events() -> None:
         assert all(event["wiki_targets"] == ["internal.collaboration.meetings"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_meeting_minutes"] is False
+        assert manifest["platform_coverage"]["observed_platforms"] == ["local-file"]
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
 
 
 def test_collect_platform_exports_and_sanitizes_raw() -> None:
@@ -54,6 +57,7 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         dingtalk = root / "dingtalk-meeting.json"
         wecom = root / "wecom-meeting.csv"
         tencent = root / "腾讯会议纪要.html"
+        feishu_zip = root / "feishu-meeting.zip"
         out = root / "out"
         dingtalk.write_text(
             json.dumps(
@@ -75,6 +79,12 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         )
         wecom.write_text("平台,会议主题,内容,参会人,会议链接\n企业微信,调研纪要,讨论财报和买入框架,研究员A、研究员C,https://work.weixin.qq.com/meeting\n", encoding="utf-8")
         tencent.write_text("<html><head><title>腾讯会议路演</title></head><body>参会人：分析师A，投资经理B<br>讨论估值和现金流 https://meeting.tencent.com/test</body></html>", encoding="utf-8")
+        with zipfile.ZipFile(feishu_zip, "w") as archive:
+            archive.writestr(
+                "feishu/roadshow.md",
+                "# 飞书路演纪要\n参会人：研究员D，基金经理E\n讨论行业空间和竞争格局。\n",
+            )
+            archive.writestr("../unsafe.md", "# 不应读取\n")
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
             check=True,
@@ -82,8 +92,9 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "meeting-artifacts" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert len(events) == 3
-        assert {event["data"]["platform"] for event in events} == {"dingtalk", "wecom", "tencent-meeting"}
+        assert len(events) == 4
+        assert {event["data"]["platform"] for event in events} == {"feishu", "dingtalk", "wecom", "tencent-meeting"}
+        assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
         assert any(event["data"].get("meeting_url") == "https://meeting.tencent.com/test" for event in events)
         assert any("研究员C" in event["data"].get("participants", []) for event in events)
         assert any("分析师A" in event["data"].get("participants", []) for event in events)
@@ -91,6 +102,10 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert "must-not-leak" not in serialized
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["platform_counts"]["tencent-meeting"] == 1
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["feishu", "dingtalk", "wecom", "tencent-meeting"]
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == []
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
+        assert manifest["platform_coverage"]["real_account_validation"] is False
 
 
 if __name__ == "__main__":

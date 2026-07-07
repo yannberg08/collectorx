@@ -5,12 +5,13 @@ from __future__ import annotations
 import csv
 import json
 import re
+import zipfile
 from html import unescape
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List
 
 
-SUPPORTED_EXTENSIONS = {
+SUPPORTED_RECORD_EXTENSIONS = {
     ".md",
     ".markdown",
     ".txt",
@@ -24,6 +25,7 @@ SUPPORTED_EXTENSIONS = {
     ".vtt",
     ".srt",
 }
+SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -39,6 +41,8 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
 
 def parse_path(path: Path) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return parse_zip(path)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
@@ -52,14 +56,22 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig").strip()
+    return parse_json_text(text, suffix=path.suffix.lower(), path_label=str(path))
+
+
+def parse_json_text(text: str, *, suffix: str, path_label: str) -> List[Dict[str, Any]]:
+    text = text.strip()
     if not text:
         return []
-    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+    if suffix in {".jsonl", ".ndjson"}:
         rows = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
         loaded = json.loads(text)
         rows = extract_records(loaded)
-    return [row if isinstance(row, dict) else {"value": row} for row in rows]
+    records = [row if isinstance(row, dict) else {"value": row} for row in rows]
+    for record in records:
+        record.setdefault("path", path_label)
+    return records
 
 
 def extract_records(loaded: Any) -> List[Any]:
@@ -80,10 +92,17 @@ def extract_records(loaded: Any) -> List[Any]:
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return parse_table_text(text, suffix=path.suffix.lower(), path_label=str(path))
+
+
+def parse_table_text(text: str, *, suffix: str, path_label: str) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else sniff_delimiter(text)
-    return [{str(k): v for k, v in row.items() if k is not None} for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
+    delimiter = "\t" if suffix == ".tsv" else sniff_delimiter(text)
+    records = [{str(k): v for k, v in row.items() if k is not None} for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
+    for record in records:
+        record.setdefault("path", path_label)
+    return records
 
 
 def sniff_delimiter(text: str) -> str:
@@ -95,38 +114,85 @@ def sniff_delimiter(text: str) -> str:
 
 def parse_text(path: Path) -> Dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
+    return parse_text_text(text, path_label=str(path), default_title=path.stem)
+
+
+def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[str, Any]:
     return {
         "artifact_type": "minutes",
-        "title": infer_title(path, text),
+        "title": infer_title(default_title, text),
         "text": text,
         "participants": extract_participants(text),
         "meeting_url": first_url(text),
-        "path": str(path),
+        "path": path_label,
     }
 
 
 def parse_html(path: Path) -> Dict[str, Any]:
     html = path.read_text(encoding="utf-8", errors="replace")
+    return parse_html_text(html, path_label=str(path), default_title=path.stem)
+
+
+def parse_html_text(html: str, *, path_label: str, default_title: str) -> Dict[str, Any]:
     text = html_to_text(html)
     return {
         "artifact_type": "minutes",
-        "title": title_tag(html) or infer_title(path, text),
+        "title": title_tag(html) or infer_title(default_title, text),
         "text": text,
         "participants": extract_participants(text),
         "meeting_url": first_url(html),
-        "path": str(path),
+        "path": path_label,
     }
 
 
 def parse_subtitle(path: Path) -> Dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
+    return parse_subtitle_text(text, path_label=str(path), default_title=path.stem)
+
+
+def parse_subtitle_text(text: str, *, path_label: str, default_title: str) -> Dict[str, Any]:
     cleaned = subtitle_text(text)
     return {
         "artifact_type": "transcript",
-        "title": path.stem,
+        "title": default_title,
         "transcript": cleaned,
-        "path": str(path),
+        "path": path_label,
     }
+
+
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive:
+        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+            if should_skip_zip_member(member):
+                continue
+            suffix = Path(member.filename).suffix.lower()
+            text = archive.read(member).decode("utf-8-sig", errors="replace")
+            path_label = f"{path.name}::{member.filename}"
+            try:
+                if suffix in {".json", ".jsonl", ".ndjson"}:
+                    parsed = parse_json_text(text, suffix=suffix, path_label=path_label)
+                elif suffix in {".csv", ".tsv"}:
+                    parsed = parse_table_text(text, suffix=suffix, path_label=path_label)
+                elif suffix in {".vtt", ".srt"}:
+                    parsed = [parse_subtitle_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                elif suffix in {".html", ".htm"}:
+                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                else:
+                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+            except Exception:
+                parsed = []
+            records.extend(parsed)
+    return records
+
+
+def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    member_path = Path(member.filename)
+    if member.is_dir():
+        return True
+    if member_path.is_absolute() or ".." in member_path.parts:
+        return True
+    return member_path.suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
 
 
 def subtitle_text(text: str) -> str:
@@ -172,9 +238,9 @@ def extract_participants(text: str) -> List[str]:
     return []
 
 
-def infer_title(path: Path, text: str) -> str:
+def infer_title(default_title: str, text: str) -> str:
     for line in text.splitlines()[:20]:
         stripped = line.strip().lstrip("#").strip()
         if stripped:
             return stripped[:120]
-    return path.stem
+    return default_title

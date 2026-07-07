@@ -13,6 +13,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 COLLECTOR = "meeting-artifacts"
 CN_TZ = timezone(timedelta(hours=8))
+EXPECTED_P1_MEETING_PLATFORMS = ("feishu", "dingtalk", "wecom", "tencent-meeting")
+GENERIC_MEETING_PLATFORMS = {"local-file"}
 
 
 def now_iso() -> str:
@@ -20,11 +22,12 @@ def now_iso() -> str:
 
 
 def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[str] = None) -> Dict[str, Any]:
-    title = first(record, ["title", "meeting_title", "name", "topic", "标题", "会议主题"]) or path.stem
+    path_label = first(record, ["path", "file", "source_path"]) or str(path)
+    title = first(record, ["title", "meeting_title", "name", "topic", "标题", "会议主题"]) or Path(path_label).stem
     text = first(record, ["text", "content", "transcript", "summary", "minutes", "正文", "内容", "纪要", "逐字稿"]) or ""
     participants = participants_for(record)
     explicit_platform = first(record, ["platform", "source_app", "provider", "来源", "平台"])
-    platform = normalize_platform(explicit_platform) if explicit_platform else infer_platform(path, record)
+    platform = normalize_platform(explicit_platform) if explicit_platform else infer_platform(path_label, record)
     start_time = first(record, ["start_time", "started_at", "time", "date", "meeting_time", "开始时间", "日期"])
     end_time = first(record, ["end_time", "ended_at", "结束时间"])
     artifact_type = first(record, ["artifact_type", "type", "kind", "类型"]) or infer_artifact_type(path)
@@ -46,7 +49,7 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(path, title, start_time, text[:160]),
+        "id": stable_id(path_label, title, start_time, text[:160]),
         "collector": COLLECTOR,
         "source": "用户授权会议产物",
         "owner_scope": "personal",
@@ -55,7 +58,7 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
         "collected_at": collected_at or now_iso(),
         "data": data,
         "raw_ref": {
-            "path": str(path),
+            "path": path_label,
             "artifact_type": artifact_type,
             "platform": platform,
         },
@@ -97,6 +100,14 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
     type_counts = Counter((event.get("data") or {}).get("artifact_type", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
+    observed_expected = [platform for platform in EXPECTED_P1_MEETING_PLATFORMS if platform_counts.get(platform)]
+    missing_expected = [platform for platform in EXPECTED_P1_MEETING_PLATFORMS if not platform_counts.get(platform)]
+    unknown_event_count = sum(
+        count
+        for platform, count in platform_counts.items()
+        if platform not in EXPECTED_P1_MEETING_PLATFORMS and platform not in GENERIC_MEETING_PLATFORMS
+    )
     return {
         "schema": "collectorx.meeting_artifacts.manifest.v1",
         "collector": COLLECTOR,
@@ -105,14 +116,32 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(kind_counts.items())),
         "artifact_type_counts": dict(sorted(type_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
+        "platform_coverage": {
+            "expected_p1_platforms": list(EXPECTED_P1_MEETING_PLATFORMS),
+            "observed_platforms": observed_platforms,
+            "observed_expected_platforms": observed_expected,
+            "missing_expected_platforms": missing_expected,
+            "platform_counts": dict(sorted(platform_counts.items())),
+            "unknown_event_count": unknown_event_count,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_meeting_artifact_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_investment_meeting_minutes": False,
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "platform_coverage_status": platform_coverage_status(events, missing_expected),
             "next_action": "Provide authorized meeting minutes/transcript files." if gap_only else "Feed events into meeting-minutes lens.",
         },
     }
+
+
+def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:
+    if not events or all((event.get("data") or {}).get("gap") for event in events):
+        return "no_platform_observed"
+    if not missing_expected:
+        return "all_expected_platforms_observed"
+    return "partial_expected_platforms_observed"
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -135,6 +164,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
+        f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         "",
         "Generic meeting artifacts are not written to the investor Wiki directly. Use the meeting-minutes lens.",
     ]
@@ -180,8 +211,8 @@ def attachment_refs_for(record: Dict[str, Any]) -> List[str]:
     return []
 
 
-def infer_platform(path: Path, record: Optional[Dict[str, Any]] = None) -> str:
-    body = str(path).lower()
+def infer_platform(path_label: str, record: Optional[Dict[str, Any]] = None) -> str:
+    body = str(path_label).lower()
     if record:
         body += " " + json.dumps(sanitized(record), ensure_ascii=False).lower()
     matched = platform_match(body)

@@ -628,6 +628,24 @@ Findings:
 - Fixture validation covers partial coverage, all expected calendar platforms,
   Dida ZIP exports, and ZIP path traversal skipping.
 
+### Wave S: P1 meeting artifacts platform coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-meeting-platform-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Added authorized ZIP export import to `meeting-artifacts`.
+- Added `manifest.platform_coverage` for expected P1 meeting platforms:
+  Feishu, DingTalk, WeCom, and Tencent Meeting.
+- Preserved archive member paths in `raw_ref.path` as `archive.zip::member`.
+- Updated package summary with observed and missing meeting platforms.
+- Fixture validation covers local-file partial coverage, all expected meeting
+  platforms, credential filtering, and ZIP path traversal skipping.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -644,7 +662,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; manifest reports observed/missing P1 note platforms | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report task/calendar platform coverage; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
-| 3 | `meeting-minutes` | G1/G2 strengthened for local meeting files plus DingTalk/WeCom collaboration exports; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
+| 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus DingTalk/WeCom collaboration exports; meeting manifest reports platform coverage; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages and Chromium/Safari browser-history copies | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 

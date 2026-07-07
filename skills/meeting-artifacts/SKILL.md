@@ -1,7 +1,7 @@
 ---
 name: meeting-artifacts
-description: 通用会议产物采集器。采集用户授权的会议纪要、逐字稿、字幕、参会人和附件指针，输出 CollectorX note 事件；用于 feeding meeting-minutes lens，不直接判断投资含义。
-version: 0.2.0
+description: 通用会议产物采集器。采集用户授权的会议纪要、逐字稿、字幕、参会人和附件指针，支持本地文件/ZIP/平台导出，输出 CollectorX note 事件和平台覆盖 manifest；用于 feeding meeting-minutes lens，不直接判断投资含义。
+version: 0.2.1
 ---
 
 # 会议产物采集器
@@ -12,9 +12,11 @@ version: 0.2.0
 
 - 会议纪要：Markdown、TXT、HTML、JSON、JSONL、NDJSON、CSV、TSV。
 - 逐字稿/字幕：VTT、SRT、JSON/JSONL/NDJSON。
+- 授权 ZIP 导出包：只读取支持的会议文件，跳过危险路径成员。
 - 飞书、钉钉、企业微信、腾讯会议常见授权导出字段。
 - 参会人、会议标题、开始/结束时间、组织者、会议链接、来源平台、附件指针。
 - 平台枚举标准化：`feishu`、`dingtalk`、`wecom`、`tencent-meeting`、`local-file`。
+- `manifest.platform_coverage`：记录四个 P1 会议平台的观察、缺失、事件数和 `real_account_validation`。
 
 ## 不采什么
 

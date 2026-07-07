@@ -52,8 +52,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized meeting minutes/transcripts into CollectorX events.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p_collect = sub.add_parser("collect", help="Parse local meeting artifact files.")
-    p_collect.add_argument("--input", action="append", help="Authorized file or folder. Repeat for multiple inputs.")
+    p_collect = sub.add_parser("collect", help="Parse local meeting artifact files or ZIP packages.")
+    p_collect.add_argument("--input", action="append", help="Authorized file, folder, or ZIP package. Repeat for multiple inputs.")
     p_collect.add_argument("--out-dir", help="Output package directory.")
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")

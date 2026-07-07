@@ -22,11 +22,14 @@ scope:
     - participants
     - attachments
     - recording_refs
+    - source_platform
+    - platform_coverage_manifest
   excludes:
     - unauthorized_recording
     - investment_classification
     - credentials
 
 description: |
-  通用会议产物采集器占位。飞书、钉钉、企业微信、腾讯会议的原始会议产物先作为
-  通用证据进入 lake；meeting-minutes lens 再筛选路演、调研、投委会和投资复盘。
+  通用会议产物采集器。飞书、钉钉、企业微信、腾讯会议的原始会议产物先作为
+  通用证据进入 lake；本采集器支持本地文件、平台导出和 ZIP 授权包，并在
+  manifest 中报告平台覆盖。meeting-minutes lens 再筛选路演、调研、投委会和投资复盘。
