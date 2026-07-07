@@ -4,10 +4,47 @@ id: xueqiu-watchlist
 display_name: 雪球关注列表
 refresh_interval: 24h
 mode: snapshot
+time_field: time
 armed: false
+category: vertical
+owner_scope: personal
+local_only: true
 
-# 采集器使用的skill
 skill: xueqiu-watchlist
 
-# 采集逻辑由skill定义
-# skill会处理：CSV解析、数据标准化
+scope:
+  channels:
+    - xueqiu
+  collects:
+    - watchlist_symbols
+    - watchlist_names
+    - watchlist_groups
+    - watchlist_tags
+    - watchlist_notes
+    - followed_time
+  excludes:
+    - credentials
+    - cookies
+    - tokens
+    - sessions
+    - posts
+    - comments
+    - favorites
+    - portfolio_rebalances
+    - broker_confirmed_trades
+
+description: |
+  雪球关注列表是投资垂直关注池源。它只采用户授权导出的雪球关注/自选列表，
+  用于 FinClaw 判断关注宇宙；发帖、评论、收藏和组合调仓由
+  `xueqiu-investor-activity` 采集，券商强交易事实必须来自交易类采集器。
+
+prompt: |
+  运行：
+    python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
+      --input <用户授权的雪球关注列表导出文件或目录> \
+      --out-dir <输出目录>
+
+  输入支持 CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT。
+  输出 collectorx.event.v1 到 lake/xueqiu-watchlist/events.jsonl，并写入 manifest.json。
+  关注列表只作为 attention-universe 证据，后续必须与雪球活动、券商交易、
+  研报、笔记和复盘交叉验证。

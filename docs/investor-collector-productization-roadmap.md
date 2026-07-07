@@ -499,6 +499,31 @@ Findings:
 - Fixture validation covers mixed CSV/JSON/XLSX/TXT inputs, missing-input gap
   events, credential-key sanitization, and non-A-share code handling.
 
+### Wave M: Xueqiu watchlist productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-xueqiu-watchlist-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `xueqiu-watchlist` from a draft CSV parser to a runnable vertical
+  baseline collector.
+- Added a standard CLI: `xueqiu_query.py collect --input <authorized-export>
+  --out-dir <out>`.
+- Preserved the legacy `--file/--export/--list` JSON workflow.
+- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, and TXT
+  watchlist inputs.
+- Captures symbol, code, market, name, group, industry, tags, note/reason,
+  followed time, source section, and sanitized raw metadata.
+- Emits `collectorx.event.v1` watchlist events into `lake/xueqiu-watchlist`.
+- Treats watchlists as attention-universe evidence only; broader posts,
+  comments, favorites, and portfolio activity stay in `xueqiu-investor-activity`.
+- Fixture validation covers mixed CSV/JSON/XLSX/TXT inputs, gap events, legacy
+  export compatibility, credential-key sanitization, and A/HK symbol handling.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -506,7 +531,7 @@ Findings:
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata and explicit content extraction | Windows/Linux path validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
 | 3 | `email-research` | G1; mailbox registration missing | G2/G3: register mailbox, run on real mailbox events, broker/IR sender classifier, attachment raw refs |
-| 4 | `xueqiu-investor-activity` | G1/G2 strengthened local export/package path; prior local candidate parsing; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments/follows/portfolio validation |
+| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths; watchlist and broad activity baselines exist; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue

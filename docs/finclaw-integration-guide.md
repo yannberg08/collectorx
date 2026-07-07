@@ -152,6 +152,23 @@ Current status:
 ### 雪球投资活动
 
 ```bash
+python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
+  --input <authorized-xueqiu-watchlist-export-or-folder> \
+  --out-dir <out-dir>
+```
+
+Current status for `xueqiu-watchlist`:
+
+- Converts authorized Xueqiu watchlist exports into `xueqiu-watchlist`
+  `watchlist` events.
+- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, and TXT.
+- Captures symbol, code, market, name, group, industry, tags, note/reason, and
+  followed time when present.
+- Recursively filters credential-like raw keys.
+- This is attention-universe evidence only. It does not prove holdings, trades,
+  orders, or fund flows.
+
+```bash
 python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect \
   --input <authorized-xueqiu-export-or-folder> \
   --out-dir <out-dir> \

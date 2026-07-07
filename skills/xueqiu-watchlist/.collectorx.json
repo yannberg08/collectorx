@@ -1,1 +1,1 @@
-{"slug": "xueqiu-watchlist", "version": "0.1.0", "description": "雪球关注列表导出工具"}
+{"collector":"xueqiu-watchlist","class":"vertical","version":"0.2.0","status":"baseline","description":"Xueqiu watchlist export collector for authorized CSV/JSON/Excel/text watchlist inputs."}

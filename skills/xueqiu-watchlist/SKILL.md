@@ -1,71 +1,53 @@
 ---
 name: xueqiu-watchlist
-description: 导出雪球关注列表。当用户说"导出关注"、"雪球股票"、"自选股"时使用此skill。
-version: 0.1.0
+description: 雪球关注/自选列表垂直采集器。采集用户授权导出的雪球关注池，输出 watchlist 事件；关注池不能单独证明持仓、交易或完整投资意图。
+version: 0.2.0
 ---
 
-# 雪球关注列表导出工具
+# Xueqiu Watchlist Collector
 
-## 功能
+## 采集边界
 
-- 解析雪球导出的关注列表CSV
-- 提取关注的股票代码和名称
-- 支持多种CSV格式
-- 输出标准化JSON格式
+采集：
 
-## 使用方法
+- 雪球关注/自选列表中的股票代码、名称、市场、分组、行业、标签、备注、关注时间。
+- CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT 中的授权关注列表。
+- 简单文本中的 A 股、港股雪球代码。
+
+不采集：
+
+- 登录密码、cookie、token、session。
+- 发帖、评论、收藏、组合调仓等更宽的雪球活动；这些由 `xueqiu-investor-activity` 采集。
+- 真实持仓、成交、委托、资金流水；这些必须来自券商或交易接口。
+- 把关注列表直接当成持仓或交易建议。
+
+## CLI
+
+标准 CollectorX 事件包：
 
 ```bash
-# 解析关注列表CSV
-python <SKILL_DIR>/scripts/xueqiu_query.py --file ~/Downloads/关注列表.csv
-
-# 导出为JSON
-python <SKILL_DIR>/scripts/xueqiu_query.py --file ~/Downloads/关注列表.csv --export ~/Desktop/watchlist.json
-
-# 查看列表
-python <SKILL_DIR>/scripts/xueqiu_query.py --file ~/Downloads/关注列表.csv --list
+python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
+  --input /path/to/authorized/xueqiu-watchlist-export \
+  --out-dir /path/to/out
 ```
 
-## CSV格式支持
+输出：
 
-### 格式1：标准格式
-```
-代码,名称,行业,备注
-600519,贵州茅台,白酒,核心持仓
-000858,五粮液,白酒,观察
-```
+- `lake/xueqiu-watchlist/events.jsonl`
+- `manifest.json`
+- `SUMMARY.md`
 
-### 格式2：简化格式
-```
-600519
-000858
-```
+保留旧入口：
 
-## 输出格式
-
-```json
-[
-  {
-    "code": "600519",
-    "name": "贵州茅台",
-    "industry": "白酒",
-    "note": "核心持仓"
-  }
-]
+```bash
+python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py \
+  --file /path/to/authorized/xueqiu-watchlist.csv \
+  --export /path/to/watchlist.json \
+  --list
 ```
 
-## 限制
+## Wiki 边界
 
-- 需要用户从雪球APP手动导出CSV
-- 不支持实时数据
-
-## 数据流向Wiki
-
-关注列表数据可流向以下Wiki维度：
-- **投资/能力圈/关注行业**：用户关注的行业
-- **投资/风格画像**：投资偏好和风格
-- **投资/信息源**：关注的信息来源
-
-### 支持的应用
-- **行业监控**：追踪关注行业的动态
-- **投资风格分析**：分析用户投资偏好
+关注列表是 attention-universe 证据，流向 `investor.opportunity_watchlist.watchlist`
+和 `investor.capability_circle.attention_universe`。FinClaw 应与雪球活动、
+券商交易、笔记、研报和复盘交叉验证。
