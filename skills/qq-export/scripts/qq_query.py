@@ -43,6 +43,22 @@ def _find_qq_db_dir():
                     if msg_dir.exists():
                         candidates.append(msg_dir)
     
+    # Linux
+    elif sys.platform == "linux":
+        # Linux QQ数据目录（可能的位置）
+        linux_paths = [
+            Path.home() / ".local/share/QQ",
+            Path.home() / ".QQ",
+            Path("/opt/QQ"),
+        ]
+        for qq_base in linux_paths:
+            if qq_base.exists():
+                for user_dir in qq_base.iterdir():
+                    if user_dir.is_dir() and user_dir.name.isdigit():
+                        msg_dir = user_dir / "Msg"
+                        if msg_dir.exists():
+                            candidates.append(msg_dir)
+    
     if not candidates:
         return None
     
