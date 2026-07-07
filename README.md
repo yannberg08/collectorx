@@ -57,6 +57,11 @@ See `docs/collector-taxonomy.md` for the full boundary table.
 
 Operational docs:
 
+- `collectors/finclaw-investor-catalog.json` is the machine-readable FinClaw
+  investor-collector catalog: priority, readiness, CLI, product action,
+  collection scope, exclusions, and remaining production gap.
+- `docs/finclaw-investor-collector-productization.md` is the human control board
+  for the P0/P1/P2 investor-avatar collector program.
 - `docs/production-readiness.md` records what is genuinely runnable versus what
   is still a placeholder or lens.
 - `docs/finclaw-integration-guide.md` describes how FinClaw should discover,
@@ -116,11 +121,17 @@ Operational docs:
 
 Status legend:
 
-- Migrated skill: copied or adapted from an existing local skill package. Confirm
-  upstream license before public release.
-- Draft implementation: usable for local validation, not yet proven against broad
-  real-world exports.
-- YAML placeholder: scheduling/config stub only; no real collection skill yet.
+- `production-candidate`: at least one real user/device path is validated and
+  FinClaw may expose it as a guarded user-facing collector.
+- `deep-beta`: substantial implementation and tests exist, but broader real
+  device coverage is still required.
+- `baseline+audit`: runnable local/export/package path exists with tests,
+  manifest coverage, provenance, and evidence policy, but real account
+  validation is incomplete.
+- `baseline`: runnable baseline exists with tests, but audit coverage or real
+  validation is incomplete.
+- `migrated-review`: copied or adapted local skill that still needs provenance,
+  license, and investor-specific boundary review before broad exposure.
 
 ## Event Contract
 

@@ -1,0 +1,97 @@
+# FinClaw 投资采集器产品化控制板
+
+这份文档是给 FinClaw 产品层、任务调度层和人工验收使用的总账。机器可读版本在
+`collectors/finclaw-investor-catalog.json`。如果两者冲突，以 JSON 目录为调度
+入口，以 `docs/production-readiness.md` 为诚实状态说明。
+
+## 当前结论
+
+P0/P1/P2 已经全部摆脱“只做占位”的状态。当前工程状态是：
+
+| 层级 | 当前状态 | 可给 FinClaw 的产品动作 |
+| --- | --- | --- |
+| P0 | 东方财富达到当前 macOS 真实账户 `production-candidate`；同花顺为 `deep-beta`；微信、研报、邮件、雪球、基金理财进入 `baseline+audit` | 东方财富可做受控一键采集；其他 P0 先做授权导入/本地扫描/镜头 lens 的 beta 流程 |
+| P1 | 笔记、任务日历、会议协作、微信收藏、财经资讯使用痕迹全部进入 `baseline+audit` | 可展示为“授权导入/选择文件/选择历史副本”的 beta 采集器，真实账号 API 逐个平台补验证 |
+| P2 | 港美股券商、专业终端、社交活动全部进入 `baseline+audit` | 可做授权导入 beta，不可宣称完整资产边界、完整终端工作流或投资结论 |
+
+不能把大多数采集器标成 `production-candidate`，原因不是代码占位，而是缺真实账号、
+真实设备、真实导出文件的授权验证。这个边界必须保留，否则后续 Wiki 会把“解析器能跑”
+误当成“用户数据已经完整采集”。
+
+## FinClaw 调用规则
+
+FinClaw 应按下面顺序调用：
+
+1. 读取 `collectors/finclaw-investor-catalog.json`，展示采集器名称、优先级、状态、
+   允许采集内容、禁止采集内容和前置条件。
+2. 读取 `collectors/generic/*.yaml`、`collectors/vertical/*.yaml`、
+   `collectors/lenses/*.yaml`，确认 `armed`、`scope.collects` 和 `scope.excludes`。
+3. 只有在用户完成授权后，才运行 catalog 中的 `cli`。
+4. 采集结果必须先进入 `collectorx.event.v1` lake，再进入
+   `finclaw.investor_wiki_evidence.v1`，最终 Wiki 由 FinClaw/SoulMirror distill 层写入。
+5. 如果 `manifest.json` 表示 gap、缺平台、缺字段、无真实账号验证，产品层展示为
+   “未完成采集/证据不足”，不能把它当成个人事实。
+
+## 展示闸门
+
+| readiness | 产品展示建议 |
+| --- | --- |
+| `production-candidate` | 可展示一键采集，但仍要列明授权和只读边界 |
+| `deep-beta` | 可展示 beta 采集，提示真实设备覆盖仍在扩大 |
+| `baseline+audit` | 可展示“授权导入/选择文件/选择导出包”流程，不做完整性承诺 |
+| `baseline` | 可在高级/实验入口展示，需要更强审计 manifest 后再推广 |
+| `migrated-review` | 默认隐藏或只给开发者，完成来源、许可和边界复核后再进入产品 |
+
+## P0 采集器
+
+| Collector | 职责 | 当前状态 | 下一步真实验证 |
+| --- | --- | --- | --- |
+| `eastmoney-portfolio` | 东方财富资产、持仓、成交、委托、资金流水和本地投资行为 | `production-candidate` on current macOS | Windows/Linux 真机、更多账户样本 |
+| `ths-portfolio` | 同花顺交易、持仓、元数据和只读 GUI 快照 | `deep-beta` | 多账户、多系统真机验证 |
+| `wechat` + `wechat-investment-dialogue` | 微信原始对话和投资讨论 lens | `migrated-review` + `baseline` | WeChat 4.x key/平台路径、真实 lake、联系人/群 allowlist |
+| `filesystem` + `research-documents` | 文件元数据、研报/财报/估值表内容 lens | `baseline+audit` | Windows/Linux 真机、本地真实样本、截图 OCR 决策 |
+| `email` + `email-research` | 邮箱原始通道和券商/IR/研报邮件 lens | `baseline+audit` | 注册真实邮箱、附件/正文泄漏评审、真实发件人回测 |
+| `xueqiu-watchlist` + `xueqiu-investor-activity` | 雪球自选、关注、发帖、评论、收藏、组合活动 | `baseline+audit` | 真实账号导出或只读 adapter、分页和频率边界 |
+| `china-wealth-assets` | 支付宝、天天基金、蛋卷、且慢、银行理财资产 | `baseline+audit` | 各平台真实导出/只读屏幕、完整资产边界证明 |
+
+## P1 采集器
+
+| Collector | 职责 | 当前状态 | 下一步真实验证 |
+| --- | --- | --- | --- |
+| `notes` + `investment-notes` | Obsidian、Notion、有道云、印象笔记和投资笔记 lens | `baseline+audit` | Notion/有道/印象真实账号、Windows/Linux vault |
+| `ticktick` + `calendar` + `task-calendar-investor` | 任务、日历、交易计划、复盘提醒 | `baseline+audit` | 滴答 OAuth、Apple/Google/Outlook/飞书等真实日历 |
+| `meeting-artifacts` + `dingtalk` + `wecom` + `meeting-minutes` | 会议纪要、协作导出、投研会议 lens | `baseline+audit` | 飞书/钉钉/企业微信/腾讯会议真实账号 API 和导出 |
+| `wechat-favorites` + `wechat-article-favorites` | 微信收藏、公众号文章动作和投资文章 lens | `baseline+audit` | 真实微信收藏库、公众号阅读动作、标签 allowlist |
+| `financial-news-usage` | 华尔街见闻、财联社、格隆汇阅读/收藏/订阅/搜索/提醒 | `baseline+audit` | App 缓存、账号 API、订阅提醒和多浏览器历史 |
+
+## P2 采集器
+
+| Collector | 职责 | 当前状态 | 下一步真实验证 |
+| --- | --- | --- | --- |
+| `hk-us-brokerage` | 富途、老虎、盈透资产、持仓、成交、委托、资金、分红、换汇 | `baseline+audit` | 真实券商导出/只读屏幕、多币种、税费、保证金 |
+| `pro-terminal-usage` | Wind、Choice、iFinD、Bloomberg 工作流使用痕迹 | `baseline+audit` | 真实授权终端导出、许可安全评审 |
+| `social-activity` + `social-investment-influence` | 微博、B站、小红书影响源和弱证据 lens | `baseline+audit` | 真实平台导出、创作者 allowlist、弱证据回测 |
+
+## 验收标准
+
+每一波产品化必须留下：
+
+1. 可运行 CLI。
+2. 无私人数据的 fixture 测试。
+3. `collectorx.event.v1` 输出。
+4. `manifest.json` 中的覆盖率、来源审计、证据边界。
+5. 必要时输出 `finclaw.investor_wiki_evidence.v1.json`。
+6. `docs/validations/*.md` 验证记录。
+7. 绿色的 `PYTHON=.venv/bin/python bash test_collectors.sh`。
+8. Git commit 和 push。
+
+## 下一阶段
+
+下一阶段不是再堆新采集器，而是按真实账号做 G3/G4：
+
+- P0 先做微信、邮件、雪球、基金理财真实授权验证。
+- P1 先做笔记、任务日历、会议协作的真实账号和多系统验证。
+- P2 先找真实券商/专业终端/社交平台导出样本，验证字段覆盖和证据边界。
+
+只有通过真实账号或真实设备验证，并且 Wiki 回测不过度推断，才能把对应采集器升为
+`production-candidate`。

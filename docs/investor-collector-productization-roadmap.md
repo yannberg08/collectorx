@@ -28,7 +28,18 @@ validation.
 | G4 Wiki Backtest | Evidence lands in the 7 dimensions / 20 subdimensions correctly | Backtest fixture, false-positive review |
 | G5 Production Candidate | FinClaw can expose it as a user-facing collector | Stable CLI, docs, tests, platform status |
 
-## Current Wave
+## Program Control Board
+
+The current product control board is maintained in:
+
+- `collectors/finclaw-investor-catalog.json` for machine-readable FinClaw
+  discovery and gating.
+- `docs/finclaw-investor-collector-productization.md` for the human P0/P1/P2
+  productization status.
+
+The wave log below records how each collector reached its current state.
+
+## Completed Waves
 
 ### Wave A: Investor lens evidence baseline
 

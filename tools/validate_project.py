@@ -183,6 +183,61 @@ def validate_event_examples() -> None:
                 raise SystemExit(f"{rel} privacy.{key} must be boolean")
 
 
+def validate_investor_catalog() -> None:
+    path = ROOT / "collectors" / "finclaw-investor-catalog.json"
+    print(f"validate_catalog {path.relative_to(ROOT)}", flush=True)
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    if catalog.get("schema") != "collectorx.finclaw_investor_catalog.v1":
+        raise SystemExit("FinClaw investor catalog has an invalid schema")
+    entries = catalog.get("entries")
+    if not isinstance(entries, list) or not entries:
+        raise SystemExit("FinClaw investor catalog must contain entries")
+
+    collector_files = {
+        path.stem
+        for folder in ("generic", "vertical", "lenses")
+        for path in (ROOT / "collectors" / folder).glob("*.yaml")
+    }
+    required_fields = {
+        "id",
+        "priority",
+        "category",
+        "skill",
+        "readiness",
+        "gate",
+        "finclaw_action",
+        "cli",
+        "collects",
+        "must_not_collect",
+        "production_gap",
+    }
+    expected_priorities = {"P0", "P1", "P2", "supporting"}
+    expected_categories = {"generic", "vertical", "lens"}
+    ids: set[str] = set()
+    priorities: dict[str, int] = {"P0": 0, "P1": 0, "P2": 0}
+
+    for entry in entries:
+        missing = required_fields.difference(entry)
+        if missing:
+            raise SystemExit(f"Catalog entry missing fields: {sorted(missing)}")
+        cid = entry["id"]
+        if cid in ids:
+            raise SystemExit(f"Duplicate catalog entry id: {cid}")
+        ids.add(cid)
+        if cid not in collector_files:
+            raise SystemExit(f"Catalog entry has no collector YAML: {cid}")
+        if entry["priority"] not in expected_priorities:
+            raise SystemExit(f"Catalog entry {cid} has invalid priority")
+        if entry["category"] not in expected_categories:
+            raise SystemExit(f"Catalog entry {cid} has invalid category")
+        if entry["priority"] in priorities:
+            priorities[entry["priority"]] += 1
+
+    for priority, count in priorities.items():
+        if count == 0:
+            raise SystemExit(f"Catalog has no {priority} entries")
+
+
 def run_first_loop_smoke_test() -> None:
     with tempfile.TemporaryDirectory(prefix="collectorx-first-loop-") as tmp:
         run([
@@ -220,6 +275,7 @@ def main() -> int:
     check_prebuilt_executables()
     run_parser_tests()
     validate_event_examples()
+    validate_investor_catalog()
     run_first_loop_smoke_test()
     print("CollectorX validation passed.")
     return 0
