@@ -1,0 +1,13 @@
+apiVersion: collectorx/v1
+kind: Collector
+id: doubao
+display_name: 豆包聊天记录
+refresh_interval: 24h
+mode: snapshot
+armed: false
+
+# 采集器使用的skill
+skill: doubao-chat-export
+
+# 采集逻辑由skill定义
+# skill会处理：cookie解密、API调用、数据导出
