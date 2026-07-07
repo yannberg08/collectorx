@@ -712,6 +712,33 @@ Findings:
   credential filtering, all expected brokers, all expected trade surfaces, all
   recommended strong fields, and ZIP path traversal skipping.
 
+### Wave W: P2 professional terminal coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-pro-terminal-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `pro-terminal-usage` to `0.2.1`.
+- Added authorized ZIP package import for JSON/JSONL/NDJSON, CSV/TSV,
+  XLSX/XLSM, HTML, Markdown, TXT, INI, CONF, and LOG workflow members.
+- Added `manifest.terminal_coverage` for Wind, Choice, iFinD, and Bloomberg.
+- Added `manifest.activity_coverage` for workspace, watchlist, search,
+  download, model-template, and factor-attention activities.
+- Added `manifest.workflow_field_coverage` for recommended workflow metadata:
+  workspace, project, module, function code, menu path, query, symbols,
+  universe, industries, regions, factors, datasets, fields, template name,
+  frequency, date range, download format, and file name.
+- Kept the collector scoped to workflow metadata; it still does not mirror
+  vendor databases or licensed content bodies.
+- Fixture validation covers Wind JSON, Choice HTML, Bloomberg nested JSON,
+  Choice/Wind XLSX, iFinD ZIP, credential/license filtering, all expected
+  terminals, all expected activities, all recommended workflow fields, and ZIP
+  path traversal skipping.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -737,7 +764,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, and strong-field coverage manifests; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
-| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel workflow packages; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
+| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, and workflow-field coverage manifests; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel social activity packages with weak-evidence policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
 ## Git Practice

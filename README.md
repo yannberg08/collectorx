@@ -98,7 +98,7 @@ Operational docs:
 | `china-wealth-assets` | `china-wealth-assets` | Normalized local export/package baseline for fund, wealth, cash-management holdings, transactions, asset snapshots, Excel/JSON/CSV inputs, platform coverage manifest, and SoulMirror lake sync |
 | `financial-news-usage` | `financial-news-usage` | Local usage export, saved-page, ZIP, and browser-history baseline for finance-app read, favorite, subscribe, search, and alert actions with platform/action coverage manifest |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only CSV/JSON/Excel/ZIP export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, FX, margin, tax, settlement fields, and broker/trade-surface/field coverage manifests |
-| `pro-terminal-usage` | `pro-terminal-usage` | Local workflow CSV/JSON/Excel export baseline for Wind/Choice/iFinD/Bloomberg workspaces, watchlists, searches, downloads, templates, factors, datasets, fields, and function codes |
+| `pro-terminal-usage` | `pro-terminal-usage` | Local workflow CSV/JSON/Excel/HTML/TXT/LOG/ZIP export baseline for Wind/Choice/iFinD/Bloomberg workspaces, watchlists, searches, downloads, templates, factors, datasets, fields, function codes, and terminal/activity/field coverage manifests |
 | `ths-watchlist` | `ths-watchlist` | Authorized local export baseline for Tonghuashun watchlists; attention-universe evidence only, corroborate with trades/research |
 
 ### Investor Lenses

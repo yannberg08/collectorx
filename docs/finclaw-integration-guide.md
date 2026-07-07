@@ -454,27 +454,31 @@ Current status:
 
 ```bash
 python3 skills/pro-terminal-usage/scripts/pro_terminal_usage.py collect \
-  --input <authorized-wind-choice-ifind-workflow-export> \
+  --input <authorized-wind-choice-ifind-workflow-export-or-zip> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
 - Converts authorized JSON/JSONL/NDJSON, CSV/TSV, XLSX/XLSM, HTML, Markdown,
-  TXT, INI/CONF, and log-like workflow records into `pro-terminal-usage`
+  TXT, INI/CONF, LOG, and ZIP workflow records into `pro-terminal-usage`
   events.
 - Expands multi-section workflow packages, including workspaces, dashboards,
   watchlists, searches, downloads, exports, templates, models, factors, and
-  indicators.
+  indicators; ZIP packages preserve `archive.zip::member` provenance.
 - Captures workspaces, watchlists, searches, downloads, model templates, and
   factor attention.
 - Captures workflow metadata such as function codes, menu paths, projects,
   strategy names, datasets, fields, frequency, date ranges, download formats,
   file names, symbols, industries, markets, and regions.
+- Writes terminal, activity, and workflow-field coverage manifests so FinClaw
+  can see missing platforms, activity types, or research-workflow metadata.
 - Outputs workflow evidence for capability circle, research workflow, monitoring
   rules, and information-source dimensions.
 - Does not copy vendor databases, public market data, reports, or licensed
   content bodies.
+- Real Wind/Choice/iFinD/Bloomberg native exports still require license-safe
+  account-level validation.
 
 ### 社交平台用户活动
 

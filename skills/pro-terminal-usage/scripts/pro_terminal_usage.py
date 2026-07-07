@@ -46,6 +46,10 @@ def collect(args: argparse.Namespace) -> int:
                     f"- collector：`{COLLECTOR}`",
                     f"- 事件数：{len(events)}",
                     f"- readiness：`{manifest['collection_readiness']['status']}`",
+                    f"- observed_terminals：`{', '.join(manifest['terminal_coverage']['observed_terminals']) or 'none'}`",
+                    f"- missing_expected_terminals：`{', '.join(manifest['terminal_coverage']['missing_expected_terminals']) or 'none'}`",
+                    f"- observed_activities：`{', '.join(manifest['activity_coverage']['observed_activities']) or 'none'}`",
+                    f"- missing_activities：`{', '.join(manifest['activity_coverage']['missing_expected_activities']) or 'none'}`",
                     "- 边界：只采用户工作流元数据，不复制厂商数据库内容。",
                 ]
             ),
@@ -60,8 +64,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized professional terminal workflow traces.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("collect", help="Parse Wind/Choice/iFinD/Bloomberg workflow exports.")
-    p.add_argument("--input", action="append", help="Authorized file or folder. Repeat for multiple inputs.")
+    p = sub.add_parser("collect", help="Parse Wind/Choice/iFinD/Bloomberg workflow exports or ZIP packages.")
+    p.add_argument("--input", action="append", help="Authorized file, folder, or ZIP package. Repeat for multiple inputs.")
     p.add_argument("--out-dir")
     p.add_argument("--event-export")
     p.add_argument("--limit", type=int)

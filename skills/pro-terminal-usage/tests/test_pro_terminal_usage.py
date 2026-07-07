@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import openpyxl
@@ -96,6 +97,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         root = Path(tmp)
         package = root / "bloomberg_workflow.json"
         workbook_path = root / "choice_workflow.xlsx"
+        ifind_zip = root / "ifind_workflow.zip"
         out = root / "out"
         package.write_text(
             json.dumps(
@@ -105,13 +107,15 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
                     "workspaces": [
                         {
                             "title": "US Credit Monitor",
+                            "workspace": "credit research",
                             "module": "Launchpad",
+                            "menu_path": "Launchpad/Credit Monitor",
                             "content": "licensed-content-" * 200,
                             "license_key": "must-not-leak",
                         }
                     ],
-                    "searches": [{"query": "AI capex credit spread", "symbols": ["NVDA US Equity"], "time": "2026-07-08T09:00:00+08:00"}],
-                    "downloads": [{"dataset": "FA", "fields": "Revenue, EBITDA", "format": "xlsx", "date_range": "2024-2026"}],
+                    "searches": [{"query": "AI capex credit spread", "symbols": ["NVDA US Equity"], "industries": "AI,Semiconductor", "time": "2026-07-08T09:00:00+08:00"}],
+                    "downloads": [{"dataset": "FA", "fields": "Revenue, EBITDA", "format": "xlsx", "frequency": "quarterly", "date_range": "2024-2026"}],
                     "templates": [{"template_name": "Credit model", "function_code": "XLTP", "project": "AI infra"}],
                     "factors": [{"factor": "OAS", "universe": "US IG Tech"}],
                 },
@@ -128,6 +132,24 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         downloads.append(["Terminal", "Title", "Datasets", "Fields", "Format", "Date Range", "File Name"])
         downloads.append(["Wind", "宏观利率导出", "EDB", "M2,社融,十年国债", "xlsx", "2020-2026", "macro_rates.xlsx"])
         workbook.save(workbook_path)
+        with zipfile.ZipFile(ifind_zip, "w") as archive:
+            archive.writestr(
+                "usage/ifind_watchlist.json",
+                json.dumps(
+                    {
+                        "watchlists": [
+                            {
+                                "terminal": "同花顺 iFinD",
+                                "title": "半导体设备观察",
+                                "symbols": ["688012.SH"],
+                                "project": "设备国产化",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            archive.writestr("../unsafe.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -136,7 +158,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert len(events) == 7
+        assert len(events) == 8
         assert {event["data"]["activity_type"] for event in events} == {
             "download",
             "factor_attention",
@@ -145,18 +167,36 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
             "watchlist",
             "workspace",
         }
-        assert {event["data"]["terminal"] for event in events} == {"bloomberg", "choice", "wind"}
+        assert {event["data"]["terminal"] for event in events} == {"bloomberg", "choice", "ifind", "wind"}
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         workspace = next(event for event in events if event["data"]["activity_type"] == "workspace")
         assert len(workspace["data"]["raw"]["content"]) == 800
+        assert workspace["data"]["menu_path"] == "Launchpad/Credit Monitor"
         download = next(event for event in events if event["data"].get("file_name") == "macro_rates.xlsx")
         assert download["data"]["datasets"] == ["EDB"]
         assert "十年国债" in download["data"]["fields"]
         watchlist = next(event for event in events if event["data"].get("title") == "央企红利自选")
         assert watchlist["data"]["regions"] == ["CN", "HK"]
+        assert any(event["raw_ref"]["path"] == "ifind_workflow.zip::usage/ifind_watchlist.json" for event in events)
+        assert all("../unsafe" not in event["raw_ref"]["path"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["activity_counts"]["download"] == 2
+        assert manifest["terminal_coverage"]["observed_expected_terminals"] == ["wind", "choice", "ifind", "bloomberg"]
+        assert manifest["terminal_coverage"]["missing_expected_terminals"] == []
+        assert manifest["activity_coverage"]["observed_expected_activities"] == [
+            "workspace",
+            "watchlist",
+            "search",
+            "download",
+            "model_template",
+            "factor_attention",
+        ]
+        assert manifest["activity_coverage"]["missing_expected_activities"] == []
+        assert manifest["workflow_field_coverage"]["missing_recommended_fields"] == []
+        assert manifest["collection_readiness"]["terminal_coverage_status"] == "all_expected_terminals_observed"
+        assert manifest["collection_readiness"]["activity_coverage_status"] == "all_expected_activity_types_observed"
+        assert manifest["collection_readiness"]["workflow_field_coverage_status"] == "all_expected_workflow_fields_observed"
 
 
 if __name__ == "__main__":

@@ -83,7 +83,7 @@ P1 必做：
 P2 必做：
 
 - `hk-us-brokerage`：vertical，采富途、老虎、盈透等港美股资产、持仓、成交、委托、资金流水、分红、换汇，并报告券商/交易表/字段覆盖。
-- `pro-terminal-usage`：vertical，采 Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作台、自选、搜索、导出痕迹。
+- `pro-terminal-usage`：vertical，采 Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作台、自选、搜索、导出、模板、因子、数据集、字段和函数代码痕迹，并报告终端/活动/字段覆盖。
 - `social-investment-influence`：lens，读取微博/B站/小红书通用社交 activity，只筛投资内容影响源。
 
 ## 采集边界
