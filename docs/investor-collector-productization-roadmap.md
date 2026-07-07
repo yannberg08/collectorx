@@ -106,6 +106,25 @@ Findings:
   candidates and confirmed 6 PDF content extractions via `pdfplumber`.
 - Wiki coverage reached 10 usable investor subdimensions.
 
+### Wave B3: P0 Xueqiu activity productization pass 2
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p0-xueqiu-productization-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `xueqiu-investor-activity` to normalize Snowball-like nested
+  `statuses/list/data/items/stocks/cubes/rebalancing_histories` payloads.
+- Added credential-key sanitization for retained raw metadata.
+- Added fixture validation for posts, favorites, owner portfolio activity,
+  portfolio change details, normalized security symbols, and SoulMirror lake
+  sync.
+- Current local machine did not have a clearly named authorized Xueqiu export,
+  so this pass still does not claim real account validation.
+
 ### Wave C: P1 notes productization pass 1
 
 Status: `completed-baseline`
@@ -263,7 +282,7 @@ Findings:
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata and explicit content extraction | Windows/Linux path validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
 | 3 | `email-research` | G1; mailbox registration missing | G2/G3: register mailbox, run on real mailbox events, broker/IR sender classifier, attachment raw refs |
-| 4 | `xueqiu-investor-activity` | G2 partial local candidate parsing | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments validation |
+| 4 | `xueqiu-investor-activity` | G1/G2 strengthened local export/package path; prior local candidate parsing; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G2 partial local candidate parsing | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue

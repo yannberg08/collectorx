@@ -135,13 +135,17 @@ Current status:
 ```bash
 python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect \
   --input <authorized-xueqiu-export-or-folder> \
-  --out-dir <out-dir>
+  --out-dir <out-dir> \
+  --sync-soulmirror
 ```
 
 Current status:
 
-- Parses authorized local exports for watchlists, follows, posts, comments,
-  favorites, and owner portfolios.
+- Parses authorized JSON/JSONL/CSV/TSV/HTML/TXT exports for watchlists, follows,
+  posts, comments, favorites, saved pages, and owner portfolio/rebalance records.
+- Normalizes Snowball-like `statuses/list/data/items/stocks/cubes` payloads,
+  strips credential-like keys from retained raw metadata, and writes a standard
+  `investor_wiki_evidence.v1.json`.
 - Not yet a real login/session collector.
 - Not a broker-confirmed trade source.
 

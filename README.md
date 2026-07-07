@@ -94,7 +94,7 @@ Operational docs:
 | `ths-portfolio` | `ths-portfolio` | Local metadata + trade package; ongoing real-device validation |
 | `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake Beta; strong trade tables require unlocked trading account |
 | `xueqiu-watchlist` | `xueqiu-watchlist` | Draft CSV parser |
-| `xueqiu-investor-activity` | `xueqiu-investor-activity` | Local export parser baseline for watchlists, posts, comments, favorites, follows, owner portfolios |
+| `xueqiu-investor-activity` | `xueqiu-investor-activity` | Normalized local export/package baseline for watchlists, follows, posts, comments, favorites, owner portfolios, and SoulMirror lake sync; real account adapter pending |
 | `china-wealth-assets` | `china-wealth-assets` | Local export parser baseline for fund/wealth holdings and transactions |
 | `financial-news-usage` | `financial-news-usage` | Local usage export/saved-page baseline for finance-app read, favorite, subscribe, search, and alert actions |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, and FX |
