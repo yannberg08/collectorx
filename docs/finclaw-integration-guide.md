@@ -209,6 +209,8 @@ Current status:
   real validation.
 - Any parsed input is treated as partial authorized input until platform/account
   coverage is verified.
+- `manifest.platform_coverage` tells FinClaw which expected P0 platforms were
+  observed in the authorized input and which are still missing.
 
 ### 邮件
 

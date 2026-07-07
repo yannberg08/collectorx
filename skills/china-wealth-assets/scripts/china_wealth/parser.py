@@ -17,6 +17,7 @@ COLLECTOR = "china-wealth-assets"
 CN_TZ = timezone(timedelta(hours=8))
 SUPPORTED_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm", ".html", ".htm", ".txt", ".md", ".markdown"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session", "paypass")
+EXPECTED_P0_PLATFORMS = ("alipay", "tiantian-fund", "danjuan", "qieman", "bank-wealth")
 
 
 def now_iso() -> str:
@@ -298,6 +299,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "events_with_value_fields": len(value_events),
             "events_without_value_fields": max(len(events) - len(value_events), 0),
         },
+        "platform_coverage": platform_coverage(platform_counts),
         "collection_readiness": {
             "status": "needs_china_wealth_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events),
@@ -332,9 +334,23 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
             "subtype_counts": dict(sorted(subtype_counts.items())),
             "platform_counts": dict(sorted(platform_counts.items())),
+            "platform_coverage": platform_coverage(platform_counts),
             "asset_boundary_source": True,
             "complete_asset_boundary_claimed": False,
         },
+    }
+
+
+def platform_coverage(platform_counts: Counter) -> Dict[str, Any]:
+    observed = sorted(platform for platform in platform_counts if platform not in {"unknown", ""} and platform_counts[platform] > 0)
+    missing = [platform for platform in EXPECTED_P0_PLATFORMS if platform not in observed]
+    return {
+        "expected_p0_platforms": list(EXPECTED_P0_PLATFORMS),
+        "observed_platforms": observed,
+        "missing_expected_platforms": missing,
+        "unknown_event_count": platform_counts.get("unknown", 0),
+        "complete_expected_platforms_observed": not missing,
+        "real_account_validation": False,
     }
 
 

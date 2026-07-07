@@ -40,6 +40,7 @@ def test_collect_fund_holding_and_transaction() -> None:
         assert manifest["collection_readiness"]["can_claim_complete_asset_boundary"] is False
         assert manifest["collection_readiness"]["asset_boundary_scope"] == "partial_authorized_input"
         assert manifest["platform_counts"] == {"tiantian-fund": 2}
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == ["alipay", "danjuan", "qieman", "bank-wealth"]
 
 
 def test_collect_without_input_gap() -> None:
@@ -86,6 +87,9 @@ def test_collects_mixed_platform_json_and_sanitizes_raw() -> None:
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         assert "token" not in events[0]["data"]["raw"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_coverage"]["observed_platforms"] == ["alipay", "bank-wealth", "danjuan"]
+        assert manifest["platform_coverage"]["real_account_validation"] is False
 
 
 def test_collects_xlsx_exports() -> None:
@@ -145,10 +149,44 @@ def test_syncs_package_to_soulmirror_lake() -> None:
         assert (soulmirror / "lake" / "china-wealth-assets" / "latest" / "soulmirror_sync.json").exists()
 
 
+def test_manifest_reports_expected_platform_coverage() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "all-platforms.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "holdings": [
+                        {"平台": "支付宝", "类型": "持仓", "基金代码": "000001", "基金名称": "支付宝基金", "持仓金额": "100"},
+                        {"平台": "天天基金", "类型": "持仓", "基金代码": "000002", "基金名称": "天天基金", "持仓金额": "200"},
+                        {"平台": "蛋卷", "类型": "持仓", "基金代码": "000003", "基金名称": "蛋卷基金", "持仓金额": "300"},
+                        {"平台": "且慢", "类型": "持仓", "基金代码": "000004", "基金名称": "且慢基金", "持仓金额": "400"},
+                        {"平台": "招商银行", "类型": "银行理财", "产品代码": "CMB005", "产品名称": "招行理财", "持仓金额": "500"},
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(json_path), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        coverage = manifest["platform_coverage"]
+        assert coverage["missing_expected_platforms"] == []
+        assert coverage["complete_expected_platforms_observed"] is True
+        assert coverage["real_account_validation"] is False
+
+
 if __name__ == "__main__":
     test_collect_fund_holding_and_transaction()
     test_collect_without_input_gap()
     test_collects_mixed_platform_json_and_sanitizes_raw()
     test_collects_xlsx_exports()
     test_syncs_package_to_soulmirror_lake()
+    test_manifest_reports_expected_platform_coverage()
     print("china-wealth-assets tests passed.")

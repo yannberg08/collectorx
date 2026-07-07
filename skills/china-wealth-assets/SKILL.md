@@ -39,4 +39,16 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
 本技能解析到基金/理财记录后，manifest 会标记为 `partial_authorized_input`。
 这代表“采到了用户授权输入里的资产证据”，不代表已经覆盖用户全部支付宝、天天基金、蛋卷、且慢、银行理财和现金管理账户。
 
+`manifest.platform_coverage` 会列出 P0 预期平台：
+
+- `alipay`
+- `tiantian-fund`
+- `danjuan`
+- `qieman`
+- `bank-wealth`
+
+并记录本次输入中已观察到的平台、缺失平台、unknown 事件数，以及
+`real_account_validation: false`。即使五类平台都在授权文件里出现，也只能说明
+“输入覆盖”，不能说明已经完成真实账号边界证明。
+
 只有未来逐个平台完成只读真机/真实账号验证，并能证明账户覆盖范围时，FinClaw 才能把它当作完整资产边界。

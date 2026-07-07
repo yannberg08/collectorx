@@ -565,6 +565,24 @@ Findings:
 - This is not a real Windows/Linux device validation claim; it closes the
   code-level simulation gap.
 
+### Wave P: P0 China wealth platform coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-platform-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Added `manifest.platform_coverage` to `china-wealth-assets`.
+- The manifest now lists expected P0 platforms: Alipay, Tiantian Fund, Danjuan,
+  Qieman, and bank wealth.
+- The manifest records observed platforms, missing expected platforms, unknown
+  event count, and `real_account_validation=false`.
+- Fixture validation proves partial platform coverage and all-expected-platform
+  input coverage are reported separately from complete asset-boundary claims.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -573,7 +591,7 @@ Findings:
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender classifier, attachment raw refs |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths; watchlist and broad activity baselines exist; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
-| 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
+| 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage manifest; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue
 
