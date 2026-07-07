@@ -297,6 +297,28 @@ Findings:
   files.
 - Platform inference remains partial: 25 real local events were `unknown`.
 
+### Wave G2: P1 financial news browser-history pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-browser-history-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `financial-news-usage` to `0.2.0`.
+- Added read-only Chromium `History` and Safari `History.db` parsing for
+  user-authorized browser history copies.
+- Filters browser history to CLS, WallstreetCN, and Gelonghui domains before
+  writing events.
+- Captures domain, source app, URL, title, visit time, visit count, typed
+  count, browser transition, tags, symbols, and article ID where present.
+- Strengthened platform/action normalization and recursive raw-field
+  sanitization.
+- Fixture validation proves ordinary non-finance browsing history is excluded.
+- Real app/account adapters and real subscription/alert stores remain pending.
+
 ### Wave H: P2 HK/US brokerage productization pass 1
 
 Status: `completed-baseline`
@@ -371,7 +393,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON and generic calendar exports; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones |
 | 3 | `meeting-minutes` | G2/G3 partial for local authorized meeting files | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
-| 5 | `financial-news-usage` | G2/G3 partial for local authorized usage/saved pages | Real CLS/WallstreetCN/Gelonghui app/account adapters, browser-history import, subscription/alert normalization, platform inference |
+| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages and Chromium/Safari browser-history copies | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 
 ## P2 Work Queue
 

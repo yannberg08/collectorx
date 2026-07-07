@@ -287,9 +287,15 @@ python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
 
 Current status:
 
-- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, and TXT usage records
-  into `financial-news-usage` events.
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, Chromium
+  `History`, and Safari `History.db` usage records into
+  `financial-news-usage` events.
 - Captures user actions: read, favorite, subscribe, search, and alert.
+- For browser history, filters to CLS, WallstreetCN, and Gelonghui domains
+  before writing events.
+- Captures domain, source app, URL, title, visit time, visit count, typed count,
+  tags, symbols, and article ID where present.
+- Recursively filters credential-like raw keys.
 - Outputs `investor_wiki_evidence.v1.json` for information-consumption and
   monitoring-rule evidence.
 - Does not crawl public news or platform-wide content.

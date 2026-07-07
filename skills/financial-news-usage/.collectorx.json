@@ -1,1 +1,1 @@
-{"collector":"financial-news-usage","class":"vertical","status":"baseline"}
+{"collector":"financial-news-usage","class":"vertical","version":"0.2.0","status":"baseline","description":"User-authorized finance-news usage exports, saved pages, and browser history traces for CLS, WallstreetCN, and Gelonghui."}
