@@ -41,4 +41,8 @@ python <SKILL_DIR>/scripts/filesystem_query.py collect \
 └── SUMMARY.md
 ```
 
+`manifest.json` 会记录 `platform_default_root_plan`，用于说明 macOS、Windows、
+Linux 默认候选根目录的代码级路径计划。无论哪个平台，默认边界仍是：
+metadata-only、用户授权根目录、正文不读取。
+
 投资分身不直接消费全量本地文件；`research-documents` lens 从 `filesystem` lake 中筛选研报、财报、公告批注、估值表等投研文件。

@@ -130,6 +130,9 @@ Boundary:
 - This collector is metadata-only. It records path, extension, size, and mtime.
 - It does not read file content. Research content reading belongs to the
   explicit `research-documents` lens step below.
+- The manifest records the macOS/Windows/Linux default-root plan for product
+  preflight, but FinClaw should still pass explicit user-authorized roots when
+  possible.
 
 ### 研报 / 财报 / 估值表内容
 

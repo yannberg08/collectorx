@@ -9,6 +9,10 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+
+from filesystem_collector.scanner import default_roots, platform_default_root_plan
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "filesystem_query.py"
@@ -45,8 +49,40 @@ def test_collect_metadata_only() -> None:
         assert event["data"]["content_read"] is False
         assert "content" not in event["data"]
         assert event["wiki_targets"] == ["internal.knowledge.files"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["content_read"] is False
+        assert set(manifest["platform_default_root_plan"]) == {"macos", "windows", "linux"}
+
+
+def test_default_roots_cross_platform_plan() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        for rel in (
+            "Documents",
+            "Desktop",
+            "Downloads",
+            "Library/Mobile Documents/com~apple~CloudDocs",
+            "OneDrive",
+            "Documents/OneDrive",
+        ):
+            (home / rel).mkdir(parents=True)
+
+        macos = default_roots(home, system_name="Darwin")
+        windows = default_roots(home, system_name="Windows")
+        linux = default_roots(home, system_name="Linux")
+
+        assert home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" in macos
+        assert home / "OneDrive" in windows
+        assert home / "Documents" / "OneDrive" in windows
+        assert home / "OneDrive" not in linux
+
+        plan = platform_default_root_plan(home)
+        assert len(plan["macos"]) == 4
+        assert len(plan["windows"]) == 5
+        assert len(plan["linux"]) == 3
 
 
 if __name__ == "__main__":
     test_collect_metadata_only()
+    test_default_roots_cross_platform_plan()
     print("filesystem-collector tests passed.")

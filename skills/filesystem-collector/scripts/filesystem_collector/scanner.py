@@ -53,15 +53,24 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def default_roots(home: Optional[Path] = None) -> List[Path]:
+def default_roots(home: Optional[Path] = None, *, system_name: Optional[str] = None) -> List[Path]:
     home = home or Path.home()
     roots = [home / "Documents", home / "Desktop", home / "Downloads"]
-    system = platform.system().lower()
+    system = (system_name or platform.system()).lower()
     if system == "darwin":
         roots.append(home / "Library" / "Mobile Documents" / "com~apple~CloudDocs")
     elif system == "windows":
         roots.extend([home / "OneDrive", home / "Documents" / "OneDrive"])
     return [root for root in roots if root.exists()]
+
+
+def platform_default_root_plan(home: Optional[Path] = None) -> Dict[str, List[str]]:
+    home = home or Path.home()
+    return {
+        "macos": [str(path) for path in default_roots(home, system_name="Darwin")],
+        "windows": [str(path) for path in default_roots(home, system_name="Windows")],
+        "linux": [str(path) for path in default_roots(home, system_name="Linux")],
+    }
 
 
 def scan_files(

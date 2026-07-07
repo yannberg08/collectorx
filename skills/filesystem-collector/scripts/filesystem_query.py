@@ -8,7 +8,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from filesystem_collector.scanner import default_roots, scan_files, write_json, write_jsonl
+from filesystem_collector.scanner import default_roots, platform_default_root_plan, scan_files, write_json, write_jsonl
 
 
 def collect(args: argparse.Namespace) -> int:
@@ -34,6 +34,14 @@ def collect(args: argparse.Namespace) -> int:
             "kind_counts": dict(Counter(event["kind"] for event in events)),
             "content_read": False,
             "metadata_only": True,
+            "platform_default_root_plan": platform_default_root_plan(),
+            "collection_readiness": {
+                "status": "events_collected" if events else "no_matching_files",
+                "can_enter_finclaw": bool(events),
+                "source_collection_scope": "authorized_roots",
+                "content_read": False,
+                "next_action": "Feed lake/filesystem/events.jsonl into research-documents lens.",
+            },
         }
         write_json(out_dir / "manifest.json", manifest)
         (out_dir / "SUMMARY.md").write_text(
