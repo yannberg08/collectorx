@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 try:
@@ -45,6 +46,9 @@ SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "cred
 CONTENT_KEY_FRAGMENTS = ("content", "body", "正文", "全文", "payload", "result")
 EXPECTED_PRO_TERMINALS = ("wind", "choice", "ifind", "bloomberg")
 EXPECTED_TERMINAL_ACTIVITY_TYPES = ("workspace", "watchlist", "search", "download", "model_template", "factor_attention")
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+CONTENT_PREVIEW_MAX_CHARS = 800
 RECOMMENDED_WORKFLOW_FIELDS = (
     "workspace",
     "project",
@@ -287,11 +291,12 @@ def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[s
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
-            path_label = f"{path.name}::{member.filename}"
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
+            path_label = f"{path}::{member_name}"
             try:
                 if suffix in {".json", ".jsonl", ".ndjson"}:
                     parsed = parse_json_text(archive.read(member).decode("utf-8-sig", errors="replace"), suffix=suffix, path_label=path_label)
@@ -300,22 +305,32 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
                 elif suffix in {".xlsx", ".xlsm"}:
                     parsed = parse_workbook(io.BytesIO(archive.read(member)), path_label=path_label)
                 elif suffix in {".html", ".htm"}:
-                    parsed = [parse_html_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_html_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member_name).stem)]
                 else:
-                    parsed = [parse_text_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_text_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member_name).stem)]
             except Exception:
                 parsed = []
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
             records.extend(parsed)
     return records
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_at: Optional[str]) -> Dict[str, Any]:
@@ -352,11 +367,22 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "download_format": first(record, ["download_format", "format", "file_type", "文件格式", "格式"]),
         "file_name": first(record, ["file_name", "filename", "export_name", "文件名", "导出文件"]),
         "file_path_hint": first(record, ["file_path", "local_path", "path_hint", "文件路径"]),
-        "content_preview": text[:800],
+        "content_preview": text[:CONTENT_PREVIEW_MAX_CHARS],
         "has_content_preview": bool(text),
+        "content_length": len(text),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "terminal": terminal,
+        "activity_type": activity_type,
+        "source_section": data.get("source_section"),
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, row, terminal, activity_type, title, query, event_time),
@@ -367,12 +393,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "row": row,
-            "terminal": terminal,
-            "activity_type": activity_type,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -521,6 +542,25 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "field_counts": dict(sorted(field_counts.items())),
             "real_account_validation": False,
         },
+        "workflow_surface_summary": workflow_surface_summary(events),
+        "source_audit": source_audit(events),
+        "license_policy": {
+            "license_boundary": "workflow_metadata_only",
+            "licensed_content_mirrored": False,
+            "vendor_database_mirror": False,
+            "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
+            "credentials_collected": False,
+            "license_keys_collected": False,
+            "real_account_validation": False,
+        },
+        "evidence_policy": {
+            "vertical_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "personal_workflow_only": True,
+            "licensed_content_mirrored": False,
+            "vendor_database_mirror": False,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_pro_terminal_usage_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -541,6 +581,51 @@ def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], n
     if not missing_expected:
         return f"all_expected_{noun}s_observed"
     return f"partial_expected_{noun}s_observed"
+
+
+def usable_terminal_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
+
+
+def workflow_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    usable_events = usable_terminal_events(events)
+    return {
+        "workflow_event_count": len(usable_events),
+        "events_with_workspace": sum(1 for event in usable_events if (event.get("data") or {}).get("workspace")),
+        "events_with_project": sum(1 for event in usable_events if (event.get("data") or {}).get("project")),
+        "events_with_module": sum(1 for event in usable_events if (event.get("data") or {}).get("module")),
+        "events_with_function_code": sum(1 for event in usable_events if (event.get("data") or {}).get("function_code")),
+        "events_with_menu_path": sum(1 for event in usable_events if (event.get("data") or {}).get("menu_path")),
+        "events_with_query": sum(1 for event in usable_events if (event.get("data") or {}).get("query")),
+        "events_with_symbols": sum(1 for event in usable_events if (event.get("data") or {}).get("symbols")),
+        "events_with_universe": sum(1 for event in usable_events if (event.get("data") or {}).get("universe")),
+        "events_with_industries": sum(1 for event in usable_events if (event.get("data") or {}).get("industries")),
+        "events_with_regions": sum(1 for event in usable_events if (event.get("data") or {}).get("regions")),
+        "events_with_factors": sum(1 for event in usable_events if (event.get("data") or {}).get("factors")),
+        "events_with_datasets": sum(1 for event in usable_events if (event.get("data") or {}).get("datasets")),
+        "events_with_fields": sum(1 for event in usable_events if (event.get("data") or {}).get("fields")),
+        "events_with_template_name": sum(1 for event in usable_events if (event.get("data") or {}).get("template_name")),
+        "events_with_download_format": sum(1 for event in usable_events if (event.get("data") or {}).get("download_format")),
+        "events_with_content_preview": sum(1 for event in usable_events if (event.get("data") or {}).get("has_content_preview")),
+        "events_with_source_section": sum(1 for event in usable_events if (event.get("data") or {}).get("source_section")),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_terminal_events(events)
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in usable_events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "source_section_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("source_section")),
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+    }
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -567,6 +652,9 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         },
         "coverage_summary": {
             "licensed_content_mirrored": False,
+            "personal_workflow_only": True,
+            "workflow_metadata_only": True,
+            "vendor_database_mirror": False,
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

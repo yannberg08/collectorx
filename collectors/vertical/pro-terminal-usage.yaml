@@ -30,12 +30,19 @@ scope:
     - terminal_coverage_manifest
     - activity_coverage_manifest
     - workflow_field_coverage_manifest
+    - workflow_surface_summary
+    - source_audit_manifest
+    - archive_member_provenance
+    - license_boundary_policy
   excludes:
     - vendor_database_mirror
     - licensed_content_redistribution
     - credentials
+    - archive_path_traversal_members
+    - windows_drive_path_archive_members
 
 description: |
   专业终端是投资垂直工作流源。只采用户工作台、搜索、自选和模型使用痕迹，
-  支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP 工作流包，并报告终端/活动/字段覆盖。
+  支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP 工作流包，并报告终端/活动/字段覆盖、
+  工作流可用面、来源审计和许可边界。
   不复制厂商数据库内容。

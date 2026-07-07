@@ -150,6 +150,8 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
                 ),
             )
             archive.writestr("../unsafe.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
+            archive.writestr("..\\windows-traversal.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
+            archive.writestr("C:\\unsafe.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -172,14 +174,20 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert "must-not-leak" not in serialized
         workspace = next(event for event in events if event["data"]["activity_type"] == "workspace")
         assert len(workspace["data"]["raw"]["content"]) == 800
+        assert workspace["data"]["content_length"] > 800
         assert workspace["data"]["menu_path"] == "Launchpad/Credit Monitor"
         download = next(event for event in events if event["data"].get("file_name") == "macro_rates.xlsx")
         assert download["data"]["datasets"] == ["EDB"]
         assert "十年国债" in download["data"]["fields"]
         watchlist = next(event for event in events if event["data"].get("title") == "央企红利自选")
         assert watchlist["data"]["regions"] == ["CN", "HK"]
-        assert any(event["raw_ref"]["path"] == "ifind_workflow.zip::usage/ifind_watchlist.json" for event in events)
+        zip_event = next(event for event in events if event["data"].get("title") == "半导体设备观察")
+        assert zip_event["raw_ref"]["path"] == f"{ifind_zip}::usage/ifind_watchlist.json"
+        assert zip_event["raw_ref"]["source_archive"] == str(ifind_zip)
+        assert zip_event["raw_ref"]["archive_member"] == "usage/ifind_watchlist.json"
         assert all("../unsafe" not in event["raw_ref"]["path"] for event in events)
+        assert all("windows-traversal" not in event["raw_ref"]["path"] for event in events)
+        assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["activity_counts"]["download"] == 2
         assert manifest["terminal_coverage"]["observed_expected_terminals"] == ["wind", "choice", "ifind", "bloomberg"]
@@ -194,9 +202,26 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         ]
         assert manifest["activity_coverage"]["missing_expected_activities"] == []
         assert manifest["workflow_field_coverage"]["missing_recommended_fields"] == []
+        assert manifest["workflow_surface_summary"]["workflow_event_count"] == 8
+        assert manifest["workflow_surface_summary"]["events_with_symbols"] >= 3
+        assert manifest["workflow_surface_summary"]["events_with_datasets"] == 2
+        assert manifest["workflow_surface_summary"]["events_with_fields"] == 2
+        assert manifest["workflow_surface_summary"]["events_with_content_preview"] == 1
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["source_section_event_count"] == 8
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
+        assert manifest["license_policy"]["licensed_content_mirrored"] is False
+        assert manifest["license_policy"]["content_preview_max_chars"] == 800
+        assert manifest["evidence_policy"]["personal_workflow_only"] is True
         assert manifest["collection_readiness"]["terminal_coverage_status"] == "all_expected_terminals_observed"
         assert manifest["collection_readiness"]["activity_coverage_status"] == "all_expected_activity_types_observed"
         assert manifest["collection_readiness"]["workflow_field_coverage_status"] == "all_expected_workflow_fields_observed"
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["personal_workflow_only"] is True
+        assert evidence["coverage_summary"]["workflow_metadata_only"] is True
+        assert evidence["coverage_summary"]["vendor_database_mirror"] is False
 
 
 if __name__ == "__main__":

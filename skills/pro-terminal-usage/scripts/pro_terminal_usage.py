@@ -50,6 +50,9 @@ def collect(args: argparse.Namespace) -> int:
                     f"- missing_expected_terminals：`{', '.join(manifest['terminal_coverage']['missing_expected_terminals']) or 'none'}`",
                     f"- observed_activities：`{', '.join(manifest['activity_coverage']['observed_activities']) or 'none'}`",
                     f"- missing_activities：`{', '.join(manifest['activity_coverage']['missing_expected_activities']) or 'none'}`",
+                    f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
+                    f"- source_section_events：{manifest['source_audit']['source_section_event_count']}",
+                    f"- license_boundary：`{manifest['license_policy']['license_boundary']}`",
                     "- 边界：只采用户工作流元数据，不复制厂商数据库内容。",
                 ]
             ),
