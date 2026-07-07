@@ -165,6 +165,23 @@ Findings:
 - Shared lens readiness was corrected so it does not claim complete source
   collection from partial authorized input.
 
+### Wave C2: P1 notes export import pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-export-validation-2026-07-08.md`
+
+Findings:
+
+- Added `notes_api.py import` for user-authorized local note exports and folders.
+- Supported Markdown, TXT, HTML, JSON/JSONL/NDJSON, and Evernote ENEX.
+- Added source inference for Youdao, Evernote/Yinxiang, Notion, Markdown, and
+  generic note exports.
+- Fixture validation covers Youdao-style JSON, Evernote ENEX, and Markdown
+  imports into generic `notes` events.
+
 ### Wave D: P1 task/calendar productization pass 1
 
 Status: `completed-baseline`
@@ -330,7 +347,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes | Strengthen Notion/Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON and generic calendar exports; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones |
 | 3 | `meeting-minutes` | G2/G3 partial for local authorized meeting files | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |

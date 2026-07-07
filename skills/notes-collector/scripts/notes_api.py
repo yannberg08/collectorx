@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from notes.events import notes_to_events, write_jsonl, write_package
+from notes.parser import parse_notes_export
 
 # Windows控制台utf-8
 try:
@@ -130,6 +131,34 @@ def collect_notion(
         print(f"采集失败: {e}")
 
 
+def collect_import(
+    input_path: str,
+    source_app: str,
+    export_path: str,
+    limit: int = None,
+    event_export: str = None,
+    out_dir: str = None,
+    include_content: bool = False,
+):
+    """采集用户授权的笔记导出文件/目录。"""
+    notes = parse_notes_export(input_path, source_app=source_app, limit=limit)
+    with open(export_path, "w", encoding="utf-8") as f:
+        json.dump(notes, f, ensure_ascii=False, indent=2)
+
+    package_source = source_app if source_app != "auto" else "notes-export"
+    events = notes_to_events(
+        notes,
+        source_app=package_source,
+        source_label=f"Notes export: {package_source}",
+        include_content=include_content,
+    )
+    if event_export:
+        write_jsonl(Path(event_export).expanduser(), events)
+    if out_dir:
+        write_package(Path(out_dir).expanduser(), events, source_app=package_source)
+    print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
+
+
 def _extract_notion_title(page):
     """提取Notion页面标题"""
     props = page.get("properties", {})
@@ -143,7 +172,7 @@ def _extract_notion_title(page):
 def cmd_status():
     """显示状态"""
     print("笔记采集器")
-    print("支持: Notion/Obsidian/有道云笔记")
+    print("支持: Notion/Obsidian/有道云/印象笔记授权导出")
 
 
 def main():
@@ -169,6 +198,16 @@ def main():
     not_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
     not_parser.add_argument("--out-dir", help="导出完整采集包目录")
     not_parser.add_argument("--include-content", action="store_true", help="在事件中包含完整笔记正文；默认只放预览")
+
+    # import命令
+    import_parser = subparsers.add_parser("import", help="导入授权笔记导出文件/目录")
+    import_parser.add_argument("--input", required=True, help="导出文件或目录，支持 md/html/txt/json/jsonl/enex")
+    import_parser.add_argument("--source-app", default="auto", choices=["auto", "notion", "obsidian", "youdao", "evernote", "markdown", "notes-export"], help="来源应用")
+    import_parser.add_argument("--export", required=True, help="标准化 JSON 导出路径")
+    import_parser.add_argument("--limit", type=int, help="限制数量")
+    import_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
+    import_parser.add_argument("--out-dir", help="导出完整采集包目录")
+    import_parser.add_argument("--include-content", action="store_true", help="在事件中包含完整笔记正文；默认只放预览")
     
     # status命令
     subparsers.add_parser("status", help="显示状态")
@@ -179,6 +218,8 @@ def main():
         collect_obsidian(args.vault, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
     elif args.command == "notion":
         collect_notion(args.token, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
+    elif args.command == "import":
+        collect_import(args.input, args.source_app, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
     elif args.command == "status":
         cmd_status()
     else:

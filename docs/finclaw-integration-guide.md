@@ -180,9 +180,22 @@ python3 skills/notes-collector/scripts/notes_api.py obsidian \
   --out-dir <out-dir>
 ```
 
+For authorized exports from Youdao, Evernote/Yinxiang, Notion exports,
+Markdown/HTML/TXT folders, or JSON note exports:
+
+```bash
+python3 skills/notes-collector/scripts/notes_api.py import \
+  --input <authorized-notes-export-or-folder> \
+  --source-app auto \
+  --export <out-dir>/notes.json \
+  --out-dir <out-dir>
+```
+
 Current status:
 
 - Emits generic `notes` events and a standard package.
+- Supports authorized local import for Markdown, HTML, TXT, JSON/JSONL, and
+  Evernote ENEX exports.
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.

@@ -79,7 +79,7 @@ Operational docs:
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
 | `email` | `email-collector` | Multi-account preflight/event baseline; needs real mailbox validation |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |
-| `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion flows; macOS Obsidian-style validation done |
+| `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion plus authorized Youdao/Evernote/Markdown/HTML/JSON/ENEX imports; macOS Obsidian-style validation done |
 | `dingtalk` | none yet | YAML placeholder; skill not implemented |
 | `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |

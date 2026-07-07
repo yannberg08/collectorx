@@ -46,11 +46,12 @@ def note_to_event(
     collected_at: Optional[str],
     include_content: bool,
 ) -> Dict[str, Any]:
+    actual_source_app = first(note, ["source_app", "source"]) or source_app
     title = first(note, ["title", "name", "标题"]) or "Untitled"
     content = first(note, ["content", "text", "body", "正文", "内容"]) or ""
     path = first(note, ["path", "file", "url", "id"])
     data = {
-        "source_app": source_app,
+        "source_app": actual_source_app,
         "title": title,
         "path": path,
         "content_preview": content[:1200],
@@ -63,7 +64,7 @@ def note_to_event(
     event_time = first(note, ["updated", "last_edited", "last_edited_time", "mtime", "created", "created_time"])
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(source_app, path, title, event_time, content[:120]),
+        "id": stable_id(actual_source_app, path, title, event_time, content[:120]),
         "collector": COLLECTOR,
         "source": source_label,
         "owner_scope": "personal",
@@ -72,7 +73,7 @@ def note_to_event(
         "collected_at": collected_at or now_iso(),
         "data": data,
         "raw_ref": {
-            "source_app": source_app,
+            "source_app": actual_source_app,
             "path": path,
             "id": first(note, ["id"]),
         },
