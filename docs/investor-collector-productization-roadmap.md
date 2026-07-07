@@ -475,6 +475,30 @@ Findings:
   meeting refs, WeCom CSV messages/meetings, gap events, and credential-key
   sanitization.
 
+### Wave L: Tonghuashun watchlist productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-ths-watchlist-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `ths-watchlist` vertical skill for user-authorized
+  Tonghuashun watchlist exports.
+- Replaced the previous YAML-only README placeholder with a real CLI:
+  `ths_watchlist.py collect --input <authorized-export> --out-dir <out>`.
+- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, and TXT
+  inputs.
+- Captures symbol, name, market, group, industry, tags, reason/note, added
+  time, source section, and sanitized raw metadata.
+- Emits `collectorx.event.v1` watchlist events into `lake/ths-watchlist`.
+- Treats watchlists as attention-universe evidence only; it does not claim
+  holdings, trades, orders, or fund flows.
+- Fixture validation covers mixed CSV/JSON/XLSX/TXT inputs, missing-input gap
+  events, credential-key sanitization, and non-A-share code handling.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

@@ -94,6 +94,25 @@ Preconditions:
 - User has authorized local app/file access.
 - GUI snapshot requires the relevant trading page to be visible/unlocked.
 
+### 同花顺自选股
+
+```bash
+python3 skills/ths-watchlist/scripts/ths_watchlist.py collect \
+  --input <authorized-ths-watchlist-export-or-folder> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized Tonghuashun watchlist exports into `ths-watchlist`
+  `watchlist` events.
+- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, and TXT.
+- Captures symbol, name, market, group, industry, tags, note/reason, and
+  added time when present.
+- Recursively filters credential-like raw keys.
+- This is attention-universe evidence only. It does not prove holdings, trades,
+  orders, or fund flows; use `ths-portfolio` for strong trading evidence.
+
 ### 本地文件
 
 ```bash

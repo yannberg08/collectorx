@@ -62,6 +62,7 @@ every upstream source collector is production-ready.
 | --- | --- |
 | `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; Windows/Linux are code-level simulations or fallback paths |
 | `ths-portfolio` | `deep-beta`; strong local package and GUI snapshot design exists, but needs broader real-device validation to claim production |
+| `ths-watchlist` | `baseline`; authorized local export collector for same-channel watchlist/attention-universe evidence; not a strong trade, holding, order, or fund-flow collector |
 | `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow exists, current machine still has LLDB/passphrase capture limitation |
 
 ## Product Rule
