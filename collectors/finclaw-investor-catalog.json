@@ -59,13 +59,13 @@
       "priority": "P0",
       "category": "lens",
       "skill": "investor-source-collectors",
-      "readiness": "baseline",
-      "gate": "G1",
-      "finclaw_action": "run-after-wechat-lake",
-      "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source wechat-investment-dialogue --input <wechat-events-jsonl> --out-dir <out-dir>",
-      "collects": "Investment reasons, consultation objects, sentiment, bias clues, and decision context from already-collected WeChat events.",
+      "readiness": "baseline+audit",
+      "gate": "G2",
+      "finclaw_action": "run-after-wechat-lake-with-optional-chat-sender-scope-policy",
+      "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source wechat-investment-dialogue --input <wechat-events-jsonl> --allow-chat <contact-or-group> --deny-sender <sender> --out-dir <out-dir>",
+      "collects": "Investment reasons, consultation objects, sentiment, bias clues, decision context, classification metadata, source policy audit, and explicit source-policy gap states from already-collected WeChat events.",
       "must_not_collect": "Fresh WeChat database access or non-investment chats.",
-      "production_gap": "Real WeChat lake validation, contact/group allowlists, and trade-adjacent backtests."
+      "production_gap": "Real WeChat lake validation, user-tuned contact/group/sender allowlists, and trade-adjacent backtests."
     },
     {
       "id": "filesystem",

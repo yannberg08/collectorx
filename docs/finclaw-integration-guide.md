@@ -611,6 +611,8 @@ Example lens collection:
 python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
   --source wechat-investment-dialogue \
   --input <wechat-collector-json-or-jsonl> \
+  --allow-chat <investment-contact-or-group> \
+  --deny-sender <noisy-sender> \
   --out-dir <out-dir>
 ```
 
@@ -622,8 +624,14 @@ Default behavior:
 - The default relevance threshold is `--min-score 0.30`.
 - Use `--include-non-matches` only for audit/backtest runs, not normal Wiki
   ingestion.
+- Use `--allow-chat`, `--deny-chat`, `--allow-sender`, and `--deny-sender` to
+  restrict WeChat investment-dialogue runs to user-approved contacts, groups,
+  and senders. These filters narrow scope only; they do not make a normal chat
+  investment evidence by themselves.
 - If input is readable but not investment-related, the manifest status is
   `no_investment_evidence_matched` and Wiki coverage stays empty.
+- If all candidates are excluded by source policy, the manifest status is
+  `source_policy_filtered_all`.
 
 ## Frontend / Product Preconditions
 

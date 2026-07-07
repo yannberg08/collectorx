@@ -45,6 +45,10 @@ def collect(args: argparse.Namespace) -> int:
         limit=args.limit,
         min_score=args.min_score,
         include_non_matches=args.include_non_matches,
+        allow_chats=args.allow_chat,
+        deny_chats=args.deny_chat,
+        allow_senders=args.allow_sender,
+        deny_senders=args.deny_sender,
     )
     events = result.events
 
@@ -98,6 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--min-score", type=float, default=0.30, help="Minimum investment relevance score for lens sources.")
     p_collect.add_argument("--include-non-matches", action="store_true", help="Audit mode: include readable non-matching records with classification metadata.")
+    p_collect.add_argument("--allow-chat", action="append", help="Only keep records whose chat/source contains this name. Repeat or comma-separate.")
+    p_collect.add_argument("--deny-chat", action="append", help="Drop records whose chat/source contains this name. Repeat or comma-separate.")
+    p_collect.add_argument("--allow-sender", action="append", help="Only keep records whose sender/author contains this name. Repeat or comma-separate.")
+    p_collect.add_argument("--deny-sender", action="append", help="Drop records whose sender/author contains this name. Repeat or comma-separate.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
     p_collect.set_defaults(func=collect)
     return parser

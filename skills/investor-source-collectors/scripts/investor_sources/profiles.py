@@ -96,6 +96,13 @@ SOURCE_PROFILES: Dict[str, Dict[str, Any]] = {
             "inv-decision-log",
             "inv-consultation-network",
         ],
+        "source_policy": {
+            "supports_allow_chat": True,
+            "supports_deny_chat": True,
+            "supports_allow_sender": True,
+            "supports_deny_sender": True,
+            "policy_does_not_assert_investment_relevance": True,
+        },
     },
     "research-documents": {
         "display_name": "本地投研文档",

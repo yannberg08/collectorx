@@ -108,6 +108,7 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
         "source_input_missing": "No authorized input was provided; collector did not fabricate source data.",
         "no_readable_input": "Authorized input was provided, but no readable records were found.",
         "no_investment_evidence_matched": "Authorized input was scanned, but no investment-related evidence matched the lens rules.",
+        "source_policy_filtered_all": "Authorized input was scanned, but every candidate was excluded by the configured source allow/deny policy.",
     }.get(reason, "Collector could not produce source evidence for this run.")
     record = {
         "signal_type": "collector_preflight_gap",
@@ -153,6 +154,7 @@ def build_manifest(
         "source_input_missing": "needs_source_authorization_or_input",
         "no_readable_input": "no_readable_input",
         "no_investment_evidence_matched": "no_investment_evidence_matched",
+        "source_policy_filtered_all": "source_policy_filtered_all",
     }.get(str(gap_reason), "events_collected" if not only_gap else "needs_source_authorization_or_input")
     classifications = [
         (event.get("data") or {}).get("classification") or {}
@@ -308,6 +310,7 @@ def next_action_for_status(status: str) -> str:
         "needs_source_authorization_or_input": "提供用户授权的源数据或连接器输入后重跑。",
         "no_readable_input": "检查输入路径、文件格式和导出内容后重跑。",
         "no_investment_evidence_matched": "输入已读取，但未命中投资证据；可降低阈值、补充白名单或确认这批数据不属于投资分身。",
+        "source_policy_filtered_all": "输入已读取，但全部被来源范围策略排除；请检查联系人/群/发送者白名单和黑名单。",
         "events_collected": "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
     }.get(status, "检查 manifest 后决定下一步。")
 

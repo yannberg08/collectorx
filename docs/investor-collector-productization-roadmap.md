@@ -126,6 +126,30 @@ Findings:
 - Real-source validation is still blocked on the current Mac by WeChat 4.x key
   extraction/SIP preconditions.
 
+### Wave B1b: P0 WeChat investment-dialogue source policy pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-wechat-lens-source-policy-validation-2026-07-08.md`
+
+Findings:
+
+- Added source-scope policy flags to `investor_sources.py collect`:
+  `--allow-chat`, `--deny-chat`, `--allow-sender`, and `--deny-sender`.
+- The policy is applied before investment classification, so FinClaw can narrow
+  WeChat lens runs to user-approved contacts, groups, and senders.
+- The policy does not assert investment relevance; normal investment
+  classification still decides whether a message can become investor evidence.
+- Manifest `collection_audit.source_policy` records configured patterns,
+  filtered candidate count, and filter reason counts.
+- Added explicit `source_policy_filtered_all` gap status when every readable
+  candidate is excluded by source policy.
+- Fixture validation covers allow chat, deny sender, policy metadata on kept
+  events, source-policy audit counts, and filtered-all gap behavior.
+- Real WeChat lake validation and user-tuned allowlists are still pending.
+
 ### Wave B2: P0 research content extraction pass 1
 
 Status: `completed-baseline`
@@ -1097,7 +1121,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` lens remains runnable; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
+| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, and explicit filtered-all gap status; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, screenshot OCR decision, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, import audit, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |

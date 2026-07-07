@@ -43,6 +43,14 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --input ~/Desktop/wechat-collect.json \
   --out-dir ~/Desktop/wechat-investor-dialogue
 
+# 微信投资讨论产品化入口：先用联系人/群/发送者范围策略收窄，再做投资证据筛选
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source wechat-investment-dialogue \
+  --input ~/Desktop/wechat-package/lake/wechat/events.jsonl \
+  --allow-chat "投资讨论群,投研朋友" \
+  --deny-sender "营销号" \
+  --out-dir ~/Desktop/wechat-investor-dialogue
+
 # 审计模式：同时输出未命中的记录，便于回测阈值和白名单
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source email-research \
@@ -111,6 +119,7 @@ P2 必做：
 `manifest.json` 会带 `collection_audit`：
 
 - 记录输入文件数、候选记录数、命中/过滤数量、扩展名分布和跳过数量。
+- 记录 `source_policy`：`--allow-chat`、`--deny-chat`、`--allow-sender`、`--deny-sender` 的配置和过滤数量。这个策略只收窄来源范围，不把普通聊天强行变成投资证据。
 - 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM 正文/表格读取必须显式传入 `--include-content`；截图目前只保留元数据，不做 OCR。
 - 不支持的研究文档扩展名会被跳过，不会因为文件名里有弱投资词就污染 Wiki 覆盖率。
 
@@ -123,6 +132,7 @@ P2 必做：
 - 默认阈值是 `--min-score 0.30`。
 - `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
 - 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。
+- 如果所有候选都被来源范围策略排除，输出 `source_policy_filtered_all` 缺口事件，提示检查联系人/群/发送者白名单和黑名单。
 
 `vertical` 类型的数据源是金融原生通道，默认视为投资证据，但仍会附分类元数据。后续每个 vertical collector 还必须做真实账号/平台验证。
 

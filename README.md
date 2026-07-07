@@ -110,7 +110,7 @@ Operational docs:
 
 | Lens | Upstream | Status |
 | --- | --- | --- |
-| `wechat-investment-dialogue` | `wechat` | Runnable lens baseline with investment classifier; real WeChat lake validation pending |
+| `wechat-investment-dialogue` | `wechat` | Runnable lens baseline with investment classifier, optional chat/sender source policy, source-policy audit, and explicit filtered-all gap status; real WeChat lake validation pending |
 | `research-documents` | `filesystem`, `notes` | Runnable lens baseline for research files and valuation docs; explicit XLSX/DOCX/PDF content extraction validation done |
 | `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |

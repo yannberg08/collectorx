@@ -16,7 +16,8 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`wechat` now has a standard CollectorX package output path:
+`wechat` and `wechat-investment-dialogue` now have a standard source-to-lens
+path for FinClaw:
 
 - `wechat_query.py --collect --out-dir <dir>` writes
   `lake/wechat/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
@@ -24,19 +25,22 @@ avoid building placeholders that look complete.
 - Manifest output records field coverage, filter policy, message surface
   summary, platform/key preconditions, source audit, and the generic-to-lens
   evidence boundary.
-- The collector still does not write investor Wiki evidence directly;
-  `wechat-investment-dialogue` remains the lens that decides whether messages
-  are investment evidence.
+- `wechat-investment-dialogue` now supports optional chat/sender allow and deny
+  policies, records source-policy audit fields, and emits an explicit
+  `source_policy_filtered_all` gap status when a policy excludes every
+  candidate.
+- The generic collector still does not write investor Wiki evidence directly;
+  the lens decides whether messages are investment evidence.
 
-This upgrades the WeChat generic source to `baseline+audit`, but it does not
-claim real-source validation on the current Mac because authorized WeChat 4.x
-key/SIP preconditions are still unresolved.
+This upgrades the WeChat generic source and investment-dialogue lens to
+`baseline+audit`, but it does not claim real-source validation on the current
+Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 ## P0 Status
 
 | Need | Current implementation | Status | Gap to reach Tonghuashun/EastMoney standard |
 | --- | --- | --- | --- |
-| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` now writes a standard CollectorX package with `lake/wechat/events.jsonl`, manifest field/filter/source audit, generic-to-lens evidence policy, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, contact/group allowlists, entity/time matching, backtest against trade events |
+| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; manifest now records extraction policy, skipped extensions, parser counts, and content-read counts | Broader private PDF/XLSX/DOCX samples, screenshot OCR decision, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance and path-traversal skipping; activity also supports XLSX/XLSM, nested Snowball-like payloads, raw sanitization, evidence policy, and SoulMirror sync; neither is a real account adapter | Real Xueqiu login/export discovery, activity pagination, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/JSON/CSV/ZIP, platform inference, numeric asset fields, platform coverage, field coverage, asset value summary, raw sanitization, ZIP provenance, and SoulMirror sync; no real account export found yet | Per-platform export/UI adapters, real account validation, complete account-boundary proof |

@@ -25,6 +25,9 @@ def test_list_sources_contains_all_priorities() -> None:
     assert "wechat-investment-dialogue" in ids
     assert "xueqiu-investor-activity" in ids
     assert "social-investment-influence" in ids
+    wechat_profile = next(profile for profile in profiles if profile["id"] == "wechat-investment-dialogue")
+    assert wechat_profile["source_policy"]["supports_allow_chat"] is True
+    assert wechat_profile["source_policy"]["policy_does_not_assert_investment_relevance"] is True
     priorities = {profile["priority"] for profile in profiles}
     assert {"P0", "P1", "P2"}.issubset(priorities)
     classes = {profile["collector_class"] for profile in profiles}
@@ -130,6 +133,149 @@ def test_wechat_lens_keeps_only_investment_dialogue() -> None:
         assert events[0]["data"]["payload"]["text"].startswith("准备买入")
         assert events[0]["data"]["classification"]["is_investment_evidence"] is True
         assert "matched_trade_action_terms" in events[0]["data"]["classification"]["reasons"]
+
+
+def test_wechat_lens_source_policy_allows_and_denies_chats_and_senders() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "wechat-events.jsonl"
+        out_dir = root / "out"
+        records = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat:allowed",
+                "collector": "wechat",
+                "source": "微信群「投资讨论群」· 2026-07-08 的聊天",
+                "owner_scope": "personal",
+                "kind": "message",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "chat": "投资讨论群",
+                    "sender": "我",
+                    "sender_is_owner": True,
+                    "text": "准备买入贵州茅台，先看财报和估值再决定仓位。",
+                },
+                "raw_ref": {"chat": "投资讨论群"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat:outside-chat",
+                "collector": "wechat",
+                "source": "跟普通朋友在 2026-07-08 的微信聊天",
+                "owner_scope": "personal",
+                "kind": "message",
+                "time": "2026-07-08T09:30:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "chat": "普通朋友",
+                    "sender": "普通朋友",
+                    "sender_is_owner": False,
+                    "text": "这个股票可以买入吗？估值看起来不贵。",
+                },
+                "raw_ref": {"chat": "普通朋友"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat:denied-sender",
+                "collector": "wechat",
+                "source": "微信群「投资讨论群」· 2026-07-08 的聊天",
+                "owner_scope": "personal",
+                "kind": "message",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "chat": "投资讨论群",
+                    "sender": "营销号",
+                    "sender_is_owner": False,
+                    "text": "立即买入这只股票，马上翻倍。",
+                },
+                "raw_ref": {"chat": "投资讨论群"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(record, ensure_ascii=False) for record in records) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "wechat-investment-dialogue",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-chat",
+            "投资讨论群",
+            "--deny-sender",
+            "营销号",
+            "--collected-at",
+            "2026-07-08T12:10:00+08:00",
+        )
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "wechat-investment-dialogue" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["raw_ref"]["upstream_event_id"] == "wechat:allowed"
+        assert events[0]["data"]["source_policy"]["allowed"] is True
+        assert events[0]["data"]["source_policy"]["matched_allow_chat"] == "投资讨论群"
+        assert events[0]["data"]["source_policy"]["policy_does_not_assert_investment_relevance"] is True
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        source_policy = manifest["collection_audit"]["source_policy"]
+        assert source_policy["enabled"] is True
+        assert source_policy["allow_chats"] == ["投资讨论群"]
+        assert source_policy["deny_senders"] == ["营销号"]
+        assert source_policy["filtered_candidate_count"] == 2
+        assert source_policy["filter_reason_counts"] == {
+            "allow_chat_not_matched": 1,
+            "deny_sender": 1,
+        }
+
+
+def test_wechat_lens_source_policy_filtered_all_has_explicit_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "wechat-events.jsonl"
+        out_dir = root / "out"
+        record = {
+            "schema": "collectorx.event.v1",
+            "id": "wechat:outside-chat",
+            "collector": "wechat",
+            "source": "跟普通朋友在 2026-07-08 的微信聊天",
+            "owner_scope": "personal",
+            "kind": "message",
+            "time": "2026-07-08T09:30:00+08:00",
+            "collected_at": "2026-07-08T12:00:00+08:00",
+            "data": {
+                "chat": "普通朋友",
+                "sender": "普通朋友",
+                "sender_is_owner": False,
+                "text": "这个股票可以买入吗？估值看起来不贵。",
+            },
+            "raw_ref": {"chat": "普通朋友"},
+            "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+        }
+        source_path.write_text(json.dumps(record, ensure_ascii=False) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "wechat-investment-dialogue",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-chat",
+            "投资讨论群",
+            "--collected-at",
+            "2026-07-08T12:10:00+08:00",
+        )
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "source_policy_filtered_all"
+        event = json.loads((out_dir / "lake" / "wechat-investment-dialogue" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["data"]["payload"]["gap"] == "source_policy_filtered_all"
+        assert event["wiki_targets"] == []
 
 
 def test_lens_without_investment_match_does_not_fill_wiki_coverage() -> None:
