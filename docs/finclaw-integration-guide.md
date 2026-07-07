@@ -160,6 +160,22 @@ Current status:
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.
 
+### 滴答清单 / 任务
+
+```bash
+python3 skills/ticktick-cli/scripts/ticktick_events.py collect \
+  --input <authorized-ticktick-task-json> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized TickTick task JSON into generic `ticktick` task events.
+- Does not claim investment-task status directly.
+- Feed `lake/ticktick/events.jsonl` into `task-calendar-investor` lens for
+  trading plans, research tasks, and review reminders.
+- Live TickTick API collection requires the user's OAuth token.
+
 ### 投资 Lens / 分类工具
 
 ```bash

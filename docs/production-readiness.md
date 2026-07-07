@@ -44,7 +44,7 @@ every upstream source collector is production-ready.
 | --- | --- | --- | --- |
 | 飞书/钉钉/腾讯会议/企业微信会议纪要 | `feishu` exists; `dingtalk`, `wecom`, `meeting-artifacts` YAML; `meeting-minutes` lens classifier | `placeholder` / `baseline` | Build/port real dingtalk/wecom/tencent meeting collectors, unify minutes schema, validate meeting fixtures |
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + `investment-notes` lens classifier | `baseline`; macOS Obsidian-style real validation passed | Validate Notion API events, add Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 日历/任务/滴答清单 | `ticktick-cli`; `calendar` YAML; `task-calendar-investor` lens classifier | `baseline` / `placeholder` | Validate TickTick real account, build calendar collector, backtest investment task classifier |
+| 日历/任务/滴答清单 | `ticktick-cli` API tool + `ticktick_events.py`; `calendar` YAML; `task-calendar-investor` lens classifier | `baseline`; real TickTick API validation blocked by missing token; calendar placeholder | Complete TickTick OAuth validation, build calendar collector, validate recurring tasks/timezones, backtest investment task classifier |
 | 公众号/微信收藏文章 | `wechat-favorites` YAML + `wechat-article-favorites` lens classifier | `placeholder` / `baseline` | Build WeChat favorites/public-account artifact collector, validate saved article refs |
 | 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` YAML | `placeholder` | Build user activity adapters; do not crawl public news as personal evidence |
 

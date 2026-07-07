@@ -12,6 +12,7 @@ version: 0.1.6
 python <SKILL_DIR>/scripts/ticktick_cli.py --json project list
 python <SKILL_DIR>/scripts/auth.py register <id> <sec>
 python <SKILL_DIR>/scripts/auth.py authorize
+python <SKILL_DIR>/scripts/ticktick_events.py collect --input <tasks.json> --out-dir <out-dir>
 ```
 
 `<SKILL_DIR>` 通常：
@@ -140,7 +141,21 @@ python <SKILL_DIR>/scripts/ticktick_cli.py --json task complete \
 2) 输出格式
 - 所有调用统一在脚本后、子命令前加 `--json`（示例：`python <SKILL_DIR>/scripts/ticktick_cli.py --json task get --project-id ...`）
 
-3) 冷门参数/字段怎么查
+3) CollectorX 事件包
+- `ticktick_cli.py` 是 API 操作工具；`ticktick_events.py` 是 CollectorX 事件转换入口。
+- 用户授权的 `task list`/`project data` JSON 可以用下面命令转成标准事件：
+
+```bash
+python <SKILL_DIR>/scripts/ticktick_events.py collect \
+  --input ~/Desktop/ticktick-tasks.json \
+  --out-dir ~/Desktop/ticktick-collect
+```
+
+- 输出：`lake/ticktick/events.jsonl`、`manifest.json`、`SUMMARY.md`。
+- generic `ticktick` 事件只路由到 `internal.productivity.tasks`，不直接写投资 Wiki。
+- 投资分身应把 `lake/ticktick/events.jsonl` 交给 `task-calendar-investor` lens，筛选交易计划、复盘提醒、研究任务。
+
+4) 冷门参数/字段怎么查
 - 运行 `python <SKILL_DIR>/scripts/ticktick_cli.py <command> --help` 查看该命令的参数
 - 查看 `references/dida365-openapi.md` 了解完整参数、字段与响应结构
 

@@ -75,7 +75,7 @@ Operational docs:
 | `filesystem` | `filesystem-collector` | Metadata-only generic file collector aligned with SoulMirror driver boundary; investor routing is handled by lenses |
 | `wechat` | `wechat-export` | Migrated skill; provenance review required |
 | `feishu` | `feishu` | Migrated skill; provenance review required |
-| `ticktick` | `ticktick-cli` | Migrated skill; provenance review required |
+| `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus event-conversion baseline; real OAuth validation pending |
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
 | `email` | `email-collector` | Multi-account preflight/event baseline; needs real mailbox validation |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |

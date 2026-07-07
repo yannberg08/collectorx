@@ -106,6 +106,23 @@ Findings:
 - Shared lens readiness was corrected so it does not claim complete source
   collection from partial authorized input.
 
+### Wave D: P1 task/calendar productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-task-calendar-validation-2026-07-08.md`
+
+Findings:
+
+- Added `ticktick_events.py` to convert authorized TickTick task JSON into
+  `collectorx.event.v1`.
+- `task-calendar-investor` lens now has a fixture proving investment tasks are
+  kept and unrelated personal tasks are filtered.
+- Real TickTick API validation is blocked because the local OAuth token is not
+  present.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -121,7 +138,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes | Strengthen Notion/Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 2 | `task-calendar-investor` | G1 | G2: validate TickTick output, implement generic calendar collector, classify tasks |
+| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON; real API token missing | Complete TickTick OAuth validation, implement generic calendar collector, validate recurring tasks/timezones |
 | 3 | `meeting-minutes` | G1 | G2: real Feishu/DingTalk/WeCom/Tencent Meeting artifacts and unified minutes schema |
 | 4 | `wechat-article-favorites` | G1 | G2: implement WeChat favorites/public-account article action collector |
 | 5 | `financial-news-usage` | G0 | G1/G2: build user activity adapters for CLS/WallstreetCN/Gelonghui |

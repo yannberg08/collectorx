@@ -218,6 +218,63 @@ def test_email_research_reads_upstream_collectorx_event() -> None:
         assert manifest["collection_readiness"]["can_claim_complete_source_collection"] is False
 
 
+def test_task_calendar_lens_keeps_investment_task_only() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "ticktick-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "ticktick:1",
+                "collector": "ticktick",
+                "source": "滴答清单用户授权任务数据",
+                "owner_scope": "personal",
+                "kind": "task",
+                "time": "2026-07-09T10:00:00+08:00",
+                "collected_at": "2026-07-08T01:10:00+08:00",
+                "data": {
+                    "title": "复盘贵州茅台财报",
+                    "content_preview": "看现金流、估值和买入纪律",
+                    "project_name": "投资研究",
+                },
+                "raw_ref": {"task_id": "1"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "ticktick:2",
+                "collector": "ticktick",
+                "source": "滴答清单用户授权任务数据",
+                "owner_scope": "personal",
+                "kind": "task",
+                "time": "2026-07-09T12:00:00+08:00",
+                "collected_at": "2026-07-08T01:10:00+08:00",
+                "data": {"title": "买牛奶", "project_name": "生活"},
+                "raw_ref": {"task_id": "2"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "task-calendar-investor",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T01:10:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "task-calendar-investor" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        assert lens_events[0]["data"]["payload"]["title"] == "复盘贵州茅台财报"
+
+
 if __name__ == "__main__":
     test_list_sources_contains_all_priorities()
     test_collect_xueqiu_csv_outputs_event_and_evidence()
@@ -225,4 +282,5 @@ if __name__ == "__main__":
     test_wechat_lens_keeps_only_investment_dialogue()
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
+    test_task_calendar_lens_keeps_investment_task_only()
     print("investor-source-collectors tests passed.")
