@@ -404,6 +404,74 @@ def test_wechat_article_favorites_lens_keeps_investment_articles_only() -> None:
         assert lens_events[0]["raw_ref"]["upstream_event_id"] == "wechat-favorites:1"
 
 
+def test_social_investment_influence_lens_keeps_investment_activity_only() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "social-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "social-activity:1",
+                "collector": "social-activity",
+                "source": "社交平台用户授权活动",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T11:00:00+08:00",
+                "data": {
+                    "platform": "bilibili",
+                    "action_type": "watch",
+                    "title": "半导体投资复盘：财报、估值和安全边际",
+                    "creator": "财经博主A",
+                    "tags": ["股票", "半导体"],
+                    "content_preview": "实盘复盘行业景气、估值和风险点。",
+                },
+                "raw_ref": {"path": "bilibili.csv", "row": 1},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "social-activity:2",
+                "collector": "social-activity",
+                "source": "社交平台用户授权活动",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T11:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "platform": "bilibili",
+                    "action_type": "like",
+                    "title": "游戏直播剪辑",
+                    "creator": "娱乐UP主",
+                    "tags": ["游戏"],
+                    "content_preview": "娱乐内容。",
+                },
+                "raw_ref": {"path": "bilibili.csv", "row": 2},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "social-investment-influence",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T12:30:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "social-investment-influence" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        assert lens_events[0]["data"]["payload"]["title"].startswith("半导体投资复盘")
+        assert lens_events[0]["raw_ref"]["upstream_event_id"] == "social-activity:1"
+
+
 if __name__ == "__main__":
     test_list_sources_contains_all_priorities()
     test_collect_xueqiu_csv_outputs_event_and_evidence()
@@ -414,4 +482,5 @@ if __name__ == "__main__":
     test_task_calendar_lens_keeps_investment_task_only()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()
+    test_social_investment_influence_lens_keeps_investment_activity_only()
     print("investor-source-collectors tests passed.")

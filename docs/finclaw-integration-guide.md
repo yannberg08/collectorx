@@ -263,6 +263,25 @@ Current status:
 - Does not copy vendor databases, public market data, reports, or licensed
   content bodies.
 
+### 社交平台用户活动
+
+```bash
+python3 skills/social-activity/scripts/social_activity.py collect \
+  --input <authorized-weibo-bilibili-xiaohongshu-activity-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, and TXT activity
+  records into generic `social-activity` events.
+- Captures follows, likes, favorites, watch/view history, comments, shares, and
+  saved pages.
+- Does not claim investment influence directly.
+- Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
+  lens. Treat resulting evidence as weak influence evidence unless corroborated
+  by stronger sources.
+
 ### 投资 Lens / 分类工具
 
 ```bash

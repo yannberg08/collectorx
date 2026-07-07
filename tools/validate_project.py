@@ -37,6 +37,7 @@ CLI_HELP_TARGETS = [
     "skills/financial-news-usage/scripts/financial_news_usage.py",
     "skills/hk-us-brokerage/scripts/hk_us_brokerage.py",
     "skills/pro-terminal-usage/scripts/pro_terminal_usage.py",
+    "skills/social-activity/scripts/social_activity.py",
     "skills/investor-source-collectors/scripts/investor_sources.py",
 ]
 
@@ -56,6 +57,7 @@ PARSER_TESTS = [
     "skills/financial-news-usage/tests/test_financial_news_usage.py",
     "skills/hk-us-brokerage/tests/test_hk_us_brokerage.py",
     "skills/pro-terminal-usage/tests/test_pro_terminal_usage.py",
+    "skills/social-activity/tests/test_social_activity.py",
     "skills/investor-source-collectors/tests/test_investor_sources.py",
 ]
 

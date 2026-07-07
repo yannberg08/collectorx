@@ -1,0 +1,1 @@
+"""Social activity collector package."""

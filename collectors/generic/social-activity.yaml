@@ -8,6 +8,7 @@ time_field: time
 armed: false
 category: generic
 owner_scope: personal
+skill: social-activity
 
 scope:
   channels:
@@ -26,5 +27,5 @@ scope:
     - credentials
 
 description: |
-  微博、B站、小红书等平台的通用用户活动采集器占位。它不判断投资含义；
+  微博、B站、小红书等平台的通用用户活动采集器。它不判断投资含义；
   social-investment-influence lens 再筛选投资内容影响源。
