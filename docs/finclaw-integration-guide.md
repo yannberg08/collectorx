@@ -294,6 +294,9 @@ Current status:
 - `manifest.field_coverage` and `manifest.asset_value_summary` tell FinClaw
   which key asset fields are present and summarize this run's authorized values
   by platform.
+- `manifest.collection_audit` records input count, resolved files, extension
+  coverage, ZIP member/skipped-member counts, parsed record count, emitted
+  event count, and path-level parse results.
 
 ### 笔记
 

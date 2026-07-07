@@ -46,16 +46,66 @@ def now_iso() -> str:
 
 
 def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    paths = list(iter_paths(inputs))
+    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    input_list = list(inputs)
+    paths = list(iter_paths(input_list))
+    audit = {
+        "source_type": "authorized_local_china_wealth_export",
+        "input_count": len(input_list),
+        "resolved_input_file_count": len(paths),
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "parsed_record_count": 0,
+        "emitted_event_count": 0,
+        "limit": limit,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "complete_asset_boundary_claimed": False,
+        "path_results": [],
+    }
     if not paths:
-        return [gap_event(collected_at=collected_at, reason="china_wealth_authorized_input_missing")]
+        events = [gap_event(collected_at=collected_at, reason="china_wealth_authorized_input_missing")]
+        audit["emitted_event_count"] = len(events)
+        finalize_audit(audit)
+        return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        for row, record in enumerate(parse_path(path), start=1):
+        path_result = {
+            "path": str(path),
+            "extension": path.suffix.lower() or "<none>",
+            "parsed_record_count": 0,
+            "emitted_event_count": 0,
+            "status": "parsed",
+        }
+        audit["path_results"].append(path_result)
+        increment_counter(audit, "extension_counts", path_result["extension"])
+        records = parse_path(path, audit=audit)
+        path_result["parsed_record_count"] = len(records)
+        audit["parsed_record_count"] += len(records)
+        for row, record in enumerate(records, start=1):
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events
+                audit["emitted_event_count"] = len(events[:limit])
+                finalize_audit(audit)
+                return events[:limit], audit
+    if not events:
+        events = [gap_event(collected_at=collected_at, reason="china_wealth_records_empty")]
+    audit["emitted_event_count"] = len(events)
+    finalize_audit(audit)
+    return events, audit
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -69,7 +119,7 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
             yield path
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix in {".csv", ".tsv"}:
         return parse_table(path)
@@ -80,11 +130,11 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
     if suffix in {".html", ".htm"}:
         return [parse_html(path)]
     if suffix == ".zip":
-        return parse_zip(path)
+        return parse_zip(path, audit=audit)
     return [parse_text(path)]
 
 
-def parse_zip(path: Path) -> List[Dict[str, Any]]:
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-china-wealth-") as tmp:
         tmp_root = Path(tmp)
@@ -94,7 +144,13 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
             member_name = info.filename.replace("\\", "/")
             member_path = PurePosixPath(member_name)
             suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
             if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
                 continue
             target = tmp_root.joinpath(*member_path.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -338,7 +394,12 @@ def wiki_targets_for_subtype(subtype: str) -> List[str]:
     return ["investor.data_quality.collection_gaps"]
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
@@ -377,6 +438,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "asset_boundary_scope": "none" if gap_only else "partial_authorized_input",
             "next_action": "提供支付宝/基金/理财授权导出后重跑。" if gap_only else "可进入投资分身蒸馏；后续按平台做只读真机验证后，才能声明完整资产边界。",
         },
+        "collection_audit": collection_audit or {},
     }
 
 
@@ -555,6 +617,20 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, str):
         return value[:2000]
     return value
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_audit(audit: Dict[str, Any]) -> None:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
 
 def html_to_text(html: str) -> str:

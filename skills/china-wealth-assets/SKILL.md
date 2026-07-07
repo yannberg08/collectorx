@@ -32,7 +32,8 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
 支持 CSV/TSV/JSON/JSONL/Excel/HTML/TXT/Markdown/ZIP。解析器会归一化支付宝、
 天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
 成本、收益等数字字段，并剔除 cookie、token、password 等凭据类字段。
-ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。
+ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会记录
+输入文件数、扩展名覆盖、ZIP 成员/跳过成员、解析记录数、发出事件数和路径级结果。
 没有授权输入时，只输出缺口事件。
 
 ## 完整性口径

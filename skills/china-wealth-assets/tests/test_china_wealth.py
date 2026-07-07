@@ -50,6 +50,9 @@ def test_collect_without_input_gap() -> None:
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
         event = json.loads((out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
         assert event["data"]["subtype"] == "collector_gap"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_audit"]["resolved_input_file_count"] == 0
+        assert manifest["collection_audit"]["complete_asset_boundary_claimed"] is False
 
 
 def test_collects_mixed_platform_json_and_sanitizes_raw() -> None:
@@ -212,6 +215,11 @@ def test_collects_zip_package_with_value_summary() -> None:
         assert "应跳过" not in serialized
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["archive_member_event_count"] == 1
+        assert manifest["collection_audit"]["archive_member_count"] == 2
+        assert manifest["collection_audit"]["skipped_archive_member_count"] == 1
+        assert manifest["collection_audit"]["extension_counts"] == {".zip": 1}
+        assert manifest["collection_audit"]["parsed_record_count"] == 1
+        assert manifest["collection_audit"]["emitted_event_count"] == 1
         assert manifest["asset_value_summary"]["alipay"]["market_value"] == 150.0
         assert manifest["field_coverage"]["field_counts"]["market_value"] == 1
         assert manifest["evidence_policy"]["complete_asset_boundary_claimed"] is False

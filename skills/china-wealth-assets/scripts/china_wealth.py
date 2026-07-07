@@ -9,7 +9,7 @@ import re
 import shutil
 from pathlib import Path
 
-from china_wealth.parser import build_evidence, build_manifest, collect_from_inputs, now_iso
+from china_wealth.parser import build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -25,10 +25,10 @@ def write_jsonl(path: Path, events: list[dict]) -> None:
             handle.write("\n")
 
 
-def write_package(out: Path, events: list[dict], *, collected_at: str) -> dict:
+def write_package(out: Path, events: list[dict], *, collected_at: str, collection_audit: dict | None = None) -> dict:
     out = out.expanduser()
     write_jsonl(out / "lake" / "china-wealth-assets" / "events.jsonl", events)
-    manifest = build_manifest(events, collected_at=collected_at)
+    manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
     evidence = build_evidence(events, generated_at=collected_at)
     write_json(out / "manifest.json", manifest)
     write_json(out / "investor_wiki_evidence.v1.json", evidence)
@@ -98,13 +98,13 @@ def sync_package_to_soulmirror(output_dir: Path, *, soulmirror_home: Path | None
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
     package_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.sync_soulmirror and package_dir is None:
         run_id = re.sub(r"[^0-9A-Za-z_.-]+", "-", collected_at).strip("-")
         package_dir = Path.home() / ".collectorx" / "runs" / "china-wealth-assets" / run_id
     if package_dir is not None:
-        write_package(package_dir, events, collected_at=collected_at)
+        write_package(package_dir, events, collected_at=collected_at, collection_audit=collection_audit)
         if args.sync_soulmirror:
             sync_report = sync_package_to_soulmirror(package_dir, soulmirror_home=Path(args.soulmirror_home).expanduser() if args.soulmirror_home else None)
             print(f"SoulMirror lake 同步: {sync_report['latest_dir']}")

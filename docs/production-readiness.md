@@ -16,8 +16,20 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`xueqiu-watchlist` and `xueqiu-investor-activity` now have stronger package
-audit coverage:
+`china-wealth-assets` now has stronger source audit coverage for authorized
+fund, wealth-management, and cash-management exports:
+
+- Manifest output records input count, resolved file count, extension coverage,
+  ZIP member/skipped-member counts, parsed record count, emitted event count,
+  supported extensions, and path-level parse results.
+- Platform coverage, field coverage, and asset value summary remain available
+  for FinClaw to inspect numeric usefulness.
+- The complete-asset-boundary policy remains conservative: parsed exports are
+  partial authorized input until real account or read-only screen validation
+  proves account scope.
+
+The prior completed wave: `xueqiu-watchlist` and
+`xueqiu-investor-activity` now have stronger package audit coverage:
 
 - `xueqiu-investor-activity` saved HTML pages are parsed as `saved_page`
   evidence instead of failing on undefined variables.
@@ -74,7 +86,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; manifest now records extraction policy, skipped extensions, parser counts, and content-read counts | Broader private PDF/XLSX/DOCX samples, screenshot OCR decision, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, and explicit non-broker-trade evidence policy; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, pagination marker audit, raw sanitization, and SoulMirror sync; neither is a real account adapter | Real Xueqiu login/export discovery, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
-| 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/JSON/CSV/ZIP, platform inference, numeric asset fields, platform coverage, field coverage, asset value summary, raw sanitization, ZIP provenance, and SoulMirror sync; no real account export found yet | Per-platform export/UI adapters, real account validation, complete account-boundary proof |
+| 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/JSON/CSV/ZIP, platform inference, numeric asset fields, platform coverage, field coverage, source audit, asset value summary, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no real account export found yet | Per-platform export/UI adapters, real account validation, complete account-boundary proof |
 | 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir` and local EML/MBOX/JSON/CSV/ZIP `import --out-dir` both produce standard packages with account/folder audit, field coverage, sanitized attachment refs, body/attachment policy, generic-to-lens evidence boundary, and research-attachment filename matching; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, real mailbox validation, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
 
 ## P1 Status

@@ -307,6 +307,28 @@ Findings:
 - Fixture validation covers ZIP import, archive member provenance, traversal
   skipping, value summary, and field coverage.
 
+### Wave B4c: P0 China wealth source audit pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `china-wealth-assets` to `0.4.0`.
+- Added source audit to the manifest: input count, resolved file count,
+  extension coverage, ZIP member count, skipped member count, parsed record
+  count, emitted event count, supported extensions, and path-level parse
+  results.
+- Kept the complete asset boundary policy unchanged: parsed exports are partial
+  authorized input until each platform/account path is validated.
+- Fixture validation covers missing-input audit, ZIP member/skipped-member
+  accounting, extension counts, parsed record counts, emitted event counts,
+  platform coverage, field coverage, and asset value summary.
+- Real Alipay/Tiantian/Danjuan/Qieman/bank account validation remains pending.
+
 ### Wave B5: P0 Email IMAP package and audit pass
 
 Status: `completed-baseline+audit`
