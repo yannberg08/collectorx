@@ -1,7 +1,6 @@
 ---
 name: wechat-favorites
-description: 微信收藏与公众号文章通用采集器。采集用户授权导出的收藏、保存、阅读、转发文章指针和本地保存的公众号文章文件，支持文件/目录/ZIP，输出 CollectorX 事件和动作覆盖 manifest；不抓公众号公共文章库，不读取凭据。
-version: 0.1.1
+description: 微信收藏与公众号文章通用采集器。采集用户授权导出的收藏、保存、阅读、转发文章指针和本地保存的公众号文章文件，支持文件/目录/ZIP，输出 CollectorX 事件、字段覆盖、来源审计、内容策略和动作覆盖 manifest；不抓公众号公共文章库，不读取凭据。
 ---
 
 # WeChat Favorites Collector
@@ -18,6 +17,10 @@ version: 0.1.1
 - 授权导出的 JSON/JSONL/CSV/TSV 收藏清单。
 - 授权 ZIP 导出包；只读取支持的文件，跳过危险路径成员。
 - `manifest.action_coverage`：记录收藏、阅读、转发、保存文件四类动作的观察和缺失。
+- `manifest.field_coverage`：记录标题、来源账号、URL、动作时间、标签、正文预览等字段覆盖。
+- `manifest.article_surface_summary`：记录 URL、来源账号、标签、正文、公号文章等可用面。
+- `manifest.source_audit`：记录文件/ZIP 成员来源、归档包数量，并声明未采集路径穿越成员。
+- `manifest.content_policy` 与 `manifest.evidence_policy`：声明通用采集器不直接写投资 Wiki，需交给 `wechat-article-favorites` lens。
 
 不采集：
 

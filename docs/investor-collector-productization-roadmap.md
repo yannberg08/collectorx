@@ -833,6 +833,28 @@ Findings:
 - Fixture validation covers JSON favorites, HTML saved public-account article,
   ZIP shared article, credential filtering, and ZIP path traversal skipping.
 
+### Wave T2: P1 WeChat favorites audit and source pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-wechat-favorites-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added per-event `text_length` and archive member/source archive provenance
+  in `raw_ref`.
+- Added `manifest.field_coverage` for item type, action type, title, source
+  account, URL, action time, tags, text preview, and event time.
+- Added `manifest.article_surface_summary` so FinClaw can see URL, source
+  account, tag, text, and public-account article availability before lensing.
+- Added `manifest.source_audit`, `manifest.content_policy`, and
+  `manifest.evidence_policy` to keep the generic collector/Lake/lens boundary
+  explicit.
+- Hardened ZIP import against POSIX traversal and Windows drive/traversal
+  members.
+
 ### Wave U: P1 financial news usage coverage pass 1
 
 Status: `completed-baseline`
@@ -953,7 +975,7 @@ Findings:
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; manifest reports platform coverage, field coverage, source audit, content policy, ZIP provenance, and generic-collector evidence policy | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, source audit, ZIP provenance, and generic-collector evidence policy; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration surface summaries, source audit, ZIP provenance, and generic-collector evidence policy; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
-| 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage manifest | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
+| 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article surface summary, source audit, ZIP provenance, content policy, and generic-collector evidence policy | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action coverage manifest | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 
 ## P2 Work Queue

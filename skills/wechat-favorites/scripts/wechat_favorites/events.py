@@ -14,6 +14,20 @@ COLLECTOR = "wechat-favorites"
 CN_TZ = timezone(timedelta(hours=8))
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "key")
 EXPECTED_WECHAT_ACTIONS = ("favorite", "read", "share", "saved_file")
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+WECHAT_FAVORITE_RECOMMENDED_FIELDS = (
+    "item_type",
+    "action_type",
+    "title",
+    "source_account",
+    "url",
+    "action_time",
+    "tags",
+    "text_preview",
+    "time",
+)
+TEXT_PREVIEW_MAX_CHARS = 2000
 
 
 def now_iso() -> str:
@@ -44,11 +58,21 @@ def favorite_to_event(
         "url": url,
         "action_time": action_time,
         "tags": tags,
-        "text_preview": text[:2000],
+        "text_preview": text[:TEXT_PREVIEW_MAX_CHARS],
         "has_text": bool(text),
+        "text_length": len(text),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "url": url,
+        "source_account": account,
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, row, title, url, action_time, action_type),
@@ -59,12 +83,7 @@ def favorite_to_event(
         "time": action_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "row": row,
-            "url": url,
-            "source_account": account,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -130,6 +149,22 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "unknown_action_count": unknown_action_count,
             "real_account_validation": False,
         },
+        "field_coverage": field_coverage(events),
+        "article_surface_summary": article_surface_summary(events),
+        "source_audit": source_audit(events),
+        "content_policy": {
+            "full_public_account_crawl": False,
+            "full_content_included_by_default": False,
+            "text_preview_max_chars": TEXT_PREVIEW_MAX_CHARS,
+            "investment_article_classification_done": False,
+        },
+        "evidence_policy": {
+            "generic_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_article_classification_done": False,
+            "required_lens": "wechat-article-favorites",
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_wechat_favorites_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -147,6 +182,61 @@ def action_coverage_status(events: List[Dict[str, Any]], missing_expected: List[
     if not missing_expected:
         return "all_expected_actions_observed"
     return "partial_expected_actions_observed"
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    favorite_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "file"]
+    field_counts = {
+        field: sum(1 for event in favorite_events if favorite_field_present(event, field))
+        for field in WECHAT_FAVORITE_RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(WECHAT_FAVORITE_RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_text": sum(1 for event in favorite_events if (event.get("data") or {}).get("has_text")),
+    }
+
+
+def favorite_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    value = (event.get("data") or {}).get(field)
+    return value not in (None, "", [], {})
+
+
+def article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    favorite_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "file"]
+    return {
+        "article_event_count": len(favorite_events),
+        "events_with_url": sum(1 for event in favorite_events if (event.get("data") or {}).get("url")),
+        "events_with_source_account": sum(1 for event in favorite_events if (event.get("data") or {}).get("source_account")),
+        "events_with_tags": sum(1 for event in favorite_events if (event.get("data") or {}).get("tags")),
+        "events_with_text": sum(1 for event in favorite_events if (event.get("data") or {}).get("has_text")),
+        "public_account_article_count": sum(
+            1
+            for event in favorite_events
+            if (event.get("data") or {}).get("item_type") == "public_account_article"
+        ),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(
+            1
+            for event in events
+            if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")
+        ),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "archive_path_traversal_members_collected": False,
+    }
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -171,6 +261,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_actions: `{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
         f"- missing_expected_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
+        f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         "",
         "Generic WeChat favorite/article events are not written to the investor Wiki directly. Use the wechat-article-favorites lens.",
     ]

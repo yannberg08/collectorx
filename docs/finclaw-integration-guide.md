@@ -420,7 +420,12 @@ Current status:
   saved-article records into generic `wechat-favorites` events.
 - Writes `manifest.action_coverage` with expected user actions: favorite,
   read, share, and saved file.
-- Captures source account count and filters credential-like raw keys.
+- Writes `manifest.field_coverage`, `manifest.article_surface_summary`,
+  `manifest.source_audit`, `manifest.content_policy`, and
+  `manifest.evidence_policy` so Lake can see which article/source fields are
+  actually present before the investor lens runs.
+- Captures ZIP member provenance, source account count, text length, and filters
+  credential-like raw keys.
 - Does not claim investment-article status directly.
 - Feed `lake/wechat-favorites/events.jsonl` into `wechat-article-favorites`
   lens for investment public-account articles and saved reading sources.

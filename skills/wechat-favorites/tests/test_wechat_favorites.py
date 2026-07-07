@@ -72,6 +72,8 @@ def test_collect_json_and_html_events() -> None:
                 ),
             )
             archive.writestr("../unsafe.json", json.dumps([{"title": "不应读取"}], ensure_ascii=False))
+            archive.writestr("..\\windows-traversal.json", json.dumps([{"title": "不应读取 Windows traversal"}], ensure_ascii=False))
+            archive.writestr("C:\\unsafe.json", json.dumps([{"title": "不应读取 Windows drive"}], ensure_ascii=False))
         subprocess.run(
             [
                 sys.executable,
@@ -95,6 +97,12 @@ def test_collect_json_and_html_events() -> None:
         assert all(event["wiki_targets"] == ["internal.knowledge.saved_articles"] for event in events)
         assert {event["data"]["action_type"] for event in events} == {"favorite", "read", "share", "saved_file"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("windows-traversal" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("C:/unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert any(event["data"].get("text_length") for event in events)
+        share_event = next(event for event in events if event["data"]["action_type"] == "share")
+        assert share_event["raw_ref"]["source_archive"] == str(share_zip)
+        assert share_event["raw_ref"]["archive_member"] == "shares.json"
         assert "must-not-leak" not in json.dumps(events, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_article_favorites"] is False
@@ -103,6 +111,14 @@ def test_collect_json_and_html_events() -> None:
         assert manifest["action_coverage"]["missing_expected_actions"] == []
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["action_coverage"]["real_account_validation"] is False
+        assert manifest["field_coverage"]["field_counts"]["action_type"] == 4
+        assert manifest["article_surface_summary"]["events_with_url"] >= 2
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["content_policy"]["full_public_account_crawl"] is False
+        assert manifest["content_policy"]["full_content_included_by_default"] is False
+        assert manifest["evidence_policy"]["required_lens"] == "wechat-article-favorites"
         assert manifest["source_account_count"] == 4
 
 
