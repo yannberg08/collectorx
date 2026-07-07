@@ -43,3 +43,15 @@ python <SKILL_DIR>/scripts/notes_api.py youdao --token <token> --export ~/Deskto
 | `--export` | 导出文件路径 |
 | `--format` | 输出格式（json/markdown） |
 | `--limit` | 限制笔记数量 |
+
+## 数据流向Wiki
+
+笔记数据可流向以下Wiki维度：
+- **内在/知识体系/笔记**：个人笔记
+- **内在/知识体系/学习记录**：学习笔记
+- **外在/履历/项目文档**：项目笔记
+
+### 支持的应用
+- **知识管理**：整理个人知识
+- **学习追踪**：追踪学习进度
+- **项目文档**：管理项目笔记
