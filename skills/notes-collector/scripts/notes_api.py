@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-笔记采集器 - 支持Notion/Obsidian/有道云笔记
+笔记采集器 - 支持 Notion/Obsidian/有道云/印象笔记/ZIP 授权导出
 """
 import json
 import os
@@ -70,15 +70,18 @@ def collect_obsidian(
 
 
 def collect_notion(
-    token: str,
-    export_path: str,
+    token: str = None,
+    export_path: str = None,
     limit: int = None,
     event_export: str = None,
     out_dir: str = None,
     include_content: bool = False,
+    token_env: str = None,
 ):
     """采集Notion笔记（通过API）"""
     import urllib.request
+
+    token = resolve_notion_token(token, token_env)
     
     headers = {
         "Authorization": f"Bearer {token}",
@@ -169,10 +172,20 @@ def _extract_notion_title(page):
     return page.get("id", "Untitled")
 
 
+def resolve_notion_token(token: str = None, token_env: str = None) -> str:
+    if token_env:
+        token = os.environ.get(token_env)
+        if not token:
+            raise ValueError(f"环境变量未设置或为空: {token_env}")
+    if not token:
+        raise ValueError("缺少 Notion API Token。推荐使用 --token-env 指向环境变量。")
+    return token
+
+
 def cmd_status():
     """显示状态"""
     print("笔记采集器")
-    print("支持: Notion/Obsidian/有道云/印象笔记授权导出")
+    print("支持: Notion/Obsidian/有道云/印象笔记/ZIP授权导出")
 
 
 def main():
@@ -192,7 +205,8 @@ def main():
     
     # notion命令
     not_parser = subparsers.add_parser("notion", help="采集Notion笔记")
-    not_parser.add_argument("--token", required=True, help="API Token")
+    not_parser.add_argument("--token", help="API Token；推荐改用 --token-env，避免明文进入命令历史")
+    not_parser.add_argument("--token-env", help="保存 Notion API Token 的环境变量名")
     not_parser.add_argument("--export", required=True, help="导出路径")
     not_parser.add_argument("--limit", type=int, help="限制数量")
     not_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
@@ -201,7 +215,7 @@ def main():
 
     # import命令
     import_parser = subparsers.add_parser("import", help="导入授权笔记导出文件/目录")
-    import_parser.add_argument("--input", required=True, help="导出文件或目录，支持 md/html/txt/json/jsonl/enex")
+    import_parser.add_argument("--input", required=True, help="导出文件或目录，支持 md/html/txt/json/jsonl/enex/zip")
     import_parser.add_argument("--source-app", default="auto", choices=["auto", "notion", "obsidian", "youdao", "evernote", "markdown", "notes-export"], help="来源应用")
     import_parser.add_argument("--export", required=True, help="标准化 JSON 导出路径")
     import_parser.add_argument("--limit", type=int, help="限制数量")
@@ -217,7 +231,7 @@ def main():
     if args.command == "obsidian":
         collect_obsidian(args.vault, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
     elif args.command == "notion":
-        collect_notion(args.token, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
+        collect_notion(args.token, args.export, args.limit, args.event_export, args.out_dir, args.include_content, args.token_env)
     elif args.command == "import":
         collect_import(args.input, args.source_app, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
     elif args.command == "status":

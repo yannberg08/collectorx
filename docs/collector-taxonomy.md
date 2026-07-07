@@ -78,7 +78,7 @@ Investor lens 是投资分身适配层，不重复挖原始数据。它从 gener
 | 公众号/微信收藏 | lens | 用户收藏/阅读/转发的投资文章动作和 raw_ref | 公众号全量文章库 |
 | 邮箱 | generic | 邮件、发件人、主题、附件指针、正文预览 | 投资定性、邮箱密码 |
 | 邮件研报 | lens | 券商晨会、研报邮件、调研邀请、项目往来 | 全量私人邮件进投资 Wiki |
-| Obsidian/Notion/有道云/印象笔记 | generic | 用户授权笔记、标签、目录、raw_ref | 投资定性、账号 token |
+| Obsidian/Notion/有道云/印象笔记 | generic | 用户授权笔记、标签、目录、raw_ref、平台覆盖 manifest | 投资定性、账号 token |
 | 投资笔记 | lens | 投资笔记、复盘、规则库、交易 checklist | 生活笔记、无关知识库 |
 | 飞书/钉钉/腾讯会议 | generic | 会议、纪要、参会人、任务、文档 raw_ref | 投资定性、未授权录音 |
 | 投研会议纪要 | lens | 路演、调研、投委会、决策点、参会对象 | 全部会议 |

@@ -583,6 +583,27 @@ Findings:
 - Fixture validation proves partial platform coverage and all-expected-platform
   input coverage are reported separately from complete asset-boundary claims.
 
+### Wave Q: P1 notes platform coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-platform-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Added authorized ZIP export import for common Notion/Youdao/Evernote/Markdown
+  note packages.
+- Added `manifest.platform_coverage` to `notes-collector`, including expected
+  P1 note platforms, observed platforms, missing platforms, source counts,
+  unknown count, and `real_account_validation=false`.
+- Added Obsidian source inference for authorized export folders.
+- Added Notion `--token-env` so FinClaw can authorize API collection without
+  placing tokens in command history.
+- Fixture validation now proves partial platform coverage, all-expected-platform
+  coverage, and ZIP path traversal skipping.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -597,7 +618,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; manifest reports observed/missing P1 note platforms | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON and generic calendar exports; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local meeting files plus DingTalk/WeCom collaboration exports; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |

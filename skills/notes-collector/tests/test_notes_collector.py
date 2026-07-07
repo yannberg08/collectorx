@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -50,6 +51,9 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         assert event["wiki_targets"] == ["internal.knowledge.notes"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_notes"] is False
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian"]
+        assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"notion", "youdao", "evernote"}
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
 
 
 def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
@@ -113,9 +117,74 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
         assert {event["data"]["title"] for event in events} == {"半导体复盘", "白酒跟踪", "交易规则"}
         assert all("content" not in event["data"] for event in events)
         assert any("现金流和估值复盘" in event["data"]["content_preview"] for event in events)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_coverage"]["source_app_counts"] == {
+            "evernote": 1,
+            "markdown": 1,
+            "youdao": 1,
+        }
+        assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"obsidian", "notion"}
+
+
+def test_import_zip_and_all_expected_platform_coverage() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        exports = root / "exports"
+        exports.mkdir()
+        (exports / "obsidian-review.md").write_text("# 复盘\n组合调整纪律\n", encoding="utf-8")
+        (exports / "youdao.json").write_text(
+            json.dumps({"notes": [{"source": "有道云笔记", "title": "煤炭跟踪", "content": "供需和估值"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (exports / "evernote.enex").write_text(
+            """<?xml version="1.0" encoding="UTF-8"?>
+<en-export>
+  <note>
+    <title>银行股规则</title>
+    <content><![CDATA[<en-note>分红率和资产质量 checklist</en-note>]]></content>
+  </note>
+</en-export>
+""",
+            encoding="utf-8",
+        )
+        zip_path = exports / "notion-export.zip"
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("Notion Export/半导体研究.md", "# 半导体研究\n库存周期和订单验证\n")
+            archive.writestr("../unsafe.md", "# 不应读取\n")
+
+        export = root / "notes.json"
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "import",
+                "--input",
+                str(exports),
+                "--source-app",
+                "auto",
+                "--export",
+                str(export),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 4
+        assert {event["data"]["source_app"] for event in events} == {"obsidian", "notion", "youdao", "evernote"}
+        assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian", "notion", "youdao", "evernote"]
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == []
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
+        assert manifest["platform_coverage"]["real_account_validation"] is False
 
 
 if __name__ == "__main__":
     test_obsidian_outputs_collectorx_events_without_full_content_by_default()
     test_import_outputs_youdao_evernote_and_markdown_events()
+    test_import_zip_and_all_expected_platform_coverage()
     print("notes-collector tests passed.")

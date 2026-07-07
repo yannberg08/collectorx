@@ -1,1 +1,1 @@
-{"slug": "notes-collector", "version": "0.2.0", "description": "笔记应用采集器，支持 Obsidian/Notion 以及有道云、印象笔记授权导出导入。"}
+{"slug": "notes-collector", "version": "0.2.1", "description": "笔记应用采集器，支持 Obsidian/Notion 以及有道云、印象笔记、ZIP 授权导出导入。"}

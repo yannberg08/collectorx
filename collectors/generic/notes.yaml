@@ -9,5 +9,19 @@ armed: false
 # 采集器使用的skill
 skill: notes-collector
 
-# 采集逻辑由skill定义
-# skill会处理：Notion API/Obsidian文件/有道云API
+scope:
+  collects:
+    - note_title
+    - note_content_preview
+    - note_tags
+    - note_path_or_url
+    - source_app
+    - platform_coverage_manifest
+  excludes:
+    - note_service_tokens
+    - unrelated_investment_classification
+    - wiki_conclusions
+
+# 采集逻辑由 skill 定义。
+# skill 会处理：Notion API、Obsidian 本地 vault、有道云/印象笔记/Markdown/HTML/JSON/ZIP 授权导出。
+# generic notes 只进入 lake/notes/events.jsonl；投资笔记由 investment-notes lens 筛选。

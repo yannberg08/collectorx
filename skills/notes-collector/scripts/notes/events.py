@@ -12,6 +12,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 COLLECTOR = "notes"
 CN_TZ = timezone(timedelta(hours=8))
+EXPECTED_P1_NOTE_PLATFORMS = ("obsidian", "notion", "youdao", "evernote")
+GENERIC_NOTE_SOURCES = {"markdown", "notes-export"}
 
 
 def now_iso() -> str:
@@ -88,6 +90,15 @@ def note_to_event(
 
 def build_manifest(events: List[Dict[str, Any]], *, source_app: str, collected_at: Optional[str] = None) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
+    source_app_counts = Counter(source_app_for(event) for event in events)
+    observed_platforms = sorted(source for source, count in source_app_counts.items() if count)
+    observed_expected = [platform for platform in EXPECTED_P1_NOTE_PLATFORMS if source_app_counts.get(platform)]
+    missing_expected = [platform for platform in EXPECTED_P1_NOTE_PLATFORMS if not source_app_counts.get(platform)]
+    unknown_event_count = sum(
+        count
+        for app, count in source_app_counts.items()
+        if app not in EXPECTED_P1_NOTE_PLATFORMS and app not in GENERIC_NOTE_SOURCES
+    )
     return {
         "schema": "collectorx.notes.manifest.v1",
         "collector": COLLECTOR,
@@ -95,10 +106,20 @@ def build_manifest(events: List[Dict[str, Any]], *, source_app: str, collected_a
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
         "kind_counts": dict(sorted(kind_counts.items())),
+        "platform_coverage": {
+            "expected_p1_platforms": list(EXPECTED_P1_NOTE_PLATFORMS),
+            "observed_platforms": observed_platforms,
+            "observed_expected_platforms": observed_expected,
+            "missing_expected_platforms": missing_expected,
+            "source_app_counts": dict(sorted(source_app_counts.items())),
+            "unknown_event_count": unknown_event_count,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "events_collected" if events else "no_notes_collected",
             "can_enter_finclaw": bool(events),
             "can_claim_investment_notes": False,
+            "platform_coverage_status": platform_coverage_status(events, missing_expected),
             "next_action": "Feed notes events into investment-notes lens for investor-specific routing." if events else "Provide an authorized notes vault/export.",
         },
     }
@@ -128,10 +149,25 @@ def write_package(out_dir: Path, events: List[Dict[str, Any]], *, source_app: st
         f"- source_app: `{source_app}`",
         f"- event_count: {len(events)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
+        f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         "",
         "Generic notes are not written to the investor Wiki directly. Use the investment-notes lens.",
     ]
     (out_dir / "SUMMARY.md").write_text("\n".join(summary), encoding="utf-8")
+
+
+def source_app_for(event: Dict[str, Any]) -> str:
+    value = event.get("data", {}).get("source_app") or event.get("raw_ref", {}).get("source_app") or "unknown"
+    return str(value)
+
+
+def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:
+    if not events:
+        return "no_platform_observed"
+    if not missing_expected:
+        return "all_expected_platforms_observed"
+    return "partial_expected_platforms_observed"
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

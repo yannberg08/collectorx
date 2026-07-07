@@ -79,7 +79,7 @@ Operational docs:
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
 | `email` | `email-collector` | Multi-account IMAP baseline plus authorized local EML/MBOX/JSON/CSV import packages; real mailbox validation still pending |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |
-| `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion plus authorized Youdao/Evernote/Markdown/HTML/JSON/ENEX imports; macOS Obsidian-style validation done |
+| `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion plus authorized Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP imports; manifest reports P1 note-platform coverage and missing platforms |
 | `dingtalk` | `collaboration-exports` | Authorized local export baseline for DingTalk messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
 | `wecom` | `collaboration-exports` | Authorized local export baseline for WeCom messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |
