@@ -237,13 +237,16 @@ python3 skills/email-collector/scripts/email_api.py import \
 
 Current status:
 
-- Converts IMAP messages or authorized local EML/MBOX/JSON/JSONL/CSV/TSV
+- Converts IMAP messages or authorized local EML/MBOX/JSON/JSONL/CSV/TSV/ZIP
   exports into generic `email` events.
 - Captures mailbox, folder, sender, recipients, cc, subject, date,
-  body preview, message ID, and attachment refs.
+  body preview, message ID, attachment refs, and ZIP member provenance.
 - Does not include full body by default; `--event-include-body` requires
   explicit authorization.
-- Does not write attachment bodies into events.
+- Does not write attachment bodies into events; attachment refs and raw refs
+  filter token/cookie/password/secret-like keys.
+- `email-research` can also match clear research attachment filenames such as
+  broker reports, morning notes, roadshow invites, and financial statements.
 - Does not claim investment-research status directly. Feed `lake/email/events.jsonl`
   into `email-research` for broker research, roadshow, and IR mail evidence.
 

@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 from email.header import Header
 from email.message import EmailMessage
@@ -80,6 +81,29 @@ def test_email_event_jsonl_writer():
     assert json.loads(lines[0])["collector"] == "email"
 
 
+def test_email_event_sanitizes_attachment_and_raw_ref_secrets():
+    events = emails_to_events(
+        [
+            {
+                "id": "44",
+                "message_id": "<sample-3@example.com>",
+                "from": "Research <research@example.com>",
+                "to": "Owner <owner@example.com>",
+                "subject": "请查收附件",
+                "date": "Tue, 07 Jul 2026 12:00:00 +0800",
+                "body": "正文",
+                "attachments": [{"filename": "report.pdf", "content_type": "application/pdf", "token": "must-not-leak"}],
+                "raw_ref": {"path": "mail.json", "token": "must-not-leak", "nested": {"cookie": "must-not-leak"}},
+            }
+        ],
+        collected_at="2026-07-07T16:30:00+08:00",
+    )
+    serialized = json.dumps(events, ensure_ascii=False)
+    assert "must-not-leak" not in serialized
+    assert events[0]["data"]["attachment_refs"] == [{"filename": "report.pdf", "content_type": "application/pdf"}]
+    assert events[0]["data"]["attachment_count"] == 1
+
+
 def test_provider_inference_and_multi_account_state():
     gmail = infer_provider("owner@gmail.com")
     assert gmail["provider"] == "gmail"
@@ -137,7 +161,7 @@ class FakeIMAP:
         return "BYE", []
 
 
-def _mail_bytes(subject, sender, recipient, body):
+def _mail_bytes(subject, sender, recipient, body, attachment_name=None):
     msg = EmailMessage()
     msg["Message-ID"] = "<sample@example.com>"
     msg["From"] = sender
@@ -145,6 +169,8 @@ def _mail_bytes(subject, sender, recipient, body):
     msg["Subject"] = str(Header(subject, "utf-8"))
     msg["Date"] = "Tue, 07 Jul 2026 10:00:00 +0800"
     msg.set_content(body)
+    if attachment_name:
+        msg.add_attachment(b"attachment-bytes", maintype="application", subtype="pdf", filename=attachment_name)
     return msg.as_bytes()
 
 
@@ -153,7 +179,7 @@ def test_fake_imap_multi_folder_collection(monkeypatch=None):
 
     FakeIMAP.mailboxes = {
         ("owner@gmail.com", "INBOX"): {
-            1: _mail_bytes("调研纪要", "Analyst <a@example.com>", "Owner <owner@gmail.com>", "正文A")
+            1: _mail_bytes("调研纪要", "Analyst <a@example.com>", "Owner <owner@gmail.com>", "正文A", "morning-note.pdf")
         },
         ("owner@gmail.com", "Sent"): {
             2: _mail_bytes("回复纪要", "Owner <owner@gmail.com>", "Analyst <a@example.com>", "正文B")
@@ -178,6 +204,7 @@ def test_fake_imap_multi_folder_collection(monkeypatch=None):
     folders = {item["folder"] for item in emails}
     assert folders == {"INBOX", "Sent"}
     assert {item["subject"] for item in emails} == {"调研纪要", "回复纪要"}
+    assert any(ref["filename"] == "morning-note.pdf" for item in emails for ref in item.get("attachment_refs", []))
 
 
 def test_local_email_import_package():
@@ -274,6 +301,56 @@ def test_local_email_import_gap_event():
         assert events[0]["data"]["gap"] == "email_authorized_export_missing"
 
 
+def test_local_email_import_zip_package():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        zip_path = root / "mail-export.zip"
+        out = root / "out"
+
+        msg = EmailMessage()
+        msg["Message-ID"] = "<zip-research@example.com>"
+        msg["From"] = "Broker Research <research@broker.example>"
+        msg["To"] = "Owner <owner@example.com>"
+        msg["Subject"] = str(Header("策略深度报告", "utf-8"))
+        msg["Date"] = "Wed, 08 Jul 2026 09:00:00 +0800"
+        msg.set_content("见附件。")
+        msg.add_attachment(b"pdf-bytes", maintype="application", subtype="pdf", filename="zip-report.pdf")
+
+        with zipfile.ZipFile(zip_path, "w") as package:
+            package.writestr("nested/research.eml", msg.as_bytes())
+            package.writestr("../escape.eml", msg.as_bytes())
+            package.writestr("nested/ignored.txt", "not email")
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(zip_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:30:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["raw_ref"]["archive_member"] == "nested/research.eml"
+        assert events[0]["data"]["attachment_refs"][0]["filename"] == "zip-report.pdf"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_audit"]["archive_member_count"] == 3
+        assert manifest["collection_audit"]["skipped_archive_member_count"] == 2
+        assert manifest["attachment_policy"]["attachment_bodies_included"] is False
+
+
 def test_register_refuses_local_password_storage():
     with tempfile.TemporaryDirectory() as tmp:
         state_path = Path(tmp) / "email.json"
@@ -300,9 +377,11 @@ def test_register_refuses_local_password_storage():
 if __name__ == "__main__":
     test_email_event_without_full_body()
     test_email_event_jsonl_writer()
+    test_email_event_sanitizes_attachment_and_raw_ref_secrets()
     test_provider_inference_and_multi_account_state()
     test_fake_imap_multi_folder_collection()
     test_local_email_import_package()
     test_local_email_import_gap_event()
+    test_local_email_import_zip_package()
     test_register_refuses_local_password_storage()
     print("All email collector event tests passed!")

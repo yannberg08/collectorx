@@ -14,6 +14,16 @@ from typing import Any, Dict, Iterable, List, Optional
 COLLECTOR_ID = "email"
 DEFAULT_SOURCE = "IMAP 邮件"
 CN_TZ = timezone(timedelta(hours=8))
+SENSITIVE_KEYS = {
+    "authorization",
+    "cookie",
+    "cookies",
+    "oauth",
+    "password",
+    "secret",
+    "session",
+    "token",
+}
 
 
 def emails_to_events(
@@ -59,10 +69,11 @@ def email_to_event(
         "body_preview": body[:300],
         "has_body": bool(body),
     }
-    attachments = item.get("attachment_refs") or item.get("attachments") or []
+    attachments = sanitize_attachment_refs(item.get("attachment_refs") or item.get("attachments") or [])
     if attachments:
         data["attachment_refs"] = attachments
         data["has_attachments"] = True
+        data["attachment_count"] = len(attachments)
     if include_body:
         data["body"] = body
     raw_ref = {
@@ -71,7 +82,7 @@ def email_to_event(
         "folder": folder or item.get("folder"),
     }
     if isinstance(item.get("raw_ref"), dict):
-        raw_ref.update(item["raw_ref"])
+        raw_ref.update(sanitize_raw_ref(item["raw_ref"]))
 
     return {
         "schema": "collectorx.event.v1",
@@ -111,6 +122,56 @@ def write_json(path: str, payload: Any) -> None:
     output = Path(path).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def sanitize_attachment_refs(value: Any) -> List[Dict[str, Any]]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, dict):
+        values = [value]
+    elif isinstance(value, list):
+        values = value
+    elif isinstance(value, str):
+        values = [{"filename": part.strip()} for part in value.replace("；", ";").split(";") if part.strip()]
+    else:
+        values = []
+
+    out: List[Dict[str, Any]] = []
+    for item in values:
+        if isinstance(item, dict):
+            filename = item.get("filename") or item.get("name") or item.get("file_name") or item.get("文件名")
+            if not filename:
+                continue
+            safe = {
+                "filename": str(filename),
+                "content_type": item.get("content_type") or item.get("mime") or item.get("type") or item.get("类型"),
+                "size": item.get("size") or item.get("bytes") or item.get("大小"),
+            }
+            out.append({key: val for key, val in safe.items() if val not in (None, "")})
+        else:
+            text = str(item).strip()
+            if text:
+                out.append({"filename": text})
+    return out
+
+
+def sanitize_raw_ref(value: Dict[str, Any]) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for key, item in value.items():
+        if is_sensitive_key(key):
+            continue
+        if isinstance(item, dict):
+            out[key] = sanitize_raw_ref(item)
+        elif isinstance(item, list):
+            out[key] = [sanitize_raw_ref(sub) if isinstance(sub, dict) else sub for sub in item]
+        else:
+            out[key] = item
+    return out
+
+
+def is_sensitive_key(key: Any) -> bool:
+    normalized = str(key).lower().replace("_", "").replace("-", "")
+    return any(secret in normalized for secret in SENSITIVE_KEYS)
 
 
 def gap_event(*, collected_at: Optional[str] = None, reason: str = "email_authorized_input_missing") -> Dict[str, Any]:

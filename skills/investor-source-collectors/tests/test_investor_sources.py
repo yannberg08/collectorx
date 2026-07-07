@@ -218,6 +218,75 @@ def test_email_research_reads_upstream_collectorx_event() -> None:
         assert manifest["collection_readiness"]["can_claim_complete_source_collection"] is False
 
 
+def test_email_research_matches_research_attachment_filename() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "email-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:attachment-research",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-08T08:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "from": "contact@example.com",
+                    "to": "owner@example.com",
+                    "subject": "请查收",
+                    "body_preview": "附件供参考。",
+                    "attachment_refs": [{"filename": "半导体深度报告.pdf", "content_type": "application/pdf"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"path": "mail-export.zip::nested/research.eml"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:attachment-casual",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "from": "friend@example.com",
+                    "to": "owner@example.com",
+                    "subject": "照片",
+                    "body_preview": "周末照片。",
+                    "attachment_refs": [{"filename": "holiday.jpg", "content_type": "image/jpeg"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"path": "mail-export.zip::nested/photo.eml"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "email-research",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T12:10:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "email-research" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        classification = lens_events[0]["data"]["classification"]
+        assert "matched_research_attachment_filename" in classification["reasons"]
+        assert lens_events[0]["data"]["payload"]["attachment_refs"][0]["filename"] == "半导体深度报告.pdf"
+
+
 def test_research_documents_extracts_office_and_pdf_content_when_authorized() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         from docx import Document

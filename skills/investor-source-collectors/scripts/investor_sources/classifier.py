@@ -122,6 +122,22 @@ BROKER_OR_RESEARCH_SENDERS = {
     "东方证券",
 }
 
+EMAIL_RESEARCH_ATTACHMENT_TERMS = {
+    "研报",
+    "研究",
+    "深度报告",
+    "晨会",
+    "策略",
+    "行业",
+    "公司研究",
+    "调研",
+    "路演",
+    "纪要",
+    "财报",
+    "公告",
+    "业绩说明会",
+}
+
 RESEARCH_FILE_HINTS = {
     "研报",
     "研究",
@@ -273,7 +289,13 @@ def source_specific_score(
             score += 0.35
             reasons.append("matched_broker_or_research_sender_subject")
             matched_terms.extend(hits[:8])
-        if any(str(record.get(key) or "") for key in ("attachment", "attachments", "附件")):
+        attachment_text = attachment_search_text(record)
+        attachment_hits = term_hits(EMAIL_RESEARCH_ATTACHMENT_TERMS, attachment_text, attachment_text.lower())
+        if attachment_hits:
+            score += 0.35
+            reasons.append("matched_research_attachment_filename")
+            matched_terms.extend(attachment_hits[:8])
+        if any(str(record.get(key) or "") for key in ("attachment", "attachments", "attachment_refs", "has_attachments", "附件")):
             score += 0.10
             reasons.append("has_research_attachment_ref")
 
@@ -296,6 +318,15 @@ def source_specific_score(
             reasons.append("matched_owner_decision_phrase")
 
     return score
+
+
+def attachment_search_text(record: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    for key in ("attachment", "attachments", "attachment_refs", "附件"):
+        value = record.get(key)
+        if value is not None:
+            collect_strings(value, parts)
+    return "\n".join(parts)[:5000]
 
 
 def stable_unique(items: Iterable[str]) -> List[str]:

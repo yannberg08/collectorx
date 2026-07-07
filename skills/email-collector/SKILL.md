@@ -1,7 +1,7 @@
 ---
 name: email-collector
 description: 采集邮箱邮件并输出CollectorX邮件事件。当用户说"查邮件"、"导出邮件"、"采集邮件"、"邮件备份"、"邮件投资讨论"时使用此skill。
-version: 0.4.0
+version: 0.4.1
 ---
 
 # 邮箱采集器
@@ -79,14 +79,15 @@ python <SKILL_DIR>/scripts/email_api.py import \
 
 ## 本地导入
 
-`import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV。它输出标准采集包：
+`import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV、ZIP 邮件包。它输出标准采集包：
 
 - `lake/email/events.jsonl`
 - `manifest.json`
 - `SUMMARY.md`
 
 默认只写入 `body_preview` 和 `attachment_refs`，附件只记录文件名、类型和大小，
-不写入附件正文。只有显式使用 `--event-include-body` 时才会把完整正文写入事件。
+不写入附件正文。ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。
+只有显式使用 `--event-include-body` 时才会把完整正文写入事件。
 
 ## 安全说明
 
@@ -97,6 +98,7 @@ python <SKILL_DIR>/scripts/email_api.py import \
 - 不会修改或删除邮件，只读取
 - `--event-export` 默认只把正文预览写入事件，不把完整正文塞进事件；如确实需要可显式使用 `--event-include-body`
 - `import` 默认只记录附件引用，不写入附件正文
+- 附件引用和 `raw_ref` 会过滤 token、cookie、password、secret 等敏感键
 - 支持多邮箱接入清单，状态文件结构为 `accounts[]`；旧版单邮箱 `account` 状态会被兼容读取
 
 ## CollectorX事件输出
@@ -107,7 +109,7 @@ python <SKILL_DIR>/scripts/email_api.py import \
 - `owner_scope`: `personal`
 - `kind`: `email`
 - `data.mailbox/folder/from/to/cc/subject/body_preview/has_body`
-- `data.attachment_refs/has_attachments`（如有附件）
+- `data.attachment_refs/has_attachments/attachment_count`（如有附件）
 - `raw_ref.imap_uid/message_id/folder`
 - `privacy.local_only: true`
 

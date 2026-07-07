@@ -569,6 +569,33 @@ Findings:
 - Fixture validation covers mixed EML/JSON/CSV imports, attachment refs,
   missing-input gap events, and legacy IMAP event paths.
 
+### Wave N2: P0 email package and research-attachment pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-package-validation-2026-07-08.md`
+
+Findings:
+
+- Added authorized ZIP package import for EML, MBOX, JSON/JSONL/NDJSON, CSV, and
+  TSV email exports.
+- ZIP imports preserve `archive.zip::member` provenance and skip unsafe path
+  traversal members.
+- Generic `email` events now sanitize attachment refs and `raw_ref` so token,
+  cookie, password, secret, session, and authorization keys do not leak into
+  lake events.
+- IMAP collection now carries attachment metadata refs in the same safe format
+  as local imports.
+- Email import manifests now include body policy, attachment policy, and
+  collection audit fields for file/archive counts.
+- `email-research` now scores clear research attachment filenames, so a broker
+  report attached to a plain email can still become investor evidence.
+- Fixture validation covers ZIP import, archive traversal skipping, raw ref and
+  attachment sanitization, IMAP attachment refs, and research-attachment lens
+  matching.
+
 ### Wave O: P0 filesystem cross-platform manifest pass 1
 
 Status: `completed-baseline`
@@ -798,7 +825,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, screenshot OCR decision, Wiki backtest against real trades/reviews |
-| 3 | `email` + `email-research` | G1/G2 local email export import baseline; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender classifier, attachment raw refs |
+| 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, import audit, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths; watchlist and broad activity baselines exist; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage manifest; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 

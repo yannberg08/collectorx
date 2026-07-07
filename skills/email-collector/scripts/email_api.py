@@ -9,11 +9,14 @@ import json
 import mailbox
 import os
 import sys
+import tempfile
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta
 from email import policy as email_policy
 from email.header import decode_header
 from pathlib import Path
+from pathlib import PurePosixPath
 
 from email_collector.events import emails_to_events, gap_event, write_events_jsonl, write_json
 
@@ -61,6 +64,8 @@ PROVIDER_PRESETS = {
 }
 
 DEFAULT_FOLDERS = ["INBOX"]
+SUPPORTED_IMPORT_EXTENSIONS = {".eml", ".mbox", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".zip"}
+SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS = SUPPORTED_IMPORT_EXTENSIONS - {".zip"}
 
 
 def _load_state() -> dict:
@@ -356,7 +361,7 @@ def cmd_import(
     event_include_body: bool = False,
 ):
     """Import user-authorized local email exports without requiring IMAP registration."""
-    emails = collect_imported_emails(inputs or [], limit=limit)
+    emails, import_audit = collect_imported_emails_with_audit(inputs or [], limit=limit)
     if not emails:
         events = [gap_event(collected_at=collected_at, reason="email_authorized_export_missing")]
     else:
@@ -372,7 +377,7 @@ def cmd_import(
     if out_dir:
         out = Path(out_dir).expanduser()
         write_events_jsonl(str(out / "lake" / "email" / "events.jsonl"), events)
-        manifest = build_import_manifest(events, collected_at=collected_at)
+        manifest = build_import_manifest(events, collected_at=collected_at, import_audit=import_audit)
         write_json(str(out / "manifest.json"), manifest)
         write_import_summary(out / "SUMMARY.md", manifest)
 
@@ -380,29 +385,51 @@ def cmd_import(
 
 
 def collect_imported_emails(inputs: list[str], *, limit: int = None) -> list[dict]:
+    emails, _audit = collect_imported_emails_with_audit(inputs, limit=limit)
+    return emails
+
+
+def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) -> tuple[list[dict], dict]:
     paths = list(iter_import_paths(inputs))
+    audit = {
+        "input_count": len(inputs),
+        "resolved_input_file_count": len(paths),
+        "imported_email_count": 0,
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "limit": limit,
+        "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
+        "attachment_bodies_included": False,
+    }
     collected = []
     for path in paths:
-        for item in parse_email_export(path):
+        increment_counter(audit, "extension_counts", path.suffix.lower() or "<none>")
+        for item in parse_email_export(path, audit=audit):
             collected.append(item)
             if limit is not None and len(collected) >= limit:
-                return collected[:limit]
-    return collected
+                audit["imported_email_count"] = len(collected[:limit])
+                finalize_import_audit(audit)
+                return collected[:limit], audit
+    audit["imported_email_count"] = len(collected)
+    finalize_import_audit(audit)
+    return collected, audit
 
 
 def iter_import_paths(inputs: list[str]):
-    supported = {".eml", ".mbox", ".json", ".jsonl", ".ndjson", ".csv", ".tsv"}
     for raw in inputs:
         path = Path(raw).expanduser()
         if path.is_dir():
             for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in supported:
+                if child.is_file() and child.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS:
                     yield child
-        elif path.is_file() and path.suffix.lower() in supported:
+        elif path.is_file() and path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS:
             yield path
 
 
-def parse_email_export(path: Path) -> list[dict]:
+def parse_email_export(path: Path, *, audit: dict = None) -> list[dict]:
     suffix = path.suffix.lower()
     if suffix == ".eml":
         raw = path.read_bytes()
@@ -418,7 +445,43 @@ def parse_email_export(path: Path) -> list[dict]:
         return parse_email_json(path)
     if suffix in {".csv", ".tsv"}:
         return parse_email_table(path)
+    if suffix == ".zip":
+        return parse_email_zip(path, audit=audit)
     return []
+
+
+def parse_email_zip(path: Path, *, audit: dict = None) -> list[dict]:
+    records: list[dict] = []
+    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-email-zip-") as tmp:
+        tmp_root = Path(tmp)
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            member_name = info.filename.replace("\\", "/")
+            member_path = PurePosixPath(member_name)
+            suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
+            if not is_safe_archive_member(member_path) or suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                continue
+            target = tmp_root.joinpath(*member_path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(archive.read(info))
+            for record in parse_email_export(target):
+                raw_ref = record.setdefault("raw_ref", {})
+                raw_ref["path"] = f"{path}::{member_name}"
+                raw_ref["archive"] = str(path)
+                raw_ref["archive_member"] = member_name
+                records.append(record)
+    return records
+
+
+def is_safe_archive_member(member_path: PurePosixPath) -> bool:
+    return bool(member_path.parts) and not member_path.is_absolute() and ".." not in member_path.parts
 
 
 def message_to_record(msg, *, path: Path, row: int) -> dict:
@@ -563,7 +626,7 @@ def _normalize_key(value) -> str:
     return str(value).lower().replace("_", "").replace("-", "").replace(" ", "")
 
 
-def build_import_manifest(events: list[dict], *, collected_at: str = None) -> dict:
+def build_import_manifest(events: list[dict], *, collected_at: str = None, import_audit: dict = None) -> dict:
     kind_counts = Counter(event["kind"] for event in events)
     folder_counts = Counter((event.get("data") or {}).get("folder", "unknown") for event in events if event["kind"] == "email")
     mailbox_counts = Counter((event.get("data") or {}).get("mailbox", "unknown") for event in events if event["kind"] == "email")
@@ -583,7 +646,32 @@ def build_import_manifest(events: list[dict], *, collected_at: str = None) -> di
             "full_body_included": any("body" in (event.get("data") or {}) for event in events),
             "next_action": "Provide authorized local email exports." if gap_only else "Feed lake/email/events.jsonl into email-research lens.",
         },
+        "body_policy": {
+            "full_body_included": any("body" in (event.get("data") or {}) for event in events),
+            "full_body_requires_event_include_body": True,
+            "body_preview_char_limit": 300,
+        },
+        "attachment_policy": {
+            "attachment_refs_included": any((event.get("data") or {}).get("attachment_refs") for event in events),
+            "attachment_bodies_included": False,
+            "retained_fields": ["filename", "content_type", "size"],
+        },
+        "collection_audit": import_audit or {},
     }
+
+
+def increment_counter(audit: dict, key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_import_audit(audit: dict) -> None:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
 
 def write_import_summary(path: Path, manifest: dict) -> None:
@@ -669,6 +757,7 @@ def _collect_account_emails(
                         "subject": decode_mime_header(msg["Subject"]),
                         "date": msg["Date"],
                         "body": get_email_body(msg)[:5000],
+                        "attachment_refs": get_email_attachments(msg),
                     }
                 )
     finally:
@@ -718,7 +807,7 @@ def main():
 
     # import命令
     import_parser = subparsers.add_parser("import", help="导入用户授权的本地邮件导出文件/目录")
-    import_parser.add_argument("--input", action="append", help="本地邮件导出文件或目录，可重复；支持 EML/MBOX/JSON/JSONL/CSV/TSV")
+    import_parser.add_argument("--input", action="append", help="本地邮件导出文件或目录，可重复；支持 EML/MBOX/JSON/JSONL/CSV/TSV/ZIP")
     import_parser.add_argument("--out-dir", help="输出标准采集包目录")
     import_parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
     import_parser.add_argument("--limit", type=int, help="限制数量")
