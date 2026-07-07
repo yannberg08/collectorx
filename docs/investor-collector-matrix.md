@@ -29,7 +29,7 @@
 
 | Collector | Skill | 目标 |
 | --- | --- | --- |
-| `meeting-artifacts` | generic placeholder | generic：飞书、钉钉、腾讯会议纪要原始通道 |
+| `meeting-artifacts` | `meeting-artifacts` | generic：飞书、钉钉、腾讯会议纪要/逐字稿/字幕原始通道 |
 | `meeting-minutes` | `investor-source-collectors` | lens：路演、调研、投委会纪要 |
 | `notes` | `notes-collector` | generic：Obsidian、Notion、有道云、印象笔记 |
 | `investment-notes` | `investor-source-collectors` | lens：投资笔记、规则库、复盘 |

@@ -123,6 +123,25 @@ Findings:
 - Real TickTick API validation is blocked because the local OAuth token is not
   present.
 
+### Wave E: P1 meeting artifacts productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-meeting-validation-2026-07-08.md`
+
+Findings:
+
+- Added runnable `meeting-artifacts` generic collector for authorized local
+  meeting minutes/transcript files.
+- `meeting-minutes` lens now has a fixture proving investment meetings are kept
+  and unrelated logistics meetings are filtered.
+- Real local candidate validation produced 10 generic meeting events and 10
+  investor-meeting lens events.
+- Platform API adapters for Feishu/DingTalk/WeCom/Tencent Meeting are still not
+  done.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -139,7 +158,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes | Strengthen Notion/Youdao/Evernote adapters, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick JSON; real API token missing | Complete TickTick OAuth validation, implement generic calendar collector, validate recurring tasks/timezones |
-| 3 | `meeting-minutes` | G1 | G2: real Feishu/DingTalk/WeCom/Tencent Meeting artifacts and unified minutes schema |
+| 3 | `meeting-minutes` | G2/G3 partial for local authorized meeting files | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G1 | G2: implement WeChat favorites/public-account article action collector |
 | 5 | `financial-news-usage` | G0 | G1/G2: build user activity adapters for CLS/WallstreetCN/Gelonghui |
 

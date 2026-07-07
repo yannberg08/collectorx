@@ -25,6 +25,7 @@ CLI_HELP_TARGETS = [
     "skills/ticktick-cli/scripts/ticktick_events.py",
     "skills/email-collector/scripts/email_api.py",
     "skills/filesystem-collector/scripts/filesystem_query.py",
+    "skills/meeting-artifacts/scripts/meeting_artifacts.py",
     "skills/qq-export/scripts/qq_query.py",
     "skills/notes-collector/scripts/notes_api.py",
     "skills/ths-portfolio/scripts/ths_query.py",
@@ -38,6 +39,7 @@ CLI_HELP_TARGETS = [
 PARSER_TESTS = [
     "skills/email-collector/tests/test_events.py",
     "skills/filesystem-collector/tests/test_filesystem_collector.py",
+    "skills/meeting-artifacts/tests/test_meeting_artifacts.py",
     "skills/qq-export/tests/test_parser.py",
     "skills/notes-collector/tests/test_notes_collector.py",
     "skills/ticktick-cli/scripts/test_ticktick_events.py",

@@ -83,7 +83,7 @@ Operational docs:
 | `dingtalk` | none yet | YAML placeholder; skill not implemented |
 | `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
 | `calendar` | none yet | YAML placeholder; generic calendar channel |
-| `meeting-artifacts` | none yet | YAML placeholder; meeting minutes/transcripts channel |
+| `meeting-artifacts` | `meeting-artifacts` | Local file event-package baseline for meeting minutes/transcripts; platform API adapters pending |
 | `wechat-favorites` | none yet | YAML placeholder; WeChat favorites/public-account article actions |
 | `social-activity` | none yet | YAML placeholder; Weibo/Bilibili/Xiaohongshu user activity |
 

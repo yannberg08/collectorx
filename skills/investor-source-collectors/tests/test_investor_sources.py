@@ -275,6 +275,69 @@ def test_task_calendar_lens_keeps_investment_task_only() -> None:
         assert lens_events[0]["data"]["payload"]["title"] == "复盘贵州茅台财报"
 
 
+def test_meeting_minutes_lens_keeps_investment_minutes_only() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "meeting-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "meeting:1",
+                "collector": "meeting-artifacts",
+                "source": "用户授权会议产物",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T11:00:00+08:00",
+                "data": {
+                    "artifact_type": "minutes",
+                    "title": "半导体公司路演纪要",
+                    "text_preview": "讨论财报、估值、风险点和买入框架。",
+                    "participants": ["研究员A", "基金经理B"],
+                },
+                "raw_ref": {"path": "roadshow.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "meeting:2",
+                "collector": "meeting-artifacts",
+                "source": "用户授权会议产物",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T12:00:00+08:00",
+                "collected_at": "2026-07-08T13:00:00+08:00",
+                "data": {
+                    "artifact_type": "minutes",
+                    "title": "周五团建安排",
+                    "text_preview": "讨论聚餐地点和出发时间。",
+                },
+                "raw_ref": {"path": "team.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "meeting-minutes",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T13:30:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "meeting-minutes" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        assert lens_events[0]["data"]["payload"]["title"] == "半导体公司路演纪要"
+        assert "matched_source_profile_terms" in lens_events[0]["data"]["classification"]["reasons"]
+
+
 if __name__ == "__main__":
     test_list_sources_contains_all_priorities()
     test_collect_xueqiu_csv_outputs_event_and_evidence()
@@ -283,4 +346,5 @@ if __name__ == "__main__":
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
     test_task_calendar_lens_keeps_investment_task_only()
+    test_meeting_minutes_lens_keeps_investment_minutes_only()
     print("investor-source-collectors tests passed.")

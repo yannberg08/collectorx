@@ -409,7 +409,7 @@ SOURCE_CLASSIFICATION: Dict[str, Dict[str, Any]] = {
     },
     "meeting-minutes": {
         "collector_class": "lens",
-        "upstream_collectors": ["feishu", "dingtalk", "filesystem"],
+        "upstream_collectors": ["meeting-artifacts", "feishu", "dingtalk", "wecom"],
         "channel": "飞书/钉钉/腾讯会议/会议纪要文件",
         "collects": ["路演纪要", "调研纪要", "投委会记录", "会议决策点", "参会对象"],
         "does_not_collect": ["所有会议", "无关组织通讯", "未授权录音"],

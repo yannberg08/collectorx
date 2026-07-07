@@ -8,6 +8,7 @@ time_field: time
 armed: false
 category: generic
 owner_scope: personal
+skill: meeting-artifacts
 
 scope:
   channels:

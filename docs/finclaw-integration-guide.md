@@ -176,6 +176,24 @@ Current status:
   trading plans, research tasks, and review reminders.
 - Live TickTick API collection requires the user's OAuth token.
 
+### 会议产物
+
+```bash
+python3 skills/meeting-artifacts/scripts/meeting_artifacts.py collect \
+  --input <authorized-meeting-minutes-or-transcript-folder> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized local minutes/transcript/subtitle files into generic
+  `meeting-artifacts` events.
+- Does not claim investment-meeting status directly.
+- Feed `lake/meeting-artifacts/events.jsonl` into `meeting-minutes` lens for
+  roadshows, research meetings, IC records, and review meetings.
+- Feishu/DingTalk/WeCom/Tencent Meeting platform adapters still require real
+  authorization validation.
+
 ### 投资 Lens / 分类工具
 
 ```bash
