@@ -244,13 +244,20 @@ python3 skills/meeting-artifacts/scripts/meeting_artifacts.py collect \
 
 Current status:
 
-- Converts authorized local minutes/transcript/subtitle files into generic
-  `meeting-artifacts` events.
+- Converts authorized local minutes/transcript/subtitle files and common
+  platform export files into generic `meeting-artifacts` events.
+- Supported export shapes include Markdown, TXT, HTML, JSON/JSONL/NDJSON,
+  CSV/TSV, VTT, and SRT.
+- Normalizes Feishu, DingTalk, WeCom, and Tencent Meeting platform evidence
+  into stable platform values and captures participants, organizer, meeting
+  links, start/end time, text preview, and attachment refs where present.
+- Filters credential-like raw keys such as password, cookie, token, session,
+  secret, authorization, and credential.
 - Does not claim investment-meeting status directly.
 - Feed `lake/meeting-artifacts/events.jsonl` into `meeting-minutes` lens for
   roadshows, research meetings, IC records, and review meetings.
-- Feishu/DingTalk/WeCom/Tencent Meeting platform adapters still require real
-  authorization validation.
+- Feishu/DingTalk/WeCom/Tencent Meeting account API adapters still require
+  real authorization validation.
 
 ### 微信收藏 / 公众号文章
 

@@ -237,6 +237,26 @@ Findings:
 - Platform API adapters for Feishu/DingTalk/WeCom/Tencent Meeting are still not
   done.
 
+### Wave E2: P1 meeting artifacts platform-export pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-meeting-platform-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `meeting-artifacts` to `0.2.0`.
+- Added HTML, CSV, and TSV parsing for user-authorized platform exports.
+- Normalizes Feishu, DingTalk, WeCom, and Tencent Meeting platform evidence
+  into stable platform values.
+- Captures participants, organizer, meeting URL, start/end time, text preview,
+  and attachment refs when present.
+- Filters credential-like raw fields before writing lake events.
+- Fixture validation covers DingTalk JSON, WeCom CSV, and Tencent Meeting HTML.
+- Real platform account/API validation is still pending user-authorized access.
+
 ### Wave F: P1 WeChat favorites productization pass 1
 
 Status: `completed-baseline`

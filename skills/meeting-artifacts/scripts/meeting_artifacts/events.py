@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,19 +23,25 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
     title = first(record, ["title", "meeting_title", "name", "topic", "标题", "会议主题"]) or path.stem
     text = first(record, ["text", "content", "transcript", "summary", "minutes", "正文", "内容", "纪要", "逐字稿"]) or ""
     participants = participants_for(record)
-    platform = first(record, ["platform", "source_app", "provider", "来源", "平台"]) or infer_platform(path)
+    explicit_platform = first(record, ["platform", "source_app", "provider", "来源", "平台"])
+    platform = normalize_platform(explicit_platform) if explicit_platform else infer_platform(path, record)
     start_time = first(record, ["start_time", "started_at", "time", "date", "meeting_time", "开始时间", "日期"])
+    end_time = first(record, ["end_time", "ended_at", "结束时间"])
     artifact_type = first(record, ["artifact_type", "type", "kind", "类型"]) or infer_artifact_type(path)
     data = {
         "artifact_type": artifact_type,
         "platform": platform,
         "title": title,
+        "start_time": start_time,
+        "end_time": end_time,
+        "organizer": first(record, ["organizer", "host", "主持人", "组织者"]),
         "participants": participants,
+        "meeting_url": first(record, ["meeting_url", "url", "link", "会议链接", "链接"]),
         "text_preview": text[:2000],
         "has_text": bool(text),
         "duration": first(record, ["duration", "时长"]),
         "attachment_refs": attachment_refs_for(record),
-        "raw": record,
+        "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
     return {
@@ -88,6 +95,7 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
 def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     type_counts = Counter((event.get("data") or {}).get("artifact_type", "unknown") for event in events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
     return {
         "schema": "collectorx.meeting_artifacts.manifest.v1",
@@ -96,6 +104,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "event_count": len(events),
         "kind_counts": dict(sorted(kind_counts.items())),
         "artifact_type_counts": dict(sorted(type_counts.items())),
+        "platform_counts": dict(sorted(platform_counts.items())),
         "collection_readiness": {
             "status": "needs_meeting_artifact_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -144,10 +153,22 @@ def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
 def participants_for(record: Dict[str, Any]) -> List[str]:
     raw = record.get("participants") or record.get("attendees") or record.get("参会人") or []
     if isinstance(raw, str):
-        return [item.strip() for item in raw.replace("，", ",").replace("、", ",").split(",") if item.strip()]
+        return split_people(raw)
     if isinstance(raw, list):
-        return [str(item.get("name") if isinstance(item, dict) else item) for item in raw if str(item)]
+        people = []
+        for item in raw:
+            if isinstance(item, dict):
+                value = first(item, ["name", "display_name", "username", "user_name", "姓名", "名称"])
+            else:
+                value = str(item)
+            if value and value != "None":
+                people.append(value.strip())
+        return people
     return []
+
+
+def split_people(text: str) -> List[str]:
+    return [item.strip() for item in re.split(r"[,，、;；|\n]+", text) if item.strip()]
 
 
 def attachment_refs_for(record: Dict[str, Any]) -> List[str]:
@@ -159,17 +180,45 @@ def attachment_refs_for(record: Dict[str, Any]) -> List[str]:
     return []
 
 
-def infer_platform(path: Path) -> str:
+def infer_platform(path: Path, record: Optional[Dict[str, Any]] = None) -> str:
     body = str(path).lower()
+    if record:
+        body += " " + json.dumps(sanitized(record), ensure_ascii=False).lower()
+    matched = platform_match(body)
+    return matched or "local-file"
+
+
+def normalize_platform(value: Any) -> str:
+    body = str(value).lower()
+    return platform_match(body) or str(value)
+
+
+def platform_match(body: str) -> Optional[str]:
     if "feishu" in body or "lark" in body or "飞书" in body:
         return "feishu"
     if "dingtalk" in body or "钉钉" in body:
         return "dingtalk"
-    if "wecom" in body or "企业微信" in body:
+    if "wecom" in body or "企业微信" in body or "work.weixin" in body:
         return "wecom"
-    if "tencent" in body or "腾讯会议" in body:
+    if "tencent" in body or "腾讯会议" in body or "meeting.tencent" in body:
         return "tencent-meeting"
-    return "local-file"
+    return None
+
+
+def sanitized(value: Any) -> Any:
+    secret_fragments = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
+    if isinstance(value, dict):
+        cleaned: Dict[str, Any] = {}
+        for key, item in value.items():
+            if any(fragment in str(key).lower() for fragment in secret_fragments):
+                continue
+            cleaned[str(key)] = sanitized(item)
+        return cleaned
+    if isinstance(value, list):
+        return [sanitized(item) for item in value[:200]]
+    if isinstance(value, str):
+        return value[:4000]
+    return value
 
 
 def infer_artifact_type(path: Path) -> str:

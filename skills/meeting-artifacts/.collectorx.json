@@ -1,1 +1,1 @@
-{"slug": "meeting-artifacts", "version": "0.1.0", "description": "Generic meeting minutes/transcript artifact collector for user-authorized local files."}
+{"slug": "meeting-artifacts", "version": "0.2.0", "description": "Generic meeting minutes/transcript artifact collector for user-authorized local files and platform exports."}

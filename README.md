@@ -83,7 +83,7 @@ Operational docs:
 | `dingtalk` | none yet | YAML placeholder; skill not implemented |
 | `wecom` | none yet | YAML placeholder; enterprise WeChat generic channel |
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |
-| `meeting-artifacts` | `meeting-artifacts` | Local file event-package baseline for meeting minutes/transcripts; platform API adapters pending |
+| `meeting-artifacts` | `meeting-artifacts` | Authorized local/platform-export baseline for meeting minutes, transcripts, HTML/CSV/JSON exports, participants, links, platform normalization; account API adapters pending |
 | `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |
 | `social-activity` | `social-activity` | Local activity export/saved-record baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, and shares |
 
@@ -108,7 +108,7 @@ Operational docs:
 | `wechat-investment-dialogue` | `wechat` | Runnable lens baseline with investment classifier; real WeChat lake validation pending |
 | `research-documents` | `filesystem`, `notes` | Runnable lens baseline for research files and valuation docs; explicit XLSX/DOCX/PDF content extraction validation done |
 | `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
-| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source adapters pending |
+| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; calendar validation pending |
 | `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; saved-article validation done |
