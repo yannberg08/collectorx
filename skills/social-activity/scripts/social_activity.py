@@ -36,8 +36,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized social platform activities into CollectorX events.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("collect", help="Parse Weibo/Bilibili/Xiaohongshu activity exports.")
-    p.add_argument("--input", action="append", help="Authorized file or folder. Repeat for multiple inputs.")
+    p = sub.add_parser("collect", help="Parse Weibo/Bilibili/Xiaohongshu activity exports or ZIP packages.")
+    p.add_argument("--input", action="append", help="Authorized file, folder, or ZIP package. Repeat for multiple inputs.")
     p.add_argument("--out-dir", help="Output package directory.")
     p.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p.add_argument("--limit", type=int, help="Maximum events to write.")

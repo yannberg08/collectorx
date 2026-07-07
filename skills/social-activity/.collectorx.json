@@ -1,1 +1,1 @@
-{"collector":"social-activity","class":"generic","version":"0.2.0","status":"baseline","description":"User-authorized Weibo/Bilibili/Xiaohongshu social activity exports, including weak influence signals, multi-section JSON, CSV, HTML, and Excel packages."}
+{"collector":"social-activity","class":"generic","version":"0.2.1","status":"baseline","description":"User-authorized Weibo/Bilibili/Xiaohongshu social activity exports and ZIP packages, including weak influence policy and platform/action/field coverage manifests."}

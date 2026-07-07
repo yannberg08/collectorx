@@ -1,7 +1,7 @@
 ---
 name: social-activity
-description: 微博、B站、小红书等社交平台用户活动通用采集器。采集用户授权的关注、点赞、收藏、观看历史、评论和分享等个人活动，输出 CollectorX 事件；不抓平台全站内容，不判断投资含义。
-version: 0.2.0
+description: 微博、B站、小红书等社交平台用户活动通用采集器。采集用户授权的关注、点赞、收藏、观看历史、评论和分享等个人活动，支持授权 ZIP 包，输出 CollectorX 事件、弱证据策略和平台/动作/字段覆盖 manifest；不抓平台全站内容，不判断投资含义。
+version: 0.2.1
 ---
 
 # Social Activity Collector
@@ -13,8 +13,9 @@ version: 0.2.0
 - 用户自己的关注、点赞、收藏、观看历史、评论、分享动作。
 - 创作者/账号名、创作者 ID/主页、标题、URL、域名、标签、话题、平台、动作时间、评论预览。
 - 观看/点赞/评论/转发/收藏/粉丝等互动计数。
-- 用户授权导出的 JSON/JSONL、CSV/TSV、Excel、HTML、Markdown、TXT 活动记录。
+- 用户授权导出的 JSON/JSONL、CSV/TSV、Excel、HTML、Markdown、TXT、ZIP 活动记录。
 - 事件明确标记为 `weak_influence_signal`，需要交易、笔记、研报、会议等更强证据交叉验证。
+- `manifest.platform_coverage`、`manifest.action_coverage`、`manifest.weak_signal_field_coverage` 和 `manifest.weak_evidence_policy`。
 
 不采集：
 
@@ -28,7 +29,7 @@ version: 0.2.0
 
 ```bash
 python3 skills/social-activity/scripts/social_activity.py collect \
-  --input /path/to/authorized/social-activity-export \
+  --input /path/to/authorized/social-activity-export-or-zip \
   --out-dir /path/to/out
 ```
 

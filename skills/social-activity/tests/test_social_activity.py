@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 import openpyxl
@@ -95,6 +96,7 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         root = Path(tmp)
         package = root / "xhs_social_package.json"
         workbook_path = root / "bilibili_activity.xlsx"
+        weibo_zip = root / "weibo_share.zip"
         out = root / "out"
         package.write_text(
             json.dumps(
@@ -105,14 +107,17 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
                             "title": "基金定投纪律",
                             "creator": "投教作者",
                             "url": "https://www.xiaohongshu.com/explore/abc",
+                            "item_id": "xhs-abc",
+                            "symbols": "000300.SH",
+                            "favorite_count": "86",
                             "content": "投资内容" * 800,
                             "profile": {"token": "must-not-leak"},
                         }
                     ],
                     "likes": [{"title": "消费观察", "creator": "消费研究员", "like_count": "1.2万"}],
-                    "comments": [{"title": "新能源讨论", "comment": "怎么看现金流？", "creator_id": "u-1"}],
+                    "comments": [{"title": "新能源讨论", "comment": "怎么看现金流？", "creator_id": "u-1", "comment_count": "42"}],
                     "shares": [{"title": "港股互联网复盘", "share_count": "3"}],
-                    "follows": [{"creator": "财经博主C", "follower_count": "20000"}],
+                    "follows": [{"creator": "财经博主C", "creator_url": "https://weibo.com/u/finance-c", "follower_count": "20000"}],
                 },
                 ensure_ascii=False,
             ),
@@ -121,12 +126,31 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         workbook = openpyxl.Workbook()
         watch = workbook.active
         watch.title = "watch_history"
-        watch.append(["Platform", "Title", "Creator", "URL", "Tags", "View Count", "Time"])
-        watch.append(["B站", "半导体产业链复盘", "投研UP主", "https://www.bilibili.com/video/BV1", "股票,半导体", "2.5万", "2026-07-08T10:00:00+08:00"])
+        watch.append(["Platform", "Title", "Creator", "URL", "Tags", "View Count", "Duration", "Progress", "Time"])
+        watch.append(["B站", "半导体产业链复盘", "投研UP主", "https://www.bilibili.com/video/BV1", "股票,半导体", "2.5万", "1800", "75%", "2026-07-08T10:00:00+08:00"])
         fav = workbook.create_sheet("favorites")
         fav.append(["Title", "Creator", "URL", "Topics"])
         fav.append(["微博AI投资主线", "财经博主D", "https://weibo.com/123/456", "AI,投资"])
         workbook.save(workbook_path)
+        with zipfile.ZipFile(weibo_zip, "w") as archive:
+            archive.writestr(
+                "shares/weibo-share.json",
+                json.dumps(
+                    {
+                        "shares": [
+                            {
+                                "platform": "微博",
+                                "title": "转发宏观流动性图表",
+                                "creator": "宏观研究员E",
+                                "url": "https://weibo.com/234/567",
+                                "share_count": "5",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            archive.writestr("../unsafe.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -135,7 +159,7 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert len(events) == 7
+        assert len(events) == 8
         assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
@@ -147,9 +171,22 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         watch_event = next(event for event in events if event["data"].get("title") == "半导体产业链复盘")
         assert watch_event["data"]["view_count"] == 25000.0
         assert watch_event["data"]["tags"] == ["股票", "半导体"]
+        assert watch_event["data"]["duration_seconds"] == 1800.0
+        assert any(event["raw_ref"]["path"] == "weibo_share.zip::shares/weibo-share.json" for event in events)
+        assert all("../unsafe" not in event["raw_ref"]["path"] for event in events)
         assert all(event["data"]["requires_corroboration"] is True for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["action_counts"]["favorite"] == 2
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["weibo", "bilibili", "xiaohongshu"]
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == []
+        assert manifest["action_coverage"]["observed_expected_actions"] == ["follow", "like", "favorite", "watch", "comment", "share"]
+        assert manifest["action_coverage"]["missing_expected_actions"] == []
+        assert manifest["weak_signal_field_coverage"]["missing_recommended_fields"] == []
+        assert manifest["weak_evidence_policy"]["investment_claim_allowed"] is False
+        assert manifest["weak_evidence_policy"]["usable_as_investment_conclusion"] is False
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
+        assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
+        assert manifest["collection_readiness"]["weak_signal_field_coverage_status"] == "all_expected_weak_signal_fields_observed"
         assert manifest["collection_readiness"]["collector_claims_investment_conclusion"] is False
 
 

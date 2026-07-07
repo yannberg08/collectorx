@@ -739,6 +739,35 @@ Findings:
   terminals, all expected activities, all recommended workflow fields, and ZIP
   path traversal skipping.
 
+### Wave X: P2 social activity coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.1`.
+- Added authorized ZIP package import for JSON/JSONL/NDJSON, CSV/TSV,
+  XLSX/XLSM, HTML, Markdown, and TXT activity members.
+- Added `manifest.platform_coverage` for Weibo, Bilibili, and Xiaohongshu.
+- Added `manifest.action_coverage` for follow, like, favorite, watch, comment,
+  and share actions.
+- Added `manifest.weak_signal_field_coverage` for creator IDs/URLs, item IDs,
+  tags, topics, symbols, watch progress, engagement counts, comment previews,
+  and content previews.
+- Added `manifest.weak_evidence_policy` so downstream FinClaw components can
+  machine-read that social evidence is weak, requires corroboration, and cannot
+  become a standalone investment conclusion.
+- Clarified `social-investment-influence` lens registration to exclude
+  standalone investment conclusions.
+- Fixture validation covers Weibo JSON, Bilibili CSV, Xiaohongshu HTML,
+  Xiaohongshu nested JSON, Bilibili/Weibo XLSX, Weibo ZIP, credential filtering,
+  all expected platforms/actions/weak fields, weak-evidence policy, and ZIP path
+  traversal skipping.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -765,7 +794,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, and strong-field coverage manifests; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, and workflow-field coverage manifests; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel social activity packages with weak-evidence policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, and weak-field coverage manifests; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
 ## Git Practice
 

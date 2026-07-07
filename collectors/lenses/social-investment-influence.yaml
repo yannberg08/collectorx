@@ -24,6 +24,8 @@ scope:
     - platform_wide_scraping
     - unrelated_entertainment_activity
     - other_people_full_profiles
+    - standalone_investment_conclusion
 
 description: |
   微博/B站/小红书等通用活动先入 social-activity lake；本 lens 只筛投资影响源。
+  输出只能作为弱证据，需要交易、笔记、研报、会议等更强证据交叉验证。

@@ -21,6 +21,12 @@ scope:
     - favorites
     - watch_history
     - comments
+    - shares
+    - engagement_counts
+    - platform_coverage_manifest
+    - action_coverage_manifest
+    - weak_signal_field_coverage_manifest
+    - weak_evidence_policy_manifest
   excludes:
     - platform_wide_scraping
     - unrelated_entertainment_in_investor_wiki
@@ -28,4 +34,5 @@ scope:
 
 description: |
   微博、B站、小红书等平台的通用用户活动采集器。它不判断投资含义；
+  支持授权 JSON/CSV/Excel/HTML/TXT/ZIP 活动包，并报告平台/动作/弱证据字段覆盖。
   social-investment-influence lens 再筛选投资内容影响源。
