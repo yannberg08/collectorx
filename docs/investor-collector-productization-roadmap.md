@@ -422,6 +422,32 @@ Findings:
 - The lens intentionally produced no `usable_for_wiki_now` subdimensions because
   social activity is weak influence evidence unless corroborated.
 
+### Wave J2: P2 social activity weak-evidence package pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-weak-evidence-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.0`.
+- Added XLSX/XLSM workbook parsing for authorized social activity exports.
+- Expanded multi-section JSON packages so follows, likes, favorites,
+  watch-history, comments, shares, and reposts can be collected in one run.
+- Added creator IDs/URLs, domains, item IDs, symbols, engagement counts, watch
+  progress, and source sections.
+- Every event now carries weak-evidence policy fields:
+  `evidence_role=weak_influence_signal`, `investment_claim_allowed=false`, and
+  `requires_corroboration=true`.
+- Manifest readiness now records `evidence_strength=weak_attention` and
+  `collector_claims_investment_conclusion=false`.
+- Strengthened platform URL inference, field-name normalization, list parsing,
+  recursive credential filtering, and content/comment preview capping.
+- Fixture validation covers Xiaohongshu nested packages and Bilibili/Weibo Excel
+  activity sheets.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -448,7 +474,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel export packages; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel workflow packages; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
-| 3 | `social-investment-influence` | G2/G3 partial for strict local saved social records | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel social activity packages with weak-evidence policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
 ## Git Practice
 

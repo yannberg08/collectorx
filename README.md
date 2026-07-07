@@ -85,7 +85,7 @@ Operational docs:
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV event-package baseline for generic calendar events; investment filtering handled by `task-calendar-investor` |
 | `meeting-artifacts` | `meeting-artifacts` | Authorized local/platform-export baseline for meeting minutes, transcripts, HTML/CSV/JSON exports, participants, links, platform normalization; account API adapters pending |
 | `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites event-package baseline; real WeChat favorites adapter pending |
-| `social-activity` | `social-activity` | Local activity export/saved-record baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, and shares |
+| `social-activity` | `social-activity` | Local JSON/CSV/Excel activity baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, engagement counts, and weak influence signals |
 
 ### Vertical Investor Collectors
 

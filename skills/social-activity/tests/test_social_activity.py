@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import openpyxl
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "social_activity.py"
@@ -77,14 +79,81 @@ def test_collect_social_activity_exports() -> None:
         assert len(events) == 5
         assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
         assert {event["data"]["action_type"] for event in events} == {"comment", "follow", "like", "saved_page", "watch"}
+        assert all(event["data"]["evidence_role"] == "weak_influence_signal" for event in events)
+        assert all(event["data"]["investment_claim_allowed"] is False for event in events)
         assert all(event["wiki_targets"] == ["internal.social.activity"] for event in events)
         comment = next(event for event in events if event["data"]["action_type"] == "comment")
         assert comment["kind"] == "message"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_influence"] is False
+        assert manifest["collection_readiness"]["evidence_strength"] == "weak_attention"
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
+
+
+def test_collect_nested_sections_workbook_and_weak_policy() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "xhs_social_package.json"
+        workbook_path = root / "bilibili_activity.xlsx"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                {
+                    "platform": "小红书",
+                    "favorites": [
+                        {
+                            "title": "基金定投纪律",
+                            "creator": "投教作者",
+                            "url": "https://www.xiaohongshu.com/explore/abc",
+                            "content": "投资内容" * 800,
+                            "profile": {"token": "must-not-leak"},
+                        }
+                    ],
+                    "likes": [{"title": "消费观察", "creator": "消费研究员", "like_count": "1.2万"}],
+                    "comments": [{"title": "新能源讨论", "comment": "怎么看现金流？", "creator_id": "u-1"}],
+                    "shares": [{"title": "港股互联网复盘", "share_count": "3"}],
+                    "follows": [{"creator": "财经博主C", "follower_count": "20000"}],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        workbook = openpyxl.Workbook()
+        watch = workbook.active
+        watch.title = "watch_history"
+        watch.append(["Platform", "Title", "Creator", "URL", "Tags", "View Count", "Time"])
+        watch.append(["B站", "半导体产业链复盘", "投研UP主", "https://www.bilibili.com/video/BV1", "股票,半导体", "2.5万", "2026-07-08T10:00:00+08:00"])
+        fav = workbook.create_sheet("favorites")
+        fav.append(["Title", "Creator", "URL", "Topics"])
+        fav.append(["微博AI投资主线", "财经博主D", "https://weibo.com/123/456", "AI,投资"])
+        workbook.save(workbook_path)
+
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 7
+        assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "must-not-leak" not in serialized
+        favorite = next(event for event in events if event["data"].get("title") == "基金定投纪律")
+        assert favorite["data"]["domain"] == "www.xiaohongshu.com"
+        assert len(favorite["data"]["raw"]["content"]) == 1200
+        like = next(event for event in events if event["data"].get("title") == "消费观察")
+        assert like["data"]["like_count"] == 12000.0
+        watch_event = next(event for event in events if event["data"].get("title") == "半导体产业链复盘")
+        assert watch_event["data"]["view_count"] == 25000.0
+        assert watch_event["data"]["tags"] == ["股票", "半导体"]
+        assert all(event["data"]["requires_corroboration"] is True for event in events)
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["action_counts"]["favorite"] == 2
+        assert manifest["collection_readiness"]["collector_claims_investment_conclusion"] is False
 
 
 if __name__ == "__main__":
     test_collect_social_activity_exports()
+    test_collect_nested_sections_workbook_and_weak_policy()
     print("social-activity tests passed.")

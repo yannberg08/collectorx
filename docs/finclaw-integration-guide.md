@@ -356,10 +356,16 @@ python3 skills/social-activity/scripts/social_activity.py collect \
 
 Current status:
 
-- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, and TXT activity
-  records into generic `social-activity` events.
+- Converts authorized JSON/JSONL/NDJSON, CSV/TSV, XLSX/XLSM, HTML, Markdown,
+  and TXT activity records into generic `social-activity` events.
+- Expands multi-section activity packages such as follows, likes, favorites,
+  watch history, comments, shares, and reposts.
 - Captures follows, likes, favorites, watch/view history, comments, shares, and
   saved pages.
+- Captures creator IDs, creator URLs, domains, item IDs, tags, topics, symbols,
+  engagement counts, watch progress, and comment/content previews.
+- Every emitted event marks itself as `weak_influence_signal`,
+  `investment_claim_allowed: false`, and `requires_corroboration: true`.
 - Does not claim investment influence directly.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
   lens. Treat resulting evidence as weak influence evidence unless corroborated
