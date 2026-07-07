@@ -1030,6 +1030,31 @@ Findings:
   all expected platforms/actions/weak fields, weak-evidence policy, and ZIP path
   traversal skipping.
 
+### Wave X2: P2 social activity audit and weak-evidence pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added ZIP `source_archive` and `archive_member` provenance to raw refs.
+- Added per-event `content_length` while keeping content/comment previews
+  capped.
+- Added `manifest.influence_surface_summary` for creator, creator ID/URL,
+  content URL/domain, item ID, tags, topics, symbols, engagement counts,
+  comment/content preview, and source section availability.
+- Added `manifest.source_audit` for source refs, archive member events, archive
+  count, and section/sheet provenance.
+- Added `manifest.content_policy` to keep collection preview-only and prevent
+  platform-wide scraping or full creator-profile scraping.
+- Strengthened `manifest.weak_evidence_policy` with generic-collector and real
+  validation flags.
+- Hardened ZIP import against POSIX traversal and Windows drive/traversal
+  members.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -1056,7 +1081,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, asset value summary, source audit, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow surface summary, source audit, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, and weak-field coverage manifests; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, source audit, ZIP provenance, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
 ## Git Practice
 

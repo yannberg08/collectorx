@@ -151,6 +151,8 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
                 ),
             )
             archive.writestr("../unsafe.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
+            archive.writestr("..\\windows-traversal.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
+            archive.writestr("C:\\unsafe.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -166,14 +168,20 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         favorite = next(event for event in events if event["data"].get("title") == "基金定投纪律")
         assert favorite["data"]["domain"] == "www.xiaohongshu.com"
         assert len(favorite["data"]["raw"]["content"]) == 1200
+        assert favorite["data"]["content_length"] > 1200
         like = next(event for event in events if event["data"].get("title") == "消费观察")
         assert like["data"]["like_count"] == 12000.0
         watch_event = next(event for event in events if event["data"].get("title") == "半导体产业链复盘")
         assert watch_event["data"]["view_count"] == 25000.0
         assert watch_event["data"]["tags"] == ["股票", "半导体"]
         assert watch_event["data"]["duration_seconds"] == 1800.0
-        assert any(event["raw_ref"]["path"] == "weibo_share.zip::shares/weibo-share.json" for event in events)
+        zip_event = next(event for event in events if event["data"].get("title") == "转发宏观流动性图表")
+        assert zip_event["raw_ref"]["path"] == f"{weibo_zip}::shares/weibo-share.json"
+        assert zip_event["raw_ref"]["source_archive"] == str(weibo_zip)
+        assert zip_event["raw_ref"]["archive_member"] == "shares/weibo-share.json"
         assert all("../unsafe" not in event["raw_ref"]["path"] for event in events)
+        assert all("windows-traversal" not in event["raw_ref"]["path"] for event in events)
+        assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         assert all(event["data"]["requires_corroboration"] is True for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["action_counts"]["favorite"] == 2
@@ -182,8 +190,21 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert manifest["action_coverage"]["observed_expected_actions"] == ["follow", "like", "favorite", "watch", "comment", "share"]
         assert manifest["action_coverage"]["missing_expected_actions"] == []
         assert manifest["weak_signal_field_coverage"]["missing_recommended_fields"] == []
+        assert manifest["influence_surface_summary"]["weak_signal_event_count"] == 8
+        assert manifest["influence_surface_summary"]["events_with_creator"] >= 6
+        assert manifest["influence_surface_summary"]["events_with_engagement_counts"] >= 5
+        assert manifest["influence_surface_summary"]["events_with_symbols"] == 1
+        assert manifest["influence_surface_summary"]["events_with_source_section"] == 8
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["source_section_event_count"] == 8
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
+        assert manifest["content_policy"]["full_platform_scrape"] is False
+        assert manifest["content_policy"]["content_preview_max_chars"] == 1200
         assert manifest["weak_evidence_policy"]["investment_claim_allowed"] is False
         assert manifest["weak_evidence_policy"]["usable_as_investment_conclusion"] is False
+        assert manifest["weak_evidence_policy"]["generic_collector"] is True
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["collection_readiness"]["weak_signal_field_coverage_status"] == "all_expected_weak_signal_fields_observed"

@@ -543,8 +543,8 @@ Current status:
 - Converts authorized JSON/JSONL/NDJSON, CSV/TSV, XLSX/XLSM, HTML, Markdown,
   TXT, and ZIP activity records into generic `social-activity` events.
 - Expands multi-section activity packages such as follows, likes, favorites,
-  watch history, comments, shares, and reposts; ZIP packages preserve
-  `archive.zip::member` provenance.
+  watch history, comments, shares, and reposts; ZIP packages preserve source
+  archive and member provenance.
 - Captures follows, likes, favorites, watch/view history, comments, shares, and
   saved pages.
 - Captures creator IDs, creator URLs, domains, item IDs, tags, topics, symbols,
@@ -553,6 +553,9 @@ Current status:
   `investment_claim_allowed: false`, and `requires_corroboration: true`.
 - Writes platform, action, weak-signal-field coverage and weak-evidence-policy
   manifests.
+- Writes `manifest.influence_surface_summary`, `manifest.source_audit`, and
+  `manifest.content_policy` so Lake can see creator/URL/topic/symbol/engagement
+  availability, export package provenance, and preview-only content boundaries.
 - Does not claim investment influence directly.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
   lens. Treat resulting evidence as weak influence evidence unless corroborated

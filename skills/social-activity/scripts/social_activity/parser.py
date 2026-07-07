@@ -12,6 +12,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.parse import urlparse
 
@@ -42,6 +43,10 @@ SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "cred
 CONTENT_KEY_FRAGMENTS = ("content", "body", "正文", "全文", "评论", "comment")
 EXPECTED_SOCIAL_PLATFORMS = ("weibo", "bilibili", "xiaohongshu")
 EXPECTED_SOCIAL_ACTIONS = ("follow", "like", "favorite", "watch", "comment", "share")
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+CONTENT_PREVIEW_MAX_CHARS = 1200
+COMMENT_PREVIEW_MAX_CHARS = 800
 RECOMMENDED_WEAK_SIGNAL_FIELDS = (
     "creator",
     "creator_id",
@@ -286,11 +291,12 @@ def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[s
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
-            path_label = f"{path.name}::{member.filename}"
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
+            path_label = f"{path}::{member_name}"
             try:
                 if suffix in {".json", ".jsonl", ".ndjson"}:
                     parsed = parse_json_text(archive.read(member).decode("utf-8-sig", errors="replace"), suffix=suffix, path_label=path_label)
@@ -299,22 +305,32 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
                 elif suffix in {".xlsx", ".xlsm"}:
                     parsed = parse_workbook(io.BytesIO(archive.read(member)), path_label=path_label)
                 elif suffix in {".html", ".htm"}:
-                    parsed = [parse_html_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_html_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member_name).stem)]
                 else:
-                    parsed = [parse_text_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_text_text(archive.read(member).decode("utf-8-sig", errors="replace"), path_label=path_label, default_title=Path(member_name).stem)]
             except Exception:
                 parsed = []
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
             records.extend(parsed)
     return records
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_at: Optional[str]) -> Dict[str, Any]:
@@ -351,12 +367,23 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "evidence_role": "weak_influence_signal",
         "investment_claim_allowed": False,
         "requires_corroboration": True,
-        "comment_preview": text[:800] if action_type == "comment" else None,
-        "content_preview": text[:1200],
+        "comment_preview": text[:COMMENT_PREVIEW_MAX_CHARS] if action_type == "comment" else None,
+        "content_preview": text[:CONTENT_PREVIEW_MAX_CHARS],
         "has_content": bool(text),
+        "content_length": len(text),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "platform": platform,
+        "action_type": action_type,
+        "source_section": data.get("source_section"),
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, row, platform, action_type, title, creator, event_time),
@@ -367,12 +394,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "row": row,
-            "platform": platform,
-            "action_type": action_type,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -525,13 +547,25 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "field_counts": dict(sorted(field_counts.items())),
             "real_account_validation": False,
         },
+        "influence_surface_summary": influence_surface_summary(events),
+        "source_audit": source_audit(events),
+        "content_policy": {
+            "full_platform_scrape": False,
+            "full_creator_profile_scrape": False,
+            "full_content_included_by_default": False,
+            "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
+            "comment_preview_max_chars": COMMENT_PREVIEW_MAX_CHARS,
+            "investment_classification_done": False,
+        },
         "weak_evidence_policy": {
             "evidence_role": "weak_influence_signal",
             "investment_claim_allowed": False,
             "requires_corroboration": True,
+            "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
             "lens_required": "social-investment-influence",
             "usable_as_investment_conclusion": False,
+            "real_account_validation": False,
         },
         "collection_readiness": {
             "status": "needs_social_activity_input" if gap_only else "events_collected",
@@ -555,6 +589,55 @@ def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], n
     if not missing_expected:
         return f"all_expected_{noun}s_observed"
     return f"partial_expected_{noun}s_observed"
+
+
+def usable_social_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if (event.get("data") or {}).get("action_type") != "collector_gap"]
+
+
+def influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    usable_events = usable_social_events(events)
+    return {
+        "weak_signal_event_count": len(usable_events),
+        "events_with_creator": sum(1 for event in usable_events if (event.get("data") or {}).get("creator")),
+        "events_with_creator_id": sum(1 for event in usable_events if (event.get("data") or {}).get("creator_id")),
+        "events_with_creator_url": sum(1 for event in usable_events if (event.get("data") or {}).get("creator_url")),
+        "events_with_url": sum(1 for event in usable_events if (event.get("data") or {}).get("url")),
+        "events_with_domain": sum(1 for event in usable_events if (event.get("data") or {}).get("domain")),
+        "events_with_item_id": sum(1 for event in usable_events if (event.get("data") or {}).get("item_id")),
+        "events_with_tags": sum(1 for event in usable_events if (event.get("data") or {}).get("tags")),
+        "events_with_topics": sum(1 for event in usable_events if (event.get("data") or {}).get("topics")),
+        "events_with_symbols": sum(1 for event in usable_events if (event.get("data") or {}).get("symbols")),
+        "events_with_engagement_counts": sum(1 for event in usable_events if has_engagement_count(event)),
+        "events_with_comment_preview": sum(1 for event in usable_events if (event.get("data") or {}).get("comment_preview")),
+        "events_with_content_preview": sum(1 for event in usable_events if (event.get("data") or {}).get("has_content")),
+        "events_with_source_section": sum(1 for event in usable_events if (event.get("data") or {}).get("source_section")),
+    }
+
+
+def has_engagement_count(event: Dict[str, Any]) -> bool:
+    data = event.get("data") or {}
+    return any(
+        data.get(field) is not None
+        for field in ("like_count", "comment_count", "share_count", "favorite_count", "view_count", "follower_count")
+    )
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_social_events(events)
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in usable_events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    return {
+        "source_ref_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "source_section_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("source_section")),
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+    }
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -581,6 +664,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         f"- observed_actions: `{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
         f"- missing_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
+        f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- content_policy: `weak-preview-only`",
         "",
         "Generic social activity events are not written to the investor Wiki directly. Use the social-investment-influence lens.",
     ]
