@@ -337,6 +337,29 @@ Findings:
   read-only brokerage exports; the collector emitted a gap event and did not
   enter FinClaw.
 
+### Wave H2: P2 HK/US brokerage export package pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-hk-us-brokerage-export-package-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `hk-us-brokerage` to `0.2.0`.
+- Added XLSX/XLSM workbook parsing with per-sheet section inference.
+- Expanded multi-section JSON packages so assets, positions, executions,
+  orders, cashflows, dividends, and FX can be collected in one run.
+- Added richer strong-trade fields: net liquidation, available/settled cash,
+  margin, tax, gross/net amounts, settlement dates, order type, time in force,
+  FX from/to currencies and amounts, exchange rate, ISIN/CUSIP.
+- Strengthened broker/status/field-name normalization, numeric parsing, and
+  recursive raw-field sanitization.
+- Fixture validation covers Tiger-style nested statements and Futu-style Excel
+  positions/dividends.
+- Real broker account/export validation remains pending.
+
 ### Wave I: P2 professional terminal usage productization pass 1
 
 Status: `completed-baseline`
@@ -399,7 +422,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `hk-us-brokerage` | G1 baseline for authorized local read-only exports; real local export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, per-broker column maps, multi-currency validation |
+| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel export packages; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1 baseline for authorized local workflow exports; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, license-safe validation |
 | 3 | `social-investment-influence` | G2/G3 partial for strict local saved social records | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, weak-evidence backtest |
 

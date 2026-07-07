@@ -9,6 +9,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+import openpyxl
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "hk_us_brokerage.py"
@@ -93,6 +95,75 @@ def test_collect_brokerage_exports() -> None:
         assert evidence["generated_from"]["event_count"] == 5
 
 
+def test_collect_nested_sections_and_workbook() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "tiger_full_statement.json"
+        workbook_path = root / "futu_statement.xlsx"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                {
+                    "broker": "Tiger",
+                    "account_id": "T-888",
+                    "assets": [{"currency": "USD", "Net Liquidation": "US$100,000.50", "Available Cash": "12000"}],
+                    "positions": [{"symbol": "NVDA", "quantity": "3", "avg_cost": "800", "market_value": "2700"}],
+                    "executions": [{"symbol": "MSFT", "side": "BOT", "filled_qty": "2", "avg_price": "400", "fees": "1.1"}],
+                    "orders": [{"symbol": "TSLA", "side": "SELL", "order_qty": "4", "status": "Cancelled"}],
+                    "cashflows": [{"type": "入金", "amount": "5000", "profile": {"token": "must-not-leak"}}],
+                    "dividends": [{"symbol": "AAPL", "gross_amount": "12.3", "withholding_tax": "(1.23)", "pay_date": "2026-07-08"}],
+                    "fx": [{"from_currency": "USD", "to_currency": "HKD", "from_amount": "100", "to_amount": "780", "exchange_rate": "7.8"}],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        workbook = openpyxl.Workbook()
+        positions = workbook.active
+        positions.title = "Positions"
+        positions.append(["Broker", "Account ID", "Symbol", "Qty", "Avg Cost", "Market Value", "Unrealized PnL"])
+        positions.append(["富途", "F-1", "00700", 100, 350, 38050, 3050])
+        dividends = workbook.create_sheet("Dividends")
+        dividends.append(["Broker", "Account ID", "Symbol", "Gross Amount", "Tax", "Net Amount", "Pay Date"])
+        dividends.append(["富途", "F-1", "00700", 100, 10, 90, "2026-07-08"])
+        workbook.save(workbook_path)
+
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "hk-us-brokerage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        subtype_counts = {}
+        for event in events:
+            subtype = event["data"]["subtype"]
+            subtype_counts[subtype] = subtype_counts.get(subtype, 0) + 1
+        assert subtype_counts == {
+            "asset_snapshot": 1,
+            "cashflow": 1,
+            "dividend": 2,
+            "execution": 1,
+            "fx": 1,
+            "order": 1,
+            "position": 2,
+        }
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "must-not-leak" not in serialized
+        asset = next(event for event in events if event["data"]["subtype"] == "asset_snapshot")
+        assert asset["data"]["net_liquidation"] == 100000.5
+        cancelled_order = next(event for event in events if event["data"].get("symbol") == "TSLA")
+        assert cancelled_order["data"]["status"] == "cancelled"
+        fx = next(event for event in events if event["data"]["subtype"] == "fx")
+        assert fx["data"]["exchange_rate"] == 7.8
+        assert fx["data"]["from_amount"] == 100.0
+        workbook_dividend = next(event for event in events if event["data"].get("net_amount") == 90.0)
+        assert workbook_dividend["data"]["broker"] == "futu"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["subtype_counts"]["position"] == 2
+
+
 if __name__ == "__main__":
     test_collect_brokerage_exports()
+    test_collect_nested_sections_and_workbook()
     print("hk-us-brokerage tests passed.")

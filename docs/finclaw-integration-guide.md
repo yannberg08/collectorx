@@ -310,8 +310,13 @@ python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
 
 Current status:
 
-- Converts authorized CSV/TSV/JSON/JSONL exports into `hk-us-brokerage` events.
-- Captures assets, positions, executions, orders, cashflows, dividends, and FX.
+- Converts authorized CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM exports into
+  `hk-us-brokerage` events.
+- Expands multi-section JSON packages, including assets, positions, executions,
+  orders, cashflows, dividends, and FX.
+- Captures strong brokerage fields: assets, positions, executions, orders,
+  cashflows, dividends, FX, margin, tax, settlement dates, order type, time in
+  force, net liquidation, and multi-currency amounts.
 - Preserves business numbers needed by the investor avatar.
 - Does not ask for passwords and does not place, cancel, or modify orders.
 

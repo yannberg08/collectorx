@@ -52,7 +52,7 @@ every upstream source collector is production-ready.
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only export collector | `baseline`; fixture validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, per-broker column maps, multi-currency assets, dividends, FX, and Windows/macOS/Linux paths |
+| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel export collector | `baseline`; fixture validation passed; multi-section JSON and Excel validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local workflow collector | `baseline`; fixture validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, and license-safe boundaries |
 | B站/微博/小红书投资内容痕迹 | `social-activity` local activity collector + `social-investment-influence` lens classifier | `baseline`; fixture validation passed; strict local saved-record validation is partial; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment surfaces, platform allowlists, creator allowlists, and weak-evidence policy |
 
