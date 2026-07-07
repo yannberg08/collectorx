@@ -48,6 +48,7 @@ PARSER_TESTS = [
     "skills/email-collector/tests/test_events.py",
     "skills/filesystem-collector/tests/test_filesystem_collector.py",
     "skills/meeting-artifacts/tests/test_meeting_artifacts.py",
+    "skills/wechat-export/tests/test_collect_package.py",
     "skills/wechat-favorites/tests/test_wechat_favorites.py",
     "skills/qq-export/tests/test_parser.py",
     "skills/notes-collector/tests/test_notes_collector.py",

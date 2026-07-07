@@ -1,7 +1,6 @@
 ---
 name: wechat-export
 description: 导出和查询微信聊天记录。当用户说"查微信"、"导出聊天记录"、"破解微信"、"聊天记录"、"查标签"、"按标签查联系人"时使用此 skill。
-version: 0.11.0
 ---
 
 # 微信聊天记录导出工具
@@ -153,6 +152,9 @@ python3 scripts/wechat_query.py --export ~/Desktop/wechat_raw.txt --raw-export
 # 给 Agent 建账 / 自动模式 / 下游分析使用；默认紧凑 JSON，避免行数和空白膨胀
 python3 scripts/wechat_query.py --collect --days 3 --active-group-days 3 --out /tmp/wechat-3d.json
 
+# 给 CollectorX / FinClaw 使用：写标准采集包
+python3 scripts/wechat_query.py --collect --days 3 --active-group-days 3 --out-dir /tmp/wechat-package
+
 # 人工排查 collect 内容时才加 --pretty
 python3 scripts/wechat_query.py --collect --days 3 --pretty --out /tmp/wechat-3d.pretty.json
 
@@ -185,6 +187,7 @@ python3 scripts/wechat_query.py --list-contacts --filter "黑客松"
 | **`--collect`** | **采集模式** 查询 + 过滤 + 格式化输出 CUFin JSON，一条命令搞定；默认紧凑 JSON |
 | **`--after "YYYY-MM-DD HH:MM:SS"`** | 配合 `--collect`，只采该时刻起的消息 |
 | **`--out FILE`** | 配合 `--collect`，写到文件（默认打到 stdout） |
+| **`--out-dir DIR`** | 配合 `--collect`，写 CollectorX 标准包：`lake/wechat/events.jsonl`、`manifest.json`、`SUMMARY.md` |
 | **`--pretty`** | 配合 `--collect`，人工排查时输出缩进 JSON；默认不要加，避免行数和 token 膨胀 |
 | **`--exclude "n1,n2"`** | **v0.7.0+** 配合 `--collect`/`--export`，黑名单（任何 chat 名匹配则跳过） |
 | **`--include-groups "g1,g2"`** | **v0.7.0+** 配合 `--collect`/`--export`，群聊白名单（默认不采群） |
@@ -205,13 +208,16 @@ python3 scripts/wechat_query.py --list-contacts --filter "黑客松"
 
 意图：私人对话信息密度高、自动全收；群聊噪音多、只保留我真正参与的。
 
-Agent 建账、自动模式、下游摘要和长期记忆蒸馏默认使用 `--collect`,不要用 `--export`。`--collect` 默认写紧凑 JSON,每条记录包含 `id`、`source` 和 `data{chat,sender,time,text}`,减少无意义换行和空白；只有人工排查文件结构时才加 `--pretty`。`--export` 是给人看的留档格式；默认同样按主人相关性过滤并清洗 XML。只有明确要看全部会话时才加 `--export-all`；只有数据库排查才使用 `--raw-export`。
+Agent 建账、自动模式、下游摘要和长期记忆蒸馏默认使用 `--collect`,不要用 `--export`。`--collect` 默认写紧凑 JSON,每条记录包含 `id`、`source` 和 `data{chat,sender,time,text}`,减少无意义换行和空白；给 CollectorX / FinClaw 调用时加 `--out-dir` 写标准包。只有人工排查文件结构时才加 `--pretty`。`--export` 是给人看的留档格式；默认同样按主人相关性过滤并清洗 XML。只有明确要看全部会话时才加 `--export-all`；只有数据库排查才使用 `--raw-export`。
 
 调用示例：
 
 ```bash
 # 只采近 7 天的私聊 + 我活跃过的群（默认 30 天阈值）
 python3 wechat_query.py --collect --days 7 --out /tmp/out.json
+
+# 输出 CollectorX 标准包，供 wechat-investment-dialogue lens 继续筛投资对话
+python3 wechat_query.py --collect --days 7 --out-dir /tmp/wechat-package
 
 # 只采纯私聊（关闭群自动白名单）
 python3 wechat_query.py --collect --days 7 --active-group-days 0 --out ...
@@ -522,6 +528,7 @@ PRAGMA cipher_kdf_algorithm = PBKDF2_HMAC_SHA512
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.11.1 | 2026-07-08 | **CollectorX 标准包输出**。`--collect` 新增 `--out-dir`，写出 `lake/wechat/events.jsonl`、`manifest.json` 和 `SUMMARY.md`；旧 `--out` JSON 数组兼容保留。标准事件为 `collectorx.event.v1`，manifest 记录字段覆盖、消息面、过滤策略、平台前置条件和 generic→`wechat-investment-dialogue` lens 边界。新增 fixture 测试 `tests/test_collect_package.py` 并接入项目总验证。 |
 | 0.11.0 | 2026-07-05 | **新增 Linux 微信 4.x 支持（方案 C）**。① 新增 `scripts/wechat_extract_linux.py`：从运行中 Linux 原生微信（`/opt/wechat/wechat`，实测 4.1.1.7）的 `/proc/<pid>/mem` 扫明文 key `x'<96hex>'`、按 salt 反查对回库、第 1 页 HMAC-SHA512 校验，产出与 Windows 同构的 `data/all_keys.json`。Linux 微信内存**仍留明文 key**（不像 Mac 4.1.11 已不留），故 regex 即可、**无需 lldb/gdb hook**。② 解密算法 `decrypt_page`/`decrypt_database` 从 `wechat_extract_windows.py` 抽进 `wexport/keycrypto.py`（三平台共用，AES 延迟 import，不解密的调用方无需装 Crypto）。③ `wexport/detect.py` 加 `_auto_find_linux_db_dir`（`~/xwechat_files/<wxid>/db_storage`，兼容 `~/.xwechat/xwechat_files`）。④ 查询侧零改动：`WindowsV4Query` 平台无关，Linux 带 `--db-dir` 直接复用。真机（CentOS 宿主上的 Ubuntu 20.04 VM，微信 4.1.1.7）端到端验证：提取 16/16 库 key → 解密 8 库 → 加载 10816 联系人 → 查出实时消息；`pycrypto 2.6.1` 即可解密。`py_compile` + 本地 import/argparse 通过。 |
 | 0.10.1 | 2026-07-05 | **Mac 提取器：跳过 `.factory` 备份库 + 综合诊断输出**。① `collect_db_files` 遍历时跳过 WCDB 的 `.factory` 备份/修复目录（活库的历史快照副本，微信启动不打开、不派生 key，扫进来会让密钥匹配数虚少一个，如实测的 36/37）——过滤后提取与查询两侧都干净（36/36）。② `wechat_extract_mac.py` 校验后**逐个打印未匹配到 key 的库**（路径 + 大小 + 未中原因：不足一页 / 明文库 / 本轮未派生），不再让人对着"36/37"干猜；`info['page1']` 取值改 `.get` 防越界。③ **新增综合诊断文件 `/tmp/wx_kd_diag.txt`**（成功/失败都写）：系统（macOS 版本+build / Darwin / 机型 / 芯片 / SIP / `CCKeyDerivationPBKDF` 是否可解析）、微信 App（`CFBundleShortVersionString`+`CFBundleVersion` / 是否 App Store 来源 / bundle 与二进制构建时间）、抓取（候选数 / 断点命中次数与 rounds·pwl 分布 / HMAC 校验数）——用于两台机器失败时快速对比定位（微信构建号差异 / 函数是否被调用 / 系统层是否有变）。lldb hook 同时记录每次命中的 rounds/pwl 到 `wx_kd_hits.txt`。真机自测：诊断输出正确、`.factory` 过滤 36/36、`py_compile` 通过。 |
 | 0.10.0 | 2026-07-03 | **破解层去重：抽公用进 `wexport/` 并接线 + 密钥文件统一命名**。① 两个提取器（`wechat_extract_mac.py` / `wechat_extract_windows.py`）此前各存一份逐字重复的 SQLCipher4 逻辑（`derive_mac_key` / `verify_key_page1` / `collect_db_files` + 目录发现），现全部抽进**新模块 `wexport/keycrypto.py`**（常量 + 派生/校验/收库 + 密钥文件命名解析）；目录发现改共用已有的 `wexport/detect.py`（`_find_mac4_db_storage` / `_auto_find_windows_db_dir`）。`wexport/` 之前是建好没接线的孤立包，现三个脚本（两提取器 + `wechat_query.py`）都真正 import 它。`collect_db_files` 统一成一份 `(db_files, salt_to_dbs)`，同时给 Windows(salt) 和 Mac(page1) 用；Windows `decrypt_database` 的内联 HMAC 校验也换成共享 `verify_key_page1`。② **密钥文件统一命名**：`mac_all_keys.json` / `windows_all_keys.json` → 都叫 **`data/all_keys.json`**（一台机器只跑一个平台不冲突，格式各自，reader 按平台分派各读各的）；新增 `resolve_keys_file()` 优先读统一名、兜底旧平台名，老装机零迁移仍可用。③ 新增 `tests/test_keycrypto.py`（5 例：派生确定性 / page1 HMAC 校验收放 / collect 收 salt+page1 / 命名解析优先级）。真机复测：Mac 用 36 把已存 key 复验 36/36 对回各库；Windows(.22 微信 4.x) 查询 + 提取器 exist-check 走统一名/兜底名均通；单测全过。 |

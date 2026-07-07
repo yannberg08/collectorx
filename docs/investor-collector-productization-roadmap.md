@@ -99,6 +99,33 @@ Findings:
   20 candidate files; manifest was corrected to avoid claiming complete asset
   boundary from partial input.
 
+### Wave B1: P0 WeChat standard package pass 1
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-wechat-standard-package-validation-2026-07-08.md`
+
+Findings:
+
+- Added `--out-dir` to `wechat_query.py --collect` so WeChat can write a
+  standard CollectorX package: `lake/wechat/events.jsonl`, `manifest.json`, and
+  `SUMMARY.md`.
+- Preserved the legacy compact JSON array path through `--out`.
+- Converted collect records into `collectorx.event.v1` message events with
+  chat, sender, sender ownership, text, text length, source, raw refs, and
+  local-only personal-message privacy markers.
+- Added manifest field coverage, message surface summary, filter policy,
+  platform precondition notes, source audit, and generic-to-lens evidence
+  policy.
+- Kept the boundary explicit: generic `wechat` enters Lake, and
+  `wechat-investment-dialogue` is responsible for investor Wiki evidence.
+- Fixture validation covers standard package output without requiring real
+  WeChat data or keys.
+- Real-source validation is still blocked on the current Mac by WeChat 4.x key
+  extraction/SIP preconditions.
+
 ### Wave B2: P0 research content extraction pass 1
 
 Status: `completed-baseline`
@@ -1070,7 +1097,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
+| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` lens remains runnable; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, screenshot OCR decision, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, import audit, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |

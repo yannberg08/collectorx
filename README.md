@@ -78,7 +78,7 @@ Operational docs:
 | Collector | Skill | Status |
 | --- | --- | --- |
 | `filesystem` | `filesystem-collector` | Metadata-only generic file collector aligned with SoulMirror driver boundary; manifest includes macOS/Windows/Linux default-root plan; investor routing is handled by lenses |
-| `wechat` | `wechat-export` | Migrated skill; provenance review required |
+| `wechat` | `wechat-export` | WeChat 4.x local query baseline with `--collect --out-dir` CollectorX package output, field/filter/source audit manifest, and generic-to-lens boundary; real-source validation still requires authorized keys/platform setup |
 | `feishu` | `feishu` | Migrated skill; provenance review required |
 | `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus authorized JSON/ZIP event-conversion baseline; manifest reports TickTick/Dida source coverage; real OAuth validation pending |
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |

@@ -48,7 +48,7 @@ FinClaw 应按下面顺序调用：
 | --- | --- | --- | --- |
 | `eastmoney-portfolio` | 东方财富资产、持仓、成交、委托、资金流水和本地投资行为 | `production-candidate` on current macOS | Windows/Linux 真机、更多账户样本 |
 | `ths-portfolio` | 同花顺交易、持仓、元数据和只读 GUI 快照 | `deep-beta` | 多账户、多系统真机验证 |
-| `wechat` + `wechat-investment-dialogue` | 微信原始对话和投资讨论 lens | `migrated-review` + `baseline` | WeChat 4.x key/平台路径、真实 lake、联系人/群 allowlist |
+| `wechat` + `wechat-investment-dialogue` | 微信原始对话和投资讨论 lens | `baseline+audit` + `baseline` | WeChat 4.x key/平台路径、真实 lake、联系人/群 allowlist |
 | `filesystem` + `research-documents` | 文件元数据、研报/财报/估值表内容 lens | `baseline+audit` | Windows/Linux 真机、本地真实样本、截图 OCR 决策 |
 | `email` + `email-research` | 邮箱原始通道和券商/IR/研报邮件 lens | `baseline+audit` | 注册真实邮箱、附件/正文泄漏评审、真实发件人回测 |
 | `xueqiu-watchlist` + `xueqiu-investor-activity` | 雪球自选、关注、发帖、评论、收藏、组合活动 | `baseline+audit` | 真实账号导出或只读 adapter、分页和频率边界 |

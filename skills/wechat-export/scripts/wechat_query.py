@@ -38,6 +38,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 import json as _json
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from wexport.keycrypto import resolve_keys_file  # noqa: E402  统一 all_keys.json 定位（兼容旧平台名）
@@ -1671,6 +1672,182 @@ def _dump_collect_payload(records, pretty: bool = False) -> str:
     return _json.dumps(records, ensure_ascii=False, separators=(',', ':'))
 
 
+def _now_iso() -> str:
+    return datetime.now().astimezone().isoformat(timespec='seconds')
+
+
+def _local_time_to_iso(value: str) -> str:
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, '%Y-%m-%d %H:%M:%S').astimezone().isoformat(timespec='seconds')
+    except ValueError:
+        return value
+
+
+def _collect_record_to_event(record: dict, collected_at: str) -> dict:
+    data = record.get('data') or {}
+    chat = data.get('chat') or ''
+    sender = data.get('sender') or ''
+    text = data.get('text') or ''
+    time_str = data.get('time') or ''
+    legacy_id = record.get('id') or hashlib.sha1(
+        f"{chat}|{sender}|{time_str}|{text}".encode('utf-8')
+    ).hexdigest()[:16]
+    event_id = legacy_id if str(legacy_id).startswith('wechat:') else f"wechat:{legacy_id}"
+    return {
+        'schema': 'collectorx.event.v1',
+        'id': event_id,
+        'collector': 'wechat',
+        'source': record.get('source') or _format_collect_source(chat, False, time_str),
+        'owner_scope': 'personal',
+        'kind': 'message',
+        'time': _local_time_to_iso(time_str),
+        'collected_at': collected_at,
+        'data': {
+            'chat': chat,
+            'sender': sender,
+            'sender_is_owner': sender == '我',
+            'text': text,
+            'text_length': len(text),
+            'message_type': 'text',
+        },
+        'raw_ref': {
+            'legacy_collect_id': legacy_id,
+            'chat': chat,
+            'time': time_str,
+        },
+        'privacy': {
+            'sensitive': True,
+            'local_only': True,
+            'contains': ['personal_message', 'contact'],
+        },
+        'wiki_targets': [
+            'internal.communication.wechat',
+        ],
+    }
+
+
+def _write_json(path: Path, payload) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+
+
+def _write_jsonl(path: Path, rows) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('w', encoding='utf-8') as f:
+        for row in rows:
+            f.write(_json.dumps(row, ensure_ascii=False, sort_keys=True) + '\n')
+
+
+def _build_collect_manifest(records, events, *, collected_at: str, args, platform: str) -> dict:
+    chats = sorted({(r.get('data') or {}).get('chat') for r in records if (r.get('data') or {}).get('chat')})
+    owner_sent = sum(1 for event in events if event.get('data', {}).get('sender_is_owner'))
+    text_lengths = [event.get('data', {}).get('text_length', 0) for event in events]
+    return {
+        'schema': 'collectorx.collection_manifest.v1',
+        'collector': 'wechat',
+        'collected_at': collected_at,
+        'event_count': len(events),
+        'source_record_count': len(records),
+        'collection_readiness': {
+            'status': 'baseline+audit' if events else 'gap',
+            'real_account_validation': False,
+            'standard_package': True,
+            'reason': 'wechat_collect_standard_package_written' if events else 'no_wechat_messages_collected',
+        },
+        'platform_status': {
+            'platform': platform,
+            'macos': 'requires_wechat_4_keys_and_sip_disabled_for_key_extraction',
+            'windows': 'requires_authorized_db_dir_and_all_keys_or_decrypted_db',
+            'linux': 'requires_authorized_db_dir_and_root_key_extraction',
+        },
+        'scope': {
+            'collects': [
+                'owner_relevant_private_chat_messages',
+                'explicit_or_active_group_messages',
+                'chat_name',
+                'sender',
+                'message_time',
+                'message_text',
+            ],
+            'excludes': [
+                'wechat_password',
+                'encryption_keys',
+                'cookies',
+                'tokens',
+                'raw_database_pages',
+                'unparticipated_groups_by_default',
+                'xml_cards_without_text',
+                'recalled_message_notices',
+            ],
+        },
+        'filter_policy': {
+            'days': args.days,
+            'after': args.after,
+            'limit': args.limit,
+            'exclude_count': len(_split_csv(args.exclude)),
+            'include_group_count': len(_split_csv(args.include_groups)),
+            'active_group_days': args.active_group_days if args.active_group_days is not None else 30,
+            'participated_only': bool(args.participated_only),
+        },
+        'field_coverage': {
+            'chat': bool(chats),
+            'sender': any(event.get('data', {}).get('sender') for event in events),
+            'sender_is_owner': any(event.get('data', {}).get('sender_is_owner') for event in events),
+            'time': any(event.get('time') for event in events),
+            'text': any(event.get('data', {}).get('text') for event in events),
+            'text_length': bool(text_lengths),
+        },
+        'message_surface_summary': {
+            'chat_count': len(chats),
+            'owner_sent_events': owner_sent,
+            'received_events': max(0, len(events) - owner_sent),
+            'max_text_length': max(text_lengths) if text_lengths else 0,
+        },
+        'source_audit': {
+            'source_type': 'wechat_local_database_query',
+            'legacy_json_array_compatible': True,
+            'writes_final_wiki_directly': False,
+            'requires_downstream_lens': 'wechat-investment-dialogue',
+        },
+        'evidence_policy': {
+            'generic_collector': True,
+            'investment_claim_allowed': False,
+            'routes_to_lens': 'wechat-investment-dialogue',
+            'writes_investor_wiki_evidence_directly': False,
+        },
+    }
+
+
+def _write_collect_summary(path: Path, manifest: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines = [
+        '# WeChat Collector Summary',
+        '',
+        f"- Collector: `{manifest['collector']}`",
+        f"- Collected at: `{manifest['collected_at']}`",
+        f"- Events: `{manifest['event_count']}`",
+        f"- Chats: `{manifest['message_surface_summary']['chat_count']}`",
+        f"- Readiness: `{manifest['collection_readiness']['status']}`",
+        '',
+        'This is a generic communication collector package. Feed `lake/wechat/events.jsonl` into the `wechat-investment-dialogue` lens before using it as FinClaw investor Wiki evidence.',
+        '',
+    ]
+    path.write_text('\n'.join(lines), encoding='utf-8')
+
+
+def _write_collect_package(records, out_dir: str, *, args, platform: str, collected_at: str = None) -> dict:
+    out_path = Path(out_dir).expanduser()
+    collected_at = collected_at or _now_iso()
+    events = [_collect_record_to_event(record, collected_at) for record in records]
+    manifest = _build_collect_manifest(records, events, collected_at=collected_at, args=args, platform=platform)
+    _write_jsonl(out_path / 'lake' / 'wechat' / 'events.jsonl', events)
+    _write_json(out_path / 'manifest.json', manifest)
+    _write_collect_summary(out_path / 'SUMMARY.md', manifest)
+    return manifest
+
+
 def _format_collect_source(chat: str, is_group: bool, time_str: str) -> str:
     date = (time_str or '')[:10]
     chat = chat or '(unknown)'
@@ -1940,6 +2117,7 @@ def main():
     parser.add_argument('--collect', action='store_true', help='Collect mode: query+filter+format messages to CUFin JSON in one shot')
     parser.add_argument('--after', metavar='TIME', help='Collect mode: only messages at/after this time, format "YYYY-MM-DD HH:MM:SS"')
     parser.add_argument('--out', metavar='FILE', help='Collect mode: write the JSON array to this file')
+    parser.add_argument('--out-dir', metavar='DIR', help='Collect mode: write a standard CollectorX package to this directory')
     parser.add_argument('--pretty', action='store_true',
                         help='Pretty-print --collect JSON for human inspection; default collect output is compact')
     parser.add_argument('--exclude', metavar='NAMES',
@@ -1990,6 +2168,12 @@ def main():
                 logger.info(f"Auto-detected keys file: {auto_keys}")
 
         logger.info(f"Windows mode: db_dir={db_dir}, keys_file={keys_file}, has_key={bool(args.key)}")
+        if sys.platform in ('win32', 'cygwin'):
+            collector_platform = 'windows'
+        elif sys.platform.startswith('linux'):
+            collector_platform = 'linux'
+        else:
+            collector_platform = 'generic-db-dir'
         _t_init = time.time()
         exporter = WindowsV4Query(db_dir, key=args.key, keys_file=keys_file)
         logger.info(f"Exporter init took {time.time()-_t_init:.3f}s")
@@ -2008,6 +2192,7 @@ def main():
             # 4.x 走 per-DB keys（data/all_keys.json，由 wechat_extract_mac.py 提取）；
             # 不再强制要 WECHAT_KEY。MacV4 内部若既无 keys 文件又无单 key 才报错。
             exporter = MacV4Query(mac_key, args.user, keys_file=args.keys)
+            collector_platform = 'macos'
             logger.info("Mac mode: WeChat 4.x (SQLCipher4, page 4096 / kdf 256000 / HMAC-SHA512)")
         else:
             # 灵镜自 v0.9.1 起仅支持微信 4.x（3.x SQLCipher3 已下线）。
@@ -2237,6 +2422,14 @@ def main():
         if args.out:
             with open(args.out, 'w', encoding='utf-8') as f:
                 f.write(payload)
+        if args.out_dir:
+            manifest = _write_collect_package(out, args.out_dir, args=args, platform=collector_platform)
+            print(_json.dumps({
+                'collector': 'wechat',
+                'event_count': manifest['event_count'],
+                'out_dir': str(Path(args.out_dir).expanduser()),
+            }, ensure_ascii=False, sort_keys=True))
+        elif args.out:
             print(f"COLLECTED {len(out)}")
         else:
             print(payload)

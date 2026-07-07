@@ -113,6 +113,41 @@ Current status:
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows; use `ths-portfolio` for strong trading evidence.
 
+### 微信聊天
+
+```bash
+python3 skills/wechat-export/scripts/wechat_query.py \
+  --collect \
+  --days 30 \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized WeChat 4.x local query results into a standard
+  CollectorX package: `lake/wechat/events.jsonl`, `manifest.json`, and
+  `SUMMARY.md`.
+- The legacy `--out <file>` compact JSON array remains available for older
+  automation, but FinClaw should prefer `--out-dir`.
+- Captures owner-relevant private chats plus explicitly included or recently
+  owner-active groups, with chat name, sender, time, text, sender ownership,
+  field coverage, filter policy, source audit, and generic-to-lens evidence
+  policy.
+- Does not output WeChat encryption keys, passwords, cookies, tokens, raw
+  database pages, or direct investment conclusions.
+- This is a generic communication collector. Feed `lake/wechat/events.jsonl`
+  into `wechat-investment-dialogue` before using any result as investor Wiki
+  evidence.
+
+Preconditions:
+
+- User has authorized local WeChat access.
+- macOS WeChat 4.x needs per-database keys from the documented extractor; on
+  the current Mac, real-source validation is still blocked by the key/SIP
+  precondition.
+- Windows/Linux need the supported local database path and authorized key or
+  decrypted database setup.
+
 ### 本地文件
 
 ```bash
