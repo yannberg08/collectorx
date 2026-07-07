@@ -86,6 +86,8 @@ def test_collect_usage_exports() -> None:
                 ),
             )
             archive.writestr("../unsafe.json", json.dumps([{"title": "不应读取"}], ensure_ascii=False))
+            archive.writestr("..\\windows-traversal.json", json.dumps([{"title": "不应读取 Windows traversal"}], ensure_ascii=False))
+            archive.writestr("C:\\unsafe.json", json.dumps([{"title": "不应读取 Windows drive"}], ensure_ascii=False))
         subprocess.run(
             [
                 sys.executable,
@@ -107,10 +109,16 @@ def test_collect_usage_exports() -> None:
         assert {event["data"]["platform"] for event in events} == {"cls", "gelonghui", "wallstreetcn"}
         assert {event["data"]["action_type"] for event in events} == {"favorite", "read", "search", "subscribe", "alert"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("windows-traversal" not in (event["raw_ref"].get("path") or "") for event in events)
+        assert all("C:/unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
         assert all(event["collector"] == "financial-news-usage" for event in events)
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         assert any(event["data"].get("domain") == "www.cls.cn" for event in events)
+        assert any(event["data"].get("text_length") for event in events)
+        alert_event = next(event for event in events if event["data"]["action_type"] == "alert")
+        assert alert_event["raw_ref"]["source_archive"] == str(alert_zip)
+        assert alert_event["raw_ref"]["archive_member"] == "cls-alert.json"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_usage_history"] is False
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["cls", "wallstreetcn", "gelonghui"]
@@ -119,8 +127,20 @@ def test_collect_usage_exports() -> None:
         assert manifest["action_coverage"]["missing_expected_actions"] == []
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
+        assert manifest["field_coverage"]["field_counts"]["action_type"] == 5
+        assert manifest["usage_surface_summary"]["events_with_domain"] == 3
+        assert manifest["usage_surface_summary"]["events_with_query"] == 1
+        assert manifest["usage_surface_summary"]["alert_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
+        assert manifest["content_policy"]["full_public_news_crawl"] is False
+        assert manifest["evidence_policy"]["personal_usage_only"] is True
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["source_is_public_news_crawler"] is False
+        assert evidence["coverage_summary"]["personal_usage_only"] is True
+        assert evidence["coverage_summary"]["public_news_content_mirror"] is False
 
 
 def test_collect_chromium_browser_history() -> None:
@@ -167,6 +187,9 @@ def test_collect_chromium_browser_history() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["platform_counts"] == {"cls": 1, "wallstreetcn": 1}
         assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"gelonghui"}
+        assert manifest["source_audit"]["browser_history_event_count"] == 2
+        assert manifest["source_audit"]["browser_history_source_apps"] == ["chromium_history"]
+        assert manifest["usage_surface_summary"]["browser_history_event_count"] == 2
 
 
 if __name__ == "__main__":

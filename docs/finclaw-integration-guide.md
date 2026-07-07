@@ -448,11 +448,16 @@ Current status:
 - Captures user actions: read, favorite, subscribe, search, and alert.
 - Writes `manifest.platform_coverage` for CLS, WallstreetCN, and Gelonghui,
   plus `manifest.action_coverage` for expected user actions.
+- Writes `manifest.field_coverage`, `manifest.usage_surface_summary`,
+  `manifest.source_audit`, `manifest.content_policy`, and
+  `manifest.evidence_policy` so Lake can tell which usage fields, browser
+  history sources, ZIP members, and evidence boundaries are actually present.
 - For browser history, filters to CLS, WallstreetCN, and Gelonghui domains
   before writing events.
 - Captures domain, source app, URL, title, visit time, visit count, typed count,
   tags, symbols, and article ID where present.
-- Preserves file/ZIP member provenance in `raw_ref.path`.
+- Preserves file/ZIP member provenance in `raw_ref.path`, `source_archive`,
+  and `archive_member`.
 - Recursively filters credential-like raw keys.
 - Outputs `investor_wiki_evidence.v1.json` for information-consumption and
   monitoring-rule evidence.

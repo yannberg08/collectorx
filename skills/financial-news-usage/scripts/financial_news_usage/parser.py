@@ -12,6 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 from urllib.parse import urlparse
 
@@ -45,6 +46,25 @@ FINANCIAL_NEWS_DOMAINS = {
 }
 EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS = ("cls", "wallstreetcn", "gelonghui")
 EXPECTED_FINANCIAL_NEWS_ACTIONS = ("read", "favorite", "search", "subscribe", "alert")
+SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
+SOURCE_MEMBER_KEY = "_collectorx_archive_member"
+TEXT_PREVIEW_MAX_CHARS = 1200
+FINANCIAL_NEWS_RECOMMENDED_FIELDS = (
+    "action_type",
+    "platform",
+    "title",
+    "url",
+    "domain",
+    "source_app",
+    "source",
+    "channel",
+    "query",
+    "symbols",
+    "tags",
+    "article_id",
+    "text_preview",
+    "time",
+)
 
 
 def now_iso() -> str:
@@ -325,34 +345,45 @@ def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[s
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
             if should_skip_zip_member(member):
                 continue
-            suffix = Path(member.filename).suffix.lower()
+            member_name = normalize_zip_member_name(member.filename)
+            suffix = Path(member_name).suffix.lower()
             text = archive.read(member).decode("utf-8-sig", errors="replace")
-            path_label = f"{path.name}::{member.filename}"
+            path_label = f"{path}::{member_name}"
             try:
                 if suffix in {".json", ".jsonl", ".ndjson"}:
                     parsed = parse_json_text(text, suffix=suffix, path_label=path_label)
                 elif suffix in {".csv", ".tsv"}:
                     parsed = parse_table_text(text, suffix=suffix, path_label=path_label)
                 elif suffix in {".html", ".htm"}:
-                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member_name).stem)]
                 else:
-                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member_name).stem)]
             except Exception:
                 parsed = []
+            for record in parsed:
+                if isinstance(record, dict):
+                    record[SOURCE_ARCHIVE_KEY] = str(path)
+                    record[SOURCE_MEMBER_KEY] = member_name
             records.extend(parsed)
     return records
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
-    member_path = Path(member.filename)
+    member_name = normalize_zip_member_name(member.filename)
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
         return True
-    if member_path.is_absolute() or ".." in member_path.parts:
+    if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return True
-    return member_path.suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+    return Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+
+
+def normalize_zip_member_name(name: str) -> str:
+    return name.replace("\\", "/")
 
 
 def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_at: Optional[str]) -> Dict[str, Any]:
@@ -397,11 +428,22 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "typed_count": first(record, ["typed_count", "输入访问次数"]),
         "transition": first(record, ["transition", "访问方式"]),
         "article_id": article_id_for(url),
-        "text_preview": text[:1200],
+        "text_preview": text[:TEXT_PREVIEW_MAX_CHARS],
         "has_text": bool(text),
+        "text_length": len(text),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": path_label,
+        "row": row,
+        "platform": platform,
+        "url": url,
+        "source_app": data.get("source_app"),
+        "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
+        "archive_member": first(record, [SOURCE_MEMBER_KEY]),
+    }
+    raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, row, action_type, platform, title, url, event_time, query),
@@ -412,12 +454,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": event_time,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": path_label,
-            "row": row,
-            "platform": platform,
-            "url": url,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -575,6 +612,23 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "unknown_action_count": unknown_action_count,
             "real_account_validation": False,
         },
+        "field_coverage": field_coverage(events),
+        "usage_surface_summary": usage_surface_summary(events),
+        "source_audit": source_audit(events),
+        "content_policy": {
+            "full_public_news_crawl": False,
+            "full_article_content_included_by_default": False,
+            "text_preview_max_chars": TEXT_PREVIEW_MAX_CHARS,
+            "browser_history_domain_filtering": True,
+            "public_news_as_personal_fact": False,
+        },
+        "evidence_policy": {
+            "vertical_collector": True,
+            "collector_writes_investor_wiki_directly": False,
+            "source_is_public_news_crawler": False,
+            "personal_usage_only": True,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_financial_news_usage_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -593,6 +647,94 @@ def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], n
     if not missing_expected:
         return f"all_expected_{noun}s_observed"
     return f"partial_expected_{noun}s_observed"
+
+
+def usable_usage_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if (event.get("data") or {}).get("action_type") != "collector_gap"]
+
+
+def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usage_events = usable_usage_events(events)
+    field_counts = {
+        field: sum(1 for event in usage_events if usage_field_present(event, field))
+        for field in FINANCIAL_NEWS_RECOMMENDED_FIELDS
+    }
+    return {
+        "recommended_fields": list(FINANCIAL_NEWS_RECOMMENDED_FIELDS),
+        "field_counts": dict(sorted(field_counts.items())),
+        "missing_recommended_fields": [field for field, count in field_counts.items() if count == 0],
+        "events_with_text": sum(1 for event in usage_events if (event.get("data") or {}).get("has_text")),
+    }
+
+
+def usage_field_present(event: Dict[str, Any], field: str) -> bool:
+    if field == "time":
+        return bool(event.get("time"))
+    value = (event.get("data") or {}).get(field)
+    return value not in (None, "", [], {})
+
+
+def usage_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+    usage_events = usable_usage_events(events)
+    return {
+        "usage_event_count": len(usage_events),
+        "events_with_url": sum(1 for event in usage_events if (event.get("data") or {}).get("url")),
+        "events_with_domain": sum(1 for event in usage_events if (event.get("data") or {}).get("domain")),
+        "events_with_source_app": sum(1 for event in usage_events if (event.get("data") or {}).get("source_app")),
+        "events_with_source_or_channel": sum(
+            1
+            for event in usage_events
+            if (event.get("data") or {}).get("source") or (event.get("data") or {}).get("channel")
+        ),
+        "events_with_query": sum(1 for event in usage_events if (event.get("data") or {}).get("query")),
+        "events_with_symbols": sum(1 for event in usage_events if (event.get("data") or {}).get("symbols")),
+        "events_with_tags": sum(1 for event in usage_events if (event.get("data") or {}).get("tags")),
+        "events_with_text": sum(1 for event in usage_events if (event.get("data") or {}).get("has_text")),
+        "browser_history_event_count": sum(
+            1
+            for event in usage_events
+            if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+        ),
+        "alert_event_count": sum(1 for event in usage_events if (event.get("data") or {}).get("action_type") == "alert"),
+        "subscription_event_count": sum(
+            1 for event in usage_events if (event.get("data") or {}).get("action_type") == "subscribe"
+        ),
+    }
+
+
+def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usage_events = usable_usage_events(events)
+    archives = [
+        (event.get("raw_ref") or {}).get("source_archive")
+        for event in usage_events
+        if (event.get("raw_ref") or {}).get("source_archive")
+    ]
+    browser_history_apps = sorted(
+        {
+            str((event.get("data") or {}).get("source_app"))
+            for event in usage_events
+            if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+        }
+    )
+    return {
+        "source_ref_count": sum(
+            1
+            for event in usage_events
+            if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")
+        ),
+        "archive_member_event_count": sum(1 for event in usage_events if (event.get("raw_ref") or {}).get("archive_member")),
+        "archive_count": len(set(archives)),
+        "browser_history_event_count": len(
+            [
+                event
+                for event in usage_events
+                if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+            ]
+        ),
+        "browser_history_source_apps": browser_history_apps,
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+    }
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -619,6 +761,23 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         },
         "coverage_summary": {
             "source_is_public_news_crawler": False,
+            "personal_usage_only": True,
+            "public_news_content_mirror": False,
+            "usable_event_count": usable_events,
+            "source_platforms": sorted(
+                {
+                    str((event.get("data") or {}).get("platform"))
+                    for event in events
+                    if (event.get("data") or {}).get("platform")
+                }
+            ),
+            "source_actions": sorted(
+                {
+                    str((event.get("data") or {}).get("action_type"))
+                    for event in events
+                    if (event.get("data") or {}).get("action_type") not in (None, "collector_gap")
+                }
+            ),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

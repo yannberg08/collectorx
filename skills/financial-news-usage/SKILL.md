@@ -1,7 +1,6 @@
 ---
 name: financial-news-usage
-description: 财经资讯使用痕迹垂直采集器。采集用户授权的财联社、华尔街见闻、格隆汇等财经 App/网页的阅读、收藏、订阅、搜索、自选提醒等个人动作，支持文件/目录/ZIP/浏览器历史副本，输出 CollectorX 事件、平台/动作覆盖 manifest 和 FinClaw 投资分身证据包；不采公共新闻全文库。
-version: 0.2.1
+description: 财经资讯使用痕迹垂直采集器。采集用户授权的财联社、华尔街见闻、格隆汇等财经 App/网页的阅读、收藏、订阅、搜索、自选提醒等个人动作，支持文件/目录/ZIP/浏览器历史副本，输出 CollectorX 事件、平台/动作覆盖、字段覆盖、来源审计、内容策略 manifest 和 FinClaw 投资分身证据包；不采公共新闻全文库。
 ---
 
 # Financial News Usage Collector
@@ -17,6 +16,10 @@ version: 0.2.1
 - 用户授权提供的 Chrome、Edge、Brave 等 Chromium `History` 数据库副本，以及 Safari `History.db`。
 - 结构化字段：动作类型、平台、域名、来源应用、URL、文章标题、访问时间、访问次数、标签、证券代码、自选提醒。
 - `manifest.platform_coverage` 与 `manifest.action_coverage`：记录三大财经资讯平台和 read/favorite/search/subscribe/alert 动作覆盖。
+- `manifest.field_coverage`：记录标题、URL、域名、来源应用、栏目、搜索词、证券代码、标签、正文预览等字段覆盖。
+- `manifest.usage_surface_summary`：记录 URL、域名、来源应用、查询、标签、正文、浏览器历史、提醒和订阅等可用面。
+- `manifest.source_audit`：记录文件/ZIP 成员来源、浏览器历史来源、归档包数量，并声明未采集危险路径成员。
+- `manifest.content_policy` 与 `manifest.evidence_policy`：声明只采用户使用痕迹，不爬公共新闻库，不把公共新闻内容当个人事实。
 
 不采集：
 
@@ -48,5 +51,5 @@ python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
 
 ## 当前投产边界
 
-- 已验证：JSON/CSV/HTML/Markdown/TXT/ZIP 授权导出、Chromium 浏览器历史库、平台/动作归一、覆盖 manifest、递归敏感字段过滤。
+- 已验证：JSON/CSV/HTML/Markdown/TXT/ZIP 授权导出、Chromium 浏览器历史库、平台/动作归一、字段覆盖、来源审计、内容/证据边界、递归敏感字段过滤。
 - 待验证：真实财联社/华尔街见闻/格隆汇 App 本地缓存、账号 API、跨浏览器历史导出工具、订阅/提醒的真实字段差异。

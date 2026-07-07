@@ -50,6 +50,9 @@ def collect(args: argparse.Namespace) -> int:
                     f"- missing_expected_platforms：`{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
                     f"- observed_actions：`{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
                     f"- missing_expected_actions：`{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
+                    f"- field_coverage_missing：`{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+                    f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
+                    f"- browser_history_events：{manifest['source_audit']['browser_history_event_count']}",
                     "- 边界：只采用户动作，不采公共新闻库。",
                 ]
             ),

@@ -877,6 +877,30 @@ Findings:
   credential filtering, browser-history finance-domain filtering, and ZIP path
   traversal skipping.
 
+### Wave U2: P1 financial news usage audit and source pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-usage-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added per-event `text_length`, ZIP `source_archive`, and `archive_member`
+  provenance.
+- Added `manifest.field_coverage` for action, platform, title, URL, domain,
+  source app, source, channel, query, symbols, tags, article ID, text preview,
+  and event time.
+- Added `manifest.usage_surface_summary` for URL/domain coverage, source apps,
+  source/channel coverage, queries, symbols, tags, text, browser-history events,
+  alerts, and subscriptions.
+- Added `manifest.source_audit`, `manifest.content_policy`, and
+  `manifest.evidence_policy` to keep personal usage evidence separate from
+  public news crawling.
+- Hardened ZIP import against POSIX traversal and Windows drive/traversal
+  members.
+
 ### Wave V: P2 HK/US brokerage coverage pass 1
 
 Status: `completed-baseline`
@@ -976,7 +1000,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, source audit, ZIP provenance, and generic-collector evidence policy; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration surface summaries, source audit, ZIP provenance, and generic-collector evidence policy; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article surface summary, source audit, ZIP provenance, content policy, and generic-collector evidence policy | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
-| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action coverage manifest | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
+| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action coverage; manifests now include field coverage, usage surface summary, source audit, ZIP provenance, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 
 ## P2 Work Queue
 
