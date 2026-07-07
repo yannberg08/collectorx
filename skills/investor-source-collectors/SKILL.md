@@ -30,6 +30,13 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --input ~/Documents/research \
   --out-dir ~/Desktop/research-investor-collect
 
+# 显式授权读取研报/财报/估值表内容；默认不读取二进制文档正文
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source research-documents \
+  --input ~/Documents/research \
+  --include-content \
+  --out-dir ~/Desktop/research-content-investor-collect
+
 # 从微信通用 collector 的授权导出里筛选投资讨论
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source wechat-investment-dialogue \

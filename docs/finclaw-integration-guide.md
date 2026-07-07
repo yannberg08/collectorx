@@ -109,8 +109,26 @@ Preconditions:
 Boundary:
 
 - This collector is metadata-only. It records path, extension, size, and mtime.
-- It does not read file content. Research content reading belongs to a later
-  explicit authorization/distillation step.
+- It does not read file content. Research content reading belongs to the
+  explicit `research-documents` lens step below.
+
+### 研报 / 财报 / 估值表内容
+
+```bash
+python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
+  --source research-documents \
+  --input <authorized-research-folder> \
+  --include-content \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Reads content only when `--include-content` is explicitly supplied.
+- Supports Markdown/TXT/HTML, CSV/TSV, XLSX/XLSM, DOCX, and PDF extraction.
+- Extracted text is capped and carries parser/status metadata.
+- Generic `filesystem` remains metadata-only; investment routing stays in the
+  `research-documents` lens.
 
 ### 雪球投资活动
 

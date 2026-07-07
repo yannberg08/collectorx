@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 MIN_PYTHON = (3, 10)
 
-PY_COMPILE_EXCLUDES = {".git", "__pycache__", ".pytest_cache"}
+PY_COMPILE_EXCLUDES = {".git", ".venv", "__pycache__", ".pytest_cache"}
 
 CLI_HELP_TARGETS = [
     "skills/wechat-export/scripts/wechat_query.py",

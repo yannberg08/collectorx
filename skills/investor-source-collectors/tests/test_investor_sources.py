@@ -218,6 +218,60 @@ def test_email_research_reads_upstream_collectorx_event() -> None:
         assert manifest["collection_readiness"]["can_claim_complete_source_collection"] is False
 
 
+def test_research_documents_extracts_office_and_pdf_content_when_authorized() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        from docx import Document
+        from openpyxl import Workbook
+        from reportlab.pdfgen import canvas
+
+        root = Path(tmp)
+        out_dir = root / "out"
+
+        xlsx_path = root / "semiconductor-model.xlsx"
+        workbook = Workbook()
+        sheet = workbook.active
+        sheet.title = "估值表"
+        sheet.append(["公司", "财报", "估值", "风险点"])
+        sheet.append(["半导体公司A", "现金流改善", "DCF低估", "库存周期"])
+        workbook.save(xlsx_path)
+
+        docx_path = root / "roadshow-notes.docx"
+        document = Document()
+        document.add_heading("路演纪要", level=1)
+        document.add_paragraph("讨论买入理由、财报、估值和安全边际。")
+        document.save(docx_path)
+
+        pdf_path = root / "factor-report.pdf"
+        pdf = canvas.Canvas(str(pdf_path))
+        pdf.drawString(72, 720, "DCF ROE PE PB research report risk review")
+        pdf.save()
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--include-content",
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:00:00+08:00",
+        )
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 3
+        assert {event["data"]["payload"]["extension"] for event in events} == {".docx", ".pdf", ".xlsx"}
+        assert all(event["kind"] == "file" for event in events)
+        assert all(event["raw_ref"]["content_read"] is True for event in events)
+        assert all(event["data"]["payload"]["content_extract"]["status"] == "extracted" for event in events)
+        assert any("DCF低估" in event["data"]["payload"].get("content", "") for event in events)
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+
+
 def test_task_calendar_lens_keeps_investment_task_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -479,6 +533,7 @@ if __name__ == "__main__":
     test_wechat_lens_keeps_only_investment_dialogue()
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
+    test_research_documents_extracts_office_and_pdf_content_when_authorized()
     test_task_calendar_lens_keeps_investment_task_only()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()

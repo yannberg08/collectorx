@@ -88,6 +88,24 @@ Findings:
   20 candidate files; manifest was corrected to avoid claiming complete asset
   boundary from partial input.
 
+### Wave B2: P0 research content extraction pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p0-research-content-validation-2026-07-08.md`
+
+Findings:
+
+- Added explicit `--include-content` extraction for research documents in
+  `skills/investor-source-collectors`.
+- Default filesystem scanning remains metadata-only.
+- Fixture validation covers XLSX, DOCX, and PDF content extraction.
+- Real local candidate validation produced 28 research evidence events from 30
+  candidates and confirmed 6 PDF content extractions via `pdfplumber`.
+- Wiki coverage reached 10 usable investor subdimensions.
+
 ### Wave C: P1 notes productization pass 1
 
 Status: `completed-baseline`
@@ -243,7 +261,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
-| 2 | `research-documents` | G2 partial / G3 partial on macOS metadata | Content extraction under explicit authorization, PDF/Excel/Markdown fixtures, Windows/Linux path validation |
+| 2 | `research-documents` | G2/G3 partial on macOS metadata and explicit content extraction | Windows/Linux path validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
 | 3 | `email-research` | G1; mailbox registration missing | G2/G3: register mailbox, run on real mailbox events, broker/IR sender classifier, attachment raw refs |
 | 4 | `xueqiu-investor-activity` | G2 partial local candidate parsing | G2/G3: real Snowball account adapter or authorized export workflow, pagination, favorites/posts/comments validation |
 | 5 | `china-wealth-assets` | G2 partial local candidate parsing | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |

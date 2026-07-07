@@ -15,7 +15,9 @@ from .profiles import get_profile
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".eml", ".ics"}
 TABLE_EXTENSIONS = {".csv", ".tsv"}
 JSON_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
+CONTENT_EXTRACT_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".xlsm"}
 METADATA_ONLY_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".pptx", ".png", ".jpg", ".jpeg", ".webp"}
+MAX_EXTRACTED_CHARS = 20000
 
 
 def collect_events(
@@ -99,6 +101,15 @@ def parse_path(
             path,
             collected_at=collected_at,
             include_content=include_content,
+            min_score=min_score,
+            include_non_matches=include_non_matches,
+        )
+        return ParseResult(candidates=[path], events=[event] if event else [])
+    if include_content and suffix in CONTENT_EXTRACT_EXTENSIONS:
+        event = parse_content_file(
+            source_id,
+            path,
+            collected_at=collected_at,
             min_score=min_score,
             include_non_matches=include_non_matches,
         )
@@ -227,6 +238,52 @@ def parse_text_file(
     )
 
 
+def parse_content_file(
+    source_id: str,
+    path: Path,
+    *,
+    collected_at: Optional[str],
+    min_score: float,
+    include_non_matches: bool,
+) -> Optional[Dict[str, Any]]:
+    extracted = extract_document_text(path)
+    record: Dict[str, Any] = {
+        "title": path.stem,
+        "path": str(path),
+        "extension": path.suffix.lower(),
+        "byte_size": path.stat().st_size,
+        "metadata_only": False,
+        "content_read": extracted["status"] == "extracted",
+        "content_extract": {
+            "status": extracted["status"],
+            "parser": extracted["parser"],
+            "text_length": extracted["text_length"],
+            "truncated": extracted["truncated"],
+        },
+    }
+    if extracted["text"]:
+        record["content_preview"] = extracted["text"][:1200]
+        record["content"] = extracted["text"]
+    if extracted["error"]:
+        record["content_extract"]["error"] = extracted["error"]
+    return candidate_to_event(
+        source_id=source_id,
+        record=record,
+        source_label=str(path),
+        raw_ref={
+            "path": str(path),
+            "parser": extracted["parser"],
+            "byte_size": path.stat().st_size,
+            "content_read": extracted["status"] == "extracted",
+            "content_truncated": extracted["truncated"],
+        },
+        collected_at=collected_at,
+        event_kind="file",
+        min_score=min_score,
+        include_non_matches=include_non_matches,
+    )
+
+
 def parse_metadata_file(
     source_id: str,
     path: Path,
@@ -252,6 +309,86 @@ def parse_metadata_file(
         min_score=min_score,
         include_non_matches=include_non_matches,
     )
+
+
+def extract_document_text(path: Path) -> Dict[str, Any]:
+    suffix = path.suffix.lower()
+    parser = suffix.lstrip(".")
+    try:
+        if suffix == ".pdf":
+            text = extract_pdf_text(path)
+            parser = "pdfplumber"
+        elif suffix == ".docx":
+            text = extract_docx_text(path)
+            parser = "python-docx"
+        elif suffix in {".xlsx", ".xlsm"}:
+            text = extract_xlsx_text(path)
+            parser = "openpyxl"
+        else:
+            text = ""
+    except Exception as exc:  # pragma: no cover - dependency/runtime specific
+        return {
+            "status": "extract_failed",
+            "parser": parser,
+            "text": "",
+            "text_length": 0,
+            "truncated": False,
+            "error": type(exc).__name__,
+        }
+    normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
+    truncated = len(normalized) > MAX_EXTRACTED_CHARS
+    return {
+        "status": "extracted" if normalized else "empty",
+        "parser": parser,
+        "text": normalized[:MAX_EXTRACTED_CHARS],
+        "text_length": len(normalized),
+        "truncated": truncated,
+        "error": None,
+    }
+
+
+def extract_pdf_text(path: Path) -> str:
+    import pdfplumber  # type: ignore
+
+    parts: List[str] = []
+    with pdfplumber.open(str(path)) as pdf:
+        for page in pdf.pages[:20]:
+            parts.append(page.extract_text() or "")
+            if sum(len(part) for part in parts) > MAX_EXTRACTED_CHARS:
+                break
+    return "\n".join(parts)
+
+
+def extract_docx_text(path: Path) -> str:
+    import docx  # type: ignore
+
+    document = docx.Document(str(path))
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    for table in document.tables[:20]:
+        for row in table.rows:
+            values = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if values:
+                parts.append(" | ".join(values))
+    return "\n".join(parts)
+
+
+def extract_xlsx_text(path: Path) -> str:
+    import openpyxl  # type: ignore
+
+    workbook = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    parts: List[str] = []
+    try:
+        for sheet in workbook.worksheets[:10]:
+            parts.append(f"# {sheet.title}")
+            for row in sheet.iter_rows(max_row=200, values_only=True):
+                values = [str(value) for value in row if value not in (None, "")]
+                if values:
+                    parts.append(" | ".join(values))
+                if sum(len(part) for part in parts) > MAX_EXTRACTED_CHARS:
+                    break
+    finally:
+        workbook.close()
+    return "\n".join(parts)
 
 
 def normalize_json_candidate(item: Any, path: Path, index: int) -> tuple[Dict[str, Any], str, Dict[str, Any], Optional[str], Optional[str]]:
