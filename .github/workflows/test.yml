@@ -1,0 +1,52 @@
+name: Test Collectors
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.9', '3.10', '3.11']
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test email-collector
+      run: python skills/email-collector/scripts/email_api.py status
+    
+    - name: Test qq-export
+      run: python skills/qq-export/scripts/qq_query.py --help
+    
+    - name: Test notes-collector
+      run: python skills/notes-collector/scripts/notes_api.py status
+    
+    - name: Test ths-portfolio
+      run: python skills/ths-portfolio/scripts/ths_query.py --help
+    
+    - name: Test eastmoney-portfolio
+      run: python skills/eastmoney-portfolio/scripts/eastmoney_query.py --help
+    
+    - name: Test xueqiu-watchlist
+      run: python skills/xueqiu-watchlist/scripts/xueqiu_query.py --help
+    
+    - name: Run unit tests
+      run: |
+        cd skills/ths-portfolio && python tests/test_parser.py
+        cd ../eastmoney-portfolio && python tests/test_parser.py
+        cd ../xueqiu-watchlist && python tests/test_parser.py
