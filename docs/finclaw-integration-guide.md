@@ -151,6 +151,26 @@ python3 skills/investor-source-collectors/scripts/investor_sources.py list-sourc
 Lenses should consume already-collected generic lake events. They should not
 directly reconnect to WeChat, email, notes, or calendar accounts.
 
+Example lens collection:
+
+```bash
+python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
+  --source wechat-investment-dialogue \
+  --input <wechat-collector-json-or-jsonl> \
+  --out-dir <out-dir>
+```
+
+Default behavior:
+
+- Generic-channel lenses only emit investment-matched evidence.
+- Each emitted event includes `data.classification.confidence`,
+  `data.classification.reasons`, `matched_terms`, and `matched_symbols`.
+- The default relevance threshold is `--min-score 0.30`.
+- Use `--include-non-matches` only for audit/backtest runs, not normal Wiki
+  ingestion.
+- If input is readable but not investment-related, the manifest status is
+  `no_investment_evidence_matched` and Wiki coverage stays empty.
+
 ## Frontend / Product Preconditions
 
 Before calling a collector, FinClaw should show the user:
@@ -192,9 +212,9 @@ FinClaw should inspect `manifest.json` when available:
 
 - `collection_readiness.status`
 - `event_count`
+- `classification_summary` for lens collectors
 - required strong table/materialization flags for broker collectors
 - gap events and missing authorization states
 
 If a collector only emits a gap/preflight event, FinClaw should show the missing
 authorization/input, not treat it as collected personal data.
-

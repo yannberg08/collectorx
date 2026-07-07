@@ -30,6 +30,19 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --input ~/Documents/research \
   --out-dir ~/Desktop/research-investor-collect
 
+# 从微信通用 collector 的授权导出里筛选投资讨论
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source wechat-investment-dialogue \
+  --input ~/Desktop/wechat-collect.json \
+  --out-dir ~/Desktop/wechat-investor-dialogue
+
+# 审计模式：同时输出未命中的记录，便于回测阈值和白名单
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source email-research \
+  --input ~/Desktop/email-events.jsonl \
+  --out-dir ~/Desktop/email-research-audit \
+  --include-non-matches
+
 # 采集雪球个人活动导出或浏览器保存的 JSON/CSV/文本
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source xueqiu-investor-activity \
@@ -87,6 +100,18 @@ P2 必做：
 ```
 
 事件使用 `collectorx.event.v1`，证据包使用 `finclaw.investor_wiki_evidence.v1`，并按投资分身七大维度、20 个子维度提供覆盖情况。
+
+## Lens 分类器
+
+`lens` 类型的数据源默认会先做投资证据筛选，再写入证据包：
+
+- 命中证券/基金代码、交易动作、仓位、估值、研报、财报、调研、复盘等特征才会进入投资证据。
+- 事件会带 `data.classification`，包含置信度、命中原因、关键词和证券代码。
+- 默认阈值是 `--min-score 0.30`。
+- `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
+- 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。
+
+`vertical` 类型的数据源是金融原生通道，默认视为投资证据，但仍会附分类元数据。后续每个 vertical collector 还必须做真实账号/平台验证。
 
 ## 参考
 

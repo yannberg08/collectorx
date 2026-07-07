@@ -14,24 +14,38 @@ avoid building placeholders that look complete.
 | `lens-registered` | Investment lens exists and has routing rules, but does not yet have a mature classifier/backtest | Upstream dependency declared, boundaries documented |
 | `placeholder` | YAML/config entry only; not a runnable collector | Scope and exclusions documented |
 
+## Latest Productization Wave
+
+`investor-source-collectors` now has a runnable lens baseline:
+
+- Generic-channel lens sources default to investment evidence filtering.
+- Events include classification metadata: confidence, reasons, matched terms,
+  and matched security symbols.
+- Upstream `collectorx.event.v1` JSON/JSONL inputs are supported.
+- No-match inputs produce `no_investment_evidence_matched` gap events.
+- Gap events are excluded from investor Wiki coverage.
+
+This moves the shared lens engine to `baseline`, but it does not yet prove that
+every upstream source collector is production-ready.
+
 ## P0 Status
 
 | Need | Current implementation | Status | Gap to reach Tonghuashun/EastMoney standard |
 | --- | --- | --- | --- |
-| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens | `lens-registered` | Build investment classifier, entity/time matching, backtest against trade events, real WeChat lake validation |
-| 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens | `baseline` | Add research-file classifier, optional content extraction under explicit authorization, PDF/Excel fixtures, Windows/Linux path validation |
+| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline` | Real WeChat lake validation, contact/group allowlists, entity/time matching, backtest against trade events |
+| 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier | `baseline` | Optional content extraction under explicit authorization, PDF/Excel fixtures, Windows/Linux path validation |
 | 雪球投资活动 | `xueqiu-investor-activity` | `baseline` | Real Xueqiu login/export discovery, activity pagination, favorites/posts/comments/follows validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline` | Per-platform export/UI adapters, product field mapping, real account validation, cross-platform import fixtures |
-| 邮件研报 | `email` generic collector + `email-research` lens | `lens-registered` | Real mailbox validation, broker/IR sender classifiers, attachment refs, no full-body Wiki leakage |
+| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline` | Real mailbox validation, expanded broker/IR sender classifiers, attachment refs, no full-body Wiki leakage |
 
 ## P1 Status
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 飞书/钉钉/腾讯会议/企业微信会议纪要 | `feishu` exists; `dingtalk`, `wecom`, `meeting-artifacts` YAML; `meeting-minutes` lens | `placeholder` / `lens-registered` | Build/port real dingtalk/wecom/tencent meeting collectors, unify minutes schema, validate meeting fixtures |
-| Obsidian/Notion/有道云/印象笔记 | `notes-collector` + `investment-notes` lens | `baseline` / `lens-registered` | Expand beyond draft Notion/Obsidian, add Youdao/Evernote adapters, investment-note classifier |
-| 日历/任务/滴答清单 | `ticktick-cli`; `calendar` YAML; `task-calendar-investor` lens | `baseline` / `placeholder` | Validate TickTick real account, build calendar collector, classify investment tasks |
-| 公众号/微信收藏文章 | `wechat-favorites` YAML + `wechat-article-favorites` lens | `placeholder` | Build WeChat favorites/public-account artifact collector, validate saved article refs |
+| 飞书/钉钉/腾讯会议/企业微信会议纪要 | `feishu` exists; `dingtalk`, `wecom`, `meeting-artifacts` YAML; `meeting-minutes` lens classifier | `placeholder` / `baseline` | Build/port real dingtalk/wecom/tencent meeting collectors, unify minutes schema, validate meeting fixtures |
+| Obsidian/Notion/有道云/印象笔记 | `notes-collector` + `investment-notes` lens classifier | `baseline` | Expand beyond draft Notion/Obsidian, add Youdao/Evernote adapters, validate investment-note classifier |
+| 日历/任务/滴答清单 | `ticktick-cli`; `calendar` YAML; `task-calendar-investor` lens classifier | `baseline` / `placeholder` | Validate TickTick real account, build calendar collector, backtest investment task classifier |
+| 公众号/微信收藏文章 | `wechat-favorites` YAML + `wechat-article-favorites` lens classifier | `placeholder` / `baseline` | Build WeChat favorites/public-account artifact collector, validate saved article refs |
 | 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` YAML | `placeholder` | Build user activity adapters; do not crawl public news as personal evidence |
 
 ## P2 Status
@@ -40,7 +54,7 @@ avoid building placeholders that look complete.
 | --- | --- | --- | --- |
 | 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` YAML | `placeholder` | Build per-broker read-only adapters for assets, positions, executions, orders, cashflows |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` YAML | `placeholder` | Build licensed-workflow collectors; do not mirror vendor databases |
-| B站/微博/小红书投资内容痕迹 | `social-activity` YAML + `social-investment-influence` lens | `placeholder` / `lens-registered` | Build user activity collectors and investment influence classifier |
+| B站/微博/小红书投资内容痕迹 | `social-activity` YAML + `social-investment-influence` lens classifier | `placeholder` / `baseline` | Build user activity collectors and validate investment influence classifier |
 
 ## Deep-Designed Existing Collectors
 
@@ -63,4 +77,3 @@ discipline as the Tonghuashun/EastMoney work:
 6. Tests: parser/unit tests and at least one fixture without private data.
 7. Real validation: run against a real account/device/export and record readiness.
 8. Backtest: verify events can land in investor Wiki dimensions without hallucinating reasons.
-

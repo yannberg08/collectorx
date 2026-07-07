@@ -61,6 +61,8 @@ Operational docs:
   is still a placeholder or lens.
 - `docs/finclaw-integration-guide.md` describes how FinClaw should discover,
   authorize, call, and gate collectors.
+- `docs/investor-collector-productization-roadmap.md` tracks the P0/P1/P2
+  productization waves and Git discipline.
 - `docs/soulmirror-migration-policy.md` records the rule for copying existing
   SoulMirror/Hermes collectors without unnecessary rewrites.
 
@@ -103,14 +105,14 @@ Operational docs:
 
 | Lens | Upstream | Status |
 | --- | --- | --- |
-| `wechat-investment-dialogue` | `wechat` | Routes investment discussions; does not read WeChat DB directly |
-| `research-documents` | `filesystem`, `notes` | Routes research files and valuation docs |
-| `email-research` | `email` | Routes broker research, roadshow, and IR mail |
-| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Routes roadshow/research/IC minutes |
-| `investment-notes` | `notes` | Routes investment notes, reviews, rules, checklists |
-| `task-calendar-investor` | `ticktick`, `calendar` | Routes research tasks, trade plans, review reminders |
-| `wechat-article-favorites` | `wechat-favorites` | Routes investment public-account articles |
-| `social-investment-influence` | `social-activity` | Routes investment creators and social influence signals |
+| `wechat-investment-dialogue` | `wechat` | Runnable lens baseline with investment classifier; real WeChat lake validation pending |
+| `research-documents` | `filesystem`, `notes` | Runnable lens baseline for research files and valuation docs; content extraction validation pending |
+| `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
+| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source adapters pending |
+| `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists; note adapters pending |
+| `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; calendar validation pending |
+| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; favorites collector pending |
+| `social-investment-influence` | `social-activity` | Runnable lens baseline for investment creators and social influence signals; social activity adapters pending |
 
 Status legend:
 
@@ -158,6 +160,7 @@ The suite currently checks:
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
 - parser unit tests for portfolio/watchlist collectors
+- investor lens classifier tests for matched and non-matched evidence
 - event example shape
 
 This is a quality baseline, not a claim that every collector has been verified

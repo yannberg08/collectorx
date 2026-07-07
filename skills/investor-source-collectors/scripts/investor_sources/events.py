@@ -54,6 +54,7 @@ def build_event(
     collected_at: Optional[str] = None,
     event_kind: Optional[str] = None,
     event_time: Optional[str] = None,
+    classification: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     profile = get_profile(source_id)
     kind = normalize_kind(event_kind or profile["default_kind"])
@@ -78,6 +79,7 @@ def build_event(
         "evidence_level": profile["evidence_level"],
         "investor_subdimensions": profile["subdimensions"],
         "normalized": normalized,
+        "classification": classification or {},
         "payload": record,
     }
     return {
@@ -102,14 +104,19 @@ def build_event(
 
 def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reason: str = "source_input_missing") -> Dict[str, Any]:
     profile = get_profile(source_id)
+    message = {
+        "source_input_missing": "No authorized input was provided; collector did not fabricate source data.",
+        "no_readable_input": "Authorized input was provided, but no readable records were found.",
+        "no_investment_evidence_matched": "Authorized input was scanned, but no investment-related evidence matched the lens rules.",
+    }.get(reason, "Collector could not produce source evidence for this run.")
     record = {
         "signal_type": "collector_preflight_gap",
         "gap": reason,
-        "message": "No authorized input was provided; collector did not fabricate source data.",
+        "message": message,
         "accepted_inputs": profile.get("accepted_inputs", []),
         "authorization": profile.get("authorization", ""),
     }
-    return build_event(
+    event = build_event(
         source_id=source_id,
         source_label=f"{profile['display_name']} preflight",
         record=record,
@@ -117,13 +124,35 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
         collected_at=collected_at,
         event_kind="other",
     )
+    event["data"]["investor_subdimensions"] = []
+    event["data"]["evidence_level"] = "none"
+    event["data"]["classification"] = {
+        "is_investment_evidence": False,
+        "confidence": 0,
+        "reasons": [reason],
+        "classifier": "collector-preflight-gap",
+    }
+    event["wiki_targets"] = []
+    return event
 
 
 def build_manifest(source_id: str, events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
     profile = get_profile(source_id)
     kind_counts = Counter(event["kind"] for event in events)
-    only_gap = bool(events) and all((event.get("data") or {}).get("payload", {}).get("signal_type") == "collector_preflight_gap" for event in events)
-    status = "needs_source_authorization_or_input" if only_gap else "events_collected"
+    only_gap = bool(events) and all(is_gap_event(event) for event in events)
+    gap_reason = None
+    if only_gap:
+        gap_reason = (events[0].get("data") or {}).get("payload", {}).get("gap")
+    status = {
+        "source_input_missing": "needs_source_authorization_or_input",
+        "no_readable_input": "no_readable_input",
+        "no_investment_evidence_matched": "no_investment_evidence_matched",
+    }.get(str(gap_reason), "events_collected" if not only_gap else "needs_source_authorization_or_input")
+    classifications = [
+        (event.get("data") or {}).get("classification") or {}
+        for event in events
+        if not is_gap_event(event)
+    ]
     return {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -133,11 +162,22 @@ def build_manifest(source_id: str, events: List[Dict[str, Any]], *, collected_at
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
         "kind_counts": dict(sorted(kind_counts.items())),
+        "classification_summary": {
+            "classifier": "investor-source-keyword-v1",
+            "matched_event_count": sum(1 for item in classifications if item.get("is_investment_evidence")),
+            "non_matched_event_count": sum(1 for item in classifications if not item.get("is_investment_evidence")),
+            "average_confidence": round(
+                sum(float(item.get("confidence") or 0) for item in classifications) / len(classifications),
+                3,
+            )
+            if classifications
+            else 0,
+        },
         "collection_readiness": {
             "status": status,
-            "can_enter_finclaw": bool(events),
+            "can_enter_finclaw": bool(events) and not only_gap,
             "can_claim_complete_source_collection": not only_gap,
-            "next_action": "提供用户授权的源数据或连接器输入后重跑。" if only_gap else "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
+            "next_action": next_action_for_status(status),
         },
         "privacy": {
             "local_only": True,
@@ -148,10 +188,11 @@ def build_manifest(source_id: str, events: List[Dict[str, Any]], *, collected_at
 
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
     by_subdimension: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     source_counts = Counter()
     kind_counts = Counter()
-    for event in events:
+    for event in usable_events:
         kind_counts[event.get("kind", "unknown")] += 1
         data = event.get("data") or {}
         source_profile = data.get("source_profile") or event.get("collector")
@@ -199,7 +240,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
         "generated_from": {
             "skill": "investor-source-collectors",
             "event_schema": EVENT_SCHEMA,
-            "event_count": len(events),
+            "event_count": len(usable_events),
             "kind_counts": dict(sorted(kind_counts.items())),
             "source_counts": dict(sorted(source_counts.items())),
             "source_profile_priority_counts": profile_count_by_priority(
@@ -248,6 +289,19 @@ def normalize_record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
         "text_preview": str(text)[:500] if text is not None else None,
     }
     return {key: value for key, value in normalized.items() if value not in (None, "")}
+
+
+def is_gap_event(event: Dict[str, Any]) -> bool:
+    return (event.get("data") or {}).get("payload", {}).get("signal_type") == "collector_preflight_gap"
+
+
+def next_action_for_status(status: str) -> str:
+    return {
+        "needs_source_authorization_or_input": "提供用户授权的源数据或连接器输入后重跑。",
+        "no_readable_input": "检查输入路径、文件格式和导出内容后重跑。",
+        "no_investment_evidence_matched": "输入已读取，但未命中投资证据；可降低阈值、补充白名单或确认这批数据不属于投资分身。",
+        "events_collected": "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
+    }.get(status, "检查 manifest 后决定下一步。")
 
 
 def first_value(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
