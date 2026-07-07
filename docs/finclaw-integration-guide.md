@@ -400,24 +400,29 @@ Current status:
 
 ```bash
 python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
-  --input <authorized-cls-wallstreetcn-gelonghui-usage-export> \
+  --input <authorized-cls-wallstreetcn-gelonghui-usage-export-or-zip-or-history-copy> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, Chromium
-  `History`, and Safari `History.db` usage records into
+- Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, ZIP packages,
+  Chromium `History`, and Safari `History.db` usage records into
   `financial-news-usage` events.
 - Captures user actions: read, favorite, subscribe, search, and alert.
+- Writes `manifest.platform_coverage` for CLS, WallstreetCN, and Gelonghui,
+  plus `manifest.action_coverage` for expected user actions.
 - For browser history, filters to CLS, WallstreetCN, and Gelonghui domains
   before writing events.
 - Captures domain, source app, URL, title, visit time, visit count, typed count,
   tags, symbols, and article ID where present.
+- Preserves file/ZIP member provenance in `raw_ref.path`.
 - Recursively filters credential-like raw keys.
 - Outputs `investor_wiki_evidence.v1.json` for information-consumption and
   monitoring-rule evidence.
 - Does not crawl public news or platform-wide content.
+- Real CLS/WallstreetCN/Gelonghui app caches, account APIs, and subscription
+  stores still require account-level validation.
 
 ### 港美股券商
 

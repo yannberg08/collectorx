@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from html import unescape
@@ -18,7 +19,7 @@ from urllib.parse import urlparse
 COLLECTOR = "financial-news-usage"
 CN_TZ = timezone(timedelta(hours=8))
 UTC = timezone.utc
-SUPPORTED_EXTENSIONS = {
+SUPPORTED_RECORD_EXTENSIONS = {
     ".json",
     ".jsonl",
     ".ndjson",
@@ -33,6 +34,8 @@ SUPPORTED_EXTENSIONS = {
     ".sqlite3",
     ".db",
 }
+SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
+SUPPORTED_ZIP_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS - {".sqlite", ".sqlite3", ".db"}
 BROWSER_HISTORY_NAMES = {"History", "History.db"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 FINANCIAL_NEWS_DOMAINS = {
@@ -40,6 +43,8 @@ FINANCIAL_NEWS_DOMAINS = {
     "wallstreetcn": ("wallstreetcn.com", "wscn.com"),
     "gelonghui": ("gelonghui.com", "gelonghui.cn"),
 }
+EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS = ("cls", "wallstreetcn", "gelonghui")
+EXPECTED_FINANCIAL_NEWS_ACTIONS = ("read", "favorite", "search", "subscribe", "alert")
 
 
 def now_iso() -> str:
@@ -76,6 +81,8 @@ def is_supported_path(path: Path) -> bool:
 
 def parse_path(path: Path) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return parse_zip(path)
     if suffix in {".sqlite", ".sqlite3", ".db"} or path.name in BROWSER_HISTORY_NAMES:
         return parse_browser_history(path)
     if suffix in {".json", ".jsonl", ".ndjson"}:
@@ -89,13 +96,21 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig").strip()
+    return parse_json_text(text, suffix=path.suffix.lower(), path_label=str(path))
+
+
+def parse_json_text(text: str, *, suffix: str, path_label: str) -> List[Dict[str, Any]]:
+    text = text.strip()
     if not text:
         return []
-    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+    if suffix in {".jsonl", ".ndjson"}:
         rows = [json.loads(line) for line in text.splitlines() if line.strip()]
     else:
         rows = extract_records(json.loads(text))
-    return [row if isinstance(row, dict) else {"value": row} for row in rows]
+    records = [row if isinstance(row, dict) else {"value": row} for row in rows]
+    for record in records:
+        record.setdefault("path", path_label)
+    return records
 
 
 def extract_records(loaded: Any) -> List[Any]:
@@ -112,10 +127,17 @@ def extract_records(loaded: Any) -> List[Any]:
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return parse_table_text(text, suffix=path.suffix.lower(), path_label=str(path))
+
+
+def parse_table_text(text: str, *, suffix: str, path_label: str) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
-    delimiter = "\t" if path.suffix.lower() == ".tsv" else sniff_delimiter(text)
-    return [dict(row) for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
+    delimiter = "\t" if suffix == ".tsv" else sniff_delimiter(text)
+    records = [dict(row) for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
+    for record in records:
+        record.setdefault("path", path_label)
+    return records
 
 
 def sniff_delimiter(text: str) -> str:
@@ -270,32 +292,74 @@ def safari_time_to_iso(value: Any) -> Optional[str]:
 
 def parse_html(path: Path) -> Dict[str, Any]:
     html = path.read_text(encoding="utf-8", errors="replace")
+    return parse_html_text(html, path_label=str(path), default_title=path.stem)
+
+
+def parse_html_text(html: str, *, path_label: str, default_title: str) -> Dict[str, Any]:
     text = html_to_text(html)
     return {
         "action_type": "read",
-        "title": meta_content(html, "og:title") or title_tag(html) or infer_title(path, text),
+        "title": meta_content(html, "og:title") or title_tag(html) or infer_title(default_title, text),
         "source": meta_content(html, "og:site_name"),
         "url": canonical_url(html) or first_url(html),
         "content": text,
-        "path": str(path),
+        "path": path_label,
     }
 
 
 def parse_text(path: Path) -> Dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
+    return parse_text_text(text, path_label=str(path), default_title=path.stem)
+
+
+def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[str, Any]:
     return {
         "action_type": "read",
-        "title": infer_title(path, text),
+        "title": infer_title(default_title, text),
         "url": first_url(text),
         "content": text,
-        "path": str(path),
+        "path": path_label,
     }
 
 
+def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    with zipfile.ZipFile(path) as archive:
+        for member in sorted(archive.infolist(), key=lambda item: item.filename):
+            if should_skip_zip_member(member):
+                continue
+            suffix = Path(member.filename).suffix.lower()
+            text = archive.read(member).decode("utf-8-sig", errors="replace")
+            path_label = f"{path.name}::{member.filename}"
+            try:
+                if suffix in {".json", ".jsonl", ".ndjson"}:
+                    parsed = parse_json_text(text, suffix=suffix, path_label=path_label)
+                elif suffix in {".csv", ".tsv"}:
+                    parsed = parse_table_text(text, suffix=suffix, path_label=path_label)
+                elif suffix in {".html", ".htm"}:
+                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+                else:
+                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member.filename).stem)]
+            except Exception:
+                parsed = []
+            records.extend(parsed)
+    return records
+
+
+def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    member_path = Path(member.filename)
+    if member.is_dir():
+        return True
+    if member_path.is_absolute() or ".." in member_path.parts:
+        return True
+    return member_path.suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+
+
 def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_at: Optional[str]) -> Dict[str, Any]:
-    action_type = infer_action_type(record, path)
-    platform = infer_platform(record, path)
-    title = first(record, ["title", "name", "subject", "标题", "文章标题"]) or path.stem
+    path_label = first(record, ["path", "file", "source_path"]) or str(path)
+    action_type = infer_action_type(record, path_label)
+    platform = infer_platform(record, path_label)
+    title = first(record, ["title", "name", "subject", "标题", "文章标题"]) or Path(path_label).stem
     url = first(record, ["url", "link", "href", "article_url", "链接", "原文链接"])
     domain = host_for(url)
     text = first(record, ["text", "content", "body", "summary", "abstract", "note", "正文", "内容", "摘要", "备注"]) or ""
@@ -340,7 +404,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(path, row, action_type, platform, title, url, event_time, query),
+        "id": stable_id(path_label, row, action_type, platform, title, url, event_time, query),
         "collector": COLLECTOR,
         "source": "财经资讯用户使用痕迹",
         "owner_scope": "personal",
@@ -349,7 +413,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "collected_at": collected_at or now_iso(),
         "data": data,
         "raw_ref": {
-            "path": str(path),
+            "path": path_label,
             "row": row,
             "platform": platform,
             "url": url,
@@ -384,9 +448,9 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     }
 
 
-def infer_action_type(record: Dict[str, Any], path: Path) -> str:
+def infer_action_type(record: Dict[str, Any], path_label: str) -> str:
     explicit = first(record, ["action_type", "activity_type", "action", "event", "type", "动作", "行为", "类型"])
-    text = json.dumps(record, ensure_ascii=False).lower() + " " + str(path).lower()
+    text = json.dumps(record, ensure_ascii=False).lower() + " " + str(path_label).lower()
     probe = (explicit or text).lower()
     if any(token in probe for token in ("favorite", "fav", "bookmark", "收藏", "星标", "saved")):
         return "favorite"
@@ -401,7 +465,7 @@ def infer_action_type(record: Dict[str, Any], path: Path) -> str:
     return "read"
 
 
-def infer_platform(record: Dict[str, Any], path: Path) -> str:
+def infer_platform(record: Dict[str, Any], path_label: str) -> str:
     explicit = first(record, ["platform", "app", "provider", "source_app", "平台", "应用"])
     explicit_match = platform_from_text(explicit or "")
     if explicit_match:
@@ -409,7 +473,7 @@ def infer_platform(record: Dict[str, Any], path: Path) -> str:
     url_match = platform_from_url(first(record, ["url", "link", "href", "article_url", "链接", "原文链接"]) or "")
     if url_match:
         return url_match
-    text = " ".join(str(value) for value in record.values() if value is not None) + " " + str(path)
+    text = " ".join(str(value) for value in record.values() if value is not None) + " " + str(path_label)
     text_match = platform_from_text(text)
     return text_match or "unknown"
 
@@ -477,6 +541,14 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
     gap_only = bool(events) and set(action_counts) == {"collector_gap"}
+    observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
+    observed_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if platform_counts.get(platform)]
+    missing_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if not platform_counts.get(platform)]
+    unknown_platform_count = sum(count for platform, count in platform_counts.items() if platform not in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS)
+    observed_actions = sorted(action for action, count in action_counts.items() if count and action not in {"collector_gap", "unknown"})
+    observed_expected_actions = [action for action in EXPECTED_FINANCIAL_NEWS_ACTIONS if action_counts.get(action)]
+    missing_expected_actions = [action for action in EXPECTED_FINANCIAL_NEWS_ACTIONS if not action_counts.get(action)]
+    unknown_action_count = sum(count for action, count in action_counts.items() if action not in EXPECTED_FINANCIAL_NEWS_ACTIONS and action != "collector_gap")
     return {
         "schema": "financial_news.usage.manifest.v1",
         "collector": COLLECTOR,
@@ -485,14 +557,42 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(kind_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
+        "platform_coverage": {
+            "expected_p1_platforms": list(EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS),
+            "observed_platforms": observed_platforms,
+            "observed_expected_platforms": observed_expected_platforms,
+            "missing_expected_platforms": missing_expected_platforms,
+            "platform_counts": dict(sorted(platform_counts.items())),
+            "unknown_platform_count": unknown_platform_count,
+            "real_account_validation": False,
+        },
+        "action_coverage": {
+            "expected_p1_actions": list(EXPECTED_FINANCIAL_NEWS_ACTIONS),
+            "observed_actions": observed_actions,
+            "observed_expected_actions": observed_expected_actions,
+            "missing_expected_actions": missing_expected_actions,
+            "action_counts": dict(sorted(action_counts.items())),
+            "unknown_action_count": unknown_action_count,
+            "real_account_validation": False,
+        },
         "collection_readiness": {
             "status": "needs_financial_news_usage_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_complete_usage_history": False,
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "platform_coverage_status": coverage_status(events, missing_expected_platforms, "platform"),
+            "action_coverage_status": coverage_status(events, missing_expected_actions, "action"),
             "next_action": "Provide authorized CLS/WallstreetCN/Gelonghui usage export." if gap_only else "Use as investor information-consumption evidence; continue real app/account validation.",
         },
     }
+
+
+def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], noun: str) -> str:
+    if not events or all((event.get("data") or {}).get("action_type") == "collector_gap" for event in events):
+        return f"no_{noun}_observed"
+    if not missing_expected:
+        return f"all_expected_{noun}s_observed"
+    return f"partial_expected_{noun}s_observed"
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -621,12 +721,12 @@ def normalize_space(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def infer_title(path: Path, text: str) -> str:
+def infer_title(default_title: str, text: str) -> str:
     for line in text.splitlines()[:30]:
         stripped = line.strip().lstrip("#").strip()
         if stripped:
             return stripped[:120]
-    return path.stem
+    return default_title
 
 
 def stable_id(*parts: Any) -> str:

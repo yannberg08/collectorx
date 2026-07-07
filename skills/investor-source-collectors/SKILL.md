@@ -78,7 +78,7 @@ P1 必做：
 - `investment-notes`：lens，读取 `notes` lake，只筛投资笔记、规则库、复盘。
 - `task-calendar-investor`：lens，读取 `ticktick`/日历 lake，只筛交易计划、复盘提醒、研究任务。
 - `wechat-article-favorites`：lens，读取微信收藏/公众号通道，只筛用户收藏、阅读、转发的投资文章。
-- `financial-news-usage`：vertical，采财联社、华尔街见闻、格隆汇等财经 App 的用户阅读/收藏/订阅痕迹。
+- `financial-news-usage`：vertical，采财联社、华尔街见闻、格隆汇等财经 App 的用户阅读/收藏/订阅/搜索/提醒痕迹，并报告平台/动作覆盖。
 
 P2 必做：
 

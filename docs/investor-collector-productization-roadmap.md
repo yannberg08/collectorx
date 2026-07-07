@@ -665,6 +665,28 @@ Findings:
 - Fixture validation covers JSON favorites, HTML saved public-account article,
   ZIP shared article, credential filtering, and ZIP path traversal skipping.
 
+### Wave U: P1 financial news usage coverage pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-usage-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Added authorized ZIP export import to `financial-news-usage`.
+- Added `manifest.platform_coverage` for CLS, WallstreetCN, and Gelonghui.
+- Added `manifest.action_coverage` for read, favorite, search, subscribe, and
+  alert actions.
+- Preserved file/ZIP member provenance in `raw_ref.path` as
+  `archive.zip::member`.
+- Kept the collector scoped to user usage traces; it still does not crawl or
+  mirror public news content.
+- Fixture validation covers JSON usage, saved HTML page, ZIP alert event,
+  credential filtering, browser-history finance-domain filtering, and ZIP path
+  traversal skipping.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -683,7 +705,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report task/calendar platform coverage; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus DingTalk/WeCom collaboration exports; meeting manifest reports platform coverage; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage manifest | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
-| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages and Chromium/Safari browser-history copies | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
+| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action coverage manifest | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 
 ## P2 Work Queue
 

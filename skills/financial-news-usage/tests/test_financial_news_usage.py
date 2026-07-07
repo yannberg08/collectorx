@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,7 @@ def test_collect_usage_exports() -> None:
         root = Path(tmp)
         export = root / "usage.json"
         html = root / "wallstreetcn.html"
+        alert_zip = root / "financial-news-alerts.zip"
         out = root / "out"
         export.write_text(
             json.dumps(
@@ -65,6 +67,25 @@ def test_collect_usage_exports() -> None:
             "<body>用户保存的阅读页面。</body></html>",
             encoding="utf-8",
         )
+        with zipfile.ZipFile(alert_zip, "w") as archive:
+            archive.writestr(
+                "cls-alert.json",
+                json.dumps(
+                    {
+                        "alerts": [
+                            {
+                                "platform": "财联社",
+                                "action": "提醒",
+                                "title": "半导体自选提醒",
+                                "url": "https://www.cls.cn/detail/alert",
+                                "time": "2026-07-08T09:20:00+08:00",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+            )
+            archive.writestr("../unsafe.json", json.dumps([{"title": "不应读取"}], ensure_ascii=False))
         subprocess.run(
             [
                 sys.executable,
@@ -82,15 +103,22 @@ def test_collect_usage_exports() -> None:
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert len(events) == 4
+        assert len(events) == 5
         assert {event["data"]["platform"] for event in events} == {"cls", "gelonghui", "wallstreetcn"}
-        assert {event["data"]["action_type"] for event in events} == {"favorite", "read", "search", "subscribe"}
+        assert {event["data"]["action_type"] for event in events} == {"favorite", "read", "search", "subscribe", "alert"}
+        assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
         assert all(event["collector"] == "financial-news-usage" for event in events)
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         assert any(event["data"].get("domain") == "www.cls.cn" for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_usage_history"] is False
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["cls", "wallstreetcn", "gelonghui"]
+        assert manifest["platform_coverage"]["missing_expected_platforms"] == []
+        assert manifest["action_coverage"]["observed_expected_actions"] == ["read", "favorite", "search", "subscribe", "alert"]
+        assert manifest["action_coverage"]["missing_expected_actions"] == []
+        assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
+        assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["source_is_public_news_crawler"] is False
 
@@ -138,6 +166,7 @@ def test_collect_chromium_browser_history() -> None:
         assert not any("example.com" in json.dumps(event, ensure_ascii=False) for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["platform_counts"] == {"cls": 1, "wallstreetcn": 1}
+        assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"gelonghui"}
 
 
 if __name__ == "__main__":

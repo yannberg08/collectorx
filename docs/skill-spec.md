@@ -71,6 +71,7 @@ skill-name/
 | xueqiu-watchlist | 9 | 草稿实现，CSV parser 已有基础测试 |
 | xueqiu-investor-activity | 7+ | 雪球个人活动垂直采集器，本地授权导出 baseline 已测试 |
 | china-wealth-assets | 7+ | 中国基金理财资产垂直采集器，本地授权导出 baseline 已测试 |
+| financial-news-usage | 7+ | 财经资讯使用痕迹垂直采集器 baseline；支持授权文件/目录/ZIP/浏览器历史副本、平台/动作覆盖 manifest 和凭证字段过滤，仍需真实财联社/华尔街见闻/格隆汇账号验证 |
 | email-collector | 8+ | 已有多邮箱前置识别与邮件事件输出基线，需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
 | notes-collector | 6+ | 笔记通用采集器 baseline；支持 Obsidian/Notion、有道/印象/Markdown/HTML/JSON/ENEX/ZIP 授权导入和平台覆盖 manifest，仍需真实 Notion/有道/印象账号验证 |

@@ -46,6 +46,10 @@ def collect(args: argparse.Namespace) -> int:
                     f"- collector：`{COLLECTOR}`",
                     f"- 事件数：{len(events)}",
                     f"- readiness：`{manifest['collection_readiness']['status']}`",
+                    f"- observed_platforms：`{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
+                    f"- missing_expected_platforms：`{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
+                    f"- observed_actions：`{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
+                    f"- missing_expected_actions：`{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
                     "- 边界：只采用户动作，不采公共新闻库。",
                 ]
             ),
@@ -60,8 +64,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized CLS/WallstreetCN/Gelonghui usage traces.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("collect", help="Parse financial news usage exports or saved pages.")
-    p.add_argument("--input", action="append", help="Authorized file or folder. Repeat for multiple inputs.")
+    p = sub.add_parser("collect", help="Parse financial news usage exports, saved pages, browser history, or ZIP packages.")
+    p.add_argument("--input", action="append", help="Authorized file, folder, browser history copy, or ZIP package. Repeat for multiple inputs.")
     p.add_argument("--out-dir")
     p.add_argument("--event-export")
     p.add_argument("--limit", type=int)
