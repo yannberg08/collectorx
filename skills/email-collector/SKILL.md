@@ -1,7 +1,7 @@
 ---
 name: email-collector
 description: 采集邮箱邮件并输出CollectorX邮件事件。当用户说"查邮件"、"导出邮件"、"采集邮件"、"邮件备份"、"邮件投资讨论"时使用此skill。
-version: 0.3.0
+version: 0.4.0
 ---
 
 # 邮箱采集器
@@ -25,9 +25,6 @@ python <SKILL_DIR>/scripts/email_api.py register \
   --folders INBOX,Sent \
   --days 30
 
-# 或者直接写入本地状态文件（仅限应用专用密码）
-python <SKILL_DIR>/scripts/email_api.py register --email user@qq.com --password "app-password"
-
 # 如果只是先列入待接入清单，还没有授权码
 python <SKILL_DIR>/scripts/email_api.py register \
   --email user@company.com \
@@ -46,6 +43,11 @@ python <SKILL_DIR>/scripts/email_api.py collect --account all --format json
 # 采集并导出 CollectorX Event JSONL
 python <SKILL_DIR>/scripts/email_api.py collect --account all --format json \
   --event-export ~/Desktop/email-events.jsonl
+
+# 不接 IMAP 时，也可以导入用户授权的本地邮件导出
+python <SKILL_DIR>/scripts/email_api.py import \
+  --input ~/Downloads/mail-export \
+  --out-dir ~/Desktop/email-package
 ```
 
 ## 支持的邮箱
@@ -66,7 +68,7 @@ python <SKILL_DIR>/scripts/email_api.py collect --account all --format json \
 | `--email` | 邮箱地址 |
 | `--provider` | 邮箱服务商（gmail/outlook/qq/163/126/icloud/custom） |
 | `--account-id` | 账户ID，默认由邮箱地址生成 |
-| `--password` | 密码或应用专用密码 |
+| `--password` | 已禁用写入；保留参数只为提示迁移 |
 | `--password-env` | 从环境变量读取密码 |
 | `--folders` | 默认采集文件夹，逗号分隔 |
 | `--days` | 采集最近N天的邮件 |
@@ -75,13 +77,26 @@ python <SKILL_DIR>/scripts/email_api.py collect --account all --format json \
 | `--format` | 输出格式（json/txt） |
 | `--limit` | 限制邮件数量 |
 
+## 本地导入
+
+`import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV。它输出标准采集包：
+
+- `lake/email/events.jsonl`
+- `manifest.json`
+- `SUMMARY.md`
+
+默认只写入 `body_preview` 和 `attachment_refs`，附件只记录文件名、类型和大小，
+不写入附件正文。只有显式使用 `--event-include-body` 时才会把完整正文写入事件。
+
 ## 安全说明
 
-- 密码存储在 `~/.collectorx/email.json`（chmod 600）
 - 推荐使用 `--password-env` 从环境变量读取密码，避免把应用专用密码写入本地状态文件
+- 新注册不会把密码或应用专用密码写入 `~/.collectorx/email.json`
+- 旧版状态文件如曾包含密码，可继续兼容读取；建议迁移到 `password_env`
 - 建议使用应用专用密码（Gmail/Outlook需要）
 - 不会修改或删除邮件，只读取
 - `--event-export` 默认只把正文预览写入事件，不把完整正文塞进事件；如确实需要可显式使用 `--event-include-body`
+- `import` 默认只记录附件引用，不写入附件正文
 - 支持多邮箱接入清单，状态文件结构为 `accounts[]`；旧版单邮箱 `account` 状态会被兼容读取
 
 ## CollectorX事件输出
@@ -92,6 +107,7 @@ python <SKILL_DIR>/scripts/email_api.py collect --account all --format json \
 - `owner_scope`: `personal`
 - `kind`: `email`
 - `data.mailbox/folder/from/to/cc/subject/body_preview/has_body`
+- `data.attachment_refs/has_attachments`（如有附件）
 - `raw_ref.imap_uid/message_id/folder`
 - `privacy.local_only: true`
 

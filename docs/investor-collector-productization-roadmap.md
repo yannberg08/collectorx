@@ -524,13 +524,34 @@ Findings:
 - Fixture validation covers mixed CSV/JSON/XLSX/TXT inputs, gap events, legacy
   export compatibility, credential-key sanitization, and A/HK symbol handling.
 
+### Wave N: P0 email local import productization pass 1
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-import-validation-2026-07-08.md`
+
+Findings:
+
+- Added `email_api.py import` for user-authorized local email exports.
+- Supports EML, MBOX, JSON/JSONL/NDJSON, CSV, and TSV inputs.
+- Writes a standard package with `lake/email/events.jsonl`, `manifest.json`,
+  and `SUMMARY.md`.
+- Captures sender, recipients, cc, subject, date, body preview, message ID,
+  folder/mailbox, and attachment refs.
+- Full body remains opt-in via `--event-include-body`; attachment bodies are not
+  written into events.
+- Fixture validation covers mixed EML/JSON/CSV imports, attachment refs,
+  missing-input gap events, and legacy IMAP event paths.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat-investment-dialogue` | G1; real-source precondition blocked | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, add contact/group allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata and explicit content extraction | Windows/Linux path validation, more real XLSX/DOCX/PDF samples, false-positive review, extraction-scope UX |
-| 3 | `email-research` | G1; mailbox registration missing | G2/G3: register mailbox, run on real mailbox events, broker/IR sender classifier, attachment raw refs |
+| 3 | `email` + `email-research` | G1/G2 local email export import baseline; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender classifier, attachment raw refs |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths; watchlist and broad activity baselines exist; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 

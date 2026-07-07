@@ -77,7 +77,7 @@ Operational docs:
 | `feishu` | `feishu` | Migrated skill; provenance review required |
 | `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus event-conversion baseline; real OAuth validation pending |
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
-| `email` | `email-collector` | Multi-account preflight/event baseline; needs real mailbox validation |
+| `email` | `email-collector` | Multi-account IMAP baseline plus authorized local EML/MBOX/JSON/CSV import packages; real mailbox validation still pending |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |
 | `notes` | `notes-collector` | Event-package baseline for Obsidian/Notion plus authorized Youdao/Evernote/Markdown/HTML/JSON/ENEX imports; macOS Obsidian-style validation done |
 | `dingtalk` | `collaboration-exports` | Authorized local export baseline for DingTalk messages, chats, contacts, file refs, and meeting refs; investment filtering handled by lenses |

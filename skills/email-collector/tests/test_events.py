@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from email.header import Header
 from email.message import EmailMessage
@@ -177,9 +180,129 @@ def test_fake_imap_multi_folder_collection(monkeypatch=None):
     assert {item["subject"] for item in emails} == {"调研纪要", "回复纪要"}
 
 
+def test_local_email_import_package():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        eml_path = root / "broker-research.eml"
+        json_path = root / "mail-export.json"
+        csv_path = root / "mail-export.csv"
+        out = root / "out"
+
+        msg = EmailMessage()
+        msg["Message-ID"] = "<research@example.com>"
+        msg["From"] = "Broker Research <research@broker.example>"
+        msg["To"] = "Owner <owner@example.com>"
+        msg["Subject"] = str(Header("晨会纪要：新能源与半导体", "utf-8"))
+        msg["Date"] = "Wed, 08 Jul 2026 08:30:00 +0800"
+        msg.set_content("今日晨会关注新能源、半导体和估值变化。")
+        msg.add_attachment(b"pdf-bytes", maintype="application", subtype="pdf", filename="morning-note.pdf")
+        eml_path.write_bytes(msg.as_bytes())
+
+        json_path.write_text(
+            json.dumps(
+                {
+                    "emails": [
+                        {
+                            "from": "IR <ir@company.example>",
+                            "to": "Owner <owner@example.com>",
+                            "subject": "调研邀请",
+                            "date": "2026-07-08T10:00:00+08:00",
+                            "body": "邀请参加业绩说明会。",
+                            "attachments": [{"filename": "roadshow.ics", "token": "must-not-leak"}],
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        csv_path.write_text(
+            "from,to,subject,date,body,attachments\n"
+            "analyst@example.com,owner@example.com,行业深度,2026-07-08T11:00:00+08:00,见附件,industry.pdf\n",
+            encoding="utf-8",
+        )
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(root),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 3
+        assert {event["collector"] for event in events} == {"email"}
+        assert {event["kind"] for event in events} == {"email"}
+        assert all("body_preview" in event["data"] for event in events)
+        assert all("body" not in event["data"] for event in events)
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "must-not-leak" not in serialized
+        assert "morning-note.pdf" in serialized
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["full_body_included"] is False
+
+
+def test_local_email_import_gap_event():
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [sys.executable, str(script), "import", "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "email_authorized_export_missing"
+
+
+def test_register_refuses_local_password_storage():
+    with tempfile.TemporaryDirectory() as tmp:
+        state_path = Path(tmp) / "email.json"
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        env = {**os.environ, "COLLECTORX_EMAIL_STATE": str(state_path)}
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "register",
+                "--email",
+                "owner@qq.com",
+                "--password",
+                "must-not-store",
+            ],
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+        assert result.returncode != 0
+        assert not state_path.exists()
+
+
 if __name__ == "__main__":
     test_email_event_without_full_body()
     test_email_event_jsonl_writer()
     test_provider_inference_and_multi_account_state()
     test_fake_imap_multi_folder_collection()
+    test_local_email_import_package()
+    test_local_email_import_gap_event()
+    test_register_refuses_local_password_storage()
     print("All email collector event tests passed!")

@@ -1,1 +1,1 @@
-{"slug": "email-collector", "version": "0.3.0", "description": "邮箱邮件采集器，支持多邮箱前置识别、接入清单和CollectorX邮件事件输出"}
+{"collector":"email","class":"generic","version":"0.4.0","status":"baseline","description":"Email collector with IMAP collection plus authorized local EML/MBOX/JSON/CSV import packages."}

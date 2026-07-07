@@ -6,9 +6,44 @@ refresh_interval: 1h
 mode: incremental
 time_field: date
 armed: false
+category: generic
+owner_scope: personal
+local_only: true
 
-# 采集器使用的skill
 skill: email-collector
 
-# 采集逻辑由skill定义
-# skill会处理：IMAP连接、邮件解析、数据导出
+scope:
+  channels:
+    - imap
+    - local_email_export
+  collects:
+    - message_headers
+    - sender_recipients
+    - subject
+    - date
+    - body_preview
+    - attachment_refs
+  excludes:
+    - mailbox_passwords
+    - app_passwords
+    - oauth_tokens
+    - full_body_by_default
+    - attachment_bodies
+
+description: |
+  邮箱是通用个人证据源。它采集用户授权邮箱或本地邮件导出中的邮件头、
+  正文预览和附件引用；投资相关筛选由 `email-research` lens 完成。
+
+prompt: |
+  IMAP 采集：
+    python3 skills/email-collector/scripts/email_api.py collect \
+      --account all \
+      --event-export <输出JSONL>
+
+  本地授权导入：
+    python3 skills/email-collector/scripts/email_api.py import \
+      --input <用户授权的 EML/MBOX/JSON/CSV 邮件导出文件或目录> \
+      --out-dir <输出目录>
+
+  默认只输出 body_preview 和 attachment_refs；除非用户显式授权
+  --event-include-body，否则不把完整正文写入事件。

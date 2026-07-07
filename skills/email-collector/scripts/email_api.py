@@ -4,14 +4,18 @@
 """
 import imaplib
 import email
+import csv
 import json
+import mailbox
 import os
 import sys
+from collections import Counter
 from datetime import datetime, timedelta
+from email import policy as email_policy
 from email.header import decode_header
 from pathlib import Path
 
-from email_collector.events import emails_to_events, write_events_jsonl
+from email_collector.events import emails_to_events, gap_event, write_events_jsonl, write_json
 
 # Windows控制台utf-8
 try:
@@ -184,6 +188,26 @@ def get_email_body(msg):
     return body
 
 
+def get_email_attachments(msg):
+    """Return attachment metadata only; never write attachment bodies into events."""
+    attachments = []
+    if not msg.is_multipart():
+        return attachments
+    for part in msg.walk():
+        filename = part.get_filename()
+        if not filename:
+            continue
+        payload = part.get_payload(decode=True) or b""
+        attachments.append(
+            {
+                "filename": decode_mime_header(filename),
+                "content_type": part.get_content_type(),
+                "size": len(payload),
+            }
+        )
+    return attachments
+
+
 def cmd_preflight(email_addrs: list[str]) -> None:
     """前置识别：判断邮箱服务商、IMAP host 和授权提示。"""
     if not email_addrs:
@@ -217,8 +241,11 @@ def cmd_register(
     enabled: bool = True,
 ):
     """注册邮箱账户"""
-    if enabled and not password and not password_env:
-        print("ERROR: 启用账户请提供 --password 或 --password-env；如只是加入待接入清单，可加 --disabled")
+    if password and not password_env:
+        print("ERROR: 出于安全边界，register 不再把密码写入本地状态；请改用 --password-env")
+        sys.exit(1)
+    if enabled and not password_env:
+        print("ERROR: 启用账户请提供 --password-env；如只是加入待接入清单，可加 --disabled")
         sys.exit(1)
     if not email_addr:
         print("ERROR: 请提供 --email")
@@ -245,8 +272,6 @@ def cmd_register(
     }
     if password_env:
         new_account["password_env"] = password_env
-    else:
-        new_account["password"] = password
 
     replaced = False
     for index, account in enumerate(accounts):
@@ -292,8 +317,7 @@ def cmd_collect(
                     limit=limit,
                 )
             )
-        
-        # 输出
+
         if fmt == "json":
             print(json.dumps(emails, ensure_ascii=False, indent=2))
         else:
@@ -314,12 +338,266 @@ def cmd_collect(
             )
             write_events_jsonl(event_export, events)
             print(f"事件导出完成: {len(events)} 条 -> {event_export}")
-        
+
         print(f"采集完成: {len(emails)} 封邮件")
-        
+
     except Exception as e:
         print(f"采集失败: {e}")
         sys.exit(1)
+
+
+def cmd_import(
+    inputs: list[str],
+    out_dir: str = None,
+    event_export: str = None,
+    limit: int = None,
+    source: str = "授权邮件导出",
+    collected_at: str = None,
+    event_include_body: bool = False,
+):
+    """Import user-authorized local email exports without requiring IMAP registration."""
+    emails = collect_imported_emails(inputs or [], limit=limit)
+    if not emails:
+        events = [gap_event(collected_at=collected_at, reason="email_authorized_export_missing")]
+    else:
+        events = emails_to_events(
+            emails,
+            source=source,
+            collected_at=collected_at,
+            include_body=event_include_body,
+        )
+
+    if event_export:
+        write_events_jsonl(event_export, events)
+    if out_dir:
+        out = Path(out_dir).expanduser()
+        write_events_jsonl(str(out / "lake" / "email" / "events.jsonl"), events)
+        manifest = build_import_manifest(events, collected_at=collected_at)
+        write_json(str(out / "manifest.json"), manifest)
+        write_import_summary(out / "SUMMARY.md", manifest)
+
+    print(json.dumps({"collector": "email", "event_count": len(events)}, ensure_ascii=False, sort_keys=True))
+
+
+def collect_imported_emails(inputs: list[str], *, limit: int = None) -> list[dict]:
+    paths = list(iter_import_paths(inputs))
+    collected = []
+    for path in paths:
+        for item in parse_email_export(path):
+            collected.append(item)
+            if limit is not None and len(collected) >= limit:
+                return collected[:limit]
+    return collected
+
+
+def iter_import_paths(inputs: list[str]):
+    supported = {".eml", ".mbox", ".json", ".jsonl", ".ndjson", ".csv", ".tsv"}
+    for raw in inputs:
+        path = Path(raw).expanduser()
+        if path.is_dir():
+            for child in sorted(path.rglob("*")):
+                if child.is_file() and child.suffix.lower() in supported:
+                    yield child
+        elif path.is_file() and path.suffix.lower() in supported:
+            yield path
+
+
+def parse_email_export(path: Path) -> list[dict]:
+    suffix = path.suffix.lower()
+    if suffix == ".eml":
+        raw = path.read_bytes()
+        msg = email.message_from_bytes(raw, policy=email_policy.default)
+        return [message_to_record(msg, path=path, row=1)]
+    if suffix == ".mbox":
+        box = mailbox.mbox(str(path))
+        try:
+            return [message_to_record(msg, path=path, row=index) for index, msg in enumerate(box, start=1)]
+        finally:
+            box.close()
+    if suffix in {".json", ".jsonl", ".ndjson"}:
+        return parse_email_json(path)
+    if suffix in {".csv", ".tsv"}:
+        return parse_email_table(path)
+    return []
+
+
+def message_to_record(msg, *, path: Path, row: int) -> dict:
+    return {
+        "id": f"{path.name}:{row}",
+        "message_id": decode_mime_header(msg.get("Message-ID")),
+        "mailbox": "",
+        "folder": "local-export",
+        "from": decode_mime_header(msg.get("From")),
+        "to": decode_mime_header(msg.get("To")),
+        "cc": decode_mime_header(msg.get("Cc")),
+        "subject": decode_mime_header(msg.get("Subject")),
+        "date": decode_mime_header(msg.get("Date")),
+        "body": get_email_body(msg)[:5000],
+        "attachment_refs": get_email_attachments(msg),
+        "raw_ref": {"path": str(path), "row": row, "format": path.suffix.lower().lstrip(".")},
+    }
+
+
+def parse_email_json(path: Path) -> list[dict]:
+    text = path.read_text(encoding="utf-8-sig", errors="replace").strip()
+    if not text:
+        return []
+    if path.suffix.lower() in {".jsonl", ".ndjson"}:
+        rows = [json.loads(line) for line in text.splitlines() if line.strip()]
+    else:
+        rows = extract_email_records(json.loads(text))
+    return [normalize_export_record(row if isinstance(row, dict) else {"subject": str(row)}, path=path, row_index=index) for index, row in enumerate(rows, start=1)]
+
+
+def extract_email_records(loaded):
+    if isinstance(loaded, list):
+        return loaded
+    if not isinstance(loaded, dict):
+        return [{"subject": str(loaded)}]
+    for key in ("emails", "messages", "items", "records", "data", "mail", "邮件"):
+        value = loaded.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            nested = extract_email_records(value)
+            if not (len(nested) == 1 and nested[0] == value):
+                return nested
+    return [loaded]
+
+
+def parse_email_table(path: Path) -> list[dict]:
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    if not text.strip():
+        return []
+    delimiter = "\t" if path.suffix.lower() == ".tsv" else sniff_delimiter(text)
+    return [
+        normalize_export_record({str(key): value for key, value in row.items() if key is not None}, path=path, row_index=index)
+        for index, row in enumerate(csv.DictReader(text.splitlines(), delimiter=delimiter), start=1)
+    ]
+
+
+def sniff_delimiter(text: str) -> str:
+    try:
+        return csv.Sniffer().sniff(text[:4096], delimiters=",\t;").delimiter
+    except csv.Error:
+        return ","
+
+
+def normalize_export_record(record_row: dict, *, path: Path, row_index: int) -> dict:
+    record = {
+        "id": first(record_row, ["id", "uid", "imap_uid", "序号"]) or f"{path.name}:{row_index}",
+        "message_id": first(record_row, ["message_id", "message-id", "Message-ID", "邮件ID"]),
+        "mailbox": first(record_row, ["mailbox", "account", "email", "邮箱", "账号"]) or "",
+        "folder": first(record_row, ["folder", "mailbox_folder", "文件夹"]) or "local-export",
+        "from": first(record_row, ["from", "sender", "from_addr", "发件人"]),
+        "to": first(record_row, ["to", "recipient", "收件人"]),
+        "cc": first(record_row, ["cc", "抄送"]),
+        "subject": first(record_row, ["subject", "title", "主题", "标题"]),
+        "date": first(record_row, ["date", "time", "sent_at", "received_at", "日期", "时间"]),
+        "body": (first(record_row, ["body", "content", "text", "正文", "内容"]) or "")[:5000],
+        "attachment_refs": normalize_attachments(first_raw(record_row, "attachments") or first_raw(record_row, "attachment_refs") or first_raw(record_row, "附件")),
+        "raw_ref": {"path": str(path), "row": row_index, "format": path.suffix.lower().lstrip(".")},
+    }
+    return {key: value for key, value in record.items() if value not in (None, "", [])}
+
+
+def normalize_attachments(value):
+    if value in (None, ""):
+        return []
+    if isinstance(value, list):
+        return [normalize_attachment_item(item) for item in value if normalize_attachment_item(item)]
+    if isinstance(value, dict):
+        item = normalize_attachment_item(value)
+        return [item] if item else []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        try:
+            loaded = json.loads(stripped)
+            return normalize_attachments(loaded)
+        except json.JSONDecodeError:
+            return [{"filename": part.strip()} for part in stripped.replace("；", ";").split(";") if part.strip()]
+    return []
+
+
+def normalize_attachment_item(item):
+    if isinstance(item, dict):
+        filename = first(item, ["filename", "name", "file_name", "文件名"])
+        if not filename:
+            return {}
+        result = {
+            "filename": filename,
+            "content_type": first(item, ["content_type", "mime", "type", "类型"]),
+            "size": first(item, ["size", "bytes", "大小"]),
+        }
+        return {key: value for key, value in result.items() if value not in (None, "")}
+    text = str(item).strip()
+    return {"filename": text} if text else {}
+
+
+def first(record: dict, keys: list[str]) -> str:
+    for key in keys:
+        value = record.get(key)
+        if value not in (None, ""):
+            return str(value)
+    normalized = {_normalize_key(key): value for key, value in record.items()}
+    for key in keys:
+        value = normalized.get(_normalize_key(key))
+        if value not in (None, ""):
+            return str(value)
+    return ""
+
+
+def first_raw(record: dict, key: str):
+    if key in record:
+        return record.get(key)
+    normalized_key = _normalize_key(key)
+    for candidate, value in record.items():
+        if _normalize_key(candidate) == normalized_key:
+            return value
+    return None
+
+
+def _normalize_key(value) -> str:
+    return str(value).lower().replace("_", "").replace("-", "").replace(" ", "")
+
+
+def build_import_manifest(events: list[dict], *, collected_at: str = None) -> dict:
+    kind_counts = Counter(event["kind"] for event in events)
+    folder_counts = Counter((event.get("data") or {}).get("folder", "unknown") for event in events if event["kind"] == "email")
+    mailbox_counts = Counter((event.get("data") or {}).get("mailbox", "unknown") for event in events if event["kind"] == "email")
+    gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    return {
+        "schema": "collectorx.email_import.manifest.v1",
+        "collector": "email",
+        "collected_at": collected_at or datetime.now().astimezone().isoformat(timespec="seconds"),
+        "event_count": len(events),
+        "kind_counts": dict(sorted(kind_counts.items())),
+        "folder_counts": dict(sorted(folder_counts.items())),
+        "mailbox_counts": dict(sorted(mailbox_counts.items())),
+        "collection_readiness": {
+            "status": "needs_email_authorized_export" if gap_only else "events_collected",
+            "can_enter_finclaw": bool(events) and not gap_only,
+            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "full_body_included": any("body" in (event.get("data") or {}) for event in events),
+            "next_action": "Provide authorized local email exports." if gap_only else "Feed lake/email/events.jsonl into email-research lens.",
+        },
+    }
+
+
+def write_import_summary(path: Path, manifest: dict) -> None:
+    lines = [
+        "# Email Collector Import Package",
+        "",
+        "- collector: `email`",
+        f"- event_count: {manifest['event_count']}",
+        f"- readiness: `{manifest['collection_readiness']['status']}`",
+        "",
+        "Local email exports are generic email evidence. Use the `email-research` lens for broker research, roadshow, and IR mail evidence.",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def cmd_status():
@@ -338,7 +616,7 @@ def cmd_status():
             if account.get("password_env"):
                 print(f"  密码来源: 环境变量 {account['password_env']}")
             elif account.get("password"):
-                print("  密码来源: 本地状态文件")
+                print("  密码来源: 旧版本地状态文件（建议迁移到 password_env）")
             else:
                 print("  密码来源: 未配置")
     else:
@@ -437,6 +715,16 @@ def main():
     col_parser.add_argument("--source", default="IMAP 邮件", help="事件source字段")
     col_parser.add_argument("--collected-at", help="事件collected_at字段，默认当前时间")
     col_parser.add_argument("--event-include-body", action="store_true", help="事件中包含完整正文，默认只包含预览")
+
+    # import命令
+    import_parser = subparsers.add_parser("import", help="导入用户授权的本地邮件导出文件/目录")
+    import_parser.add_argument("--input", action="append", help="本地邮件导出文件或目录，可重复；支持 EML/MBOX/JSON/JSONL/CSV/TSV")
+    import_parser.add_argument("--out-dir", help="输出标准采集包目录")
+    import_parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
+    import_parser.add_argument("--limit", type=int, help="限制数量")
+    import_parser.add_argument("--source", default="授权邮件导出", help="事件source字段")
+    import_parser.add_argument("--collected-at", help="事件collected_at字段，默认当前时间")
+    import_parser.add_argument("--event-include-body", action="store_true", help="事件中包含完整正文，默认只包含预览")
     
     # status命令
     subparsers.add_parser("status", help="显示状态")
@@ -468,6 +756,16 @@ def main():
             collected_at=args.collected_at,
             event_include_body=args.event_include_body,
             account_id=args.account,
+        )
+    elif args.command == "import":
+        cmd_import(
+            args.input or [],
+            out_dir=args.out_dir,
+            event_export=args.event_export,
+            limit=args.limit,
+            source=args.source,
+            collected_at=args.collected_at,
+            event_include_body=args.event_include_body,
         )
     elif args.command == "status":
         cmd_status()

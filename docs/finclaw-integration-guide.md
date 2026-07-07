@@ -207,6 +207,37 @@ Current status:
 - Any parsed input is treated as partial authorized input until platform/account
   coverage is verified.
 
+### 邮件
+
+IMAP collection:
+
+```bash
+python3 skills/email-collector/scripts/email_api.py collect \
+  --account all \
+  --format json \
+  --event-export <out-dir>/lake/email/events.jsonl
+```
+
+Authorized local export import:
+
+```bash
+python3 skills/email-collector/scripts/email_api.py import \
+  --input <authorized-eml-mbox-json-csv-email-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts IMAP messages or authorized local EML/MBOX/JSON/JSONL/CSV/TSV
+  exports into generic `email` events.
+- Captures mailbox, folder, sender, recipients, cc, subject, date,
+  body preview, message ID, and attachment refs.
+- Does not include full body by default; `--event-include-body` requires
+  explicit authorization.
+- Does not write attachment bodies into events.
+- Does not claim investment-research status directly. Feed `lake/email/events.jsonl`
+  into `email-research` for broker research, roadshow, and IR mail evidence.
+
 ### 笔记
 
 ```bash
