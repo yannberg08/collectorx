@@ -7,8 +7,8 @@ mode: snapshot
 time_field: date
 armed: false
 
-prompt: |
-  使用东方财富导出的CSV文件，提取交易记录。
-  文件路径：~/Downloads/交割单.csv
-  解析字段：成交日期、证券代码、证券名称、买卖方向、成交价格、成交数量、成交金额
-  输出格式：JSON数组
+# 采集器使用的skill
+skill: eastmoney-portfolio
+
+# 采集逻辑由skill定义
+# skill会处理：CSV解析、数据标准化、统计分析

@@ -6,8 +6,8 @@ refresh_interval: 24h
 mode: snapshot
 armed: false
 
-prompt: |
-  使用雪球关注列表，提取关注的股票信息。
-  文件路径：~/Downloads/关注列表.csv
-  解析字段：证券代码、证券名称
-  输出格式：JSON数组
+# 采集器使用的skill
+skill: xueqiu-watchlist
+
+# 采集逻辑由skill定义
+# skill会处理：CSV解析、数据标准化
