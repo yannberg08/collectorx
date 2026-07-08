@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -14,8 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "investor_sources.py"
 
 
-def run_cli(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run([sys.executable, str(SCRIPT), *args], text=True, capture_output=True, check=True)
+def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([sys.executable, str(SCRIPT), *args], text=True, capture_output=True, check=True, env=env)
 
 
 def test_list_sources_contains_all_priorities() -> None:
@@ -584,6 +585,103 @@ def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -
         assert png_result["ocr_performed"] is False
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+
+
+def test_research_documents_image_ocr_requires_explicit_adapter_authorization() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out_dir = root / "out"
+        (root / "估值截图.png").write_bytes(b"fake image bytes")
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:35:00+08:00",
+        )
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["content_extraction_policy"]["include_image_ocr_enabled"] is False
+        assert audit["content_extraction_policy"]["screenshots_are_metadata_only_no_ocr"] is True
+        assert audit["screenshot_metadata_only_file_count"] == 1
+        assert audit["ocr_performed"] is False
+        png_result = next(item for item in audit["path_results"] if item["extension"] == ".png")
+        assert png_result["ocr_requested"] is False
+        assert png_result["ocr_performed"] is False
+        assert png_result["content_policy"] == "screenshot_metadata_only_no_ocr"
+
+
+def test_research_documents_image_ocr_extracts_when_explicitly_authorized() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        fake_tesseract = bin_dir / "tesseract"
+        fake_tesseract.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' '半导体 研报 财报 DCF 估值 安全边际 买入理由 风险提示'\n",
+            encoding="utf-8",
+        )
+        fake_tesseract.chmod(0o755)
+
+        image_path = root / "screen.png"
+        image_path.write_bytes(b"fake image bytes")
+        out_dir = root / "out"
+        env = {
+            **os.environ,
+            "COLLECTORX_TESSERACT_CMD": str(fake_tesseract),
+        }
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(image_path),
+            "--include-image-ocr",
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:36:00+08:00",
+            env=env,
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        event = events[0]
+        assert event["kind"] == "file"
+        assert event["raw_ref"]["parser"] == "tesseract-ocr"
+        assert event["raw_ref"]["content_read"] is True
+        assert event["raw_ref"]["image_ocr_requested"] is True
+        assert event["raw_ref"]["image_ocr_performed"] is True
+        assert event["data"]["payload"]["metadata_only"] is False
+        assert event["data"]["payload"]["content_extract"]["status"] == "extracted"
+        assert "DCF" in event["data"]["payload"]["content"]
+        assert event["data"]["classification"]["is_investment_evidence"] is True
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["content_extraction_policy"]["include_image_ocr_enabled"] is True
+        assert audit["content_extraction_policy"]["image_ocr_engine"] == str(fake_tesseract)
+        assert audit["content_extraction_policy"]["screenshots_are_metadata_only_no_ocr"] is False
+        assert audit["ocr_performed"] is True
+        assert audit["image_ocr_event_count"] == 1
+        assert audit["image_ocr_status_counts"] == {"extracted": 1}
+        assert audit["content_read_event_count"] == 1
+        assert audit["parser_counts"] == {"tesseract-ocr": 1}
+        png_result = audit["path_results"][0]
+        assert png_result["content_policy"] == "image_ocr_explicit_authorized"
+        assert png_result["ocr_requested"] is True
+        assert png_result["ocr_performed"] is True
 
 
 def test_research_documents_limit_records_path_truncation() -> None:
@@ -1586,6 +1684,8 @@ if __name__ == "__main__":
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
     test_research_documents_without_include_content_keeps_binary_metadata_only()
     test_research_documents_filters_broad_titles_and_skips_unsupported_files()
+    test_research_documents_image_ocr_requires_explicit_adapter_authorization()
+    test_research_documents_image_ocr_extracts_when_explicitly_authorized()
     test_research_documents_limit_records_path_truncation()
     test_task_calendar_lens_keeps_investment_task_and_calendar_only()
     test_task_calendar_lens_reports_planning_surface_from_upstream_events()

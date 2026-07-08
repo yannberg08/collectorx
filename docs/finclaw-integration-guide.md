@@ -281,6 +281,7 @@ python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
   --source research-documents \
   --input <authorized-research-folder> \
   --include-content \
+  --include-image-ocr \
   --out-dir <out-dir>
 ```
 
@@ -293,8 +294,12 @@ Current status:
   parse results, candidate counts, filtered counts, skipped reasons, extension
   coverage, parser counts, content-read counts, limit truncation, and the active
   content policy.
-- Screenshots/images are metadata-only in this lens. OCR is not performed unless
-  a separate OCR adapter and user authorization are added later.
+- Screenshots/images stay metadata-only by default. OCR is performed only when
+  `--include-image-ocr` is explicitly supplied and a local `tesseract` engine is
+  available through `PATH` or `COLLECTORX_TESSERACT_CMD`.
+- If OCR is requested but unavailable or fails, the run keeps metadata-only
+  evidence and records the OCR status in `manifest.collection_audit` and
+  per-file `path_results`.
 - Broad file-title hints such as a lone "股票" or "基金" do not enter Wiki
   evidence without stronger research context.
 - Generic `filesystem` remains metadata-only; investment routing stays in the

@@ -27,6 +27,7 @@ scope:
     - missing_input_audit
     - skipped_reason_counts
     - screenshot_metadata_only_policy
+    - optional_image_ocr_policy
   excludes:
     - whole_disk_scan
     - unrelated_private_files
@@ -51,9 +52,10 @@ content_policy:
     - .jpeg
     - .webp
     - .heic
-  screenshots_are_metadata_only_no_ocr: true
-  ocr_performed: false
-  ocr_requires_separate_user_consent_and_adapter: true
+  screenshots_are_metadata_only_without_image_ocr: true
+  image_ocr_requires_explicit_include_image_ocr: true
+  image_ocr_engine_required: tesseract
+  ocr_performed_by_default: false
   unsupported_extensions_are_skipped: true
   writes_final_wiki_directly: false
 
@@ -61,6 +63,9 @@ description: |
   本 lens 不重新扫描硬盘。它消费 filesystem/notes 的已授权文件元数据，
   筛选投研文档并把 raw_ref 路由到投资分身。若用户显式授权
   --include-content，可读取 DOCX/PDF/XLSX/XLSM 的正文或表格文本，
+  若用户另行显式传入 --include-image-ocr 且本机有 tesseract，可读取
+  截图/图片里的文字；没有 OCR 引擎时会保留 metadata-only 事件并在
+  manifest 中记录降级原因。
   但仍只写 CollectorX lake 与 investor_wiki_evidence.v1 证据包。
   manifest 会记录缺失输入、逐文件解析结果、跳过原因、limit 截断和截图
-  metadata-only/no-OCR 边界。
+  OCR/metadata-only 边界。

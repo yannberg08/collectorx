@@ -128,6 +128,12 @@ The prior completed wave: Investor Wiki evidence packages now have a shared
 The prior completed wave: `research-documents` now has stronger path-level
 collection audit coverage for authorized research files and folders:
 
+- `research-documents` now has an explicit optional image OCR path:
+  `--include-image-ocr` runs a local `tesseract` adapter only when the user
+  authorizes it separately from `--include-content`.
+- Screenshot/image runs record OCR engine availability, OCR status counts,
+  image OCR event counts, and per-file OCR/metadata-only policy in
+  `manifest.collection_audit`.
 - `investor_sources.py collect --source research-documents --input
   <authorized-research-folder> --out-dir <dir>` records requested inputs,
   missing inputs, per-file parse results, extension coverage, skipped reasons,
@@ -135,12 +141,13 @@ collection audit coverage for authorized research files and folders:
   truncation in `manifest.collection_audit`.
 - The generic `filesystem` collector remains metadata-only. DOCX/PDF/XLSX/XLSM
   content extraction still requires explicit `--include-content`.
-- Screenshots/images are recorded as metadata-only research candidates when they
-  pass the lens rules; OCR is not performed and would require a separate adapter
-  plus user authorization.
+- Screenshots/images are still metadata-only by default; OCR requires
+  `--include-image-ocr` and a local `tesseract` engine, and failures degrade to
+  audited metadata-only output.
 - This improves the P0 research-material path, but it does not claim broader
-  private sample validation, Windows/Linux real-device validation, OCR adapter
-  readiness, or Wiki backtest against real trades/reviews.
+  private sample validation, Windows/Linux real-device validation, OCR quality
+  across real Chinese screenshots, or Wiki backtest against real
+  trades/reviews.
 
 The prior completed wave: `email` now has stronger local-import source audit
 coverage for authorized EML, MBOX, JSON, CSV, TSV, and ZIP email export
@@ -385,7 +392,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | Need | Current implementation | Status | Gap to reach Tonghuashun/EastMoney standard |
 | --- | --- | --- | --- |
 | 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
-| 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons and per-root results; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extraction policy, parser counts, content-read counts, limit truncation, and screenshot metadata-only/no-OCR policy | Broader private PDF/XLSX/DOCX samples, optional screenshot OCR adapter review, real Windows/Linux device validation, backtest against real trades/reviews |
+| 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons and per-root results; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extraction policy, parser counts, content-read counts, limit truncation, screenshot metadata-only/default policy, and explicit `--include-image-ocr` tesseract adapter audit | Broader private PDF/XLSX/DOCX/image samples, OCR quality review on real Chinese screenshots, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, and explicit non-broker-trade evidence policy; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, pagination marker audit, raw sanitization, and SoulMirror sync; neither is a real account adapter | Real Xueqiu login/export discovery, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/JSON/CSV/ZIP, platform inference, numeric asset fields, platform coverage, field coverage, account boundary summary, asset surface summary, currency summary, transaction-side summary, source audit, asset value summary, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no real account export found yet | Per-platform export/UI adapters, real account validation, complete account-boundary proof |
 | 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir` and local EML/MBOX/JSON/CSV/TSV/ZIP `import --out-dir` both produce standard packages with account/folder audit, per-input import audit, skipped file/ZIP-member reasons, field coverage, sanitized attachment refs, body/attachment policy, generic-to-lens evidence boundary, and research-attachment filename matching; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, real mailbox validation, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |

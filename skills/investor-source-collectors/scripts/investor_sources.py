@@ -42,6 +42,7 @@ def collect(args: argparse.Namespace) -> int:
         args.input or [],
         collected_at=collected_at,
         include_content=args.include_content,
+        include_image_ocr=args.include_image_ocr,
         limit=args.limit,
         min_score=args.min_score,
         include_non_matches=args.include_non_matches,
@@ -99,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--input", action="append", help="Authorized input file or folder. Repeat for multiple inputs.")
     p_collect.add_argument("--out-dir", required=True, help="Output directory.")
     p_collect.add_argument("--include-content", action="store_true", help="Include full text content for text files.")
+    p_collect.add_argument("--include-image-ocr", action="store_true", help="Run an explicitly authorized image OCR adapter for screenshots/images when available.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--min-score", type=float, default=0.30, help="Minimum investment relevance score for lens sources.")
     p_collect.add_argument("--include-non-matches", action="store_true", help="Audit mode: include readable non-matching records with classification metadata.")

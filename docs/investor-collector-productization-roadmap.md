@@ -217,6 +217,33 @@ Findings:
   false-positive filtering, screenshot metadata-only/no-OCR policy, and limit
   truncation.
 
+### Wave B2d: P0 research screenshot OCR adapter pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-research-image-ocr-validation-2026-07-08.md`
+
+Findings:
+
+- Added explicit `--include-image-ocr` authorization for `research-documents`.
+  It is separate from `--include-content`, so reading document bodies and
+  reading screenshot text remain two distinct user choices.
+- Added a local `tesseract` adapter selected from `PATH` or
+  `COLLECTORX_TESSERACT_CMD`.
+- OCR output is treated like other explicit content extraction: capped text,
+  parser/status metadata, `content_read`, `content_extract`, and
+  `raw_ref.image_ocr_*` fields are recorded.
+- If OCR is requested but the engine is missing or fails, the run degrades to
+  metadata-only evidence and records the OCR status in manifest/path audit
+  instead of pretending the screenshot was read.
+- Fixture validation covers default metadata-only screenshot behavior and a fake
+  local `tesseract` adapter that extracts investment-relevant screenshot text.
+- This improves the P0 local research-material channel, but it still needs real
+  private screenshot samples, Chinese OCR quality review, Windows/Linux engine
+  path validation, and Wiki backtesting against real trades/reviews.
+
 ### Wave B3: P0 Xueqiu activity productization pass 2
 
 Status: `completed-baseline`
@@ -1883,7 +1910,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, and explicit filtered-all gap status; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
-| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot metadata-only/no-OCR boundary, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, optional screenshot OCR adapter review, Wiki backtest against real trades/reviews |
+| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF/image samples, Chinese OCR quality review, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, asset surface summary, currency summary, transaction-side summary, asset value summary, ZIP provenance, raw sanitization, and SoulMirror sync; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |

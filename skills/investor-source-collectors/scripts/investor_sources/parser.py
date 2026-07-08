@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import shutil
+import subprocess
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
@@ -42,6 +45,7 @@ def collect_events(
     *,
     collected_at: Optional[str] = None,
     include_content: bool = False,
+    include_image_ocr: bool = False,
     limit: Optional[int] = None,
     min_score: float = 0.30,
     include_non_matches: bool = False,
@@ -55,6 +59,7 @@ def collect_events(
         inputs,
         collected_at=collected_at,
         include_content=include_content,
+        include_image_ocr=include_image_ocr,
         limit=limit,
         min_score=min_score,
         include_non_matches=include_non_matches,
@@ -71,6 +76,7 @@ def collect_events_with_audit(
     *,
     collected_at: Optional[str] = None,
     include_content: bool = False,
+    include_image_ocr: bool = False,
     limit: Optional[int] = None,
     min_score: float = 0.30,
     include_non_matches: bool = False,
@@ -94,6 +100,7 @@ def collect_events_with_audit(
         input_list,
         paths,
         include_content=include_content,
+        include_image_ocr=include_image_ocr,
         limit=limit,
         min_score=min_score,
         include_non_matches=include_non_matches,
@@ -116,6 +123,7 @@ def collect_events_with_audit(
             path,
             collected_at=collected_at,
             include_content=include_content,
+            include_image_ocr=include_image_ocr,
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
@@ -197,6 +205,7 @@ def parse_path(
     *,
     collected_at: Optional[str],
     include_content: bool,
+    include_image_ocr: bool,
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
@@ -264,6 +273,20 @@ def parse_path(
         parser = (event.get("raw_ref") or {}).get("parser") if event else "content_extract"
         record_path_parse_result(audit, path, parsed, parser=str(parser or "content_extract"))
         return parsed
+    if source_id == "research-documents" and include_image_ocr and suffix in IMAGE_METADATA_ONLY_EXTENSIONS:
+        event = parse_image_ocr_file(
+            source_id,
+            path,
+            collected_at=collected_at,
+            min_score=min_score,
+            include_non_matches=include_non_matches,
+            source_policy=source_policy,
+            audit=audit,
+        )
+        parsed = ParseResult(candidates=[path], events=[event] if event else [])
+        parser = (event.get("raw_ref") or {}).get("parser") if event else "tesseract-ocr"
+        record_path_parse_result(audit, path, parsed, parser=str(parser or "tesseract-ocr"))
+        return parsed
     event = parse_metadata_file(
         source_id,
         path,
@@ -290,6 +313,7 @@ def initial_collection_audit(
     paths: List[Path],
     *,
     include_content: bool,
+    include_image_ocr: bool,
     limit: Optional[int],
     min_score: float,
     include_non_matches: bool,
@@ -316,6 +340,9 @@ def initial_collection_audit(
         "metadata_only_file_count": 0,
         "screenshot_metadata_only_file_count": 0,
         "ocr_performed": False,
+        "include_image_ocr": include_image_ocr,
+        "image_ocr_event_count": 0,
+        "image_ocr_status_counts": {},
         "content_read_event_count": 0,
         "content_extract_status_counts": {},
         "include_content": include_content,
@@ -324,7 +351,7 @@ def initial_collection_audit(
         "limit": limit,
         "limit_reached": False,
         "path_results": list(input_resolution.get("path_results") or []),
-        "content_extraction_policy": content_extraction_policy(source_id, include_content),
+        "content_extraction_policy": content_extraction_policy(source_id, include_content, include_image_ocr),
         "source_policy": {
             "enabled": source_policy_enabled(source_policy),
             "allow_chats": (source_policy or {}).get("allow_chats", []),
@@ -355,6 +382,8 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
 
     parser_counts: Counter[str] = Counter()
     content_status_counts: Counter[str] = Counter()
+    image_ocr_status_counts: Counter[str] = Counter()
+    image_ocr_event_count = 0
     content_read_count = 0
     for event in usable_events:
         raw_ref = event.get("raw_ref") or {}
@@ -368,9 +397,16 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
         if isinstance(extract, dict):
             status = extract.get("status") or "unknown"
             content_status_counts[str(status)] += 1
+            if raw_ref.get("image_ocr_requested"):
+                image_ocr_status_counts[str(status)] += 1
+        if raw_ref.get("image_ocr_performed"):
+            image_ocr_event_count += 1
     audit["parser_counts"] = dict(sorted(parser_counts.items()))
     audit["content_read_event_count"] = content_read_count
     audit["content_extract_status_counts"] = dict(sorted(content_status_counts.items()))
+    audit["image_ocr_event_count"] = image_ocr_event_count
+    audit["image_ocr_status_counts"] = dict(sorted(image_ocr_status_counts.items()))
+    audit["ocr_performed"] = image_ocr_event_count > 0
     audit["extension_counts"] = dict(sorted(audit_counter(audit, "extension_counts").items()))
     audit["skipped_extension_counts"] = dict(sorted(audit_counter(audit, "skipped_extension_counts").items()))
     audit["skipped_reason_counts"] = dict(sorted(audit_counter(audit, "skipped_reason_counts").items()))
@@ -379,26 +415,32 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
         source_policy["filter_reason_counts"] = dict(sorted(source_policy["filter_reason_counts"].items()))
 
 
-def content_extraction_policy(source_id: str, include_content: bool) -> Dict[str, Any]:
+def content_extraction_policy(source_id: str, include_content: bool, include_image_ocr: bool = False) -> Dict[str, Any]:
     if source_id != "research-documents":
         return {
             "include_content_enabled": include_content,
+            "include_image_ocr_enabled": include_image_ocr,
             "applies_to": "generic investor-source input parser",
         }
+    ocr_engine = image_ocr_engine()
     return {
         "applies_to": "research-documents lens",
         "input_boundary": "user_selected_files_or_folders_only",
         "generic_filesystem_collector": "metadata_only",
         "content_read_requires_explicit_include_content": True,
         "include_content_enabled": include_content,
+        "image_ocr_requires_explicit_include_image_ocr": True,
+        "include_image_ocr_enabled": include_image_ocr,
+        "image_ocr_engine": ocr_engine if include_image_ocr else None,
         "text_files_read_for_preview_extensions": sorted(TEXT_EXTENSIONS),
         "table_files_read_as_rows_extensions": sorted(TABLE_EXTENSIONS),
         "binary_content_extract_extensions": sorted(CONTENT_EXTRACT_EXTENSIONS),
         "binary_metadata_only_extensions_without_include_content": sorted(METADATA_ONLY_EXTENSIONS),
         "screenshot_metadata_only_extensions": sorted(IMAGE_METADATA_ONLY_EXTENSIONS),
-        "screenshots_are_metadata_only_no_ocr": True,
+        "screenshots_are_metadata_only_no_ocr": not include_image_ocr,
         "ocr_performed": False,
-        "ocr_requires_separate_user_consent_and_adapter": True,
+        "ocr_requires_separate_user_consent_and_adapter": not include_image_ocr,
+        "ocr_engine_required": "tesseract",
         "unsupported_extensions_are_skipped": True,
         "preview_char_limit": 1200,
         "extracted_text_char_limit": MAX_EXTRACTED_CHARS,
@@ -441,9 +483,15 @@ def record_path_parse_result(audit: Optional[Dict[str, Any]], path: Path, parsed
     if parser == "metadata":
         audit["metadata_only_file_count"] = int(audit.get("metadata_only_file_count") or 0) + 1
     if suffix in IMAGE_METADATA_ONLY_EXTENSIONS:
-        audit["screenshot_metadata_only_file_count"] = int(audit.get("screenshot_metadata_only_file_count") or 0) + 1
-        result["content_policy"] = "screenshot_metadata_only_no_ocr"
-        result["ocr_performed"] = False
+        ocr_performed = any((event.get("raw_ref") or {}).get("image_ocr_performed") for event in parsed.events)
+        ocr_requested = parser == "tesseract-ocr" or any((event.get("raw_ref") or {}).get("image_ocr_requested") for event in parsed.events)
+        result["ocr_requested"] = ocr_requested
+        result["ocr_performed"] = ocr_performed
+        if ocr_performed:
+            result["content_policy"] = "image_ocr_explicit_authorized"
+        else:
+            audit["screenshot_metadata_only_file_count"] = int(audit.get("screenshot_metadata_only_file_count") or 0) + 1
+            result["content_policy"] = "image_ocr_requested_but_not_performed" if ocr_requested else "screenshot_metadata_only_no_ocr"
     audit.setdefault("path_results", []).append(result)
 
 
@@ -656,6 +704,62 @@ def parse_metadata_file(
     )
 
 
+def parse_image_ocr_file(
+    source_id: str,
+    path: Path,
+    *,
+    collected_at: Optional[str],
+    min_score: float,
+    include_non_matches: bool,
+    source_policy: Optional[Dict[str, Any]],
+    audit: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    extracted = extract_image_ocr_text(path)
+    content_read = extracted["status"] == "extracted"
+    record: Dict[str, Any] = {
+        "title": path.stem,
+        "path": str(path),
+        "extension": path.suffix.lower(),
+        "byte_size": path.stat().st_size,
+        "metadata_only": not content_read,
+        "content_read": content_read,
+        "image_ocr_requested": True,
+        "image_ocr_performed": content_read,
+        "content_extract": {
+            "status": extracted["status"],
+            "parser": extracted["parser"],
+            "text_length": extracted["text_length"],
+            "truncated": extracted["truncated"],
+            "ocr": True,
+        },
+    }
+    if extracted["text"]:
+        record["content_preview"] = extracted["text"][:1200]
+        record["content"] = extracted["text"]
+    if extracted["error"]:
+        record["content_extract"]["error"] = extracted["error"]
+    return candidate_to_event(
+        source_id=source_id,
+        record=record,
+        source_label=str(path),
+        raw_ref={
+            "path": str(path),
+            "parser": extracted["parser"],
+            "byte_size": path.stat().st_size,
+            "content_read": content_read,
+            "content_truncated": extracted["truncated"],
+            "image_ocr_requested": True,
+            "image_ocr_performed": content_read,
+        },
+        collected_at=collected_at,
+        event_kind="file",
+        min_score=min_score,
+        include_non_matches=include_non_matches,
+        source_policy=source_policy,
+        audit=audit,
+    )
+
+
 def extract_document_text(path: Path) -> Dict[str, Any]:
     suffix = path.suffix.lower()
     parser = suffix.lstrip(".")
@@ -690,6 +794,64 @@ def extract_document_text(path: Path) -> Dict[str, Any]:
         "truncated": truncated,
         "error": None,
     }
+
+
+def extract_image_ocr_text(path: Path) -> Dict[str, Any]:
+    parser = "tesseract-ocr"
+    engine = image_ocr_engine()
+    if not engine:
+        return {
+            "status": "ocr_engine_unavailable",
+            "parser": parser,
+            "text": "",
+            "text_length": 0,
+            "truncated": False,
+            "error": "tesseract_not_found",
+        }
+    try:
+        result = subprocess.run(
+            [engine, str(path), "stdout", "-l", os.environ.get("COLLECTORX_TESSERACT_LANG", "chi_sim+eng")],
+            text=True,
+            capture_output=True,
+            timeout=60,
+            check=False,
+        )
+    except Exception as exc:  # pragma: no cover - runtime specific
+        return {
+            "status": "ocr_failed",
+            "parser": parser,
+            "text": "",
+            "text_length": 0,
+            "truncated": False,
+            "error": type(exc).__name__,
+        }
+    if result.returncode != 0:
+        return {
+            "status": "ocr_failed",
+            "parser": parser,
+            "text": "",
+            "text_length": 0,
+            "truncated": False,
+            "error": (result.stderr or "").strip()[:200] or f"exit_{result.returncode}",
+        }
+    normalized = "\n".join(line.strip() for line in result.stdout.splitlines() if line.strip())
+    truncated = len(normalized) > MAX_EXTRACTED_CHARS
+    return {
+        "status": "extracted" if normalized else "empty",
+        "parser": parser,
+        "text": normalized[:MAX_EXTRACTED_CHARS],
+        "text_length": len(normalized),
+        "truncated": truncated,
+        "error": None,
+    }
+
+
+def image_ocr_engine() -> Optional[str]:
+    configured = os.environ.get("COLLECTORX_TESSERACT_CMD")
+    if configured:
+        expanded = Path(configured).expanduser()
+        return str(expanded) if expanded.exists() else None
+    return shutil.which("tesseract")
 
 
 def extract_pdf_text(path: Path) -> str:
