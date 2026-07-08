@@ -898,6 +898,7 @@ def build_manifest(
             "real_account_validation": False,
         },
         "influence_surface_summary": influence_surface_summary(events),
+        "social_activity_boundary_proof": social_activity_boundary_proof(events, collection_audit=collection_audit),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "content_policy": {
             "full_platform_scrape": False,
@@ -986,6 +987,166 @@ def influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "events_with_comment_preview": sum(1 for event in usable_events if (event.get("data") or {}).get("comment_preview")),
         "events_with_content_preview": sum(1 for event in usable_events if (event.get("data") or {}).get("has_content")),
         "events_with_source_section": sum(1 for event in usable_events if (event.get("data") or {}).get("source_section")),
+    }
+
+
+def social_activity_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    usable_events = usable_social_events(events)
+    action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in usable_events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
+    field_counts = Counter(
+        field
+        for event in usable_events
+        for field in RECOMMENDED_WEAK_SIGNAL_FIELDS
+        if (event.get("data") or {}).get(field) not in (None, "", [])
+    )
+    observed_expected_platforms = [platform for platform in EXPECTED_SOCIAL_PLATFORMS if platform_counts.get(platform)]
+    missing_expected_platforms = [platform for platform in EXPECTED_SOCIAL_PLATFORMS if not platform_counts.get(platform)]
+    observed_expected_actions = [action for action in EXPECTED_SOCIAL_ACTIONS if action_counts.get(action)]
+    missing_expected_actions = [action for action in EXPECTED_SOCIAL_ACTIONS if not action_counts.get(action)]
+    observed_recommended_fields = [field for field in RECOMMENDED_WEAK_SIGNAL_FIELDS if field_counts.get(field)]
+    missing_recommended_fields = [field for field in RECOMMENDED_WEAK_SIGNAL_FIELDS if not field_counts.get(field)]
+    surface = influence_surface_summary(events)
+    audit = source_audit(events, collection_audit=collection_audit)
+    expected_topics = list(SOCIAL_INFLUENCE_TOPIC_ORDER[:-1])
+    observed_topics = [topic for topic in expected_topics if surface["social_topic_counts"].get(topic)]
+    missing_topics = list(surface["missing_expected_social_topics"])
+    all_expected_platforms = bool(observed_expected_platforms) and not missing_expected_platforms
+    all_expected_actions = bool(observed_expected_actions) and not missing_expected_actions
+    all_recommended_fields = bool(observed_recommended_fields) and not missing_recommended_fields
+    all_expected_topics = bool(observed_topics) and not missing_topics
+    if not usable_events:
+        gap_reason = None
+        if events:
+            gap_reason = (events[0].get("data") or {}).get("gap")
+        proof_level = "no_authorized_social_activity_input" if gap_reason == "social_activity_authorized_input_missing" else "no_usable_social_activity_records"
+    elif all_expected_platforms and all_expected_actions and all_recommended_fields and all_expected_topics:
+        proof_level = "strong_partial_social_activity_boundary"
+    elif len(observed_expected_platforms) >= 2 and len(observed_expected_actions) >= 3 and surface["events_with_social_topics"] > 0:
+        proof_level = "medium_partial_social_activity_boundary"
+    else:
+        proof_level = "weak_partial_social_activity_boundary"
+    blockers = []
+    if not usable_events:
+        blockers.append("authorized_social_activity_export_missing")
+    if missing_expected_platforms:
+        blockers.append("missing_expected_platforms:" + ",".join(missing_expected_platforms))
+    if missing_expected_actions:
+        blockers.append("missing_expected_actions:" + ",".join(missing_expected_actions))
+    if missing_recommended_fields:
+        blockers.append("missing_recommended_weak_signal_fields:" + ",".join(missing_recommended_fields))
+    if missing_topics:
+        blockers.append("missing_social_topics:" + ",".join(missing_topics))
+    if surface["events_with_social_topics"] == 0:
+        blockers.append("social_topic_classification_missing")
+    if not audit.get("path_results"):
+        blockers.append("path_level_source_audit_missing")
+    if audit.get("limit_reached"):
+        blockers.append("collection_limit_reached")
+    blockers.extend(
+        [
+            "real_weibo_bilibili_xiaohongshu_validation_missing",
+            "creator_domain_allowlist_missing",
+            "social_topic_false_positive_review_missing",
+            "weak_evidence_backtest_missing",
+            "strong_source_corroboration_missing",
+        ]
+    )
+    return {
+        "proof_level": proof_level,
+        "authorized_input_observed": bool(usable_events),
+        "generic_social_activity_collector": True,
+        "weak_evidence_only": True,
+        "requires_social_investment_lens": True,
+        "required_lens": "social-investment-influence",
+        "can_enter_finclaw_lake": bool(usable_events),
+        "can_feed_investor_wiki_directly": False,
+        "can_claim_investment_influence": False,
+        "observed_event_count": len(usable_events),
+        "platform_boundary": {
+            "observed_platforms": observed_expected_platforms,
+            "missing_expected_platforms": missing_expected_platforms,
+            "platform_counts": dict(sorted(platform_counts.items())),
+            "real_account_validation": False,
+        },
+        "action_boundary": {
+            "observed_actions": observed_expected_actions,
+            "missing_expected_actions": missing_expected_actions,
+            "action_counts": dict(sorted(action_counts.items())),
+            "complete_activity_history_claimed": False,
+        },
+        "weak_signal_field_boundary": {
+            "observed_recommended_fields": observed_recommended_fields,
+            "missing_recommended_fields": missing_recommended_fields,
+        },
+        "social_topic_boundary": {
+            "expected_social_topics": expected_topics,
+            "observed_social_topics": observed_topics,
+            "missing_expected_social_topics": missing_topics,
+            "social_topic_counts": surface["social_topic_counts"],
+            "events_with_social_topics": surface["events_with_social_topics"],
+            "social_topic_false_positive_reviewed": False,
+        },
+        "influence_surface_boundary": {
+            "events_with_creator": surface["events_with_creator"],
+            "events_with_creator_url": surface["events_with_creator_url"],
+            "events_with_url": surface["events_with_url"],
+            "events_with_domain": surface["events_with_domain"],
+            "events_with_item_id": surface["events_with_item_id"],
+            "events_with_tags": surface["events_with_tags"],
+            "events_with_symbols": surface["events_with_symbols"],
+            "events_with_engagement_counts": surface["events_with_engagement_counts"],
+            "events_with_comment_preview": surface["events_with_comment_preview"],
+            "events_with_content_preview": surface["events_with_content_preview"],
+        },
+        "source_boundary": {
+            "requested_input_count": int(audit.get("input_count") or 0),
+            "resolved_input_file_count": int(audit.get("resolved_input_file_count") or 0),
+            "input_missing_count": int(audit.get("input_missing_count") or 0),
+            "skipped_file_count": int(audit.get("skipped_file_count") or 0),
+            "archive_count": int(audit.get("archive_count") or 0),
+            "archive_member_count": int(audit.get("archive_member_count") or 0),
+            "archive_member_event_count": int(audit.get("archive_member_event_count") or 0),
+            "skipped_archive_member_count": int(audit.get("skipped_archive_member_count") or 0),
+            "limit_reached": bool(audit.get("limit_reached")),
+            "path_level_audit_available": bool(audit.get("path_results")),
+            "archive_path_traversal_members_collected": False,
+            "windows_drive_archive_members_collected": False,
+        },
+        "content_boundary": {
+            "full_platform_scrape": False,
+            "full_creator_profile_scrape": False,
+            "full_content_included_by_default": False,
+            "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
+            "comment_preview_max_chars": COMMENT_PREVIEW_MAX_CHARS,
+            "credentials_collected": False,
+        },
+        "wiki_boundary": {
+            "event_schema": "collectorx.event.v1",
+            "required_flow": [
+                "social-activity collector",
+                "collectorx.event.v1",
+                "social-investment-influence lens",
+                "finclaw.investor_wiki_evidence.v1",
+                "SoulMirror investor-portrait distill/organize",
+            ],
+            "collector_writes_wiki_directly": False,
+        },
+        "false_claims": {
+            "investment_conclusion_claimed": False,
+            "complete_social_activity_history_claimed": False,
+            "real_account_validation_claimed": False,
+            "platform_wide_scrape_performed": False,
+            "full_creator_profile_scraped": False,
+            "full_content_mirrored": False,
+            "private_platform_credentials_collected": False,
+            "collector_writes_wiki_directly": False,
+        },
+        "completion_blockers": blockers,
     }
 
 
@@ -1136,6 +1297,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         f"- observed_actions: `{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
         f"- missing_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
+        f"- social_activity_boundary_proof: `{manifest['social_activity_boundary_proof']['proof_level']}`",
+        f"- investment_claim_allowed: `{manifest['weak_evidence_policy']['investment_claim_allowed']}`",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         f"- content_policy: `weak-preview-only`",

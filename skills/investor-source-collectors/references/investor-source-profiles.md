@@ -16,7 +16,7 @@
 | P1 | `financial-news-usage` | vertical | 财联社/华尔街见闻/格隆汇 | 阅读/收藏/订阅/搜索/提醒痕迹 |
 | P2 | `hk-us-brokerage` | vertical | 富途/老虎/盈透 | 港美股资产、持仓、成交、委托、资金、分红、换汇 |
 | P2 | `pro-terminal-usage` | vertical | Wind/Choice/iFinD/Bloomberg | 专业终端工作流、搜索、下载、模板、数据集和字段痕迹 |
-| P2 | `social-investment-influence` | lens | `social-activity` | 微博、B站、小红书等投资内容影响源；弱证据 |
+| P2 | `social-investment-influence` | lens | `social-activity` | 微博、B站、小红书等投资内容影响源；弱证据；输出社交影响边界证明 |
 
 每个 source profile 都会映射到投资分身七大维度、20 个子维度。证据强度分为：
 

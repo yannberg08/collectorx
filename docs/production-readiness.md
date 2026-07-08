@@ -226,6 +226,26 @@ packages:
   validation on the current machine because no mailbox is registered in the
   local email collector state.
 
+The prior completed wave: `social-activity` and `social-investment-influence`
+now have explicit weak-evidence boundary proofs:
+
+- `manifest.social_activity_boundary_proof` gives FinClaw one gate for
+  authorized social-activity input presence, Weibo/Bilibili/Xiaohongshu
+  platform coverage, action coverage, weak-signal fields, social-topic coverage,
+  influence surfaces, source audit counts, content-preview policy, and required
+  lens flow.
+- `manifest.social_influence_boundary_proof` and evidence
+  `source_boundary_proof_summary.social-investment-influence` tell SoulMirror
+  that filtered social influence records remain weak attention evidence and
+  require stronger trade/research/note/meeting corroboration.
+- False claims remain explicit: no standalone investment conclusion, no
+  complete social activity history, no real account validation, no platform-wide
+  scrape, no full creator profile scrape, no full content mirror, no private
+  platform credentials, and no direct Wiki write.
+- This improves FinClaw gating for P2 social influence packages, but still does
+  not replace real Weibo/Bilibili/Xiaohongshu export validation, creator/domain
+  allowlists, topic false-positive review, or weak-evidence backtesting.
+
 The prior completed wave: `social-activity` now has stronger social-topic
 coverage for authorized Weibo, Bilibili, and Xiaohongshu activity packages:
 
@@ -507,7 +527,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- | --- | --- |
 | 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false positives, and license-safe boundaries |
-| B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
+| B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, social activity boundary proof, social influence boundary proof, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
 
 ## Deep-Designed Existing Collectors
 

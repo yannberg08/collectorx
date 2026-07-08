@@ -474,7 +474,7 @@ SOURCE_CLASSIFICATION: Dict[str, Dict[str, Any]] = {
         "collector_class": "lens",
         "upstream_collectors": ["social-activity"],
         "channel": "微博/B站/小红书",
-        "collects": ["投资内容收藏/点赞/观看", "关注的投资创作者", "评论表达", "影响源"],
+        "collects": ["投资内容收藏/点赞/观看", "关注的投资创作者", "评论表达", "影响源", "社交影响边界证明"],
         "does_not_collect": ["平台全站内容", "无关娱乐消费", "他人完整主页"],
         "collection_method": "从社交 activity lake 中按投资实体、财经标签、创作者白名单筛选。",
     },

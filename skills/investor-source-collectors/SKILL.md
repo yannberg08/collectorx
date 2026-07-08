@@ -1,6 +1,6 @@
 ---
 name: investor-source-collectors
-description: 投资分身采集器分类、路由和证据包工具。用于区分 CollectorX 通用采集器、投资垂直采集器和 investor lens/适配层，并把微信投资讨论、投研文档、雪球活动、基金/理财资产、邮件研报、会议纪要、投资笔记、任务日历、公众号收藏、财经资讯使用痕迹、港美股券商、Wind/Choice/iFinD 专业终端使用痕迹、微博/B站/小红书等用户授权证据标准化为 FinClaw/SoulMirror 的 investor_wiki_evidence.v1。
+description: 投资分身采集器分类、路由和证据包工具。用于区分 CollectorX 通用采集器、投资垂直采集器和 investor lens/适配层，并把微信投资讨论、投研文档、雪球活动、基金/理财资产、邮件研报、会议纪要、投资笔记、任务日历、公众号收藏、财经资讯使用痕迹、港美股券商、Wind/Choice/iFinD 专业终端使用痕迹、微博/B站/小红书等用户授权证据标准化为 FinClaw/SoulMirror 的 investor_wiki_evidence.v1，同时保留各 lens 边界证明。
 ---
 
 # 投资分身采集器分类与路由
@@ -98,7 +98,7 @@ P2 必做：
 
 - `hk-us-brokerage`：vertical，采富途、老虎、盈透等港美股资产、持仓、成交、委托、资金流水、分红、换汇，并报告券商/交易表/字段覆盖。
 - `pro-terminal-usage`：vertical，采 Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作台、自选、搜索、导出、模板、因子、数据集、字段和函数代码痕迹，并报告终端/活动/字段覆盖。
-- `social-investment-influence`：lens，读取微博/B站/小红书通用社交 activity，只筛投资内容影响源，并汇总平台/动作/创作者/社交影响主题；输出仍是弱证据，不能单独形成投资结论。
+- `social-investment-influence`：lens，读取微博/B站/小红书通用社交 activity，只筛投资内容影响源，并汇总平台/动作/创作者/社交影响主题和 `social_influence_boundary_proof`；输出仍是弱证据，不能单独形成投资结论。
 
 ## 采集边界
 

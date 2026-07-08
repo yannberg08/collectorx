@@ -897,11 +897,16 @@ Current status:
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, limit truncation, export package provenance, and
   preview-only content boundaries.
+- Writes `manifest.social_activity_boundary_proof` so FinClaw can inspect the
+  authorized social-activity input boundary, platform/action/topic coverage,
+  weak-signal field coverage, source audit, content-preview policy, required
+  `social-investment-influence` lens flow, and explicit no-investment-conclusion
+  / no-platform-wide-scrape / no-full-creator-profile claims.
 - Does not claim investment influence directly.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
-  lens. The lens mirrors social-topic/platform/action/creator summaries, but
-  resulting evidence remains weak influence evidence unless corroborated by
-  stronger sources.
+  lens. The lens mirrors social-topic/platform/action/creator summaries and
+  writes `social_influence_boundary_proof`, but resulting evidence remains weak
+  influence evidence unless corroborated by stronger sources.
 
 ### 投资 Lens / 分类工具
 

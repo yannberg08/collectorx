@@ -278,6 +278,11 @@ def build_manifest(
         if source_id == "wechat-article-favorites"
         else None
     )
+    social_influence_proof = (
+        build_social_influence_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "social-investment-influence"
+        else None
+    )
     manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -319,6 +324,8 @@ def build_manifest(
         manifest["meeting_minutes_boundary_proof"] = meeting_minutes_proof
     if wechat_article_proof is not None:
         manifest["wechat_article_boundary_proof"] = wechat_article_proof
+    if social_influence_proof is not None:
+        manifest["social_influence_boundary_proof"] = social_influence_proof
     return manifest
 
 
@@ -798,6 +805,122 @@ def wechat_article_proof_level(
     return "authorized_wechat_article_actions_event_only"
 
 
+def build_social_influence_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface = social_influence_surface_summary(usable_events)
+    topic_counts = surface["social_topic_counts"]
+    observed_topics = [topic for topic in SOCIAL_INFLUENCE_TOPIC_ORDER[:-1] if topic_counts.get(topic)]
+    missing_topics = list(surface["missing_expected_social_topics"])
+    platform_count = len(surface["platform_counts"])
+    action_count = len(surface["action_counts"])
+    if not usable_events:
+        proof_level = "no_social_influence_candidates"
+    elif (
+        int(surface["event_count"]) >= 3
+        and platform_count >= 2
+        and action_count >= 2
+        and int(surface["creator_event_count"]) > 0
+        and int(surface["content_preview_event_count"]) > 0
+    ):
+        proof_level = "strong_partial_social_influence_boundary"
+    elif int(surface["creator_event_count"]) > 0 and observed_topics:
+        proof_level = "medium_partial_social_influence_boundary"
+    else:
+        proof_level = "weak_partial_social_influence_boundary"
+    blockers = []
+    if not usable_events:
+        blockers.append("no_investment_social_activity_matched")
+    if missing_topics:
+        blockers.append("missing_social_topics:" + ",".join(missing_topics))
+    if int(surface["creator_event_count"]) == 0:
+        blockers.append("creator_surface_missing")
+    if int(surface["url_event_count"]) == 0:
+        blockers.append("url_surface_missing")
+    if int(surface["engagement_event_count"]) == 0:
+        blockers.append("engagement_surface_missing")
+    blockers.extend(
+        [
+            "creator_domain_allowlist_missing",
+            "social_topic_false_positive_review_missing",
+            "weak_evidence_backtest_missing",
+            "strong_trade_research_corroboration_missing",
+            "complete_social_activity_history_not_proven",
+        ]
+    )
+    return {
+        "proof_level": proof_level,
+        "source_profile": "social-investment-influence",
+        "authorized_input_observed": bool(usable_events),
+        "weak_evidence_only": True,
+        "evidence_strength": "weak_attention",
+        "requires_corroboration": True,
+        "can_enter_finclaw_lake": bool(usable_events),
+        "can_feed_investor_wiki_evidence": bool(usable_events),
+        "can_claim_investment_conclusion": False,
+        "observed_event_count": len(usable_events),
+        "social_topic_boundary": {
+            "expected_social_topics": list(SOCIAL_INFLUENCE_TOPIC_ORDER[:-1]),
+            "observed_social_topics": observed_topics,
+            "missing_expected_social_topics": missing_topics,
+            "social_topic_counts": surface["social_topic_counts"],
+            "social_topic_false_positive_reviewed": False,
+        },
+        "platform_action_boundary": {
+            "platform_counts": surface["platform_counts"],
+            "action_counts": surface["action_counts"],
+            "platform_topic_counts": surface["platform_topic_counts"],
+            "action_topic_counts": surface["action_topic_counts"],
+        },
+        "creator_content_boundary": {
+            "creator_event_count": surface["creator_event_count"],
+            "creator_url_event_count": surface["creator_url_event_count"],
+            "url_event_count": surface["url_event_count"],
+            "tagged_event_count": surface["tagged_event_count"],
+            "symbol_event_count": surface["symbol_event_count"],
+            "engagement_event_count": surface["engagement_event_count"],
+            "comment_preview_event_count": surface["comment_preview_event_count"],
+            "content_preview_event_count": surface["content_preview_event_count"],
+            "preview_only": True,
+        },
+        "source_boundary": {
+            "requested_input_count": int(audit.get("input_count") or 0),
+            "resolved_input_file_count": int(audit.get("resolved_input_file_count") or 0),
+            "input_missing_count": int(audit.get("input_missing_count") or 0),
+            "candidate_event_count": int(audit.get("candidate_event_count") or len(events)),
+            "matched_event_count": len(usable_events),
+            "collection_status": collection_readiness.get("status"),
+            "source_collection_scope": collection_readiness.get("source_collection_scope"),
+        },
+        "wiki_boundary": {
+            "event_schema": EVENT_SCHEMA,
+            "evidence_schema": EVIDENCE_SCHEMA,
+            "collector_writes_wiki_directly": False,
+            "required_flow": [
+                "social-activity collector",
+                "social-investment-influence lens",
+                "finclaw.investor_wiki_evidence.v1",
+                "SoulMirror investor-portrait distill/organize",
+            ],
+        },
+        "false_claims": {
+            "investment_conclusion_claimed": False,
+            "complete_social_activity_history_claimed": False,
+            "real_account_validation_claimed": False,
+            "platform_wide_scrape_performed": False,
+            "full_creator_profile_scraped": False,
+            "full_content_mirrored": False,
+            "private_platform_credentials_collected": False,
+            "collector_writes_wiki_directly": False,
+        },
+        "completion_blockers": blockers,
+    }
+
+
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
     by_subdimension: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -875,6 +998,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
             "subdimension_count": sum(len(d["children"]) for d in dimensions),
             "support_level_counts": dict(sorted(support_counts.items())),
             "source_surface_summary": source_surface_summary(usable_events),
+            "source_boundary_proof_summary": source_boundary_proof_summary(usable_events),
             "usable_for_wiki_now": [
                 child["subdimension_id"]
                 for dimension in dimensions
@@ -923,6 +1047,25 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         summaries["wechat-article-favorites"] = wechat_article_surface_summary(by_source["wechat-article-favorites"])
     if "social-investment-influence" in by_source:
         summaries["social-investment-influence"] = social_influence_surface_summary(by_source["social-investment-influence"])
+    return summaries
+
+
+def source_boundary_proof_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summaries: Dict[str, Any] = {}
+    by_source: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for event in events:
+        source_id = str((event.get("data") or {}).get("source_profile") or event.get("collector") or "unknown")
+        by_source[source_id].append(event)
+    if "social-investment-influence" in by_source:
+        source_events = by_source["social-investment-influence"]
+        summaries["social-investment-influence"] = build_social_influence_boundary_proof(
+            source_events,
+            audit={},
+            collection_readiness={
+                "status": "events_collected" if source_events else "no_investment_evidence_matched",
+                "source_collection_scope": "partial_authorized_input" if source_events else "none",
+            },
+        )
     return summaries
 
 

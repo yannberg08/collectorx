@@ -1701,10 +1701,28 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
         assert surface["platform_counts"] == {"bilibili": 1}
         assert surface["action_counts"] == {"watch": 1}
         assert surface["usable_as_investment_conclusion"] is False
+        proof = manifest["social_influence_boundary_proof"]
+        assert proof["proof_level"] == "medium_partial_social_influence_boundary"
+        assert proof["weak_evidence_only"] is True
+        assert proof["requires_corroboration"] is True
+        assert proof["can_claim_investment_conclusion"] is False
+        assert proof["social_topic_boundary"]["observed_social_topics"] == [
+            "industry_theme",
+            "company_fundamental",
+            "risk_control",
+        ]
+        assert proof["platform_action_boundary"]["platform_counts"] == {"bilibili": 1}
+        assert proof["creator_content_boundary"]["creator_event_count"] == 1
+        assert proof["false_claims"]["investment_conclusion_claimed"] is False
+        assert proof["false_claims"]["full_content_mirrored"] is False
+        assert "strong_trade_research_corroboration_missing" in proof["completion_blockers"]
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["social-investment-influence"]
         assert evidence_surface["requires_corroboration"] is True
         assert evidence_surface["social_topic_counts"]["industry_theme"] == 1
+        evidence_proof = evidence["coverage_summary"]["source_boundary_proof_summary"]["social-investment-influence"]
+        assert evidence_proof["weak_evidence_only"] is True
+        assert evidence_proof["can_claim_investment_conclusion"] is False
 
 
 def test_investment_notes_lens_reports_note_type_surface_from_notes_events() -> None:

@@ -95,6 +95,17 @@ def test_collect_social_activity_exports() -> None:
         assert manifest["collection_readiness"]["can_claim_investment_influence"] is False
         assert manifest["collection_readiness"]["evidence_strength"] == "weak_attention"
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
+        proof = manifest["social_activity_boundary_proof"]
+        assert proof["proof_level"] == "medium_partial_social_activity_boundary"
+        assert proof["generic_social_activity_collector"] is True
+        assert proof["weak_evidence_only"] is True
+        assert proof["requires_social_investment_lens"] is True
+        assert proof["can_enter_finclaw_lake"] is True
+        assert proof["can_feed_investor_wiki_directly"] is False
+        assert proof["platform_boundary"]["observed_platforms"] == ["weibo", "bilibili", "xiaohongshu"]
+        assert proof["content_boundary"]["full_platform_scrape"] is False
+        assert proof["false_claims"]["investment_conclusion_claimed"] is False
+        assert "missing_expected_actions:favorite,share" in proof["completion_blockers"]
 
 
 def test_collect_nested_sections_workbook_and_weak_policy() -> None:
@@ -219,6 +230,24 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert manifest["influence_surface_summary"]["events_with_engagement_counts"] >= 5
         assert manifest["influence_surface_summary"]["events_with_symbols"] == 1
         assert manifest["influence_surface_summary"]["events_with_source_section"] == 8
+        boundary_proof = manifest["social_activity_boundary_proof"]
+        assert boundary_proof["proof_level"] == "strong_partial_social_activity_boundary"
+        assert boundary_proof["authorized_input_observed"] is True
+        assert boundary_proof["platform_boundary"]["missing_expected_platforms"] == []
+        assert boundary_proof["action_boundary"]["missing_expected_actions"] == []
+        assert boundary_proof["weak_signal_field_boundary"]["missing_recommended_fields"] == []
+        assert boundary_proof["social_topic_boundary"]["missing_expected_social_topics"] == []
+        assert boundary_proof["influence_surface_boundary"]["events_with_creator"] >= 6
+        assert boundary_proof["source_boundary"]["requested_input_count"] == 1
+        assert boundary_proof["source_boundary"]["resolved_input_file_count"] == 3
+        assert boundary_proof["source_boundary"]["archive_member_count"] == 4
+        assert boundary_proof["source_boundary"]["skipped_archive_member_count"] == 3
+        assert boundary_proof["content_boundary"]["content_preview_max_chars"] == 1200
+        assert boundary_proof["content_boundary"]["comment_preview_max_chars"] == 800
+        assert boundary_proof["wiki_boundary"]["collector_writes_wiki_directly"] is False
+        assert boundary_proof["false_claims"]["full_creator_profile_scraped"] is False
+        assert boundary_proof["false_claims"]["complete_social_activity_history_claimed"] is False
+        assert "strong_source_corroboration_missing" in boundary_proof["completion_blockers"]
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["source_audit"]["source_section_event_count"] == 8
@@ -324,6 +353,10 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert len(events) == 1
         assert events[0]["data"]["gap"] == "social_activity_authorized_input_missing"
         assert manifest["collection_readiness"]["status"] == "needs_social_activity_input"
+        assert manifest["social_activity_boundary_proof"]["proof_level"] == "no_authorized_social_activity_input"
+        assert manifest["social_activity_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["social_activity_boundary_proof"]["source_boundary"]["input_missing_count"] == 1
+        assert manifest["social_activity_boundary_proof"]["false_claims"]["platform_wide_scrape_performed"] is False
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["input_missing_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 0

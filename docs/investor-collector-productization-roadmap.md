@@ -2094,6 +2094,38 @@ Findings:
   surface summaries, source audit, ZIP provenance, unsafe ZIP member skipping,
   and preview-only content policy.
 
+### Wave X5: P2 social activity and influence boundary proof pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-boundary-proof-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.5` and `investor-source-collectors` to
+  `0.1.16`.
+- Added `manifest.social_activity_boundary_proof` as the generic social gate
+  for authorized input presence, Weibo/Bilibili/Xiaohongshu platform coverage,
+  action coverage, weak-signal field coverage, social-topic coverage, influence
+  surfaces, source audit counts, content-preview policy, required lens flow, and
+  explicit no-investment-conclusion claims.
+- Added `manifest.social_influence_boundary_proof` to the
+  `social-investment-influence` lens so FinClaw can see platform/action/topic/
+  creator coverage, preview-only content surfaces, weak evidence strength,
+  corroboration requirements, and false claims.
+- Added evidence `coverage_summary.source_boundary_proof_summary` so
+  SoulMirror can inspect the social influence boundary from
+  `investor_wiki_evidence.v1.json` without opening the raw manifest.
+- Kept both layers weak-evidence-only: no standalone investment conclusion, no
+  complete social activity history, no platform-wide scrape, no full creator
+  profile scrape, no full content mirror, no private platform credentials, and
+  no direct Wiki write.
+- Fixture validation covers medium partial, strong partial, and missing-input
+  social activity proof levels plus social influence lens proof and evidence
+  proof summaries.
+
 ### Wave Y: Investor Wiki evidence contract pass
 
 Status: `completed-baseline+audit`
@@ -2286,7 +2318,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false-positive review, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, lens social-surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 
 ## Git Practice
 
