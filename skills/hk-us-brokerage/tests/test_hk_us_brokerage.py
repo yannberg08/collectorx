@@ -221,6 +221,30 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert manifest["strong_trade_surface_summary"]["asset_snapshot_count"] == 2
         assert manifest["strong_trade_surface_summary"]["events_with_margin"] == 1
         assert manifest["strong_trade_surface_summary"]["events_with_tax"] == 2
+        account_boundary = manifest["account_boundary_summary"]
+        assert account_boundary["account_id_count"] == 3
+        assert account_boundary["accounts_by_broker"] == {
+            "futu": ["F-1"],
+            "ibkr": ["U123"],
+            "tiger": ["T-888"],
+        }
+        assert account_boundary["event_counts_by_account"]["tiger:T-888"] == 7
+        assert account_boundary["event_counts_by_account"]["futu:F-1"] == 2
+        assert account_boundary["event_counts_by_account"]["ibkr:U123"] == 1
+        assert account_boundary["missing_expected_subtypes_by_account"]["tiger:T-888"] == []
+        assert account_boundary["full_surface_account_candidates"] == ["tiger:T-888"]
+        assert account_boundary["complete_account_boundary_claimed"] is False
+        currency_market = manifest["currency_market_summary"]
+        assert currency_market["currency_count"] == 2
+        assert currency_market["currency_counts"] == {"HKD": 2, "USD": 2}
+        assert currency_market["fx_pair_counts"] == {"USD->HKD": 1}
+        assert currency_market["multi_currency_observed"] is True
+        fee_tax_margin = manifest["fee_tax_margin_summary"]
+        assert fee_tax_margin["events_with_fees"] == 1
+        assert fee_tax_margin["events_with_tax"] == 2
+        assert fee_tax_margin["events_with_margin"] == 1
+        assert fee_tax_margin["margin_requirement_by_currency"]["USD"] == 3000.0
+        assert fee_tax_margin["maintenance_margin_by_currency"]["USD"] == 2000.0
         assert manifest["asset_value_summary"]["multi_currency_observed"] is True
         assert manifest["asset_value_summary"]["reported_total_assets_by_currency"]["USD"] == 100000.5
         assert manifest["asset_value_summary"]["reported_total_assets_by_currency"]["HKD"] == 25000.0
@@ -254,6 +278,8 @@ def test_collect_nested_sections_and_workbook() -> None:
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["read_only_collection"] is True
         assert evidence["coverage_summary"]["order_side_effects_allowed"] is False
+        assert evidence["coverage_summary"]["account_boundary_summary"]["full_surface_account_candidates"] == ["tiger:T-888"]
+        assert evidence["coverage_summary"]["currency_market_summary"]["multi_currency_observed"] is True
 
 
 def test_collect_zip_limit_counts_only_emitted_records() -> None:

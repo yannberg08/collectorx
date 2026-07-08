@@ -719,6 +719,9 @@ def build_manifest(
             "real_account_validation": False,
         },
         "strong_trade_surface_summary": strong_trade_surface_summary(events),
+        "account_boundary_summary": account_boundary_summary(events),
+        "currency_market_summary": currency_market_summary(events),
+        "fee_tax_margin_summary": fee_tax_margin_summary(events),
         "asset_value_summary": asset_value_summary(events),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
@@ -792,6 +795,150 @@ def subtype_event_count(events: List[Dict[str, Any]], subtype: str) -> int:
     return sum(1 for event in events if (event.get("data") or {}).get("subtype") == subtype)
 
 
+def account_boundary_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    accounts_by_broker: Dict[str, set[str]] = defaultdict(set)
+    subtypes_by_account: Dict[str, set[str]] = defaultdict(set)
+    currencies_by_account: Dict[str, set[str]] = defaultdict(set)
+    markets_by_account: Dict[str, set[str]] = defaultdict(set)
+    event_counts_by_account: Counter[str] = Counter()
+    accounts_with_asset_snapshot = set()
+    accounts_with_position = set()
+    accounts_with_execution = set()
+    accounts_with_order = set()
+    accounts_with_cashflow = set()
+    accounts_with_dividend = set()
+    accounts_with_fx = set()
+    known_account_keys = set()
+    for event in usable_events:
+        data = event.get("data") or {}
+        broker = str(data.get("broker") or "unknown_broker")
+        account_id = str(data.get("account_id") or "unknown_account")
+        account_key = f"{broker}:{account_id}"
+        if account_id != "unknown_account":
+            accounts_by_broker[broker].add(account_id)
+            known_account_keys.add(account_key)
+        subtype = str(data.get("subtype") or "unknown")
+        subtypes_by_account[account_key].add(subtype)
+        event_counts_by_account[account_key] += 1
+        for currency in currency_values(data):
+            currencies_by_account[account_key].add(currency)
+        market = data.get("market")
+        if market:
+            markets_by_account[account_key].add(str(market))
+        target = {
+            "asset_snapshot": accounts_with_asset_snapshot,
+            "position": accounts_with_position,
+            "execution": accounts_with_execution,
+            "order": accounts_with_order,
+            "cashflow": accounts_with_cashflow,
+            "dividend": accounts_with_dividend,
+            "fx": accounts_with_fx,
+        }.get(subtype)
+        if target is not None:
+            target.add(account_key)
+    missing_by_account = {
+        account_key: [subtype for subtype in EXPECTED_STRONG_TRADE_SUBTYPES if subtype not in subtypes_by_account.get(account_key, set())]
+        for account_key in sorted(known_account_keys)
+    }
+    full_surface_accounts = [
+        account_key
+        for account_key, missing in missing_by_account.items()
+        if not missing
+    ]
+    return {
+        "account_id_count": sum(len(accounts) for accounts in accounts_by_broker.values()),
+        "accounts_by_broker": sorted_dict_of_lists(accounts_by_broker),
+        "event_counts_by_account": dict(sorted(event_counts_by_account.items())),
+        "subtypes_by_account": sorted_dict_of_lists(subtypes_by_account),
+        "currencies_by_account": sorted_dict_of_lists(currencies_by_account),
+        "markets_by_account": sorted_dict_of_lists(markets_by_account),
+        "accounts_with_asset_snapshot": sorted(accounts_with_asset_snapshot),
+        "accounts_with_position": sorted(accounts_with_position),
+        "accounts_with_execution": sorted(accounts_with_execution),
+        "accounts_with_order": sorted(accounts_with_order),
+        "accounts_with_cashflow": sorted(accounts_with_cashflow),
+        "accounts_with_dividend": sorted(accounts_with_dividend),
+        "accounts_with_fx": sorted(accounts_with_fx),
+        "missing_expected_subtypes_by_account": missing_by_account,
+        "full_surface_account_candidates": full_surface_accounts,
+        "complete_account_boundary_claimed": False,
+    }
+
+
+def currency_market_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    currency_counts: Counter[str] = Counter()
+    market_counts: Counter[str] = Counter()
+    broker_currency_counts: Counter[str] = Counter()
+    broker_market_counts: Counter[str] = Counter()
+    fx_pair_counts: Counter[str] = Counter()
+    for event in usable_events:
+        data = event.get("data") or {}
+        broker = str(data.get("broker") or "unknown_broker")
+        currencies = currency_values(data)
+        for currency in currencies:
+            currency_counts[currency] += 1
+            broker_currency_counts[f"{broker}:{currency}"] += 1
+        market = data.get("market")
+        if market:
+            market_value = str(market)
+            market_counts[market_value] += 1
+            broker_market_counts[f"{broker}:{market_value}"] += 1
+        if data.get("from_currency") and data.get("to_currency"):
+            fx_pair_counts[f"{data['from_currency']}->{data['to_currency']}"] += 1
+    return {
+        "currency_counts": dict(sorted(currency_counts.items())),
+        "market_counts": dict(sorted(market_counts.items())),
+        "broker_currency_counts": dict(sorted(broker_currency_counts.items())),
+        "broker_market_counts": dict(sorted(broker_market_counts.items())),
+        "fx_pair_counts": dict(sorted(fx_pair_counts.items())),
+        "currency_count": len(currency_counts),
+        "market_count": len(market_counts),
+        "multi_currency_observed": len(currency_counts) > 1,
+        "hk_market_event_count": market_counts.get("HK", 0),
+        "us_market_event_count": market_counts.get("US", 0),
+    }
+
+
+def fee_tax_margin_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    fee_events = [event for event in usable_events if (event.get("data") or {}).get("fees") is not None]
+    tax_events = [event for event in usable_events if (event.get("data") or {}).get("tax") is not None]
+    margin_events = [
+        event
+        for event in usable_events
+        if (event.get("data") or {}).get("margin_requirement") is not None
+        or (event.get("data") or {}).get("maintenance_margin") is not None
+    ]
+    total_fees_by_currency: Dict[str, float] = defaultdict(float)
+    total_tax_by_currency: Dict[str, float] = defaultdict(float)
+    margin_requirement_by_currency: Dict[str, float] = defaultdict(float)
+    maintenance_margin_by_currency: Dict[str, float] = defaultdict(float)
+    for event in fee_events:
+        data = event.get("data") or {}
+        currency = primary_currency(data)
+        total_fees_by_currency[currency] += float(data.get("fees") or 0)
+    for event in tax_events:
+        data = event.get("data") or {}
+        currency = primary_currency(data)
+        total_tax_by_currency[currency] += float(data.get("tax") or 0)
+    for event in margin_events:
+        data = event.get("data") or {}
+        currency = primary_currency(data)
+        margin_requirement_by_currency[currency] += float(data.get("margin_requirement") or 0)
+        maintenance_margin_by_currency[currency] += float(data.get("maintenance_margin") or 0)
+    return {
+        "events_with_fees": len(fee_events),
+        "events_with_tax": len(tax_events),
+        "events_with_margin": len(margin_events),
+        "total_fees_by_currency": dict(sorted(total_fees_by_currency.items())),
+        "total_tax_by_currency": dict(sorted(total_tax_by_currency.items())),
+        "margin_requirement_by_currency": dict(sorted(margin_requirement_by_currency.items())),
+        "maintenance_margin_by_currency": dict(sorted(maintenance_margin_by_currency.items())),
+    }
+
+
 def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     usable_events = usable_brokerage_events(events)
     asset_events = [event for event in usable_events if (event.get("data") or {}).get("subtype") == "asset_snapshot"]
@@ -825,6 +972,27 @@ def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "reported_buying_power_by_currency": dict(sorted(buying_power_by_currency.items())),
         "multi_currency_observed": len(currencies) > 1,
     }
+
+
+def currency_values(data: Dict[str, Any]) -> List[str]:
+    values = []
+    for key in ("currency", "base_currency", "from_currency", "to_currency"):
+        value = data.get(key)
+        if value not in (None, ""):
+            values.append(str(value))
+    return sorted(set(values))
+
+
+def primary_currency(data: Dict[str, Any]) -> str:
+    for key in ("currency", "base_currency", "from_currency", "to_currency"):
+        value = data.get(key)
+        if value not in (None, ""):
+            return str(value)
+    return "unknown"
+
+
+def sorted_dict_of_lists(mapping: Dict[str, set[str]]) -> Dict[str, List[str]]:
+    return {key: sorted(values) for key, values in sorted(mapping.items())}
 
 
 def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -889,6 +1057,10 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "complete_trade_boundary_claimed": False,
             "read_only_collection": True,
             "order_side_effects_allowed": False,
+            "account_boundary_summary": account_boundary_summary(events),
+            "currency_market_summary": currency_market_summary(events),
+            "fee_tax_margin_summary": fee_tax_margin_summary(events),
+            "asset_value_summary": asset_value_summary(events),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

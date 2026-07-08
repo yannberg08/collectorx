@@ -1468,6 +1468,34 @@ Findings:
   credential filtering, ZIP limit accounting, field coverage, value summaries,
   and read-only evidence policy.
 
+### Wave V4: P2 HK/US brokerage account boundary pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-hk-us-brokerage-account-boundary-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `hk-us-brokerage` to `0.2.4`.
+- Added `manifest.account_boundary_summary` and evidence coverage summary for
+  broker/account IDs, event counts by account, observed strong-trade subtypes
+  by account, per-account missing surfaces, and full-surface account
+  candidates.
+- Added `manifest.currency_market_summary` for observed currencies, markets,
+  broker-currency pairs, broker-market pairs, FX pairs, and multi-currency
+  observation.
+- Added `manifest.fee_tax_margin_summary` for fee, tax, margin requirement,
+  and maintenance margin availability and totals by currency.
+- Kept `complete_account_boundary_claimed` false so FinClaw can use exact user
+  business numbers from authorized exports without pretending one export proves
+  the full broker account boundary.
+- Fixture validation covers Futu, Tiger, and IBKR account IDs, a Tiger account
+  containing all seven strong-trade surfaces, multi-currency USD/HKD assets and
+  FX, tax/fee/margin values, ZIP provenance, unsafe ZIP member skipping, and
+  evidence summary routing.
+
 ### Wave W: P2 professional terminal coverage pass 1
 
 Status: `completed-baseline`
@@ -1651,7 +1679,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, asset value summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
+| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
