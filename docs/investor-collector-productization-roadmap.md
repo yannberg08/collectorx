@@ -2235,6 +2235,32 @@ Findings:
 - ZIP browser-history records keep user-visible archive provenance and do not
   leak temporary extraction paths.
 
+### Wave U8: P1 financial news scope-policy authorization pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-usage-scope-policy-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `financial-news-usage` to `0.2.8`.
+- Added platform, action, source-app, domain, usage-topic, and keyword
+  allow/deny filters to the collection CLI and parser API.
+- Added `manifest.source_audit.financial_news_scope_policy`,
+  `candidate_record_count`, `scope_policy_filtered_record_count`,
+  `scope_policy_filter_reason_counts`, and
+  `financial_news_scope_policy_filtered_all`.
+- Added `usage_boundary_proof.authorization_scope_boundary` so FinClaw can
+  inspect the user's authorization boundary before using events as investor
+  Wiki evidence.
+- If all candidate records are excluded by policy, readiness now reports
+  `scope_policy_filtered_all` and no synthetic gap event is emitted.
+- Regression tests cover partial retention and filtered-all status while
+  preserving existing JSON/CSV/HTML/TXT/ZIP, Chromium, Safari, and ZIP-history
+  validations.
+
 ### Wave V: P2 HK/US brokerage coverage pass 1
 
 Status: `completed-baseline`
@@ -3237,7 +3263,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; TickTick/Dida task events now preserve timezone, all-day, repeat frequency, reminders, checklist items, checklist completed/pending counts, completion rate, and source-app/project/tag/keyword scope-policy audit for offline packages; calendar reports duration/multi-day/invalid-time/conflict quality plus source-platform/calendar/attendee/keyword scope-policy audit; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, reminder/time/timezone/repeat coverage, task checklist execution surface, calendar time-quality surface, and task/calendar boundary proof | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, checklist-heavy trading-plan backtest, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, participant-role hints, action items, decision points, risk items, mentioned symbols, source audit, meeting/collaboration scope-policy audits, filtered-all states, missing/unsupported input accounting, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries plus meeting-minutes and decision/action boundary proof; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant identity normalization, speaker/role resolution, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, article behavior summary, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, filtered-all status, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries plus article/behavior boundary proof | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
-| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, direct Chromium/Safari browser-history copies, ZIP-packaged browser-history members, and platform/action/topic/behavior coverage; manifests now include field coverage, usage topic summary, usage surface summary, usage behavior summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps/source-app counts, ZIP provenance, usage/behavior boundary proof, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux path validation, platform inference on noisy exports, topic false-positive review |
+| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, direct Chromium/Safari browser-history copies, ZIP-packaged browser-history members, and platform/action/topic/behavior coverage; manifests now include field coverage, usage topic summary, usage surface summary, usage behavior summary, platform/action/source-app/domain/topic/keyword scope-policy audit, filtered-all readiness, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps/source-app counts, ZIP provenance, usage/behavior boundary proof, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux path validation, authorization default scopes, platform inference on noisy exports, topic false-positive review |
 
 ## P2 Work Queue
 

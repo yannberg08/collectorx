@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 try:
@@ -227,8 +227,41 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    allow_platforms: Optional[Iterable[str]] = None,
+    deny_platforms: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_source_apps: Optional[Iterable[str]] = None,
+    deny_source_apps: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_topics: Optional[Iterable[str]] = None,
+    deny_topics: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        allow_platforms=allow_platforms,
+        deny_platforms=deny_platforms,
+        allow_actions=allow_actions,
+        deny_actions=deny_actions,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_domains=allow_domains,
+        deny_domains=deny_domains,
+        allow_topics=allow_topics,
+        deny_topics=deny_topics,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -237,6 +270,18 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_platforms: Optional[Iterable[str]] = None,
+    deny_platforms: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_source_apps: Optional[Iterable[str]] = None,
+    deny_source_apps: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_topics: Optional[Iterable[str]] = None,
+    deny_topics: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     events: List[Dict[str, Any]] = []
@@ -244,8 +289,25 @@ def collect_from_inputs_with_audit(
     skipped_extension_counts: Counter[str] = Counter()
     skipped_reason_counts: Counter[str] = Counter()
     skipped_archive_member_reason_counts: Counter[str] = Counter()
+    scope_policy_filter_reason_counts: Counter[str] = Counter()
     browser_history_source_apps: set[str] = set()
     browser_history_source_app_counts: Counter[str] = Counter()
+    candidate_record_count = 0
+    scope_policy_filtered_record_count = 0
+    policy = build_financial_news_scope_policy(
+        allow_platforms=allow_platforms,
+        deny_platforms=deny_platforms,
+        allow_actions=allow_actions,
+        deny_actions=deny_actions,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_domains=allow_domains,
+        deny_domains=deny_domains,
+        allow_topics=allow_topics,
+        deny_topics=deny_topics,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     audit: Dict[str, Any] = {
         "source_type": "authorized_financial_news_usage_export",
         "input_count": len(input_list),
@@ -271,6 +333,11 @@ def collect_from_inputs_with_audit(
         "browser_history_event_count": 0,
         "browser_history_source_apps": [],
         "browser_history_source_app_counts": {},
+        "candidate_record_count": 0,
+        "scope_policy_filtered_record_count": 0,
+        "scope_policy_filter_reason_counts": {},
+        "financial_news_scope_policy": policy,
+        "financial_news_scope_policy_filtered_all": False,
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "path_results": [],
@@ -311,7 +378,8 @@ def collect_from_inputs_with_audit(
             result = path_result(path, status="pending")
             try:
                 if path.suffix.lower() == ".zip":
-                    parsed, archive_audit = parse_zip_with_audit(path, limit=remaining_limit(limit, events))
+                    zip_limit = None if policy["enabled"] else remaining_limit(limit, events)
+                    parsed, archive_audit = parse_zip_with_audit(path, limit=zip_limit)
                     merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
                     result.update(
                         {
@@ -342,12 +410,24 @@ def collect_from_inputs_with_audit(
                 result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0})
             audit["path_results"].append(result)
             row = 0
+            path_candidate_count = 0
+            path_filtered_count = 0
+            path_emitted_count = 0
             for record in parsed:
                 if not isinstance(record, dict):
                     continue
                 row += 1
+                candidate_record_count += 1
+                path_candidate_count += 1
                 event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+                filter_reason = financial_news_scope_policy_filter_reason(event, policy)
+                if filter_reason:
+                    scope_policy_filtered_record_count += 1
+                    path_filtered_count += 1
+                    scope_policy_filter_reason_counts[filter_reason] += 1
+                    continue
                 events.append(event)
+                path_emitted_count += 1
                 source_app = str((event.get("data") or {}).get("source_app") or "")
                 if source_app.endswith("_history"):
                     browser_history_source_apps.add(source_app)
@@ -355,13 +435,32 @@ def collect_from_inputs_with_audit(
                 if limit is not None and len(events) >= limit:
                     audit["limit_reached"] = True
                     break
+            if path_candidate_count:
+                result["candidate_record_count"] = path_candidate_count
+                result["scope_policy_filtered_record_count"] = path_filtered_count
+                result["emitted_record_count"] = path_emitted_count
+                if policy["enabled"] and path_filtered_count == path_candidate_count and path_emitted_count == 0:
+                    result["status"] = "filtered_by_scope_policy"
+                    result["reason"] = "scope_policy_excluded_all_records"
+                elif path_filtered_count:
+                    result["scope_policy_filter_status"] = "partially_filtered"
         if limit is not None and len(events) >= limit:
             break
 
-    if not events:
+    scope_policy_filtered_all = (
+        policy["enabled"]
+        and candidate_record_count > 0
+        and scope_policy_filtered_record_count == candidate_record_count
+        and not events
+    )
+    if not events and not scope_policy_filtered_all:
         reason = "financial_news_usage_authorized_input_missing" if not input_list or audit["input_missing_count"] else "financial_news_usage_records_empty"
         events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["parsed_record_count"] = len(usable_usage_events(events))
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
+    audit["financial_news_scope_policy_filtered_all"] = scope_policy_filtered_all
+    audit["parsed_record_count"] = candidate_record_count
     audit["emitted_event_count"] = len(events)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
@@ -372,7 +471,203 @@ def collect_from_inputs_with_audit(
     )
     audit["browser_history_source_apps"] = sorted(browser_history_source_apps)
     audit["browser_history_source_app_counts"] = dict(sorted(browser_history_source_app_counts.items()))
+    audit["archive_member_event_count"] = sum(1 for event in usable_usage_events(events) if (event.get("raw_ref") or {}).get("archive_member"))
     return events, audit
+
+
+def build_financial_news_scope_policy(
+    *,
+    allow_platforms: Optional[Iterable[str]] = None,
+    deny_platforms: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_source_apps: Optional[Iterable[str]] = None,
+    deny_source_apps: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_topics: Optional[Iterable[str]] = None,
+    deny_topics: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_platforms": normalize_scope_terms(allow_platforms, normalizer=normalize_platform_scope_term),
+        "deny_platforms": normalize_scope_terms(deny_platforms, normalizer=normalize_platform_scope_term),
+        "allow_actions": normalize_scope_terms(allow_actions, normalizer=normalize_action_scope_term),
+        "deny_actions": normalize_scope_terms(deny_actions, normalizer=normalize_action_scope_term),
+        "allow_source_apps": normalize_scope_terms(allow_source_apps),
+        "deny_source_apps": normalize_scope_terms(deny_source_apps),
+        "allow_domains": normalize_scope_terms(allow_domains, normalizer=normalize_domain_scope_term),
+        "deny_domains": normalize_scope_terms(deny_domains, normalizer=normalize_domain_scope_term),
+        "allow_topics": normalize_scope_terms(allow_topics),
+        "deny_topics": normalize_scope_terms(deny_topics),
+        "allow_keywords": normalize_scope_terms(allow_keywords, keep_case=True),
+        "deny_keywords": normalize_scope_terms(deny_keywords, keep_case=True),
+    }
+    policy["enabled"] = any(bool(values) for values in policy.values())
+    return policy
+
+
+def normalize_scope_terms(
+    values: Optional[Iterable[str]],
+    *,
+    normalizer: Optional[Any] = None,
+    keep_case: bool = False,
+) -> List[str]:
+    cleaned: List[str] = []
+    for term in split_policy_terms(values):
+        normalized = normalizer(term) if normalizer else term.strip()
+        if not normalized:
+            continue
+        cleaned.append(normalized if keep_case else normalized.lower())
+    return sorted(dict.fromkeys(cleaned))
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    terms: List[str] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, (list, tuple, set)):
+            terms.extend(split_policy_terms(value))
+            continue
+        terms.extend(item.strip() for item in re.split(r"[,，、;；|\n]+", str(value)) if item.strip())
+    return terms
+
+
+def normalize_platform_scope_term(term: str) -> str:
+    return platform_from_text(term) or term.strip().lower()
+
+
+def normalize_action_scope_term(term: str) -> str:
+    lowered = term.strip().lower()
+    aliases = {
+        "fav": "favorite",
+        "bookmark": "favorite",
+        "bookmarked": "favorite",
+        "saved": "favorite",
+        "收藏": "favorite",
+        "星标": "favorite",
+        "read": "read",
+        "view": "read",
+        "visit": "read",
+        "browse": "read",
+        "阅读": "read",
+        "浏览": "read",
+        "查看": "read",
+        "访问": "read",
+        "search": "search",
+        "query": "search",
+        "搜索": "search",
+        "检索": "search",
+        "subscribe": "subscribe",
+        "subscription": "subscribe",
+        "订阅": "subscribe",
+        "关注": "subscribe",
+        "alert": "alert",
+        "remind": "alert",
+        "提醒": "alert",
+        "预警": "alert",
+    }
+    return aliases.get(lowered, lowered)
+
+
+def normalize_domain_scope_term(term: str) -> str:
+    value = term.strip().lower().lstrip("*.")
+    if "://" in value:
+        parsed = urlparse(value)
+        value = parsed.netloc or parsed.path
+    value = value.split("/", 1)[0].split(":", 1)[0]
+    if "@" in value:
+        value = value.rsplit("@", 1)[-1]
+    return value
+
+
+def financial_news_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    data = event.get("data") or {}
+    platform = normalize_platform_scope_term(str(data.get("platform") or ""))
+    action = normalize_action_scope_term(str(data.get("action_type") or ""))
+    source_app = str(data.get("source_app") or "").strip().lower()
+    domain = normalize_domain_scope_term(str(data.get("domain") or host_for(data.get("url")) or ""))
+    topics = financial_news_event_topics(data)
+    if platform and platform in policy.get("deny_platforms", []):
+        return "platform_denied"
+    if action and action in policy.get("deny_actions", []):
+        return "action_denied"
+    if source_app and source_app in policy.get("deny_source_apps", []):
+        return "source_app_denied"
+    if domain and domain_policy_hit(domain, policy.get("deny_domains", [])):
+        return "domain_denied"
+    if topics and set(topics).intersection(policy.get("deny_topics", [])):
+        return "topic_denied"
+    if policy_hit(policy.get("deny_keywords", []), flatten_policy_surface(data)):
+        return "keyword_denied"
+    if policy.get("allow_platforms") and platform not in policy["allow_platforms"]:
+        return "platform_not_allowed"
+    if policy.get("allow_actions") and action not in policy["allow_actions"]:
+        return "action_not_allowed"
+    if policy.get("allow_source_apps") and source_app not in policy["allow_source_apps"]:
+        return "source_app_not_allowed"
+    if policy.get("allow_domains") and not domain_policy_hit(domain, policy["allow_domains"]):
+        return "domain_not_allowed"
+    if policy.get("allow_topics") and not set(topics).intersection(policy["allow_topics"]):
+        return "topic_not_allowed"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], flatten_policy_surface(data)):
+        return "keyword_not_allowed"
+    return None
+
+
+def financial_news_event_topics(data: Dict[str, Any]) -> List[str]:
+    topics = data.get("usage_topics") if isinstance(data.get("usage_topics"), list) else []
+    if not topics and data.get("primary_usage_topic"):
+        topics = [str(data["primary_usage_topic"])]
+    return [str(topic).strip().lower() for topic in topics if str(topic).strip()]
+
+
+def domain_policy_hit(domain: str, policy_domains: Sequence[str]) -> bool:
+    if not domain or not policy_domains:
+        return False
+    normalized = normalize_domain_scope_term(domain)
+    return any(normalized == item or normalized.endswith(f".{item}") for item in policy_domains if item)
+
+
+def policy_hit(needles: Sequence[str], values: Iterable[Any]) -> bool:
+    if not needles:
+        return False
+    haystack = "\n".join(str(value) for value in values if value not in (None, "", [], {})).lower()
+    return any(str(needle).lower() in haystack for needle in needles if str(needle).strip())
+
+
+def flatten_policy_surface(data: Dict[str, Any]) -> List[Any]:
+    values: List[Any] = []
+    for key in (
+        "title",
+        "query",
+        "query_terms",
+        "subscription_target",
+        "alert_condition",
+        "notification_channel",
+        "source",
+        "channel",
+        "url",
+        "domain",
+        "symbols",
+        "tags",
+        "article_id",
+        "text_preview",
+    ):
+        value = data.get(key)
+        if isinstance(value, list):
+            values.extend(value)
+        else:
+            values.append(value)
+    return values
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -1091,7 +1386,10 @@ def build_manifest(
     kind_counts = Counter(event["kind"] for event in events)
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
+    collection_audit = collection_audit or {}
     gap_only = bool(events) and set(action_counts) == {"collector_gap"}
+    scope_policy_filtered_all = bool(collection_audit.get("financial_news_scope_policy_filtered_all"))
+    no_events = not events
     observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
     observed_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if platform_counts.get(platform)]
     missing_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if not platform_counts.get(platform)]
@@ -1152,15 +1450,51 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_financial_news_usage_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": collection_readiness_status(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_complete_usage_history": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": source_collection_scope_for_readiness(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
             "platform_coverage_status": coverage_status(events, missing_expected_platforms, "platform"),
             "action_coverage_status": coverage_status(events, missing_expected_actions, "action"),
-            "next_action": "Provide authorized CLS/WallstreetCN/Gelonghui usage export." if gap_only else "Use as investor information-consumption evidence; continue real app/account validation.",
+            "next_action": collection_next_action(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
     }
+
+
+def collection_readiness_status(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only or no_events:
+        return "needs_financial_news_usage_input"
+    return "events_collected"
+
+
+def source_collection_scope_for_readiness(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only or no_events:
+        return "none"
+    return "partial_authorized_input"
+
+
+def collection_next_action(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden the user authorization scope or provide financial-news usage records that match the current policy."
+    if gap_only or no_events:
+        return "Provide authorized CLS/WallstreetCN/Gelonghui usage export."
+    return "Use as investor information-consumption evidence; continue real app/account validation."
 
 
 def build_usage_boundary_proof(
@@ -1200,6 +1534,13 @@ def build_usage_boundary_proof(
             "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
             "limit": audit.get("limit"),
             "limit_reached": audit.get("limit_reached", False),
+        },
+        "authorization_scope_boundary": {
+            "policy": audit.get("financial_news_scope_policy", {}),
+            "candidate_record_count": audit.get("candidate_record_count", audit.get("parsed_record_count", len(usage_events))),
+            "scope_policy_filtered_record_count": audit.get("scope_policy_filtered_record_count", 0),
+            "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts", {}),
+            "financial_news_scope_policy_filtered_all": audit.get("financial_news_scope_policy_filtered_all", False),
         },
         "platform_action_boundary": {
             "expected_platforms": list(EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS),
@@ -1268,6 +1609,8 @@ def usage_boundary_proof_level(
     missing_expected_actions: List[str],
     gap_only: bool,
 ) -> str:
+    if audit.get("financial_news_scope_policy_filtered_all"):
+        return "scope_policy_filtered_all"
     if not usage_events or gap_only:
         if int(audit.get("input_missing_count") or 0) > 0 or int(audit.get("input_count") or 0) == 0:
             return "no_authorized_financial_news_usage_input"
@@ -1447,21 +1790,24 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
         for event in usage_events
         if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
     )
-    audit = {
-        "source_ref_count": sum(
-            1
+    source_ref_count = sum(
+        1
+        for event in usage_events
+        if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")
+    )
+    archive_member_event_count = sum(1 for event in usage_events if (event.get("raw_ref") or {}).get("archive_member"))
+    browser_history_event_count = len(
+        [
+            event
             for event in usage_events
-            if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")
-        ),
-        "archive_member_event_count": sum(1 for event in usage_events if (event.get("raw_ref") or {}).get("archive_member")),
+            if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+        ]
+    )
+    audit = {
+        "source_ref_count": source_ref_count,
+        "archive_member_event_count": archive_member_event_count,
         "archive_count": len(set(archives)),
-        "browser_history_event_count": len(
-            [
-                event
-                for event in usage_events
-                if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
-            ]
-        ),
+        "browser_history_event_count": browser_history_event_count,
         "browser_history_source_apps": browser_history_apps,
         "browser_history_source_app_counts": dict(sorted(browser_history_app_counts.items())),
         "archive_path_traversal_members_collected": False,
@@ -1469,21 +1815,11 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     }
     if collection_audit:
         audit.update(collection_audit)
-        audit["source_ref_count"] = max(
-            int(audit.get("source_ref_count") or 0),
-            sum(1 for event in usage_events if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")),
-        )
-        audit["archive_member_event_count"] = max(
-            int(audit.get("archive_member_event_count") or 0),
-            sum(1 for event in usage_events if (event.get("raw_ref") or {}).get("archive_member")),
-        )
-        audit["browser_history_event_count"] = max(
-            int(audit.get("browser_history_event_count") or 0),
-            len([event for event in usage_events if str((event.get("data") or {}).get("source_app", "")).endswith("_history")]),
-        )
-        audit["browser_history_source_apps"] = sorted(set(audit.get("browser_history_source_apps") or []) | set(browser_history_apps))
-        if browser_history_app_counts:
-            audit["browser_history_source_app_counts"] = dict(sorted(browser_history_app_counts.items()))
+        audit["source_ref_count"] = source_ref_count
+        audit["archive_member_event_count"] = archive_member_event_count
+        audit["browser_history_event_count"] = browser_history_event_count
+        audit["browser_history_source_apps"] = browser_history_apps
+        audit["browser_history_source_app_counts"] = dict(sorted(browser_history_app_counts.items()))
         audit["archive_path_traversal_members_collected"] = False
         audit["windows_drive_archive_members_collected"] = False
     return audit

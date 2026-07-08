@@ -460,6 +460,200 @@ def test_collect_zip_limit_counts_only_emitted_records() -> None:
         assert source_audit["path_results"][0]["parsed_record_count"] == 1
 
 
+def test_collect_scope_policy_filters_platform_action_source_domain_topic_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "usage.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "usage": [
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "半导体产业链财报订单回暖",
+                            "url": "https://www.cls.cn/detail/keep",
+                            "source_app": "cls_app",
+                            "tags": ["半导体"],
+                            "time": "2026-07-08T09:00:00+08:00",
+                        },
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "半导体买菜清单",
+                            "url": "https://www.cls.cn/detail/keyword-deny",
+                            "source_app": "cls_app",
+                            "time": "2026-07-08T09:01:00+08:00",
+                        },
+                        {
+                            "platform": "格隆汇",
+                            "action": "收藏",
+                            "title": "半导体财报跟踪",
+                            "url": "https://www.gelonghui.com/news/1",
+                            "source_app": "cls_app",
+                            "time": "2026-07-08T09:02:00+08:00",
+                        },
+                        {
+                            "platform": "财联社",
+                            "action": "阅读",
+                            "title": "半导体财报跟踪",
+                            "url": "https://www.cls.cn/detail/action",
+                            "source_app": "cls_app",
+                            "time": "2026-07-08T09:03:00+08:00",
+                        },
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "半导体财报跟踪",
+                            "url": "https://www.cls.cn/detail/source-app",
+                            "source_app": "safari_history",
+                            "time": "2026-07-08T09:04:00+08:00",
+                        },
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "半导体财报跟踪",
+                            "url": "https://example.com/news/1",
+                            "source_app": "cls_app",
+                            "time": "2026-07-08T09:05:00+08:00",
+                        },
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "自定义收藏记录",
+                            "url": "https://www.cls.cn/detail/topic",
+                            "source_app": "cls_app",
+                            "time": "2026-07-08T09:06:00+08:00",
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-platform",
+                "cls",
+                "--allow-action",
+                "favorite",
+                "--allow-source-app",
+                "cls_app",
+                "--allow-domain",
+                "cls.cn",
+                "--allow-topic",
+                "industry_theme",
+                "--deny-keyword",
+                "买菜",
+                "--collected-at",
+                "2026-07-08T03:20:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["title"] == "半导体产业链财报订单回暖"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        source_audit = manifest["source_audit"]
+        assert source_audit["candidate_record_count"] == 7
+        assert source_audit["parsed_record_count"] == 7
+        assert source_audit["scope_policy_filtered_record_count"] == 6
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["scope_policy_filter_reason_counts"] == {
+            "action_not_allowed": 1,
+            "domain_not_allowed": 1,
+            "keyword_denied": 1,
+            "platform_not_allowed": 1,
+            "source_app_not_allowed": 1,
+            "topic_not_allowed": 1,
+        }
+        assert source_audit["financial_news_scope_policy"]["enabled"] is True
+        assert source_audit["financial_news_scope_policy"]["allow_domains"] == ["cls.cn"]
+        path_audit = source_audit["path_results"][0]
+        assert path_audit["status"] == "parsed"
+        assert path_audit["scope_policy_filter_status"] == "partially_filtered"
+        assert path_audit["candidate_record_count"] == 7
+        assert path_audit["scope_policy_filtered_record_count"] == 6
+        assert path_audit["emitted_record_count"] == 1
+        proof = manifest["usage_boundary_proof"]["authorization_scope_boundary"]
+        assert proof["candidate_record_count"] == 7
+        assert proof["scope_policy_filtered_record_count"] == 6
+        assert proof["financial_news_scope_policy_filtered_all"] is False
+
+
+def test_collect_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "usage.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "usage": [
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "半导体产业链订单回暖",
+                            "url": "https://www.cls.cn/detail/1",
+                            "source_app": "cls_app",
+                            "time": "2026-07-08T09:00:00+08:00",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-topic",
+                "macro_policy",
+                "--collected-at",
+                "2026-07-08T03:20:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert events == []
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["candidate_record_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 1
+        assert manifest["source_audit"]["scope_policy_filtered_record_count"] == 1
+        assert manifest["source_audit"]["emitted_event_count"] == 0
+        assert manifest["source_audit"]["financial_news_scope_policy_filtered_all"] is True
+        assert manifest["source_audit"]["scope_policy_filter_reason_counts"] == {"topic_not_allowed": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "filtered_by_scope_policy"
+        assert manifest["usage_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+        assert manifest["usage_boundary_proof"]["can_enter_finclaw"] is False
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+
+
 def test_collect_missing_input_writes_gap_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -503,5 +697,7 @@ if __name__ == "__main__":
     test_collect_chromium_browser_history()
     test_collect_safari_browser_history_direct_and_zip_member()
     test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_scope_policy_filters_platform_action_source_domain_topic_and_keyword()
+    test_collect_scope_policy_filtered_all_status()
     test_collect_missing_input_writes_gap_audit()
     print("financial-news-usage tests passed.")

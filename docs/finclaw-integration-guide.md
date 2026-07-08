@@ -982,6 +982,18 @@ python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
   --out-dir <out-dir>
 ```
 
+Optional authorization scope filters:
+
+```bash
+python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
+  --input <authorized-cls-wallstreetcn-gelonghui-usage-export-or-zip-or-history-copy> \
+  --out-dir <out-dir> \
+  --allow-platform cls \
+  --allow-action favorite \
+  --allow-topic industry_theme \
+  --deny-keyword 非投资
+```
+
 Current status:
 
 - Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, ZIP packages,
@@ -1003,6 +1015,14 @@ Current status:
   inputs, platform/action/topic coverage, browser-history domain filtering, ZIP
   safety, content pointers, and the explicit no-complete-usage-history /
   no-public-news-crawl / no-public-article-mirror boundaries.
+- Optional scope filters narrow authorized records by platform, action,
+  source app, domain, usage topic, or keyword before Lake output.
+- `manifest.source_audit.financial_news_scope_policy`,
+  `scope_policy_filtered_record_count`, `scope_policy_filter_reason_counts`,
+  and `financial_news_scope_policy_filtered_all` explain what the authorization
+  policy kept or excluded; `collection_readiness.status=scope_policy_filtered_all`
+  means the collector ran successfully but the user's policy excluded every
+  candidate record.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, browser-history source apps/source-app counts,
