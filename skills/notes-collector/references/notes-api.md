@@ -15,7 +15,8 @@
 
 ## 授权导出导入
 
-- 支持目录或单文件：Markdown、TXT、HTML、JSON、JSONL、NDJSON、ENEX。
+- 支持目录或单文件：Markdown、TXT、HTML、JSON、JSONL、NDJSON、CSV、TSV、ENEX。
+- CSV/TSV 表格按行转成 note，适配 Notion database、投资规则表、复盘表和研究清单导出。
 - 支持 ZIP 授权导出包，常见于 Notion、印象笔记迁移包和手动打包的笔记库。
 - ZIP 内部只读取支持的笔记文件，并跳过绝对路径或包含 `..` 的成员，避免路径跳出。
 - `manifest.json` 的 `platform_coverage` 会记录预期 P1 平台、实际观察平台、缺失平台和事件数。

@@ -277,7 +277,7 @@ def main():
 
     # import命令
     import_parser = subparsers.add_parser("import", help="导入授权笔记导出文件/目录")
-    import_parser.add_argument("--input", required=True, help="导出文件或目录，支持 md/html/txt/json/jsonl/enex/zip")
+    import_parser.add_argument("--input", required=True, help="导出文件或目录，支持 md/html/txt/json/jsonl/csv/tsv/enex/zip")
     import_parser.add_argument("--source-app", default="auto", choices=["auto", "notion", "obsidian", "youdao", "evernote", "markdown", "notes-export"], help="来源应用")
     import_parser.add_argument("--export", required=True, help="标准化 JSON 导出路径")
     import_parser.add_argument("--limit", type=int, help="限制数量")

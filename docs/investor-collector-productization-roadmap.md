@@ -1087,6 +1087,34 @@ Findings:
   all expected P1 note platforms, ZIP unsafe member skipping, and preview-only
   content policy.
 
+### Wave Q3b: P1 notes table export import pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-table-import-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `notes-collector` to `0.2.4`.
+- Added CSV/TSV import for user-authorized note table exports, including
+  Notion database exports, investment rules tables, review templates, valuation
+  assumption tables, and research checklists.
+- Table rows are normalized into generic `notes` events. Title columns prefer
+  `title/name/标题/名称`; content columns prefer
+  `content/text/正文/内容/备注/notes`; other non-metadata columns are appended to
+  the content preview so table fields are not silently dropped.
+- Added ZIP support for CSV/TSV note table members while preserving
+  `source_archive` and `archive_member` provenance.
+- Manifest `source_audit` now records `table_import_supported`,
+  `table_file_count`, `table_row_count`, and `table_note_count`.
+- Fixture validation covers Notion-style CSV databases, TSV table members in
+  ZIP packages, Notion source inference, table row counts, preview-only policy,
+  and generic/lens boundary preservation.
+- Real Notion/Youdao/Evernote account exports and mixed-note false-positive
+  backtesting remain pending.
+
 ### Wave Q4: P1 investment notes surface pass
 
 Status: `completed-baseline+audit`
@@ -1999,7 +2027,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, and preview/full-content surface | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/CSV/TSV/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, table import audit, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, and preview/full-content surface | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, and reminder/time coverage | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, source audit, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |

@@ -147,6 +147,71 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
         assert len(manifest["source_audit"]["path_results"]) == 4
 
 
+def test_import_notion_csv_database_and_tsv_zip_tables() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        exports = root / "exports"
+        notion_dir = exports / "Notion Export"
+        notion_dir.mkdir(parents=True)
+        (notion_dir / "Investment Rules.csv").write_text(
+            "Name,Content,Tags,Updated,URL,Ticker,Action\n"
+            "买入规则,估值低于安全边际才买入,\"规则,checklist\",2026-07-08,https://notion.example/rule,600519,wait\n"
+            "复盘模板,记录买入理由、错因和仓位,\"复盘,模板\",2026-07-09,https://notion.example/review,300750,review\n",
+            encoding="utf-8",
+        )
+        zip_path = exports / "notion-tables.zip"
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr(
+                "Notion Export/valuation.tsv",
+                "标题\t正文\t标签\t更新时间\t股票\n"
+                "估值假设\tDCF、PE、现金流和安全边际\t估值;研究\t2026-07-10\tSH600519\n",
+            )
+
+        export = root / "notes.json"
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "import",
+                "--input",
+                str(exports),
+                "--source-app",
+                "auto",
+                "--export",
+                str(export),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 3
+        assert {event["data"]["source_app"] for event in events} == {"notion"}
+        assert {event["data"]["title"] for event in events} == {"买入规则", "复盘模板", "估值假设"}
+        rule_event = next(event for event in events if event["data"]["title"] == "买入规则")
+        assert "Ticker: 600519" in rule_event["data"]["content_preview"]
+        assert "Action: wait" in rule_event["data"]["content_preview"]
+        assert rule_event["data"]["tags"] == ["checklist", "规则"]
+        assert all("content" not in event["data"] for event in events)
+        zip_event = next(event for event in events if event["data"]["title"] == "估值假设")
+        assert zip_event["raw_ref"]["archive_member"] == "Notion Export/valuation.tsv"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["source_audit"]
+        assert audit["extension_counts"] == {".csv": 1, ".zip": 1}
+        assert audit["table_import_supported"] is True
+        assert audit["table_file_count"] == 2
+        assert audit["table_row_count"] == 3
+        assert audit["table_note_count"] == 3
+        assert audit["path_results"][0]["parser"] == "table"
+        assert audit["path_results"][0]["table_row_count"] == 2
+        assert audit["archive_member_event_count"] == 1
+        assert manifest["platform_coverage"]["observed_expected_platforms"] == ["notion"]
+        assert manifest["content_policy"]["full_content_event_count"] == 0
+
+
 def test_import_zip_and_all_expected_platform_coverage() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -260,6 +325,7 @@ def test_import_missing_input_has_source_audit_gap() -> None:
 if __name__ == "__main__":
     test_obsidian_outputs_collectorx_events_without_full_content_by_default()
     test_import_outputs_youdao_evernote_and_markdown_events()
+    test_import_notion_csv_database_and_tsv_zip_tables()
     test_import_zip_and_all_expected_platform_coverage()
     test_import_missing_input_has_source_audit_gap()
     print("notes-collector tests passed.")

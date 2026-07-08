@@ -27,7 +27,7 @@ python <SKILL_DIR>/scripts/notes_api.py obsidian \
   --export ~/Desktop/obsidian.json \
   --out-dir ~/Desktop/notes-collect
 
-# 导入有道云/印象笔记/Notion/Markdown/HTML/JSON/ZIP 授权导出
+# 导入有道云/印象笔记/Notion/Markdown/HTML/JSON/CSV/TSV/ZIP 授权导出
 python <SKILL_DIR>/scripts/notes_api.py import \
   --input ~/Downloads/notes-export \
   --source-app auto \
@@ -39,11 +39,11 @@ python <SKILL_DIR>/scripts/notes_api.py import \
 
 | 应用 | 认证方式 | 数据格式 |
 |------|----------|----------|
-| Notion | API Token | JSON |
+| Notion | API Token / 授权导出 | JSON/Markdown/CSV/TSV |
 | Obsidian | 本地文件 | Markdown |
 | 有道云笔记 | 授权导出 | JSON/HTML/TXT |
 | 印象笔记 / Evernote | 授权导出 | ENEX |
-| ZIP 授权导出包 | 本地文件 | Notion/有道/印象/Markdown 等导出包 |
+| ZIP 授权导出包 | 本地文件 | Notion/有道/印象/Markdown/CSV/TSV 等导出包 |
 
 ## 参数说明
 
@@ -66,6 +66,10 @@ python <SKILL_DIR>/scripts/notes_api.py import \
 
 默认事件只包含 `content_preview`、`content_length` 和 `content_digest`，不包含完整正文；如用户明确授权，可加 `--include-content`。投资分身应把 `lake/notes/events.jsonl` 交给 `investment-notes` lens，由 lens 负责筛选复盘、规则库、估值假设和交易 checklist。
 
+CSV/TSV 表格会按行转成 note，适配 Notion database、规则库、复盘表和研究清单导出；
+标题列优先识别 `title/name/标题/名称`，正文列优先识别 `content/text/正文/内容/备注/notes`，
+其他非元数据列会拼入正文预览，避免表格字段丢失。
+
 ZIP 导入会保留 `source_archive` 和 `archive_member`，并跳过绝对路径、`..`
 路径穿越和 Windows 盘符路径成员。采集器只记录用户授权导出内的来源引用，不采
 Notion token、服务端 cookie 或账号密码。
@@ -77,7 +81,7 @@ Notion token、服务端 cookie 或账号密码。
 
 `manifest.field_coverage` 会报告标题、路径/URL、正文预览、正文长度、标签、
 更新时间等推荐字段覆盖情况；`source_audit` 报告授权输入、逐文件解析结果、
-扩展名覆盖、跳过文件原因、ZIP 成员数量、跳过 ZIP 成员原因、来源引用和路径
+扩展名覆盖、CSV/TSV 表格文件数、表格行数、跳过文件原因、ZIP 成员数量、跳过 ZIP 成员原因、来源引用和路径
 安全边界；`content_policy` 明确本次是预览模式还是全文授权模式。`evidence_policy`
 固定声明：generic notes 不能直接写投资 Wiki，也不能直接声称“投资笔记已识别”。
 

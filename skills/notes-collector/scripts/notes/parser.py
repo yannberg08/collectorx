@@ -1,3 +1,4 @@
+import csv
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -9,8 +10,13 @@ from pathlib import PurePosixPath, PureWindowsPath
 from typing import List, Dict, Any, Iterable, Optional, Tuple
 
 
-SUPPORTED_NOTE_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".json", ".jsonl", ".ndjson", ".enex"}
+SUPPORTED_NOTE_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".enex"}
 SUPPORTED_EXPORT_EXTENSIONS = SUPPORTED_NOTE_EXTENSIONS | {".zip"}
+TABLE_TITLE_FIELDS = ("title", "name", "标题", "名称", "Name")
+TABLE_CONTENT_FIELDS = ("content", "text", "body", "正文", "内容", "备注", "notes", "note", "description", "Description", "记录", "复盘", "规则")
+TABLE_TAG_FIELDS = ("tags", "tag", "标签", "分类")
+TABLE_TIME_FIELDS = ("updated", "last_edited", "last_edited_time", "mtime", "created", "created_time", "更新时间", "创建时间", "日期", "时间")
+TABLE_URL_FIELDS = ("url", "link", "链接")
 
 
 def parse_obsidian_vault(vault_path: str, limit: int = None) -> List[Dict[str, Any]]:
@@ -66,6 +72,10 @@ def parse_notes_export_with_audit(
         "input_count": 1,
         "resolved_input_file_count": 0,
         "supported_extensions": sorted(SUPPORTED_EXPORT_EXTENSIONS),
+        "table_import_supported": True,
+        "table_file_count": 0,
+        "table_row_count": 0,
+        "table_note_count": 0,
         "source_app": source_app,
         "limit": limit,
         "limit_reached": False,
@@ -131,6 +141,12 @@ def parse_notes_export_with_audit(
             elif suffix == ".enex":
                 parsed = parse_enex_notes(file_path)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "enex", "parsed_note_count": len(parsed)})
+            elif suffix in {".csv", ".tsv"}:
+                parsed = parse_table_notes(file_path)
+                audit["table_file_count"] += 1
+                audit["table_row_count"] += len(parsed)
+                audit["table_note_count"] += len(parsed)
+                result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "table", "parsed_note_count": len(parsed), "table_row_count": len(parsed)})
             else:
                 parsed = [parse_text_note(file_path)]
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "text", "parsed_note_count": len(parsed)})
@@ -280,6 +296,86 @@ def parse_enex_notes_text(text: str, *, path_label: str) -> List[Dict[str, Any]]
     return notes
 
 
+def parse_table_notes(path: Path) -> List[Dict[str, Any]]:
+    text = path.read_text(encoding="utf-8-sig", errors="replace")
+    return parse_table_notes_text(text, suffix=path.suffix.lower(), default_title=path.stem, path_label=str(path))
+
+
+def parse_table_notes_text(text: str, *, suffix: str, default_title: str, path_label: str) -> List[Dict[str, Any]]:
+    if not text.strip():
+        return []
+    delimiter = "\t" if suffix == ".tsv" else sniff_delimiter(text)
+    notes: List[Dict[str, Any]] = []
+    rows = csv.DictReader(text.splitlines(), delimiter=delimiter)
+    headers = [header for header in (rows.fieldnames or []) if header]
+    for index, row in enumerate(rows, start=1):
+        clean_row = {str(key): value for key, value in row.items() if key is not None and value not in (None, "")}
+        if not clean_row:
+            continue
+        content = table_first(clean_row, TABLE_CONTENT_FIELDS)
+        title = table_first(clean_row, TABLE_TITLE_FIELDS) or infer_title(f"{default_title}-{index}", content or table_row_to_content(clean_row, exclude=()))
+        content = table_content_for_row(clean_row, content=content)
+        note = {
+            "title": title,
+            "content": content,
+            "path": f"{path_label}#{index}",
+            "updated": table_first(clean_row, TABLE_TIME_FIELDS),
+            "url": table_first(clean_row, TABLE_URL_FIELDS),
+            "tags": split_table_tags(table_first(clean_row, TABLE_TAG_FIELDS)),
+            "table_row": index,
+            "table_columns": headers,
+        }
+        notes.append({key: value for key, value in note.items() if value not in (None, "", [], {})})
+    return notes
+
+
+def sniff_delimiter(text: str) -> str:
+    try:
+        return csv.Sniffer().sniff(text[:4096], delimiters=",\t;").delimiter
+    except csv.Error:
+        return ","
+
+
+def table_content_for_row(row: Dict[str, Any], *, content: Optional[str]) -> str:
+    metadata_fields = set(TABLE_TITLE_FIELDS + TABLE_CONTENT_FIELDS + TABLE_TAG_FIELDS + TABLE_TIME_FIELDS + TABLE_URL_FIELDS)
+    metadata_keys = {normalize_key(field) for field in metadata_fields}
+    extra = table_row_to_content(row, exclude=metadata_keys)
+    parts = [part for part in (content, extra) if part]
+    return "\n".join(parts)
+
+
+def table_row_to_content(row: Dict[str, Any], *, exclude: Iterable[str]) -> str:
+    exclude_set = set(exclude)
+    parts = []
+    for key, value in row.items():
+        if normalize_key(key) in exclude_set or value in (None, ""):
+            continue
+        parts.append(f"{key}: {value}")
+    return "\n".join(parts)
+
+
+def table_first(row: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
+    normalized = {normalize_key(key): value for key, value in row.items()}
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return str(value)
+        value = normalized.get(normalize_key(key))
+        if value not in (None, ""):
+            return str(value)
+    return None
+
+
+def normalize_key(value: Any) -> str:
+    return str(value).strip().lower().replace("_", "").replace("-", "").replace(" ", "")
+
+
+def split_table_tags(value: Optional[str]) -> List[str]:
+    if not value:
+        return []
+    return [part.strip() for part in re.split(r"[,，;；\s]+", value) if part.strip()]
+
+
 def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     notes, _audit = parse_zip_notes_with_audit(path, source_app=source_app, limit=limit)
     return notes
@@ -299,6 +395,9 @@ def parse_zip_notes_with_audit(
         "archive_member_event_count": 0,
         "skipped_archive_member_count": 0,
         "skipped_archive_member_reason_counts": {},
+        "table_member_count": 0,
+        "table_row_count": 0,
+        "table_note_count": 0,
         "limit_reached": False,
         "member_results": [],
     }
@@ -326,6 +425,16 @@ def parse_zip_notes_with_audit(
                     )
                 elif suffix == ".enex":
                     parsed = parse_enex_notes_text(text, path_label=path_label)
+                elif suffix in {".csv", ".tsv"}:
+                    parsed = parse_table_notes_text(
+                        text,
+                        suffix=suffix,
+                        default_title=Path(member_name).stem,
+                        path_label=path_label,
+                    )
+                    audit["table_member_count"] += 1
+                    audit["table_row_count"] += len(parsed)
+                    audit["table_note_count"] += len(parsed)
                 else:
                     parsed = [
                         parse_text_note_text(
@@ -394,6 +503,9 @@ def merge_archive_audit(audit: Dict[str, Any], archive_audit: Dict[str, Any], sk
     audit["skipped_archive_member_count"] += int(archive_audit.get("skipped_archive_member_count") or 0)
     if archive_audit.get("limit_reached"):
         audit["limit_reached"] = True
+    audit["table_file_count"] += int(archive_audit.get("table_member_count") or 0)
+    audit["table_row_count"] += int(archive_audit.get("table_row_count") or 0)
+    audit["table_note_count"] += int(archive_audit.get("table_note_count") or 0)
     for reason, count in (archive_audit.get("skipped_archive_member_reason_counts") or {}).items():
         skipped_reason_counts[str(reason)] += int(count)
 
