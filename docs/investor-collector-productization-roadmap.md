@@ -885,6 +885,30 @@ Findings:
 - Kept the generic/lens boundary explicit: notes can enter Lake, but only
   `investment-notes` can classify investment notes for Wiki evidence.
 
+### Wave Q3: P1 notes source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added `parse_notes_export_with_audit` while keeping the existing
+  `parse_notes_export` API compatible.
+- `notes_api.py obsidian/import --out-dir` now writes `manifest.source_audit`
+  with input kind, resolved files, extension coverage, parsed/emitted counts,
+  skipped file reasons, ZIP member counts, skipped ZIP member reasons,
+  path-level parse results, limit status, and path-safety flags.
+- Obsidian vault collection now records per-file parse status instead of only
+  event-derived source references.
+- The generic/lens boundary remains explicit: generic notes enter Lake, while
+  `investment-notes` classifies investment relevance for Wiki evidence.
+- Fixture validation covers Obsidian vault audit, unsupported import files,
+  all expected P1 note platforms, ZIP unsafe member skipping, and preview-only
+  content policy.
+
 ### Wave R: P1 task/calendar platform coverage pass 1
 
 Status: `completed-baseline`

@@ -5,10 +5,11 @@
 import json
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 from notes.events import notes_to_events, write_jsonl, write_package
-from notes.parser import parse_notes_export
+from notes.parser import parse_notes_export_with_audit
 
 # Windows控制台utf-8
 try:
@@ -33,12 +34,40 @@ def collect_obsidian(
         return
     
     notes = []
-    md_files = list(vault.rglob("*.md"))
+    md_files = sorted(vault.rglob("*.md"))
+    total_md_files = len(md_files)
     
     if limit:
         md_files = md_files[:limit]
+    audit = {
+        "source_type": "obsidian_vault",
+        "input": str(vault),
+        "input_exists": True,
+        "input_kind": "directory",
+        "input_count": 1,
+        "resolved_input_file_count": len(md_files),
+        "source_app": "obsidian",
+        "limit": limit,
+        "limit_reached": bool(limit and total_md_files > len(md_files)),
+        "extension_counts": {".md": len(md_files)} if md_files else {},
+        "skipped_extension_counts": {},
+        "skipped_reason_counts": {},
+        "skipped_file_count": 0,
+        "archive_count": 0,
+        "archive_member_count": 0,
+        "archive_member_event_count": 0,
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_reason_counts": {},
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+        "parsed_note_count": 0,
+        "path_results": [],
+        "unvisited_input_file_count_due_limit": max(0, total_md_files - len(md_files)),
+    }
+    skipped_reason_counts: Counter[str] = Counter()
     
     for md_file in md_files:
+        result = {"path": str(md_file), "extension": ".md", "status": "pending"}
         try:
             content = md_file.read_text(encoding="utf-8")
             note = {
@@ -48,8 +77,15 @@ def collect_obsidian(
                 "mtime": md_file.stat().st_mtime
             }
             notes.append(note)
+            result.update({"status": "parsed", "parsed_note_count": 1})
         except Exception as e:
             print(f"读取失败 {md_file}: {e}")
+            audit["skipped_file_count"] += 1
+            skipped_reason_counts["read_error"] += 1
+            result.update({"status": "read_error", "reason": "read_error", "parsed_note_count": 0})
+        audit["path_results"].append(result)
+    audit["parsed_note_count"] = len(notes)
+    audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
     
     # 导出
     with open(export_path, "w", encoding="utf-8") as f:
@@ -61,10 +97,11 @@ def collect_obsidian(
         source_label=f"Obsidian vault: {vault.name}",
         include_content=include_content,
     )
+    audit["emitted_event_count"] = len(events)
     if event_export:
         write_jsonl(Path(event_export).expanduser(), events)
     if out_dir:
-        write_package(Path(out_dir).expanduser(), events, source_app="obsidian")
+        write_package(Path(out_dir).expanduser(), events, source_app="obsidian", collection_audit=audit)
     
     print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
 
@@ -112,6 +149,29 @@ def collect_notion(
                 "last_edited": page.get("last_edited_time", "")
             }
             notes.append(note)
+        audit = {
+            "source_type": "notion_api",
+            "input": "notion_api_search",
+            "input_exists": True,
+            "input_kind": "api",
+            "input_count": 1,
+            "resolved_input_file_count": 0,
+            "source_app": "notion",
+            "limit": limit,
+            "limit_reached": False,
+            "parsed_note_count": len(notes),
+            "emitted_event_count": 0,
+            "skipped_file_count": 0,
+            "skipped_reason_counts": {},
+            "archive_count": 0,
+            "archive_member_count": 0,
+            "archive_member_event_count": 0,
+            "skipped_archive_member_count": 0,
+            "skipped_archive_member_reason_counts": {},
+            "archive_path_traversal_members_collected": False,
+            "windows_drive_archive_members_collected": False,
+            "path_results": [],
+        }
         
         # 导出
         with open(export_path, "w", encoding="utf-8") as f:
@@ -123,10 +183,11 @@ def collect_notion(
             source_label="Notion API",
             include_content=include_content,
         )
+        audit["emitted_event_count"] = len(events)
         if event_export:
             write_jsonl(Path(event_export).expanduser(), events)
         if out_dir:
-            write_package(Path(out_dir).expanduser(), events, source_app="notion")
+            write_package(Path(out_dir).expanduser(), events, source_app="notion", collection_audit=audit)
         
         print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
         
@@ -144,7 +205,7 @@ def collect_import(
     include_content: bool = False,
 ):
     """采集用户授权的笔记导出文件/目录。"""
-    notes = parse_notes_export(input_path, source_app=source_app, limit=limit)
+    notes, collection_audit = parse_notes_export_with_audit(input_path, source_app=source_app, limit=limit)
     with open(export_path, "w", encoding="utf-8") as f:
         json.dump(notes, f, ensure_ascii=False, indent=2)
 
@@ -155,10 +216,11 @@ def collect_import(
         source_label=f"Notes export: {package_source}",
         include_content=include_content,
     )
+    collection_audit["emitted_event_count"] = len(events)
     if event_export:
         write_jsonl(Path(event_export).expanduser(), events)
     if out_dir:
-        write_package(Path(out_dir).expanduser(), events, source_app=package_source)
+        write_package(Path(out_dir).expanduser(), events, source_app=package_source, collection_audit=collection_audit)
     print(f"导出完成: {len(notes)} 篇笔记 -> {export_path}")
 
 

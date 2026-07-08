@@ -110,7 +110,13 @@ def note_to_event(
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, source_app: str, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    source_app: str,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     source_app_counts = Counter(source_app_for(event) for event in events)
     observed_platforms = sorted(source for source, count in source_app_counts.items() if count)
@@ -138,7 +144,7 @@ def build_manifest(events: List[Dict[str, Any]], *, source_app: str, collected_a
             "real_account_validation": False,
         },
         "field_coverage": field_coverage(events),
-        "source_audit": source_audit(events),
+        "source_audit": source_audit(events, collection_audit=collection_audit),
         "content_policy": content_policy(events),
         "evidence_policy": {
             "generic_collector": True,
@@ -170,9 +176,16 @@ def write_jsonl(path: Path, events: Iterable[Dict[str, Any]]) -> None:
             handle.write("\n")
 
 
-def write_package(out_dir: Path, events: List[Dict[str, Any]], *, source_app: str, collected_at: Optional[str] = None) -> None:
+def write_package(
+    out_dir: Path,
+    events: List[Dict[str, Any]],
+    *,
+    source_app: str,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> None:
     write_jsonl(out_dir / "lake" / COLLECTOR / "events.jsonl", events)
-    manifest = build_manifest(events, source_app=source_app, collected_at=collected_at)
+    manifest = build_manifest(events, source_app=source_app, collected_at=collected_at, collection_audit=collection_audit)
     write_json(out_dir / "manifest.json", manifest)
     summary = [
         "# Notes Collector Package",
@@ -185,6 +198,7 @@ def write_package(out_dir: Path, events: List[Dict[str, Any]], *, source_app: st
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         f"- full_content_events: {manifest['content_policy']['full_content_event_count']}",
         "",
         "Generic notes are not written to the investor Wiki directly. Use the investment-notes lens.",
@@ -231,7 +245,7 @@ def note_field_present(event: Dict[str, Any], field: str) -> bool:
     return value not in (None, "", [], {})
 
 
-def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     archive_members = [
         event.get("raw_ref", {}).get("archive_member")
         for event in events
@@ -242,7 +256,7 @@ def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         for event in events
         if event.get("raw_ref", {}).get("source_archive")
     ]
-    return {
+    audit = {
         "source_ref_count": sum(1 for event in events if event.get("raw_ref", {}).get("path") or event.get("raw_ref", {}).get("url")),
         "archive_member_event_count": len(archive_members),
         "archive_count": len(set(archives)),
@@ -250,6 +264,19 @@ def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "events_with_path": sum(1 for event in events if event.get("data", {}).get("path") or event.get("raw_ref", {}).get("path")),
         "archive_path_traversal_members_collected": False,
     }
+    if collection_audit:
+        audit.update(collection_audit)
+        audit["source_ref_count"] = max(
+            int(audit.get("source_ref_count") or 0),
+            sum(1 for event in events if event.get("raw_ref", {}).get("path") or event.get("raw_ref", {}).get("url")),
+        )
+        audit["archive_member_event_count"] = max(
+            int(audit.get("archive_member_event_count") or 0),
+            len(archive_members),
+        )
+        audit["archive_path_traversal_members_collected"] = False
+        audit["windows_drive_archive_members_collected"] = False
+    return audit
 
 
 def content_policy(events: List[Dict[str, Any]]) -> Dict[str, Any]:

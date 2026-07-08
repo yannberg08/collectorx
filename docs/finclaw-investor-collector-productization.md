@@ -58,7 +58,7 @@ FinClaw 应按下面顺序调用：
 
 | Collector | 职责 | 当前状态 | 下一步真实验证 |
 | --- | --- | --- | --- |
-| `notes` + `investment-notes` | Obsidian、Notion、有道云、印象笔记和投资笔记 lens | `baseline+audit` | Notion/有道/印象真实账号、Windows/Linux vault |
+| `notes` + `investment-notes` | Obsidian、Notion、有道云、印象笔记和投资笔记 lens | `baseline+audit`；manifest 记录平台覆盖、字段覆盖、逐输入解析结果、跳过文件/ZIP 成员原因、内容策略和 generic-to-lens 边界 | Notion/有道/印象真实账号、Windows/Linux vault |
 | `ticktick` + `calendar` + `task-calendar-investor` | 任务、日历、交易计划、复盘提醒，含 ZIP 跳过成员审计和逐文件解析结果 | `baseline+audit` | 滴答 OAuth、Apple/Google/Outlook/飞书等真实日历 |
 | `feishu` + `meeting-artifacts` + `dingtalk` + `wecom` + `meeting-minutes` | 飞书/会议纪要、协作导出、投研会议 lens，含 ZIP 跳过成员审计和逐文件解析结果 | `baseline+audit` | 飞书/钉钉/企业微信/腾讯会议真实账号 API 和导出 |
 | `wechat-favorites` + `wechat-article-favorites` | 微信收藏、公众号文章动作和投资文章 lens | `baseline+audit` | 真实微信收藏库、公众号阅读动作、标签 allowlist |

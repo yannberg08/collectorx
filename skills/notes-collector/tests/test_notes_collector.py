@@ -61,6 +61,11 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian"]
         assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"notion", "youdao", "evernote"}
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
+        assert manifest["source_audit"]["source_type"] == "obsidian_vault"
+        assert manifest["source_audit"]["resolved_input_file_count"] == 1
+        assert manifest["source_audit"]["parsed_note_count"] == 1
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["path_results"][0]["status"] == "parsed"
 
 
 def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
@@ -98,6 +103,7 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
             encoding="utf-8",
         )
         (exports / "rules.md").write_text("# 交易规则\n控制仓位和回撤\n", encoding="utf-8")
+        (exports / "ignore.bin").write_bytes(b"not a note")
         export = root / "notes.json"
         out = root / "out"
         subprocess.run(
@@ -131,6 +137,14 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
             "youdao": 1,
         }
         assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"obsidian", "notion"}
+        assert manifest["source_audit"]["source_type"] == "authorized_notes_export"
+        assert manifest["source_audit"]["resolved_input_file_count"] == 3
+        assert manifest["source_audit"]["parsed_note_count"] == 3
+        assert manifest["source_audit"]["emitted_event_count"] == 3
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert len(manifest["source_audit"]["path_results"]) == 4
 
 
 def test_import_zip_and_all_expected_platform_coverage() -> None:
@@ -199,14 +213,53 @@ def test_import_zip_and_all_expected_platform_coverage() -> None:
         assert manifest["field_coverage"]["field_counts"]["source_app"] == 4
         assert manifest["field_coverage"]["field_counts"]["content_length"] == 4
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
+        assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["content_policy"]["full_content_event_count"] == 0
         assert manifest["content_policy"]["investment_classification_done"] is False
+
+
+def test_import_missing_input_has_source_audit_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        missing = root / "missing-export"
+        export = root / "notes.json"
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "import",
+                "--input",
+                str(missing),
+                "--source-app",
+                "auto",
+                "--export",
+                str(export),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "no_notes_collected"
+        assert manifest["source_audit"]["input_exists"] is False
+        assert manifest["source_audit"]["input_kind"] == "missing"
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
 
 
 if __name__ == "__main__":
     test_obsidian_outputs_collectorx_events_without_full_content_by_default()
     test_import_outputs_youdao_evernote_and_markdown_events()
     test_import_zip_and_all_expected_platform_coverage()
+    test_import_missing_input_has_source_audit_gap()
     print("notes-collector tests passed.")

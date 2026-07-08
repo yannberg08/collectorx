@@ -2,10 +2,11 @@ import json
 import re
 import xml.etree.ElementTree as ET
 import zipfile
+from collections import Counter
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import List, Dict, Any, Iterable, Optional
+from typing import List, Dict, Any, Iterable, Optional, Tuple
 
 
 SUPPORTED_NOTE_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".json", ".jsonl", ".ndjson", ".enex"}
@@ -43,27 +44,127 @@ def parse_obsidian_vault(vault_path: str, limit: int = None) -> List[Dict[str, A
 
 def parse_notes_export(input_path: str, *, source_app: str = "auto", limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """Parse user-authorized notes exports from common local formats."""
+    notes, _audit = parse_notes_export_with_audit(input_path, source_app=source_app, limit=limit)
+    return notes
+
+
+def parse_notes_export_with_audit(
+    input_path: str,
+    *,
+    source_app: str = "auto",
+    limit: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """Parse notes exports and return a source audit suitable for manifest output."""
     path = Path(input_path).expanduser()
     notes: List[Dict[str, Any]] = []
-    for file_path in iter_export_files(path):
+    files = list(iter_authorized_files(path))
+    audit: Dict[str, Any] = {
+        "source_type": "authorized_notes_export",
+        "input": str(path),
+        "input_exists": path.exists(),
+        "input_kind": input_kind(path),
+        "input_count": 1,
+        "resolved_input_file_count": 0,
+        "supported_extensions": sorted(SUPPORTED_EXPORT_EXTENSIONS),
+        "source_app": source_app,
+        "limit": limit,
+        "limit_reached": False,
+        "extension_counts": {},
+        "skipped_extension_counts": {},
+        "skipped_reason_counts": {},
+        "skipped_file_count": 0,
+        "archive_count": 0,
+        "archive_member_count": 0,
+        "archive_member_event_count": 0,
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_reason_counts": {},
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+        "parsed_note_count": 0,
+        "path_results": [],
+    }
+    extension_counts: Counter[str] = Counter()
+    skipped_extension_counts: Counter[str] = Counter()
+    skipped_reason_counts: Counter[str] = Counter()
+    skipped_archive_member_reason_counts: Counter[str] = Counter()
+    if not path.exists():
+        skipped_reason_counts["input_missing"] += 1
+        audit["path_results"].append(path_result(path, status="missing", reason="input_missing"))
+    elif not path.is_dir() and not path.is_file():
+        skipped_reason_counts["unsupported_input_kind"] += 1
+        audit["path_results"].append(path_result(path, status="skipped", reason="unsupported_input_kind"))
+
+    for file_path in files:
+        if limit is not None and len(notes) >= limit:
+            audit["limit_reached"] = True
+            break
         suffix = file_path.suffix.lower()
+        extension_counts[suffix or "<none>"] += 1
+        if suffix not in SUPPORTED_EXPORT_EXTENSIONS:
+            audit["skipped_file_count"] += 1
+            skipped_extension_counts[suffix or "<none>"] += 1
+            skipped_reason_counts["unsupported_extension"] += 1
+            audit["path_results"].append(path_result(file_path, status="skipped", reason="unsupported_extension"))
+            continue
+        audit["resolved_input_file_count"] += 1
+        result = path_result(file_path, status="pending")
         try:
             if suffix == ".zip":
-                parsed = parse_zip_notes(file_path, source_app=source_app, limit=remaining_limit(limit, notes))
+                parsed, archive_audit = parse_zip_notes_with_audit(
+                    file_path,
+                    source_app=source_app,
+                    limit=remaining_limit(limit, notes),
+                )
+                merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
+                result.update(
+                    {
+                        "status": "parsed" if parsed else "no_notes_parsed",
+                        "parser": "zip",
+                        "parsed_note_count": len(parsed),
+                        "archive_member_count": archive_audit["archive_member_count"],
+                        "skipped_archive_member_count": archive_audit["skipped_archive_member_count"],
+                    }
+                )
             elif suffix in {".json", ".jsonl", ".ndjson"}:
                 parsed = parse_json_notes(file_path)
+                result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "json", "parsed_note_count": len(parsed)})
             elif suffix == ".enex":
                 parsed = parse_enex_notes(file_path)
+                result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "enex", "parsed_note_count": len(parsed)})
             else:
                 parsed = [parse_text_note(file_path)]
+                result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "text", "parsed_note_count": len(parsed)})
         except Exception:
             parsed = []
+            audit["skipped_file_count"] += 1
+            skipped_reason_counts["parse_error"] += 1
+            skipped_extension_counts[suffix or "<none>"] += 1
+            result.update({"status": "parse_error", "reason": "parse_error", "parsed_note_count": 0})
+        audit["path_results"].append(result)
         for note in parsed:
             note["source_app"] = normalize_source_app(source_app, file_path, note)
             notes.append(note)
             if limit is not None and len(notes) >= limit:
-                return notes[:limit]
-    return notes
+                audit["limit_reached"] = True
+                break
+
+    audit["parsed_note_count"] = len(notes)
+    audit["extension_counts"] = dict(sorted(extension_counts.items()))
+    audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
+    audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+    audit["unvisited_input_file_count_due_limit"] = max(0, len(files) - len(audit["path_results"]))
+    return notes[:limit] if limit is not None else notes, audit
+
+
+def input_kind(path: Path) -> str:
+    if not path.exists():
+        return "missing"
+    if path.is_dir():
+        return "directory"
+    if path.is_file():
+        return "file"
+    return "other"
 
 
 def iter_export_files(path: Path) -> Iterable[Path]:
@@ -72,6 +173,15 @@ def iter_export_files(path: Path) -> Iterable[Path]:
             if child.is_file() and child.suffix.lower() in SUPPORTED_EXPORT_EXTENSIONS:
                 yield child
     elif path.is_file() and path.suffix.lower() in SUPPORTED_EXPORT_EXTENSIONS:
+        yield path
+
+
+def iter_authorized_files(path: Path) -> Iterable[Path]:
+    if path.is_dir():
+        for child in sorted(path.rglob("*")):
+            if child.is_file():
+                yield child
+    elif path.is_file():
         yield path
 
 
@@ -171,12 +281,38 @@ def parse_enex_notes_text(text: str, *, path_label: str) -> List[Dict[str, Any]]
 
 
 def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+    notes, _audit = parse_zip_notes_with_audit(path, source_app=source_app, limit=limit)
+    return notes
+
+
+def parse_zip_notes_with_audit(
+    path: Path,
+    *,
+    source_app: str,
+    limit: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     notes: List[Dict[str, Any]] = []
+    skipped_reason_counts: Counter[str] = Counter()
+    audit: Dict[str, Any] = {
+        "archive": str(path),
+        "archive_member_count": 0,
+        "archive_member_event_count": 0,
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_reason_counts": {},
+        "limit_reached": False,
+        "member_results": [],
+    }
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
-            if should_skip_zip_member(member):
-                continue
+        members = sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename))
+        for member in members:
+            audit["archive_member_count"] += 1
             member_name = normalize_zip_member_name(member.filename)
+            skip_reason = zip_member_skip_reason(member)
+            if skip_reason:
+                audit["skipped_archive_member_count"] += 1
+                skipped_reason_counts[skip_reason] += 1
+                audit["member_results"].append({"member": member_name, "status": "skipped", "reason": skip_reason})
+                continue
             suffix = Path(member_name).suffix.lower()
             text = archive.read(member).decode("utf-8-sig", errors="replace")
             path_label = f"{path}::{member_name}"
@@ -202,25 +338,64 @@ def parse_zip_notes(path: Path, *, source_app: str, limit: Optional[int] = None)
                     ]
             except Exception:
                 parsed = []
+                audit["skipped_archive_member_count"] += 1
+                skipped_reason_counts["parse_error"] += 1
+                audit["member_results"].append({"member": member_name, "status": "parse_error", "reason": "parse_error"})
+                continue
+            audit["member_results"].append({"member": member_name, "status": "parsed" if parsed else "no_notes_parsed", "parsed_note_count": len(parsed)})
             for note in parsed:
                 note.setdefault("source_archive", str(path))
                 note.setdefault("archive_member", member_name)
                 note["source_app"] = normalize_source_app(source_app, Path(path.name) / member_name, note)
                 notes.append(note)
+                audit["archive_member_event_count"] += 1
                 if limit is not None and len(notes) >= limit:
-                    return notes[:limit]
-    return notes
+                    audit["limit_reached"] = True
+                    audit["unvisited_archive_member_count_due_limit"] = max(0, len(members) - audit["archive_member_count"])
+                    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+                    return notes[:limit], audit
+    audit["unvisited_archive_member_count_due_limit"] = 0
+    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    return notes, audit
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    return zip_member_skip_reason(member) is not None
+
+
+def zip_member_skip_reason(member: zipfile.ZipInfo) -> Optional[str]:
     member_name = normalize_zip_member_name(member.filename)
     member_path = PurePosixPath(member_name)
     windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
-        return True
+        return "directory"
     if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
-        return True
-    return Path(member_name).suffix.lower() not in SUPPORTED_NOTE_EXTENSIONS
+        return "unsafe_path"
+    if Path(member_name).suffix.lower() not in SUPPORTED_NOTE_EXTENSIONS:
+        return "unsupported_extension"
+    return None
+
+
+def path_result(path: Path, *, status: str, reason: Optional[str] = None) -> Dict[str, Any]:
+    result = {
+        "path": str(path),
+        "extension": path.suffix.lower() or "<none>",
+        "status": status,
+    }
+    if reason:
+        result["reason"] = reason
+    return result
+
+
+def merge_archive_audit(audit: Dict[str, Any], archive_audit: Dict[str, Any], skipped_reason_counts: Counter[str]) -> None:
+    audit["archive_count"] += 1
+    audit["archive_member_count"] += int(archive_audit.get("archive_member_count") or 0)
+    audit["archive_member_event_count"] += int(archive_audit.get("archive_member_event_count") or 0)
+    audit["skipped_archive_member_count"] += int(archive_audit.get("skipped_archive_member_count") or 0)
+    if archive_audit.get("limit_reached"):
+        audit["limit_reached"] = True
+    for reason, count in (archive_audit.get("skipped_archive_member_reason_counts") or {}).items():
+        skipped_reason_counts[str(reason)] += int(count)
 
 
 def normalize_zip_member_name(name: str) -> str:

@@ -331,7 +331,8 @@ Current status:
   platforms, event counts, and `real_account_validation`.
 - Writes `manifest.field_coverage`, `source_audit`, and `content_policy` so
   FinClaw can tell whether title/path/content preview/tags/time fields are
-  present, whether ZIP member provenance exists, and whether the run used
+  present, whether per-input parse results and ZIP member provenance exist,
+  which files or archive members were skipped and why, and whether the run used
   preview-only or full-content authorization.
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki

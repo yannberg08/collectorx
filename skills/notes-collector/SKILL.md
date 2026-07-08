@@ -55,7 +55,6 @@ python <SKILL_DIR>/scripts/notes_api.py import \
 | `--input` | 授权导出文件、目录或 ZIP |
 | `--source-app` | 导出来源，支持 `auto/notion/obsidian/youdao/evernote/markdown/notes-export` |
 | `--export` | 导出文件路径 |
-| `--format` | 输出格式（json/markdown） |
 | `--limit` | 限制笔记数量 |
 | `--event-export` | 导出 `collectorx.event.v1` JSONL |
 | `--out-dir` | 导出完整采集包：`lake/notes/events.jsonl`、`manifest.json`、`SUMMARY.md` |
@@ -77,7 +76,8 @@ Notion token、服务端 cookie 或账号密码。
 采集是否只是局部导入，还是已经覆盖用户授权的主要笔记平台。
 
 `manifest.field_coverage` 会报告标题、路径/URL、正文预览、正文长度、标签、
-更新时间等推荐字段覆盖情况；`source_audit` 报告来源引用、ZIP 成员来源和路径
+更新时间等推荐字段覆盖情况；`source_audit` 报告授权输入、逐文件解析结果、
+扩展名覆盖、跳过文件原因、ZIP 成员数量、跳过 ZIP 成员原因、来源引用和路径
 安全边界；`content_policy` 明确本次是预览模式还是全文授权模式。`evidence_policy`
 固定声明：generic notes 不能直接写投资 Wiki，也不能直接声称“投资笔记已识别”。
 
