@@ -91,8 +91,16 @@ def test_collect_brokerage_exports() -> None:
         assert execution["data"]["amount"] == 1902.0
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_hk_us_trade_boundary"] is False
+        proof = manifest["brokerage_boundary_proof"]
+        assert proof["proof_level"] == "weak_partial_brokerage_boundary"
+        assert proof["can_enter_finclaw_lake"] is True
+        assert proof["business_numbers_preserved"] is True
+        assert proof["false_claims"]["complete_hk_us_trade_boundary_claimed"] is False
+        assert proof["false_claims"]["trading_password_collected"] is False
+        assert "missing_expected_brokers:tiger" in proof["completion_blockers"]
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["strong_trade_source"] is True
+        assert evidence["coverage_summary"]["brokerage_boundary_proof"]["can_feed_investor_wiki_evidence"] is True
         assert evidence["generated_from"]["event_count"] == 5
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
@@ -260,6 +268,25 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert manifest["asset_value_summary"]["reported_total_assets_by_currency"]["HKD"] == 25000.0
         assert manifest["asset_value_summary"]["reported_cash_by_currency"]["USD"] == 12000.0
         assert manifest["asset_value_summary"]["reported_cash_by_currency"]["HKD"] == 5000.0
+        boundary_proof = manifest["brokerage_boundary_proof"]
+        assert boundary_proof["proof_level"] == "strong_partial_brokerage_boundary"
+        assert boundary_proof["authorized_input_observed"] is True
+        assert boundary_proof["observed_brokers"] == ["futu", "tiger", "ibkr"]
+        assert boundary_proof["missing_expected_brokers"] == []
+        assert boundary_proof["missing_trade_surfaces"] == []
+        assert boundary_proof["missing_recommended_fields"] == []
+        assert boundary_proof["account_boundary"]["full_surface_account_candidates"] == ["tiger:T-888"]
+        assert boundary_proof["asset_value_boundary"]["reported_total_assets_by_currency"]["USD"] == 100000.5
+        assert boundary_proof["currency_market_boundary"]["multi_currency_observed"] is True
+        assert boundary_proof["fee_tax_margin_boundary"]["margin_requirement_by_currency"]["USD"] == 3000.0
+        assert boundary_proof["source_boundary"]["requested_input_count"] == 1
+        assert boundary_proof["source_boundary"]["resolved_input_file_count"] == 3
+        assert boundary_proof["source_boundary"]["archive_member_count"] == 4
+        assert boundary_proof["source_boundary"]["skipped_archive_member_count"] == 3
+        assert boundary_proof["wiki_boundary"]["collector_writes_wiki_directly"] is False
+        assert boundary_proof["false_claims"]["complete_account_boundary_claimed"] is False
+        assert boundary_proof["false_claims"]["order_mutation_supported"] is False
+        assert "complete_account_boundary_not_proven" in boundary_proof["completion_blockers"]
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_member_count"] == 4
         assert manifest["source_audit"]["skipped_archive_member_count"] == 3
@@ -290,6 +317,7 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert evidence["coverage_summary"]["order_side_effects_allowed"] is False
         assert evidence["coverage_summary"]["account_boundary_summary"]["full_surface_account_candidates"] == ["tiger:T-888"]
         assert evidence["coverage_summary"]["currency_market_summary"]["multi_currency_observed"] is True
+        assert evidence["coverage_summary"]["brokerage_boundary_proof"]["proof_level"] == "strong_partial_brokerage_boundary"
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
 
@@ -377,6 +405,10 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "needs_hk_us_brokerage_authorized_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["brokerage_boundary_proof"]["proof_level"] == "no_authorized_brokerage_input"
+        assert manifest["brokerage_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["brokerage_boundary_proof"]["source_boundary"]["input_missing_count"] == 1
+        assert manifest["brokerage_boundary_proof"]["false_claims"]["direct_broker_reconnect"] is False
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["input_missing_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 0

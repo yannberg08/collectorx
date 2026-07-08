@@ -35,6 +35,7 @@ scope:
     - currency_market_summary
     - fee_tax_margin_summary
     - asset_value_summary
+    - brokerage_boundary_proof
     - source_audit_manifest
     - archive_member_provenance
     - path_level_collection_audit
@@ -53,5 +54,5 @@ scope:
 description: |
   港美股券商是投资垂直强交易源。支持用户授权 CSV/JSON/Excel/ZIP 只读导出包。
   manifest 会报告富途/老虎/盈透、七类强交易表、关键金额字段覆盖、资产数值汇总、
-  账户边界、币种市场、费用税费保证金、逐输入来源审计、跳过原因和只读证据边界。
+  账户边界、币种市场、费用税费保证金、统一券商边界证明、逐输入来源审计、跳过原因和只读证据边界。
   后续按富途、老虎、盈透逐个做真实账号只读采集和真机验证。

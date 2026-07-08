@@ -824,6 +824,7 @@ def build_manifest(
         "currency_market_summary": currency_market_summary(events),
         "fee_tax_margin_summary": fee_tax_margin_summary(events),
         "asset_value_summary": asset_value_summary(events),
+        "brokerage_boundary_proof": brokerage_boundary_proof(events, collection_audit=collection_audit),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
             "vertical_collector": True,
@@ -1075,6 +1076,172 @@ def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def brokerage_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in usable_events)
+    broker_counts = Counter((event.get("data") or {}).get("broker", "unknown") for event in usable_events)
+    field_counts = Counter(
+        field
+        for event in usable_events
+        for field in RECOMMENDED_STRONG_FIELDS
+        if (event.get("data") or {}).get(field) not in (None, "", [])
+    )
+    observed_expected_brokers = [broker for broker in EXPECTED_HK_US_BROKERS if broker_counts.get(broker)]
+    missing_expected_brokers = [broker for broker in EXPECTED_HK_US_BROKERS if not broker_counts.get(broker)]
+    observed_expected_subtypes = [subtype for subtype in EXPECTED_STRONG_TRADE_SUBTYPES if subtype_counts.get(subtype)]
+    missing_expected_subtypes = [subtype for subtype in EXPECTED_STRONG_TRADE_SUBTYPES if not subtype_counts.get(subtype)]
+    observed_recommended_fields = [field for field in RECOMMENDED_STRONG_FIELDS if field_counts.get(field)]
+    missing_recommended_fields = [field for field in RECOMMENDED_STRONG_FIELDS if not field_counts.get(field)]
+    strong_summary = strong_trade_surface_summary(events)
+    account_summary = account_boundary_summary(events)
+    currency_summary = currency_market_summary(events)
+    fee_summary = fee_tax_margin_summary(events)
+    asset_summary = asset_value_summary(events)
+    audit = source_audit(events, collection_audit=collection_audit)
+    has_account_ids = account_summary["account_id_count"] > 0
+    has_asset_values = bool(
+        asset_summary["reported_total_assets_by_currency"]
+        or asset_summary["reported_cash_by_currency"]
+        or asset_summary["reported_buying_power_by_currency"]
+    )
+    has_numeric_trade_values = any(
+        strong_summary[key] > 0
+        for key in (
+            "events_with_amount",
+            "events_with_fees",
+            "events_with_tax",
+            "events_with_margin",
+            "events_with_pnl",
+        )
+    )
+    all_expected_brokers = bool(observed_expected_brokers) and not missing_expected_brokers
+    all_expected_surfaces = bool(observed_expected_subtypes) and not missing_expected_subtypes
+    all_recommended_fields = bool(observed_recommended_fields) and not missing_recommended_fields
+    if not usable_events:
+        gap_reason = None
+        if events:
+            gap_reason = (events[0].get("data") or {}).get("gap")
+        proof_level = "no_authorized_brokerage_input" if gap_reason == "hk_us_brokerage_authorized_input_missing" else "no_usable_brokerage_records"
+    elif all_expected_brokers and all_expected_surfaces and all_recommended_fields and has_account_ids and has_asset_values:
+        proof_level = "strong_partial_brokerage_boundary"
+    elif all_expected_surfaces and has_account_ids and (has_asset_values or has_numeric_trade_values):
+        proof_level = "medium_partial_brokerage_boundary"
+    elif has_account_ids or has_numeric_trade_values:
+        proof_level = "weak_partial_brokerage_boundary"
+    else:
+        proof_level = "weak_brokerage_evidence"
+    blockers = []
+    if not usable_events:
+        blockers.append("authorized_readonly_brokerage_export_or_screen_missing")
+    if missing_expected_brokers:
+        blockers.append("missing_expected_brokers:" + ",".join(missing_expected_brokers))
+    if missing_expected_subtypes:
+        blockers.append("missing_strong_trade_surfaces:" + ",".join(missing_expected_subtypes))
+    if missing_recommended_fields:
+        blockers.append("missing_recommended_strong_fields:" + ",".join(missing_recommended_fields))
+    if not has_account_ids:
+        blockers.append("account_id_boundary_missing")
+    if not has_asset_values:
+        blockers.append("reported_asset_value_boundary_missing")
+    if not currency_summary["multi_currency_observed"]:
+        blockers.append("multi_currency_boundary_not_observed")
+    if not any(fee_summary[key] > 0 for key in ("events_with_fees", "events_with_tax", "events_with_margin")):
+        blockers.append("fee_tax_margin_boundary_not_observed")
+    blockers.extend(
+        [
+            "real_futu_tiger_ibkr_account_validation_missing",
+            "complete_account_boundary_not_proven",
+            "complete_brokerage_history_not_proven",
+        ]
+    )
+    return {
+        "proof_level": proof_level,
+        "authorized_input_observed": bool(usable_events),
+        "strong_trade_source": bool(usable_events),
+        "can_enter_finclaw_lake": bool(usable_events),
+        "can_feed_investor_wiki_evidence": bool(usable_events),
+        "business_numbers_preserved": True,
+        "observed_event_count": len(usable_events),
+        "observed_brokers": observed_expected_brokers,
+        "missing_expected_brokers": missing_expected_brokers,
+        "observed_trade_surfaces": observed_expected_subtypes,
+        "missing_trade_surfaces": missing_expected_subtypes,
+        "observed_recommended_fields": observed_recommended_fields,
+        "missing_recommended_fields": missing_recommended_fields,
+        "account_boundary": {
+            "account_id_count": account_summary["account_id_count"],
+            "accounts_by_broker": account_summary["accounts_by_broker"],
+            "full_surface_account_candidates": account_summary["full_surface_account_candidates"],
+            "complete_account_boundary_claimed": False,
+        },
+        "asset_value_boundary": {
+            "asset_snapshot_count": asset_summary["asset_snapshot_count"],
+            "currencies_observed": asset_summary["currencies_observed"],
+            "reported_total_assets_by_currency": asset_summary["reported_total_assets_by_currency"],
+            "reported_cash_by_currency": asset_summary["reported_cash_by_currency"],
+            "reported_buying_power_by_currency": asset_summary["reported_buying_power_by_currency"],
+            "multi_currency_observed": asset_summary["multi_currency_observed"],
+        },
+        "currency_market_boundary": {
+            "currency_count": currency_summary["currency_count"],
+            "market_count": currency_summary["market_count"],
+            "fx_pair_counts": currency_summary["fx_pair_counts"],
+            "multi_currency_observed": currency_summary["multi_currency_observed"],
+        },
+        "fee_tax_margin_boundary": {
+            "events_with_fees": fee_summary["events_with_fees"],
+            "events_with_tax": fee_summary["events_with_tax"],
+            "events_with_margin": fee_summary["events_with_margin"],
+            "total_fees_by_currency": fee_summary["total_fees_by_currency"],
+            "total_tax_by_currency": fee_summary["total_tax_by_currency"],
+            "margin_requirement_by_currency": fee_summary["margin_requirement_by_currency"],
+            "maintenance_margin_by_currency": fee_summary["maintenance_margin_by_currency"],
+        },
+        "source_boundary": {
+            "requested_input_count": int(audit.get("input_count") or 0),
+            "resolved_input_file_count": int(audit.get("resolved_input_file_count") or 0),
+            "input_missing_count": int(audit.get("input_missing_count") or 0),
+            "skipped_file_count": int(audit.get("skipped_file_count") or 0),
+            "archive_count": int(audit.get("archive_count") or 0),
+            "archive_member_count": int(audit.get("archive_member_count") or 0),
+            "archive_member_event_count": int(audit.get("archive_member_event_count") or 0),
+            "skipped_archive_member_count": int(audit.get("skipped_archive_member_count") or 0),
+            "limit_reached": bool(audit.get("limit_reached")),
+            "path_level_audit_available": bool(audit.get("path_results")),
+            "archive_path_traversal_members_collected": False,
+            "windows_drive_archive_members_collected": False,
+        },
+        "wiki_boundary": {
+            "event_schema": "collectorx.event.v1",
+            "evidence_schema": "finclaw.investor_wiki_evidence.v1",
+            "collector_writes_wiki_directly": False,
+            "required_flow": [
+                "hk-us-brokerage collector",
+                "collectorx.event.v1",
+                "finclaw.investor_wiki_evidence.v1",
+                "SoulMirror investor-portrait distill/organize",
+            ],
+        },
+        "false_claims": {
+            "complete_account_boundary_claimed": False,
+            "complete_brokerage_history_claimed": False,
+            "complete_hk_us_trade_boundary_claimed": False,
+            "real_account_validation_claimed": False,
+            "broker_native_api_validation_claimed": False,
+            "trading_password_collected": False,
+            "order_mutation_supported": False,
+            "direct_broker_reconnect": False,
+            "public_community_discussions_collected": False,
+            "collector_writes_wiki_directly": False,
+        },
+        "completion_blockers": blockers,
+    }
+
+
 def currency_values(data: Dict[str, Any]) -> List[str]:
     values = []
     for key in ("currency", "base_currency", "from_currency", "to_currency"):
@@ -1162,6 +1329,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "currency_market_summary": currency_market_summary(events),
             "fee_tax_margin_summary": fee_tax_margin_summary(events),
             "asset_value_summary": asset_value_summary(events),
+            "brokerage_boundary_proof": brokerage_boundary_proof(events),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

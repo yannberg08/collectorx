@@ -269,6 +269,22 @@ coverage for authorized Wind, Choice, iFinD, and Bloomberg workflow packages:
   validation, legal/license review, workflow-topic false-positive review, or
   Windows/macOS/Linux path validation.
 
+The prior completed wave: `hk-us-brokerage` now has unified brokerage-boundary
+proof for authorized read-only Futu, Tiger, and IBKR export packages:
+
+- `manifest.brokerage_boundary_proof` gives FinClaw one gate for authorized
+  input presence, broker coverage, strong trade surfaces, recommended numeric
+  fields, account IDs, asset values, multi-currency evidence, fee/tax/margin
+  evidence, source audit counts, and Investor Wiki flow.
+- The proof keeps exact user business numbers intact for assets, cash, buying
+  power, fees, tax, margin, FX, orders, executions, positions, dividends, and
+  cashflows when the user authorized those inputs.
+- False claims remain explicit: no complete account boundary, no complete
+  brokerage history, no native broker API validation, no trading password, no
+  order mutation, no community crawl, and no direct Wiki write.
+- This improves FinClaw gating for P2 HK/US brokerage packages, but still does
+  not replace real Futu/Tiger/IBKR export or read-only-screen validation.
+
 The prior completed wave: `hk-us-brokerage` now has stronger account-boundary,
 currency/market, and fee/tax/margin coverage for authorized read-only Futu,
 Tiger, and IBKR export packages:

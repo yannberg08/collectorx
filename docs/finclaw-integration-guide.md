@@ -800,9 +800,15 @@ Current status:
 - Writes `manifest.strong_trade_surface_summary`,
   `manifest.account_boundary_summary`, `manifest.currency_market_summary`,
   `manifest.fee_tax_margin_summary`, `manifest.asset_value_summary`,
-  `manifest.source_audit`, and `manifest.evidence_policy` so Lake can see
-  account/currency/market/amount/tax/margin availability, reported asset
-  totals by currency, export package provenance, and read-only boundaries.
+  `manifest.brokerage_boundary_proof`, `manifest.source_audit`, and
+  `manifest.evidence_policy` so Lake can see account/currency/market/amount/
+  tax/margin availability, reported asset totals by currency, export package
+  provenance, and read-only boundaries.
+- `manifest.brokerage_boundary_proof` gives FinClaw a single gate for the
+  authorized input boundary, broker coverage, strong trade surfaces, account
+  IDs, asset values, multi-currency, fee/tax/margin, Wiki flow, and explicit
+  false claims such as no complete brokerage history, no trading password, no
+  order mutation, and no direct Wiki write.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.
