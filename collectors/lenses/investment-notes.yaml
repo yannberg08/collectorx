@@ -21,10 +21,15 @@ scope:
     - rules_library
     - trade_checklists
     - valuation_assumptions
+    - investment_note_type_surface
+    - source_app_surface
+    - preview_vs_full_content_surface
   excludes:
     - all_life_notes
     - note_service_tokens
     - unrelated_knowledge_base
 
 description: |
-  笔记应用本身是通用采集器。本 lens 只筛 Obsidian、Notion、有道云、印象笔记中的投资笔记。
+  笔记应用本身是通用采集器。本 lens 只筛 Obsidian、Notion、有道云、印象笔记中的投资笔记，
+  并把复盘、规则库、交易 checklist、估值假设、研究记录等投资笔记子类型写入
+  manifest/evidence 的 surface summary。

@@ -160,6 +160,79 @@ RESEARCH_FILE_HINTS = {
     "交易复盘",
     "DCF",
 }
+INVESTMENT_NOTE_TYPE_ORDER = (
+    "review_note",
+    "rules_library",
+    "trade_checklist",
+    "valuation_assumption",
+    "research_note",
+)
+
+INVESTMENT_NOTE_TYPE_TERMS = {
+    "review_note": {
+        "复盘",
+        "交易复盘",
+        "回顾",
+        "反思",
+        "错误",
+        "亏损",
+        "总结",
+        "错因",
+        "归因",
+    },
+    "rules_library": {
+        "规则",
+        "纪律",
+        "原则",
+        "仓位控制",
+        "风控",
+        "止损",
+        "止盈",
+        "禁止",
+        "必须",
+        "买入框架",
+        "卖出框架",
+    },
+    "trade_checklist": {
+        "checklist",
+        "检查清单",
+        "交易计划",
+        "买入理由",
+        "卖出理由",
+        "加仓",
+        "减仓",
+        "买入",
+        "卖出",
+        "调仓",
+        "仓位",
+    },
+    "valuation_assumption": {
+        "估值",
+        "估值假设",
+        "DCF",
+        "PE",
+        "PB",
+        "ROE",
+        "现金流",
+        "安全边际",
+        "目标价",
+        "折现",
+        "利润率",
+        "模型",
+    },
+    "research_note": {
+        "研报",
+        "调研",
+        "财报",
+        "公告",
+        "行业",
+        "公司研究",
+        "纪要",
+        "跟踪",
+        "基本面",
+        "护城河",
+    },
+}
 
 
 def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -202,6 +275,15 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
         reasons.append("matched_source_profile_terms")
         matched_terms.extend(source_hits[:8])
 
+    investment_note_type_matches: Dict[str, List[str]] = {}
+    if source_id == "investment-notes":
+        investment_note_type_matches = classify_investment_note_types(text, lowered)
+        if investment_note_type_matches:
+            score += min(0.30, len(investment_note_type_matches) * 0.08)
+            reasons.append("matched_investment_note_type")
+            for hits in investment_note_type_matches.values():
+                matched_terms.extend(hits[:4])
+
     score += source_specific_score(source_id, record, text, lowered, reasons, matched_terms)
 
     if collector_class == "vertical":
@@ -209,7 +291,7 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
         reasons.append("vertical_investment_source")
 
     confidence = min(1.0, round(score, 3))
-    return {
+    result = {
         "is_investment_evidence": collector_class == "vertical" or confidence >= 0.30,
         "confidence": confidence,
         "threshold": 0.30,
@@ -218,6 +300,25 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
         "matched_symbols": code_matches[:20],
         "classifier": "investor-source-keyword-v1",
     }
+    if source_id == "investment-notes":
+        note_types = [note_type for note_type in INVESTMENT_NOTE_TYPE_ORDER if note_type in investment_note_type_matches]
+        result["investment_note_types"] = note_types
+        result["primary_investment_note_type"] = note_types[0] if note_types else "unclassified_investment_note"
+        result["investment_note_type_terms"] = {
+            note_type: hits[:8]
+            for note_type, hits in sorted(investment_note_type_matches.items())
+        }
+    return result
+
+
+def classify_investment_note_types(text: str, lowered: str) -> Dict[str, List[str]]:
+    matches: Dict[str, List[str]] = {}
+    for note_type in INVESTMENT_NOTE_TYPE_ORDER:
+        terms = INVESTMENT_NOTE_TYPE_TERMS[note_type]
+        hits = term_hits(terms, text, lowered)
+        if hits:
+            matches[note_type] = hits
+    return matches
 
 
 def should_keep_event(source_id: str, classification: Dict[str, Any], *, min_score: float, include_non_matches: bool) -> bool:

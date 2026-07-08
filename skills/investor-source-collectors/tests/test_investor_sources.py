@@ -909,6 +909,143 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
         assert lens_events[0]["raw_ref"]["upstream_event_id"] == "social-activity:1"
 
 
+def test_investment_notes_lens_reports_note_type_surface_from_notes_events() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "notes-events.jsonl"
+        out_dir = root / "out"
+        notes_events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "notes:review",
+                "collector": "notes",
+                "source": "Obsidian vault",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "obsidian",
+                    "title": "贵州茅台交易复盘",
+                    "path": "reviews/600519.md",
+                    "content_preview": "复盘 600519 买入理由、错误归因、仓位和交易纪律。",
+                    "content_length": 28,
+                    "content_included": False,
+                    "tags": ["复盘", "投资"],
+                },
+                "raw_ref": {"source_app": "obsidian", "path": "reviews/600519.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_note"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "notes:rules",
+                "collector": "notes",
+                "source": "Notion API",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "notion",
+                    "title": "交易规则库",
+                    "path": "notion-page-rules",
+                    "content_preview": "规则库 checklist 买入框架、卖出框架、仓位控制、止损和止盈。",
+                    "content_length": 35,
+                    "content_included": False,
+                    "tags": ["规则库"],
+                },
+                "raw_ref": {"source_app": "notion", "path": "notion-page-rules"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_note"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "notes:valuation",
+                "collector": "notes",
+                "source": "有道云笔记导出",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T11:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "youdao",
+                    "title": "半导体估值假设",
+                    "path": "youdao/semiconductor.md",
+                    "content_preview": "估值假设 DCF PE PB ROE 现金流 安全边际 财报 跟踪。",
+                    "content_length": 40,
+                    "content_included": False,
+                    "tags": ["估值"],
+                },
+                "raw_ref": {"source_app": "youdao", "path": "youdao/semiconductor.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_note"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "notes:life",
+                "collector": "notes",
+                "source": "Evernote export",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T11:30:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "evernote",
+                    "title": "周末安排",
+                    "path": "life/weekend.enex",
+                    "content_preview": "周末买菜、整理房间、约朋友吃饭。",
+                    "content_length": 18,
+                    "content_included": False,
+                },
+                "raw_ref": {"source_app": "evernote", "path": "life/weekend.enex"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_note"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in notes_events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "investment-notes",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T12:30:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "investment-notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 3
+        assert {event["raw_ref"]["upstream_event_id"] for event in lens_events} == {"notes:review", "notes:rules", "notes:valuation"}
+        classifications = [event["data"]["classification"] for event in lens_events]
+        assert any("review_note" in item["investment_note_types"] for item in classifications)
+        assert any("rules_library" in item["investment_note_types"] for item in classifications)
+        assert any("trade_checklist" in item["investment_note_types"] for item in classifications)
+        assert any("valuation_assumption" in item["investment_note_types"] for item in classifications)
+        assert any("research_note" in item["investment_note_types"] for item in classifications)
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        surface = manifest["lens_surface_summary"]
+        assert surface["event_count"] == 3
+        assert surface["source_app_counts"] == {"obsidian": 1, "notion": 1, "youdao": 1}
+        assert surface["upstream_collector_counts"] == {"notes": 3}
+        assert surface["missing_expected_investment_note_types"] == []
+        assert surface["investment_note_type_counts"]["review_note"] == 1
+        assert surface["investment_note_type_counts"]["rules_library"] == 2
+        assert surface["investment_note_type_counts"]["trade_checklist"] == 2
+        assert surface["investment_note_type_counts"]["valuation_assumption"] == 1
+        assert surface["investment_note_type_counts"]["research_note"] == 1
+        assert surface["full_content_event_count"] == 0
+        assert surface["preview_only_event_count"] == 3
+        assert surface["tagged_event_count"] == 3
+        assert surface["collector_writes_wiki_directly"] is False
+
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["investment-notes"]
+        assert evidence_surface["investment_note_type_counts"]["valuation_assumption"] == 1
+        assert evidence_surface["generic_notes_lens"] is True
+
+
 if __name__ == "__main__":
     test_list_sources_contains_all_priorities()
     test_collect_xueqiu_csv_outputs_event_and_evidence()
@@ -924,4 +1061,5 @@ if __name__ == "__main__":
     test_meeting_minutes_lens_keeps_investment_minutes_only()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()
     test_social_investment_influence_lens_keeps_investment_activity_only()
+    test_investment_notes_lens_reports_note_type_surface_from_notes_events()
     print("investor-source-collectors tests passed.")

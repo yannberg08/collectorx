@@ -114,7 +114,7 @@ Operational docs:
 | `research-documents` | `filesystem`, `notes` | Runnable lens baseline for research files and valuation docs; explicit XLSX/DOCX/PDF content extraction, path-level collection audit, skipped reasons, limit truncation, and screenshot metadata-only/no-OCR policy validation done |
 | `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |
-| `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists; note adapters pending |
+| `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists, valuation assumptions, source-app surface, and preview/full-content surface; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; upstream task/calendar platform coverage manifests available |
 | `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; upstream saved/read/share action coverage available |
 | `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator and social influence signals |

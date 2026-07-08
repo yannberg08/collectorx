@@ -980,6 +980,29 @@ Findings:
   all expected P1 note platforms, ZIP unsafe member skipping, and preview-only
   content policy.
 
+### Wave Q4: P1 investment notes surface pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-investment-notes-surface-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `investor-source-collectors` to `0.1.5`.
+- Added `investment-notes` classification fields for review notes, rules
+  libraries, trade checklists, valuation assumptions, and research notes.
+- Added `manifest.lens_surface_summary` and evidence
+  `coverage_summary.source_surface_summary` for note-type counts, source-app
+  counts, upstream collector counts, matched-symbol counts, preview/full-content
+  counts, and tagged/path/URL coverage.
+- Fixture validation reads upstream `notes` events, filters a life note, keeps
+  three investment notes, and proves surface propagation into manifest and
+  `finclaw.investor_wiki_evidence.v1`.
+- Real Notion/Youdao/Evernote account validation and real mixed-note
+  false-positive backtesting remain pending.
+
 ### Wave R: P1 task/calendar platform coverage pass 1
 
 Status: `completed-baseline`
@@ -1527,7 +1550,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; manifest reports platform coverage, field coverage, source audit, content policy, ZIP provenance, and generic-collector evidence policy | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, and preview/full-content surface | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, source audit, ZIP provenance, and generic-collector evidence policy; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration surface summaries, source audit, ZIP provenance, and generic-collector evidence policy; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article surface summary, source audit, ZIP provenance, content policy, and generic-collector evidence policy | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |

@@ -29,6 +29,14 @@ ALLOWED_KINDS = {
     "profile",
     "other",
 }
+INVESTMENT_NOTE_TYPE_ORDER = (
+    "review_note",
+    "rules_library",
+    "trade_checklist",
+    "valuation_assumption",
+    "research_note",
+    "unclassified_investment_note",
+)
 
 
 def now_iso() -> str:
@@ -181,6 +189,7 @@ def build_manifest(
             if classifications
             else 0,
         },
+        "lens_surface_summary": lens_surface_summary(source_id, events),
         "collection_readiness": {
             "status": status,
             "can_enter_finclaw": bool(events) and not only_gap,
@@ -273,6 +282,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
             "dimension_count": len(dimensions),
             "subdimension_count": sum(len(d["children"]) for d in dimensions),
             "support_level_counts": dict(sorted(support_counts.items())),
+            "source_surface_summary": source_surface_summary(usable_events),
             "usable_for_wiki_now": [
                 child["subdimension_id"]
                 for dimension in dimensions
@@ -281,6 +291,96 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
             ],
         },
     }
+
+
+def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if source_id == "investment-notes":
+        return investment_note_surface_summary(events)
+    return {}
+
+
+def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    summaries: Dict[str, Any] = {}
+    by_source: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for event in events:
+        source_id = str((event.get("data") or {}).get("source_profile") or event.get("collector") or "unknown")
+        by_source[source_id].append(event)
+    if "investment-notes" in by_source:
+        summaries["investment-notes"] = investment_note_surface_summary(by_source["investment-notes"])
+    return summaries
+
+
+def investment_note_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    note_type_counts: Counter[str] = Counter()
+    primary_type_counts: Counter[str] = Counter()
+    source_app_counts: Counter[str] = Counter()
+    upstream_collector_counts: Counter[str] = Counter()
+    matched_symbol_event_count = 0
+    full_content_event_count = 0
+    tagged_event_count = 0
+    path_event_count = 0
+    url_event_count = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        note_types = classification.get("investment_note_types") if isinstance(classification.get("investment_note_types"), list) else []
+        if not note_types:
+            note_types = ["unclassified_investment_note"]
+        for note_type in note_types:
+            note_type_counts[str(note_type)] += 1
+        primary_type_counts[str(classification.get("primary_investment_note_type") or note_types[0])] += 1
+        source_app_counts[note_source_app(event)] += 1
+        upstream_collector_counts[str(payload.get("upstream_collector") or event.get("raw_ref", {}).get("upstream_collector") or "direct_input")] += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        if payload.get("content_included") is True or "content" in payload:
+            full_content_event_count += 1
+        if payload.get("tags"):
+            tagged_event_count += 1
+        if payload.get("path") or event.get("raw_ref", {}).get("path"):
+            path_event_count += 1
+        if payload.get("url") or event.get("raw_ref", {}).get("url"):
+            url_event_count += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_investment_note_types": list(INVESTMENT_NOTE_TYPE_ORDER[:-1]),
+        "investment_note_type_counts": ordered_counts(note_type_counts, INVESTMENT_NOTE_TYPE_ORDER),
+        "primary_investment_note_type_counts": ordered_counts(primary_type_counts, INVESTMENT_NOTE_TYPE_ORDER),
+        "missing_expected_investment_note_types": [
+            note_type for note_type in INVESTMENT_NOTE_TYPE_ORDER[:-1] if note_type_counts.get(note_type, 0) == 0
+        ],
+        "source_app_counts": dict(sorted(source_app_counts.items())),
+        "upstream_collector_counts": dict(sorted(upstream_collector_counts.items())),
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "full_content_event_count": full_content_event_count,
+        "preview_only_event_count": max(len(usable_events) - full_content_event_count, 0),
+        "tagged_event_count": tagged_event_count,
+        "path_event_count": path_event_count,
+        "url_event_count": url_event_count,
+        "generic_notes_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def note_source_app(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    value = payload.get("source_app") or raw_ref.get("source_app")
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref")
+    if not value and isinstance(upstream_raw_ref, dict):
+        value = upstream_raw_ref.get("source_app")
+    return str(value or "unknown")
+
+
+def ordered_counts(counts: Counter[str], order: Iterable[str]) -> Dict[str, int]:
+    result = {key: counts[key] for key in order if counts.get(key)}
+    for key, value in sorted(counts.items()):
+        if key not in result:
+            result[key] = value
+    return result
 
 
 def normalize_record_payload(record: Dict[str, Any]) -> Dict[str, Any]:
