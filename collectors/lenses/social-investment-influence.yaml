@@ -20,6 +20,8 @@ scope:
     - investment_favorites
     - investment_video_watch_history
     - comments
+    - social_topic_summary
+    - platform_action_creator_summary
   excludes:
     - platform_wide_scraping
     - unrelated_entertainment_activity
@@ -28,4 +30,5 @@ scope:
 
 description: |
   微博/B站/小红书等通用活动先入 social-activity lake；本 lens 只筛投资影响源。
-  输出只能作为弱证据，需要交易、笔记、研报、会议等更强证据交叉验证。
+  输出会汇总社交影响主题、平台、动作和创作者可用面；只能作为弱证据，
+  需要交易、笔记、研报、会议等更强证据交叉验证。

@@ -1378,6 +1378,8 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
                     "title": "半导体投资复盘：财报、估值和安全边际",
                     "creator": "财经博主A",
                     "tags": ["股票", "半导体"],
+                    "social_topics": ["industry_theme", "company_fundamental", "risk_control"],
+                    "primary_social_topic": "industry_theme",
                     "content_preview": "实盘复盘行业景气、估值和风险点。",
                 },
                 "raw_ref": {"path": "bilibili.csv", "row": 1},
@@ -1423,6 +1425,18 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
         assert len(lens_events) == 1
         assert lens_events[0]["data"]["payload"]["title"].startswith("半导体投资复盘")
         assert lens_events[0]["raw_ref"]["upstream_event_id"] == "social-activity:1"
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        surface = manifest["lens_surface_summary"]
+        assert surface["social_topic_counts"]["industry_theme"] == 1
+        assert surface["social_topic_counts"]["company_fundamental"] == 1
+        assert surface["social_topic_counts"]["risk_control"] == 1
+        assert surface["platform_counts"] == {"bilibili": 1}
+        assert surface["action_counts"] == {"watch": 1}
+        assert surface["usable_as_investment_conclusion"] is False
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["social-investment-influence"]
+        assert evidence_surface["requires_corroboration"] is True
+        assert evidence_surface["social_topic_counts"]["industry_theme"] == 1
 
 
 def test_investment_notes_lens_reports_note_type_surface_from_notes_events() -> None:

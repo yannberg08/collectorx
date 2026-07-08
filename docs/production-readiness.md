@@ -52,23 +52,27 @@ packages:
   validation on the current machine because no mailbox is registered in the
   local email collector state.
 
-The prior completed wave: `social-activity` now has stronger source audit
+The prior completed wave: `social-activity` now has stronger social-topic
 coverage for authorized Weibo, Bilibili, and Xiaohongshu activity packages:
 
 - `social_activity.py collect --input <authorized-social-activity-export-or-zip>
-  --out-dir <dir>` records `manifest.source_audit` with requested inputs,
+  --out-dir <dir>` records per-event `social_topics` plus
+  `manifest.influence_surface_summary` topic counts, platform/topic counts,
+  action/topic counts, and `manifest.source_audit` with requested inputs,
   missing inputs, per-file parse results, extension coverage, parsed/emitted
   counts, skipped file reasons, ZIP member counts, skipped ZIP member reasons,
   limit truncation, and path-safety flags.
 - The collector remains weak-evidence-only: it captures the user's follows,
   likes, favorites, watch history, comments, shares, creator refs, topics,
-  symbols, and engagement counts, while keeping content/comment previews capped.
+  symbols, engagement counts, and weak influence topics, while keeping
+  content/comment previews capped.
 - It does not scrape platform-wide content, mirror full creator profiles, collect
   platform credentials, or let social activity become a standalone investment
   conclusion.
 - This improves the P2 social activity import path, but it does not claim real
   Weibo/Bilibili/Xiaohongshu account export validation, creator/domain
-  allowlists, weak-evidence backtest, or Windows/macOS/Linux path validation.
+  allowlists, social-topic false-positive review, weak-evidence backtest, or
+  Windows/macOS/Linux path validation.
 
 The prior completed wave: `pro-terminal-usage` now has stronger workflow-topic
 coverage for authorized Wind, Choice, iFinD, and Bloomberg workflow packages:
@@ -293,7 +297,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- | --- | --- |
 | 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false positives, and license-safe boundaries |
-| B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, influence surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, and weak-evidence backtest |
+| B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
 
 ## Deep-Designed Existing Collectors
 

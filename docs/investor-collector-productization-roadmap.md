@@ -1683,6 +1683,35 @@ Findings:
   files, unsafe ZIP members, missing input gap audit, credential filtering, ZIP
   limit accounting, weak-evidence policy, and preview-only content policy.
 
+### Wave X4: P2 social activity topic and lens-surface pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-topic-surface-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.4` and
+  `investor-source-collectors` to `0.1.9`.
+- Added per-event `social_topics`, `primary_social_topic`, and
+  `social_topic_terms` for macro, strategy, industry, fundamental,
+  fund/wealth, trading review, risk control, portfolio watch, creator
+  education, and HK/US weak influence themes.
+- Added social-topic coverage to `manifest.influence_surface_summary`,
+  including topic counts, primary topic counts, platform/topic counts,
+  action/topic counts, and missing expected social topics.
+- Added `social_influence_surface_summary` to the `social-investment-influence`
+  lens evidence so FinClaw can see platform, action, creator, engagement, and
+  weak social-topic coverage after investment filtering.
+- Kept the weak-evidence boundary explicit: social traces require
+  corroboration and cannot become standalone investment conclusions.
+- Fixture validation covers investment-topic classification, entertainment
+  false-positive guard, all expected social topics in package fixtures, lens
+  surface summaries, source audit, ZIP provenance, unsafe ZIP member skipping,
+  and preview-only content policy.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -1709,7 +1738,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false-positive review, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, lens social-surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 
 ## Git Practice
 

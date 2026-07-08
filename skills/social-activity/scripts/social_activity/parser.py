@@ -48,6 +48,8 @@ SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 CONTENT_PREVIEW_MAX_CHARS = 1200
 COMMENT_PREVIEW_MAX_CHARS = 800
 RECOMMENDED_WEAK_SIGNAL_FIELDS = (
+    "social_topics",
+    "primary_social_topic",
     "creator",
     "creator_id",
     "creator_url",
@@ -69,6 +71,117 @@ RECOMMENDED_WEAK_SIGNAL_FIELDS = (
     "comment_preview",
     "content_preview",
 )
+SOCIAL_INFLUENCE_TOPIC_ORDER = (
+    "macro_policy",
+    "market_strategy",
+    "industry_theme",
+    "company_fundamental",
+    "fund_wealth",
+    "trading_review",
+    "risk_control",
+    "portfolio_watch",
+    "creator_education",
+    "hk_us_market",
+    "unclassified_social_topic",
+)
+SOCIAL_INFLUENCE_TOPIC_TERMS = {
+    "macro_policy": {
+        "宏观",
+        "政策",
+        "流动性",
+        "利率",
+        "汇率",
+        "央行",
+        "财政",
+        "美联储",
+    },
+    "market_strategy": {
+        "策略",
+        "主线",
+        "配置",
+        "仓位",
+        "风格",
+        "择时",
+        "市场观点",
+        "市场复盘",
+    },
+    "industry_theme": {
+        "行业",
+        "产业链",
+        "主题",
+        "赛道",
+        "半导体",
+        "新能源",
+        "消费",
+        "医药",
+        "互联网",
+        "AI",
+    },
+    "company_fundamental": {
+        "财报",
+        "业绩",
+        "基本面",
+        "现金流",
+        "ROE",
+        "利润",
+        "毛利率",
+        "安全边际",
+    },
+    "fund_wealth": {
+        "基金",
+        "定投",
+        "ETF",
+        "指数基金",
+        "理财",
+        "固收",
+        "债券基金",
+    },
+    "trading_review": {
+        "复盘",
+        "实盘",
+        "交易",
+        "买入",
+        "卖出",
+        "加仓",
+        "减仓",
+        "打板",
+    },
+    "risk_control": {
+        "风险",
+        "风控",
+        "回撤",
+        "止损",
+        "纪律",
+        "风险控制",
+        "黑天鹅",
+    },
+    "portfolio_watch": {
+        "自选",
+        "组合",
+        "持仓",
+        "盯盘",
+        "观察",
+        "跟踪",
+        "提醒",
+    },
+    "creator_education": {
+        "财经博主",
+        "投教",
+        "大V",
+        "投研UP主",
+        "研究员",
+        "基金经理",
+    },
+    "hk_us_market": {
+        "港股",
+        "美股",
+        "中概股",
+        "恒生",
+        "纳斯达克",
+        "HK",
+        "US",
+    },
+}
 SECTION_ACTION_TYPES = {
     "activities": None,
     "history": "watch",
@@ -556,10 +669,27 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     text = first(record, ["text", "content", "body", "summary", "description", "comment", "评论", "正文", "内容", "简介", "备注"]) or ""
     creator = first(record, ["creator", "author", "owner", "uploader", "screen_name", "nickname", "up", "博主", "作者", "发布者", "UP主", "账号"])
     url = first(record, ["url", "link", "href", "链接", "地址"])
+    tags = tags_for(record)
+    topics = list_values(record, ["topics", "topic", "话题"])
+    symbols = list_values(record, ["symbols", "codes", "tickers", "证券", "股票", "代码"])
+    social_topics, social_topic_terms = classify_social_topics(
+        record,
+        title=title,
+        text=text,
+        creator=creator,
+        tags=tags,
+        topics=topics,
+        symbols=symbols,
+        action_type=action_type,
+        platform=platform,
+    )
     event_time = first(record, ["time", "date", "created_at", "updated_at", "watched_at", "liked_at", "favorited_at", "commented_at", "时间", "日期", "观看时间", "收藏时间", "点赞时间", "评论时间"])
     data = {
         "action_type": action_type,
         "platform": platform,
+        "social_topics": social_topics,
+        "primary_social_topic": social_topics[0] if social_topics else "unclassified_social_topic",
+        "social_topic_terms": social_topic_terms,
         "source_section": first(record, ["source_section", "sheet"]),
         "title": title,
         "creator": creator,
@@ -568,9 +698,9 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "url": url,
         "domain": host_for(url),
         "item_id": first(record, ["item_id", "post_id", "video_id", "note_id", "微博ID", "视频ID", "笔记ID"]),
-        "tags": tags_for(record),
-        "topics": list_values(record, ["topics", "topic", "话题"]),
-        "symbols": list_values(record, ["symbols", "codes", "tickers", "证券", "股票", "代码"]),
+        "tags": tags,
+        "topics": topics,
+        "symbols": symbols,
         "duration_seconds": number(first(record, ["duration_seconds", "duration", "时长"])),
         "progress": first(record, ["progress", "watch_progress", "观看进度"]),
         "like_count": number(first(record, ["like_count", "likes", "点赞数"])),
@@ -815,10 +945,34 @@ def usable_social_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return [event for event in events if (event.get("data") or {}).get("action_type") != "collector_gap"]
 
 
-def influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+def influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     usable_events = usable_social_events(events)
+    social_topic_counts: Counter[str] = Counter()
+    primary_topic_counts: Counter[str] = Counter()
+    platform_topic_counts: Counter[str] = Counter()
+    action_topic_counts: Counter[str] = Counter()
+    for event in usable_events:
+        data = event.get("data") or {}
+        topics = data.get("social_topics") if isinstance(data.get("social_topics"), list) else []
+        if not topics:
+            topics = ["unclassified_social_topic"]
+        for topic in topics:
+            topic_value = str(topic)
+            social_topic_counts[topic_value] += 1
+            platform_topic_counts[f"{data.get('platform', 'unknown')}:{topic_value}"] += 1
+            action_topic_counts[f"{data.get('action_type', 'unknown')}:{topic_value}"] += 1
+        primary_topic_counts[str(data.get("primary_social_topic") or topics[0])] += 1
     return {
         "weak_signal_event_count": len(usable_events),
+        "expected_social_topics": list(SOCIAL_INFLUENCE_TOPIC_ORDER[:-1]),
+        "social_topic_counts": ordered_counts(social_topic_counts, SOCIAL_INFLUENCE_TOPIC_ORDER),
+        "primary_social_topic_counts": ordered_counts(primary_topic_counts, SOCIAL_INFLUENCE_TOPIC_ORDER),
+        "missing_expected_social_topics": [
+            topic for topic in SOCIAL_INFLUENCE_TOPIC_ORDER[:-1] if social_topic_counts.get(topic, 0) == 0
+        ],
+        "platform_topic_counts": dict(sorted(platform_topic_counts.items())),
+        "action_topic_counts": dict(sorted(action_topic_counts.items())),
+        "events_with_social_topics": sum(1 for event in usable_events if (event.get("data") or {}).get("social_topics")),
         "events_with_creator": sum(1 for event in usable_events if (event.get("data") or {}).get("creator")),
         "events_with_creator_id": sum(1 for event in usable_events if (event.get("data") or {}).get("creator_id")),
         "events_with_creator_url": sum(1 for event in usable_events if (event.get("data") or {}).get("creator_url")),
@@ -841,6 +995,86 @@ def has_engagement_count(event: Dict[str, Any]) -> bool:
         data.get(field) is not None
         for field in ("like_count", "comment_count", "share_count", "favorite_count", "view_count", "follower_count")
     )
+
+
+def classify_social_topics(
+    record: Dict[str, Any],
+    *,
+    title: str,
+    text: str,
+    creator: Optional[str],
+    tags: List[str],
+    topics: List[str],
+    symbols: List[str],
+    action_type: str,
+    platform: str,
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    parts: List[str] = [
+        title,
+        text,
+        creator or "",
+        action_type,
+        platform,
+        " ".join(tags),
+        " ".join(topics),
+        " ".join(symbols),
+    ]
+    for key in (
+        "creator",
+        "author",
+        "owner",
+        "uploader",
+        "screen_name",
+        "nickname",
+        "title",
+        "name",
+        "subject",
+        "summary",
+        "description",
+        "comment",
+        "博主",
+        "作者",
+        "发布者",
+        "UP主",
+        "标题",
+        "评论",
+        "简介",
+    ):
+        value = first(record, [key])
+        if value:
+            parts.append(value)
+    searchable = "\n".join(parts)
+    lowered = searchable.lower()
+    matches: Dict[str, List[str]] = {}
+    for topic in SOCIAL_INFLUENCE_TOPIC_ORDER[:-1]:
+        hits = topic_term_hits(SOCIAL_INFLUENCE_TOPIC_TERMS[topic], searchable, lowered)
+        if hits:
+            matches[topic] = hits
+    if action_type == "follow":
+        matches.setdefault("creator_education", []).append("action:follow")
+    if any(re.search(r"(\.|\s)(hk|us)\b", symbol.lower()) or " hk " in f" {symbol.lower()} " for symbol in symbols):
+        matches.setdefault("hk_us_market", []).append("symbol_market")
+    topics_out = [topic for topic in SOCIAL_INFLUENCE_TOPIC_ORDER[:-1] if topic in matches]
+    return topics_out, {topic: matches[topic][:8] for topic in topics_out}
+
+
+def topic_term_hits(terms: Iterable[str], text: str, lowered: str) -> List[str]:
+    hits: List[str] = []
+    for term in sorted(terms):
+        if term.isascii():
+            if re.search(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])", lowered):
+                hits.append(term)
+        elif term in text:
+            hits.append(term)
+    return hits
+
+
+def ordered_counts(counts: Counter[str], order: Iterable[str]) -> Dict[str, int]:
+    result = {key: counts[key] for key in order if counts.get(key)}
+    for key, value in sorted(counts.items()):
+        if key not in result:
+            result[key] = value
+    return result
 
 
 def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

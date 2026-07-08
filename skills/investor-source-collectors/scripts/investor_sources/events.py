@@ -75,6 +75,19 @@ WECHAT_SOURCE_ACCOUNT_TYPE_ORDER = (
     "company_ir_account",
     "unknown_account_type",
 )
+SOCIAL_INFLUENCE_TOPIC_ORDER = (
+    "macro_policy",
+    "market_strategy",
+    "industry_theme",
+    "company_fundamental",
+    "fund_wealth",
+    "trading_review",
+    "risk_control",
+    "portfolio_watch",
+    "creator_education",
+    "hk_us_market",
+    "unclassified_social_topic",
+)
 
 
 def now_iso() -> str:
@@ -340,6 +353,8 @@ def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[s
         return meeting_minutes_surface_summary(events)
     if source_id == "wechat-article-favorites":
         return wechat_article_surface_summary(events)
+    if source_id == "social-investment-influence":
+        return social_influence_surface_summary(events)
     return {}
 
 
@@ -357,6 +372,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         summaries["meeting-minutes"] = meeting_minutes_surface_summary(by_source["meeting-minutes"])
     if "wechat-article-favorites" in by_source:
         summaries["wechat-article-favorites"] = wechat_article_surface_summary(by_source["wechat-article-favorites"])
+    if "social-investment-influence" in by_source:
+        summaries["social-investment-influence"] = social_influence_surface_summary(by_source["social-investment-influence"])
     return summaries
 
 
@@ -511,6 +528,82 @@ def task_calendar_source_platform(event: Dict[str, Any]) -> str:
     if not value and isinstance(upstream_raw_ref, dict):
         value = upstream_raw_ref.get("source_app") or upstream_raw_ref.get("source_platform")
     return str(value or "unknown")
+
+
+def social_influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    topic_counts: Counter[str] = Counter()
+    primary_topic_counts: Counter[str] = Counter()
+    platform_counts: Counter[str] = Counter()
+    action_counts: Counter[str] = Counter()
+    platform_topic_counts: Counter[str] = Counter()
+    action_topic_counts: Counter[str] = Counter()
+    creator_event_count = 0
+    creator_url_event_count = 0
+    url_event_count = 0
+    tagged_event_count = 0
+    symbol_event_count = 0
+    engagement_event_count = 0
+    comment_preview_event_count = 0
+    content_preview_event_count = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        topics = payload.get("social_topics") if isinstance(payload.get("social_topics"), list) else []
+        if not topics:
+            topics = ["unclassified_social_topic"]
+        platform = str(payload.get("platform") or "unknown")
+        action = str(payload.get("action_type") or "unknown")
+        platform_counts[platform] += 1
+        action_counts[action] += 1
+        for topic in topics:
+            topic_value = str(topic)
+            topic_counts[topic_value] += 1
+            platform_topic_counts[f"{platform}:{topic_value}"] += 1
+            action_topic_counts[f"{action}:{topic_value}"] += 1
+        primary_topic_counts[str(payload.get("primary_social_topic") or topics[0])] += 1
+        if payload.get("creator"):
+            creator_event_count += 1
+        if payload.get("creator_url"):
+            creator_url_event_count += 1
+        if payload.get("url"):
+            url_event_count += 1
+        if payload.get("tags") or payload.get("topics"):
+            tagged_event_count += 1
+        if payload.get("symbols"):
+            symbol_event_count += 1
+        if any(payload.get(field) is not None for field in ("like_count", "comment_count", "share_count", "favorite_count", "view_count", "follower_count")):
+            engagement_event_count += 1
+        if payload.get("comment_preview"):
+            comment_preview_event_count += 1
+        if payload.get("content_preview"):
+            content_preview_event_count += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_social_topics": list(SOCIAL_INFLUENCE_TOPIC_ORDER[:-1]),
+        "social_topic_counts": ordered_counts(topic_counts, SOCIAL_INFLUENCE_TOPIC_ORDER),
+        "primary_social_topic_counts": ordered_counts(primary_topic_counts, SOCIAL_INFLUENCE_TOPIC_ORDER),
+        "missing_expected_social_topics": [
+            topic for topic in SOCIAL_INFLUENCE_TOPIC_ORDER[:-1] if topic_counts.get(topic, 0) == 0
+        ],
+        "platform_counts": dict(sorted(platform_counts.items())),
+        "action_counts": dict(sorted(action_counts.items())),
+        "platform_topic_counts": dict(sorted(platform_topic_counts.items())),
+        "action_topic_counts": dict(sorted(action_topic_counts.items())),
+        "creator_event_count": creator_event_count,
+        "creator_url_event_count": creator_url_event_count,
+        "url_event_count": url_event_count,
+        "tagged_event_count": tagged_event_count,
+        "symbol_event_count": symbol_event_count,
+        "engagement_event_count": engagement_event_count,
+        "comment_preview_event_count": comment_preview_event_count,
+        "content_preview_event_count": content_preview_event_count,
+        "evidence_strength": "weak_attention",
+        "requires_corroboration": True,
+        "usable_as_investment_conclusion": False,
+        "generic_social_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
 
 
 def meeting_minutes_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -85,7 +85,13 @@ def test_collect_social_activity_exports() -> None:
         assert all(event["wiki_targets"] == ["internal.social.activity"] for event in events)
         comment = next(event for event in events if event["data"]["action_type"] == "comment")
         assert comment["kind"] == "message"
+        watch = next(event for event in events if event["data"].get("title") == "半导体投资复盘")
+        assert "industry_theme" in watch["data"]["social_topics"]
+        game = next(event for event in events if event["data"].get("title") == "游戏直播剪辑")
+        assert "social_topics" not in game["data"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["influence_surface_summary"]["events_with_social_topics"] == 4
+        assert manifest["influence_surface_summary"]["social_topic_counts"]["fund_wealth"] == 2
         assert manifest["collection_readiness"]["can_claim_investment_influence"] is False
         assert manifest["collection_readiness"]["evidence_strength"] == "weak_attention"
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
@@ -193,6 +199,22 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert manifest["action_coverage"]["missing_expected_actions"] == []
         assert manifest["weak_signal_field_coverage"]["missing_recommended_fields"] == []
         assert manifest["influence_surface_summary"]["weak_signal_event_count"] == 8
+        assert manifest["influence_surface_summary"]["events_with_social_topics"] == 8
+        assert manifest["influence_surface_summary"]["missing_expected_social_topics"] == []
+        assert manifest["influence_surface_summary"]["social_topic_counts"] == {
+            "macro_policy": 1,
+            "market_strategy": 1,
+            "industry_theme": 5,
+            "company_fundamental": 1,
+            "fund_wealth": 1,
+            "trading_review": 2,
+            "risk_control": 1,
+            "portfolio_watch": 1,
+            "creator_education": 6,
+            "hk_us_market": 1,
+        }
+        assert manifest["influence_surface_summary"]["action_topic_counts"]["share:macro_policy"] == 1
+        assert manifest["influence_surface_summary"]["platform_topic_counts"]["bilibili:trading_review"] == 1
         assert manifest["influence_surface_summary"]["events_with_creator"] >= 6
         assert manifest["influence_surface_summary"]["events_with_engagement_counts"] >= 5
         assert manifest["influence_surface_summary"]["events_with_symbols"] == 1

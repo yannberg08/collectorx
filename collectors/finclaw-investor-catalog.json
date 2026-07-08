@@ -362,7 +362,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-social-activity-export-import",
       "cli": "python3 skills/social-activity/scripts/social_activity.py collect --input <authorized-social-activity-export> --out-dir <out-dir>",
-      "collects": "Weibo, Bilibili, and Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, topics, symbols, engagement counts, weak influence signals, platform/action/field coverage, per-input source audit, skipped file reasons, and ZIP member audit.",
+      "collects": "Weibo, Bilibili, and Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, social influence topics, symbols, engagement counts, weak influence signals, platform/action/field coverage, per-input source audit, skipped file reasons, and ZIP member audit.",
       "must_not_collect": "Standalone investment conclusions, platform-wide scraping, full creator-profile scraping, or private platform secrets.",
       "production_gap": "Real platform exports, creator/domain allowlists, and weak-evidence backtest."
     },
@@ -375,7 +375,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-social-activity-lake-as-weak-evidence-only",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source social-investment-influence --input <social-activity-events-jsonl> --out-dir <out-dir>",
-      "collects": "Investment creator influence, attention sources, and corroboration candidates from social activity.",
+      "collects": "Investment creator influence, attention sources, social influence topic summaries, platform/action summaries, and corroboration candidates from social activity.",
       "must_not_collect": "Standalone investment advice or conclusions.",
       "production_gap": "Weak-evidence backtest against stronger trade/research sources."
     },

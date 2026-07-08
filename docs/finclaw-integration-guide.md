@@ -661,20 +661,25 @@ Current status:
   saved pages.
 - Captures creator IDs, creator URLs, domains, item IDs, tags, topics, symbols,
   engagement counts, watch progress, and comment/content previews.
+- Adds per-event `social_topics`, `primary_social_topic`, and
+  `social_topic_terms` so FinClaw can map weak influence signals to macro,
+  strategy, industry, fundamental, fund/wealth, trading review, risk control,
+  portfolio watch, creator education, and HK/US themes.
 - Every emitted event marks itself as `weak_influence_signal`,
   `investment_claim_allowed: false`, and `requires_corroboration: true`.
 - Writes platform, action, weak-signal-field coverage and weak-evidence-policy
   manifests.
 - Writes `manifest.influence_surface_summary`, `manifest.source_audit`, and
   `manifest.content_policy` so Lake can see creator/URL/topic/symbol/engagement
-  availability, requested inputs, missing inputs, per-file parse results,
-  extension coverage, skipped file reasons, ZIP member counts, skipped ZIP
-  member reasons, limit truncation, export package provenance, and preview-only
-  content boundaries.
+  and social-topic availability, requested inputs, missing inputs, per-file
+  parse results, extension coverage, skipped file reasons, ZIP member counts,
+  skipped ZIP member reasons, limit truncation, export package provenance, and
+  preview-only content boundaries.
 - Does not claim investment influence directly.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
-  lens. Treat resulting evidence as weak influence evidence unless corroborated
-  by stronger sources.
+  lens. The lens mirrors social-topic/platform/action/creator summaries, but
+  resulting evidence remains weak influence evidence unless corroborated by
+  stronger sources.
 
 ### 投资 Lens / 分类工具
 

@@ -23,6 +23,8 @@ scope:
     - comments
     - shares
     - engagement_counts
+    - social_topics
+    - social_topic_summary
     - platform_coverage_manifest
     - action_coverage_manifest
     - weak_signal_field_coverage_manifest
@@ -44,5 +46,5 @@ scope:
 description: |
   微博、B站、小红书等平台的通用用户活动采集器。它不判断投资含义；
   支持授权 JSON/CSV/Excel/HTML/TXT/ZIP 活动包，并报告平台/动作/弱证据字段覆盖、
-  影响源可用面、逐输入来源审计、跳过文件/ZIP 成员原因和内容策略。
+  社交影响主题面谱、影响源可用面、逐输入来源审计、跳过文件/ZIP 成员原因和内容策略。
   social-investment-influence lens 再筛选投资内容影响源。

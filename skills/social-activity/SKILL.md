@@ -1,6 +1,6 @@
 ---
 name: social-activity
-description: 微博、B站、小红书等社交平台用户活动通用采集器。采集用户授权的关注、点赞、收藏、观看历史、评论和分享等个人活动，支持授权 ZIP 包，输出 CollectorX 事件、弱证据策略、平台/动作/字段覆盖、影响源可用面、来源审计和内容策略 manifest；不抓平台全站内容，不判断投资含义。
+description: 微博、B站、小红书等社交平台用户活动通用采集器。采集用户授权的关注、点赞、收藏、观看历史、评论和分享等个人活动，支持授权 ZIP 包，输出 CollectorX 事件、弱证据策略、平台/动作/字段覆盖、社交影响主题面谱、影响源可用面、来源审计和内容策略 manifest；不抓平台全站内容，不直接形成投资结论。
 ---
 
 # Social Activity Collector
@@ -14,8 +14,9 @@ description: 微博、B站、小红书等社交平台用户活动通用采集器
 - 观看/点赞/评论/转发/收藏/粉丝等互动计数。
 - 用户授权导出的 JSON/JSONL、CSV/TSV、Excel、HTML、Markdown、TXT、ZIP 活动记录。
 - 事件明确标记为 `weak_influence_signal`，需要交易、笔记、研报、会议等更强证据交叉验证。
+- `social_topics`、`primary_social_topic`、`social_topic_terms`：给每条活动标记宏观、策略、行业、基本面、基金理财、交易复盘、风险控制、组合观察、投资创作者、港美股等弱影响主题。
 - `manifest.platform_coverage`、`manifest.action_coverage`、`manifest.weak_signal_field_coverage` 和 `manifest.weak_evidence_policy`。
-- `manifest.influence_surface_summary`：记录创作者、主页、URL、标签、话题、证券代码、互动计数、评论/内容预览和 section 可用面。
+- `manifest.influence_surface_summary`：记录创作者、主页、URL、标签、话题、证券代码、互动计数、评论/内容预览、section 和弱影响主题可用面。
 - `manifest.source_audit`：记录请求输入、缺失输入、逐文件解析结果、扩展名覆盖、跳过原因、ZIP 成员数量、ZIP 成员跳过原因、section/sheet 来源，并声明未采集危险路径成员。
 - `manifest.content_policy`：声明不抓平台全站、不抓完整创作者主页、默认不写全文，只保留预览。
 
