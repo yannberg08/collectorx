@@ -51,10 +51,19 @@ python <SKILL_DIR>/scripts/collect_for_soulmirror.py
 明确失败，**禁止把未授权伪装成空数组 `[]`**。空数组只代表“已成功连接滴答，
 且 API 确认当前没有任务”。
 
+对 AgentRunner 来说，未授权错误只用于展示下一步动作，不是采集结果：错误对象只会出现在
+`collect_for_soulmirror.py` 的 stderr 中，AgentRunner 不得把它写进 snapshot/result file；
+应保持结果文件为空或不存在，并回复 `TICKTICK_AUTH_REQUIRED 需要先通过“连接滴答清单”完成 OAuth 授权。`
+
 `ticktick_events.py` 只保留为本地授权导出包的离线转换/测试辅助，不是 SoulMirror
 主采集入口。
 
 ## 首次授权 SOP（AI 必读）
+
+注意：下面的授权 SOP 只适用于用户主动点击“连接滴答清单”或明确要求连接账号时。
+SoulMirror 定时/立即采集阶段只允许检查授权状态和读取任务；如果未授权，必须失败并
+提示需要连接，不能在采集过程中自动运行 `auth.py connect`、`auth.py register` 或
+`auth.py authorize`。
 
 ### 产品模式：优先一键连接
 

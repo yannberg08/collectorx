@@ -467,6 +467,12 @@ Current status:
 - If auth is missing, the collector fails clearly with
   `ticktick_auth_required`; it must not return `[]` because that would falsely
   mean the authorized account has no tasks.
+- Authorization is a separate user-facing action. During scheduled or immediate
+  collection, AgentRunner must not start OAuth, open a browser, or run
+  `auth.py connect` / `auth.py register` / `auth.py authorize`.
+- When auth is missing, any structured error belongs to stderr only; AgentRunner
+  should leave the snapshot/result file empty or absent and show
+  `TICKTICK_AUTH_REQUIRED 需要先通过“连接滴答清单”完成 OAuth 授权。`
 - The snapshot captures active tasks plus recent completed tasks, with stable
   ids, title, project, project id, status, priority, tags, due/start time, and
   raw task fields.

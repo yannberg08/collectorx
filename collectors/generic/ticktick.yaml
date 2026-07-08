@@ -13,18 +13,26 @@ prompt: |
 
   SoulMirror owns scheduling, diffing, event writing, and lake paths. This skill
   must only fetch task data and return one JSON array to AgentRunner.
+  During collection, do not start an OAuth flow, do not open a browser, and do
+  not run auth.py connect / register / authorize. Authorization is a separate
+  user-facing product action.
 
   First check authorization:
     python <SKILL_DIR>/scripts/auth.py status --json
 
   If authorization is missing, do not return [] and do not fabricate a task.
-  Fail clearly with error `ticktick_auth_required` so the product can ask the
-  user to connect TickTick first.
+  Do not write an error object into the result file. Leave the result file
+  empty/absent and make the final AgentRunner reply exactly:
+    TICKTICK_AUTH_REQUIRED 需要先通过“连接滴答清单”完成 OAuth 授权。
 
   If authorization exists, run:
     python <SKILL_DIR>/scripts/collect_for_soulmirror.py
 
-  Return exactly the JSON array printed by that command. Each item should keep a
-  stable `id` and a `data` object with the raw task fields. Do not write
-  lake/ticktick/events.jsonl, manifest.json, or SUMMARY.md from the skill; the
-  SoulMirror daemon will diff the snapshot and append events itself.
+  Write exactly the JSON array printed by that command to the result file
+  provided by SoulMirror. Each item should keep a stable `id` and a `data`
+  object with the raw task fields. Do not write lake/ticktick/events.jsonl,
+  manifest.json, or SUMMARY.md from the skill; the SoulMirror daemon will diff
+  the snapshot and append events itself.
+
+  Only after successfully writing a JSON array should the final reply be:
+    COLLECTED <number-of-records>

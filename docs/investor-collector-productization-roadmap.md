@@ -1810,6 +1810,9 @@ Findings:
   diffing, and snapshot state to the SoulMirror daemon.
 - Missing authorization now fails with `ticktick_auth_required` instead of
   returning `[]`, so FinClaw does not mistake "not connected" for "no tasks".
+- Hardened the AgentRunner prompt and skill instructions so scheduled/immediate
+  collection never starts OAuth and never writes a structured auth error into
+  the snapshot/result file.
 - Added `auth.py connect` support for a FinClaw-managed OAuth Broker through
   `TICKTICK_OAUTH_BROKER_URL`; the OAuth client secret stays server-side.
 - Added `task collect-all` to the management CLI for stable snapshot export.
@@ -1818,7 +1821,8 @@ Findings:
   `lake/ticktick/events.jsonl`.
 - Fixture validation covers missing auth, a fake authorized OpenAPI server,
   active/completed tasks, project-name mapping, inbox fallback, dedupe, token
-  non-leakage, and the offline export helper.
+  non-leakage, the offline export helper, and the YAML/SKILL prompt contract
+  that keeps authorization out of the collection path.
 - This improves the P1 task-planning source, but does not claim real TickTick
   account validation until the managed OAuth Broker is deployed and a real
   recurring-task/timezone backtest is run.

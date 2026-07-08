@@ -19,6 +19,9 @@ returns one JSON snapshot array.
   collide with daemon-owned `lake/ticktick/events.jsonl`.
 - Updated FinClaw catalog/docs to describe the live path and remaining real
   account validation gap.
+- Hardened the AgentRunner prompt and skill instructions so collection never
+  starts OAuth and never writes a structured auth error into the
+  snapshot/result file.
 
 ## Validation Coverage
 
@@ -39,6 +42,9 @@ returns one JSON snapshot array.
 - Completed-task OpenAPI requests use the documented `startDate`/`endDate`
   fields and apply `limit` locally instead of sending a non-standard request
   field.
+- The test suite now reads `collectors/generic/ticktick.yaml` and
+  `skills/ticktick-cli/SKILL.md` to lock the no-OAuth-during-collection and
+  no-error-object-in-result-file contract.
 
 ## Validation Commands
 

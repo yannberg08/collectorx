@@ -57,6 +57,9 @@ The prior completed wave: `ticktick-cli` now has a SoulMirror-aligned live colle
   SoulMirror daemon.
 - Missing auth now fails with `ticktick_auth_required` instead of returning an
   empty snapshot.
+- The AgentRunner prompt now explicitly separates authorization from
+  collection: collection must not start OAuth or write an auth-error object into
+  the snapshot/result file.
 - `auth.py connect` supports a FinClaw-managed OAuth Broker through
   `TICKTICK_OAUTH_BROKER_URL`, so ordinary users do not need to create a Dida365
   developer app.

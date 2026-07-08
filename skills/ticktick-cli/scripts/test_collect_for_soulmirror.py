@@ -15,6 +15,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 SCRIPT = ROOT / "collect_for_soulmirror.py"
+REPO_ROOT = ROOT.parents[2]
+COLLECTOR_YAML = REPO_ROOT / "collectors" / "generic" / "ticktick.yaml"
+SKILL_MD = ROOT.parent / "SKILL.md"
 
 
 def test_missing_auth_fails_without_empty_snapshot() -> None:
@@ -150,7 +153,25 @@ def test_authorized_snapshot_collects_active_and_completed_tasks() -> None:
     assert {} in seen_payloads
 
 
+def test_soulmirror_prompt_keeps_auth_out_of_collection() -> None:
+    collector_text = COLLECTOR_YAML.read_text(encoding="utf-8")
+    skill_text = SKILL_MD.read_text(encoding="utf-8")
+    collector_flat = " ".join(collector_text.split())
+
+    assert "apiVersion: soulmirror/v1" in collector_text
+    assert "do not start an OAuth flow" in collector_flat
+    assert "do not run auth.py connect / register / authorize" in collector_flat
+    assert "Do not write an error object into the result file" in collector_flat
+    assert "TICKTICK_AUTH_REQUIRED" in collector_text
+    assert "COLLECTED <number-of-records>" in collector_text
+
+    assert "SoulMirror 定时/立即采集阶段只允许检查授权状态和读取任务" in skill_text
+    assert "错误对象只会出现在" in skill_text
+    assert "不得把它写进 snapshot/result file" in skill_text
+
+
 if __name__ == "__main__":
     test_missing_auth_fails_without_empty_snapshot()
     test_authorized_snapshot_collects_active_and_completed_tasks()
+    test_soulmirror_prompt_keeps_auth_out_of_collection()
     print("ticktick SoulMirror collector tests passed.")
