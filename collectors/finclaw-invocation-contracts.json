@@ -58,8 +58,8 @@
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
       "user_step": "Authorize a local Tonghuashun data root for read-only watchlist scanning; exported files can still be imported through --input as a fallback. Optional allow/deny scope parameters can narrow symbols, markets, groups, industries, tags, keywords, source paths, or source platforms.",
-      "preflight": "The root or export is user-owned Tonghuashun watchlist evidence and not a trade, holding, order, or fund-flow source; when scope filters are supplied, filtered-all means every candidate was outside the user authorization scope.",
-      "failure_state": "needs_authorized_ths_watchlist_root_or_export"
+      "preflight": "The root or export is user-owned Tonghuashun watchlist evidence and not a trade, holding, order, or fund-flow source; no-input and filtered-all runs emit validator-safe profile gap packages with can_enter_finclaw=false.",
+      "failure_state": "needs_authorized_ths_watchlist_root_or_export_or_scope_policy_retained_watchlist"
     },
     {
       "id": "wechat",

@@ -221,10 +221,16 @@ def collect_from_inputs_with_audit(
         "archive_member_results": [],
     }
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="ths_watchlist_authorized_input_missing")]
-        audit["emitted_event_count"] = len(events)
         _unused, scope_audit = apply_ths_watchlist_scope_policy([], normalized_scope_policy)
         attach_ths_watchlist_scope_policy_audit(audit, scope_audit)
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason="ths_watchlist_authorized_input_missing",
+                collection_audit=audit,
+            )
+        ]
+        audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
         return events, audit
     events: List[Dict[str, Any]] = []
@@ -283,7 +289,7 @@ def collect_from_inputs_with_audit(
     audit["local_scan_event_count"] = sum(1 for event in events if (event.get("raw_ref") or {}).get("local_scan"))
     if not events:
         reason = "ths_watchlist_scope_policy_filtered_all" if audit.get("ths_watchlist_scope_policy_filtered_all") else "ths_watchlist_records_empty"
-        events = [gap_event(collected_at=collected_at, reason=reason)]
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
@@ -648,6 +654,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     name = first(record, ["name", "stock_name", "security_name", "证券名称", "名称"]) or ""
     group = first(record, ["group", "group_name", "folder", "watchlist", "分组", "自选分组"]) or first(record, ["sheet"])
     added_at = first(record, ["added_at", "created_at", "time", "date", "加入时间", "添加时间", "日期"])
+    event_time = added_at or collected_at or now_iso()
     source_platform = first(record, ["_collectorx_source_platform"])
     local_scan = bool(first_raw(record, "_collectorx_local_scan"))
     data = {
@@ -682,8 +689,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source": "同花顺自选股用户授权本机扫描" if local_scan else "同花顺自选股用户授权导出",
         "owner_scope": "personal",
         "kind": "watchlist",
-        "time": added_at,
-        "collected_at": collected_at or now_iso(),
+        "time": event_time,
+        "collected_at": collected_at or event_time,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -698,27 +705,56 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     messages = {
         "ths_watchlist_authorized_input_missing": "No user-authorized Tonghuashun watchlist input or local-scan candidate was available.",
         "ths_watchlist_records_empty": "Tonghuashun watchlist inputs were available, but no usable watchlist records were parsed.",
         "ths_watchlist_scope_policy_filtered_all": "Tonghuashun watchlist records were found, but every candidate was outside the configured authorization scope policy.",
     }
+    statuses = {
+        "ths_watchlist_authorized_input_missing": "needs_ths_watchlist_authorized_input",
+        "ths_watchlist_records_empty": "no_usable_ths_watchlist_records",
+        "ths_watchlist_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    audit = collection_audit or {}
+    scope_audit = audit.get("ths_watchlist_scope_policy") or {}
+    timestamp = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "同花顺自选股授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
         "data": {
             "gap": reason,
+            "status": statuses.get(reason, "no_usable_ths_watchlist_records"),
+            "profile_type": reason,
             "message": messages.get(reason, "Tonghuashun watchlist collection produced no usable events."),
+            "candidate_event_count": scope_audit.get("candidate_event_count", audit.get("scope_policy_candidate_event_count", 0)),
+            "retained_event_count": scope_audit.get("retained_event_count", audit.get("scope_policy_retained_event_count", 0)),
+            "filtered_event_count": scope_audit.get("filtered_event_count", audit.get("scope_policy_filtered_event_count", 0)),
+            "filter_reason_counts": scope_audit.get("filter_reason_counts", audit.get("scope_policy_filter_reason_counts", {})),
+            "policy_is_user_authorization_scope": scope_audit.get("policy_is_user_authorization_scope", True),
+            "policy_does_not_assert_investment_relevance": scope_audit.get("policy_does_not_assert_investment_relevance", True),
+            "watchlist_is_attention_universe_only": True,
+            "broker_trade_fact_claimed": False,
+            "holding_fact_claimed": False,
+            "order_or_fund_flow_claimed": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(scope_audit.get("configured", False)),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
@@ -733,6 +769,8 @@ def build_manifest(
     market_counts = Counter((event.get("data") or {}).get("market", "unknown") for event in events if event["kind"] == "watchlist")
     group_counts = Counter((event.get("data") or {}).get("group", "unknown") for event in events if event["kind"] == "watchlist")
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    watchlist_event_count = sum(1 for event in events if event.get("kind") == "watchlist")
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     field_coverage = build_watchlist_field_coverage(events)
     audit = collection_audit or {}
     local_scan_event_count = sum(1 for event in events if (event.get("raw_ref") or {}).get("local_scan"))
@@ -757,6 +795,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "watchlist_event_count": watchlist_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "market_counts": dict(sorted(market_counts.items())),
         "group_counts": dict(sorted(group_counts.items())),

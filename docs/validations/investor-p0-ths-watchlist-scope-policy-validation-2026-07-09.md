@@ -8,7 +8,8 @@ broker-confirmed trade records are collected by this collector.
 ## Scope
 
 - Collector: `ths-watchlist`
-- Version: `0.1.3`
+- Version: `0.1.3`; gap package ingestion was later hardened in version
+  `0.1.4`.
 - FinClaw route: vertical attention-universe evidence for the Investor Wiki,
   never broker-confirmed holdings, executions, orders, or fund flows.
 
@@ -27,6 +28,10 @@ broker-confirmed trade records are collected by this collector.
 - When every candidate record is filtered, readiness reports
   `scope_policy_filtered_all` and the collector emits an explicit gap event
   instead of a misleading successful watchlist package.
+- As of version `0.1.4`, no-input and filtered-all gap events are
+  validator-safe profile events with non-empty `time`, candidate/filter counts,
+  reason summaries, `manifest.watchlist_event_count=0`, and
+  `manifest.gap_event_count=1`.
 
 ## Fixture Coverage
 

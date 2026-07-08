@@ -57,7 +57,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-local-scan-or-export-import",
       "cli": "python3 skills/ths-watchlist/scripts/ths_watchlist.py collect --local-scan --container-root <authorized-ths-watchlist-root> --out-dir <out-dir>",
-      "collects": "Tonghuashun watchlist symbols, names, groups, industries, tags, notes, added time, authorized local-scan provenance, path-level source audit, ZIP member provenance, skipped reason counts, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all readiness, field coverage, ths_watchlist_boundary_proof, and attention-universe Investor Wiki evidence.",
+      "collects": "Tonghuashun watchlist symbols, names, groups, industries, tags, notes, added time, authorized local-scan provenance, path-level source audit, ZIP member provenance, skipped reason counts, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, validator-safe filtered-all/no-input gap packages, field coverage, ths_watchlist_boundary_proof, and attention-universe Investor Wiki evidence.",
       "must_not_collect": "Broker-confirmed holdings, executions, orders, fund flows, trading passwords, cookies, tokens, or sessions.",
       "production_gap": "Real Tonghuashun local-store validation, default app path validation, and trade/research corroboration backtest."
     },
