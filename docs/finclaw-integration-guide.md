@@ -390,9 +390,14 @@ Current status:
   metadata, and writes a standard `investor_wiki_evidence.v1.json`.
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
   counts, HAR entry/endpoint/skip-reason coverage, parsed records, pagination
-  marker fields, activity field coverage, and source-surface coverage.
+  marker fields, activity field coverage, source-surface coverage,
+  `activity_boundary_proof`, and pagination completeness.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade
   evidence.
+- `activity_boundary_proof` reports whether watchlist, followed users,
+  followed portfolios, portfolio activity, comments, favorites, posts, and saved
+  pages were observed. Pagination completeness remains partial and never claims
+  a complete timeline without real account validation.
 - Not yet a one-click login/session collector; the HAR path is an authorized
   browser export baseline for real-account responses.
 - Not a broker-confirmed trade source.

@@ -29,7 +29,7 @@ def write_package(out: Path, events: list[dict], *, collected_at: str, collectio
     out = out.expanduser()
     write_jsonl(out / "lake" / "xueqiu-investor-activity" / "events.jsonl", events)
     manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
-    evidence = build_evidence(events, generated_at=collected_at)
+    evidence = build_evidence(events, generated_at=collected_at, collection_audit=collection_audit)
     write_json(out / "manifest.json", manifest)
     write_json(out / "investor_wiki_evidence.v1.json", evidence)
     (out / "SUMMARY.md").write_text(
@@ -38,6 +38,8 @@ def write_package(out: Path, events: list[dict], *, collected_at: str, collectio
                 "# 雪球投资者活动采集包",
                 "",
                 f"- 事件数：{len(events)}",
+                f"- 活动覆盖证明：`{manifest['activity_boundary_proof']['overall_proof_level']}`",
+                f"- 分页完整性：`{manifest['activity_boundary_proof']['pagination_completeness']['completeness_level']}`",
                 "- 强交易事实：false",
                 "- 边界：雪球只作为关注池、信息源、人脉网络、观点表达和组合模拟行为证据。",
                 "- Wiki 写入：采集器只写 lake 和 evidence，最终 Wiki 由 SoulMirror investor-portrait 组织。",

@@ -29,6 +29,8 @@ scope:
     - pagination_marker_audit
     - browser_network_response_audit
     - field_coverage
+    - activity_boundary_proof
+    - pagination_completeness_summary
   excludes:
     - platform_wide_sentiment
     - other_users_full_timelines
@@ -45,5 +47,5 @@ description: |
   CollectorX lake 包与投资 Wiki 证据包；支持 JSON/CSV/Excel/HTML/TXT/HAR/ZIP
   授权导出，HAR 只读取 xueqiu.com 响应体且不写入请求头、Cookie、Authorization
   或 URL 查询串，ZIP 包保留 archive.zip::member 来源并跳过路径穿越成员。
-  manifest 记录输入、HAR、ZIP、分页标记和字段覆盖审计。不能当券商强交易事实，
-  也不爬全站舆情。
+  manifest 记录输入、HAR、ZIP、分页标记、字段覆盖、活动面覆盖证明和分页完整性摘要。
+  不能当券商强交易事实，也不爬全站舆情。

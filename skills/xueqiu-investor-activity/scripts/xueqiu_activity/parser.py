@@ -54,7 +54,17 @@ SUPPORTED_EXTENSIONS = {
 }
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
-EXPECTED_ACTIVITY_TYPES = ("watchlist", "follow_user", "follow_portfolio", "portfolio_activity", "comment", "favorite", "post")
+EXPECTED_ACTIVITY_TYPES = ("watchlist", "follow_user", "follow_portfolio", "portfolio_activity", "comment", "favorite", "post", "saved_page")
+ACTIVITY_REQUIRED_FIELDS = {
+    "watchlist": ("symbols", "name"),
+    "follow_user": ("author", "author_id", "target_user", "url"),
+    "follow_portfolio": ("portfolio_symbol", "portfolio_name", "url"),
+    "portfolio_activity": ("portfolio_symbol", "portfolio_name", "portfolio_changes"),
+    "comment": ("content_preview", "author", "url"),
+    "favorite": ("content_preview", "url"),
+    "post": ("content_preview", "url"),
+    "saved_page": ("content_preview", "url"),
+}
 INVESTOR_WIKI_SUBDIMENSION_RULES = {
     "inv-market-view": {
         "support_level": "weak",
@@ -727,6 +737,7 @@ def build_manifest(
         "observed_activity_types": observed,
         "missing_expected_activity_types": missing,
         "field_coverage": build_activity_field_coverage(events),
+        "activity_boundary_proof": activity_boundary_proof(events, collection_audit=collection_audit),
         "evidence_policy": {
             "xueqiu_is_broker_trade_source": False,
             "broker_confirmed_trade_collection": False,
@@ -774,7 +785,12 @@ def build_activity_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any
     }
 
 
-def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+def build_evidence(
+    events: List[Dict[str, Any]],
+    *,
+    generated_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in events)
     for event in events:
@@ -796,11 +812,149 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         "coverage_summary": {
             "xueqiu_is_strong_trade_source": False,
             "activity_counts": dict(sorted(activity_counts.items())),
+            "activity_boundary_proof": activity_boundary_proof(events, collection_audit=collection_audit),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
             "evidence_role": "attention_network_opinion_and_model_portfolio_only",
         },
     }
     return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
+
+
+def activity_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    activity_events = [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
+    audit = collection_audit or {}
+    if not activity_events:
+        return {
+            "proof_scope": "none",
+            "overall_proof_level": "no_authorized_activity_evidence",
+            "complete_xueqiu_activity_boundary_claimed": False,
+            "xueqiu_is_broker_trade_source": False,
+            "expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
+            "observed_activity_types": [],
+            "missing_expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
+            "activity_proofs": [],
+            "pagination_completeness": pagination_completeness_summary(activity_events, audit),
+            "missing_global_requirements": ["authorized_xueqiu_activity_input"],
+        }
+
+    activity_counts = Counter(str((event.get("data") or {}).get("activity_type") or "unknown") for event in activity_events)
+    observed = sorted(activity for activity in activity_counts if activity != "unknown")
+    missing = [activity for activity in EXPECTED_ACTIVITY_TYPES if activity_counts.get(activity, 0) == 0]
+    activity_types = list(EXPECTED_ACTIVITY_TYPES)
+    for activity in sorted(activity_counts):
+        if activity not in activity_types:
+            activity_types.append(activity)
+    proofs = [activity_type_proof(activity, activity_events) for activity in activity_types]
+    missing_global = []
+    if missing:
+        missing_global.append("expected_activity_surface_coverage")
+    if not any((event.get("data") or {}).get("symbols") for event in activity_events):
+        missing_global.append("symbol_or_watchlist_evidence")
+    if not any((event.get("data") or {}).get("author") or (event.get("data") or {}).get("target_user") for event in activity_events):
+        missing_global.append("information_network_identity")
+    if not any((event.get("data") or {}).get("content_preview") for event in activity_events):
+        missing_global.append("opinion_or_saved_content_preview")
+    pagination = pagination_completeness_summary(activity_events, audit)
+    if pagination["completeness_level"] != "paginated_partial_export":
+        missing_global.append("validated_pagination")
+    return {
+        "proof_scope": "partial_authorized_input",
+        "overall_proof_level": overall_activity_boundary_level(activity_counts),
+        "complete_xueqiu_activity_boundary_claimed": False,
+        "xueqiu_is_broker_trade_source": False,
+        "expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
+        "observed_activity_types": observed,
+        "missing_expected_activity_types": missing,
+        "activity_proof_level_counts": dict(sorted(Counter(proof["proof_level"] for proof in proofs).items())),
+        "activity_proofs": proofs,
+        "pagination_completeness": pagination,
+        "missing_global_requirements": missing_global,
+    }
+
+
+def activity_type_proof(activity_type: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    activity_events = [
+        event for event in events
+        if str((event.get("data") or {}).get("activity_type") or "unknown") == activity_type
+    ]
+    field_counts = {
+        field: sum(1 for event in activity_events if (event.get("data") or {}).get(field) not in (None, "", [], {}))
+        for field in ACTIVITY_REQUIRED_FIELDS.get(activity_type, ())
+    }
+    present_required = [field for field, count in field_counts.items() if count > 0]
+    missing_required = [field for field, count in field_counts.items() if count == 0]
+    return {
+        "activity_type": activity_type,
+        "event_count": len(activity_events),
+        "proof_level": activity_proof_level(len(activity_events), present_required, missing_required),
+        "required_fields": list(ACTIVITY_REQUIRED_FIELDS.get(activity_type, ())),
+        "present_required_fields": present_required,
+        "missing_required_fields": missing_required,
+        "field_counts": dict(sorted(field_counts.items())),
+        "symbol_event_count": sum(1 for event in activity_events if (event.get("data") or {}).get("symbols")),
+        "content_event_count": sum(1 for event in activity_events if (event.get("data") or {}).get("content_preview")),
+        "url_event_count": sum(1 for event in activity_events if (event.get("data") or {}).get("url")),
+    }
+
+
+def activity_proof_level(event_count: int, present_required: List[str], missing_required: List[str]) -> str:
+    if event_count == 0:
+        return "missing_activity_evidence"
+    if not missing_required:
+        return "usable_activity_evidence"
+    if present_required:
+        return "thin_activity_evidence"
+    return "raw_activity_presence_only"
+
+
+def overall_activity_boundary_level(activity_counts: Counter) -> str:
+    observed_expected_count = sum(1 for activity in EXPECTED_ACTIVITY_TYPES if activity_counts.get(activity, 0) > 0)
+    if observed_expected_count == len(EXPECTED_ACTIVITY_TYPES):
+        return "broad_partial_activity_boundary"
+    if observed_expected_count >= 4:
+        return "medium_partial_activity_boundary"
+    return "narrow_partial_activity_boundary"
+
+
+def pagination_completeness_summary(events: List[Dict[str, Any]], audit: Dict[str, Any]) -> Dict[str, Any]:
+    limit = audit.get("limit")
+    pagination_marker_count = int(audit.get("pagination_marker_count") or 0)
+    har_used = bool(audit.get("authorized_browser_network_export_used"))
+    completeness_level = "no_activity_input"
+    if events:
+        if isinstance(limit, int) and limit >= 0 and len(events) >= limit:
+            completeness_level = "truncated_by_limit"
+        elif har_used and pagination_marker_count > 0:
+            completeness_level = "paginated_partial_export"
+        elif pagination_marker_count > 0:
+            completeness_level = "pagination_markers_observed_not_validated"
+        elif har_used:
+            completeness_level = "single_page_or_unknown_pagination"
+        else:
+            completeness_level = "no_pagination_evidence"
+    missing_requirements = []
+    if pagination_marker_count == 0 and events:
+        missing_requirements.append("pagination_markers")
+    if not har_used and events:
+        missing_requirements.append("authorized_browser_network_or_account_export")
+    missing_requirements.append("real_account_pagination_validation")
+    return {
+        "completeness_level": completeness_level,
+        "complete_timeline_claimed": False,
+        "requires_real_pagination_validation": True,
+        "event_count": len(events),
+        "limit": limit,
+        "pagination_marker_count": pagination_marker_count,
+        "pagination_marker_field_counts": dict(sorted((audit.get("pagination_marker_field_counts") or {}).items())),
+        "authorized_browser_network_export_used": har_used,
+        "har_endpoint_counts": dict(sorted((audit.get("har_endpoint_counts") or {}).items())),
+        "har_response_record_count": int(audit.get("har_response_record_count") or 0),
+        "missing_requirements": missing_requirements,
+    }
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

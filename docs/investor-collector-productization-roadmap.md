@@ -336,6 +336,35 @@ Findings:
 - This is an authorized browser export baseline, not a one-click login/session
   adapter. Real account HAR samples and pagination completeness remain pending.
 
+### Wave B3e: P0 Xueqiu activity-boundary and pagination proof pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-xueqiu-activity-boundary-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `xueqiu-investor-activity` to `0.3.2`.
+- Added `manifest.activity_boundary_proof` and mirrored it into
+  `investor_wiki_evidence.v1.json`.
+- Expected activity surfaces now include watchlist, followed users, followed
+  portfolios, portfolio activity, comments, favorites, posts, and saved pages.
+- Per-surface proof levels distinguish usable, thin, raw-presence, and missing
+  activity evidence.
+- Added `pagination_completeness` with pagination marker counts, marker fields,
+  HAR endpoint counts, limit truncation status, and conservative
+  `complete_timeline_claimed: false` policy.
+- Package `SUMMARY.md` now shows activity-boundary proof and pagination
+  completeness levels.
+- Fixture validation covers all expected activity surfaces, HAR pagination
+  markers, evidence propagation, package summary output, and the explicit
+  non-broker-trade boundary.
+- This improves Snowball as a P0 attention-network and opinion-source channel,
+  but it does not claim a one-click real account adapter or complete timeline
+  validation.
+
 ### Wave B4: P0 China wealth assets productization pass 2
 
 Status: `completed-baseline`
@@ -2074,7 +2103,7 @@ Findings:
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, and explicit filtered-all gap status; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF/image samples, Chinese OCR quality review, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
-| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
+| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
 
 ## P1 Work Queue

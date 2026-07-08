@@ -141,7 +141,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-package-import",
       "cli": "python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect --input <authorized-xueqiu-export> --out-dir <out-dir> --sync-soulmirror",
-      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, source audit, pagination marker audit, and field coverage.",
+      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, source audit, pagination marker audit, activity-boundary proof, pagination completeness summary, and field coverage.",
       "must_not_collect": "Trading facts unless corroborated by broker sources, login secrets, or platform-wide public scraping.",
       "production_gap": "Real account adapter/export workflow, real pagination coverage, and rate/terms boundary review."
     },

@@ -129,6 +129,11 @@ def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:
         assert manifest["collection_audit"]["pagination_marker_count"] == 1
         assert manifest["collection_audit"]["pagination_marker_field_counts"]["max_id"] == 1
         assert manifest["field_coverage"]["fields"]["content_preview"]["present"] >= 1
+        proof = manifest["activity_boundary_proof"]
+        assert proof["overall_proof_level"] == "narrow_partial_activity_boundary"
+        assert proof["complete_xueqiu_activity_boundary_claimed"] is False
+        assert proof["pagination_completeness"]["completeness_level"] == "pagination_markers_observed_not_validated"
+        assert "validated_pagination" in proof["missing_global_requirements"]
 
 
 def test_collects_har_network_export_without_leaking_secrets() -> None:
@@ -234,6 +239,15 @@ def test_collects_har_network_export_without_leaking_secrets() -> None:
         }
         assert audit["har_secret_material_stripped_count"] >= 4
         assert audit["har_query_string_stripped_count"] == 1
+        proof = manifest["activity_boundary_proof"]
+        assert proof["pagination_completeness"]["completeness_level"] == "paginated_partial_export"
+        assert proof["pagination_completeness"]["pagination_marker_count"] == 1
+        assert proof["pagination_completeness"]["har_endpoint_counts"] == {
+            "/statuses/user_timeline.json": 1,
+            "/v4/statuses/public_timeline.json": 1,
+        }
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["activity_boundary_proof"]["pagination_completeness"]["completeness_level"] == "paginated_partial_export"
 
 
 def test_collects_html_saved_page_and_manifest_audit() -> None:
@@ -360,6 +374,60 @@ def test_collects_zip_excel_activity_package() -> None:
         assert manifest["evidence_policy"]["xueqiu_is_broker_trade_source"] is False
 
 
+def test_activity_boundary_proof_reports_broad_partial_coverage() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "all-surfaces.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "items": [
+                        {"type": "watchlist", "symbol": "600519", "name": "贵州茅台"},
+                        {"type": "follow_user", "screen_name": "价值研究员", "user_id": "u-1", "url": "https://xueqiu.com/u/1"},
+                        {"type": "follow_portfolio", "cube_symbol": "ZH001", "cube_name": "红利组合", "url": "https://xueqiu.com/P/ZH001"},
+                        {
+                            "type": "portfolio",
+                            "cube_symbol": "ZH001",
+                            "cube_name": "红利组合",
+                            "rebalancing_histories": [{"stock_symbol": "600519", "stock_name": "贵州茅台", "target_weight": "10"}],
+                        },
+                        {"type": "comment", "text": "同意继续观察估值。", "screen_name": "本人", "url": "https://xueqiu.com/1/2"},
+                        {"type": "favorite", "title": "白酒深度", "url": "https://xueqiu.com/1/3", "text": "收藏行业研究。"},
+                        {"type": "post", "text": "复盘：降低仓位等待赔率。", "url": "https://xueqiu.com/1/4"},
+                        {"type": "saved_page", "title": "半导体收藏", "url": "https://xueqiu.com/1/5", "content": "保存页内容。"},
+                    ],
+                    "max_id": 88,
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(json_path), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        proof = manifest["activity_boundary_proof"]
+        assert proof["overall_proof_level"] == "broad_partial_activity_boundary"
+        assert proof["missing_expected_activity_types"] == []
+        assert proof["complete_xueqiu_activity_boundary_claimed"] is False
+        assert proof["xueqiu_is_broker_trade_source"] is False
+        assert proof["pagination_completeness"]["completeness_level"] == "pagination_markers_observed_not_validated"
+        assert proof["pagination_completeness"]["complete_timeline_claimed"] is False
+        assert proof["activity_proof_level_counts"]["usable_activity_evidence"] >= 6
+        watchlist = next(item for item in proof["activity_proofs"] if item["activity_type"] == "watchlist")
+        assert watchlist["proof_level"] == "usable_activity_evidence"
+        assert watchlist["field_counts"]["symbols"] == 1
+        summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
+        assert "活动覆盖证明：`broad_partial_activity_boundary`" in summary
+        assert "分页完整性：`pagination_markers_observed_not_validated`" in summary
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["activity_boundary_proof"]["overall_proof_level"] == "broad_partial_activity_boundary"
+
+
 if __name__ == "__main__":
     test_collect_watchlist_csv()
     test_collect_posts_json()
@@ -368,4 +436,5 @@ if __name__ == "__main__":
     test_collects_html_saved_page_and_manifest_audit()
     test_syncs_package_to_soulmirror_lake()
     test_collects_zip_excel_activity_package()
+    test_activity_boundary_proof_reports_broad_partial_coverage()
     print("xueqiu-investor-activity tests passed.")
