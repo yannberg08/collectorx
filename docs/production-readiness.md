@@ -16,7 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw catalog validation now checks runnable invocation contracts:
+`qq` now has a standard CollectorX package path:
+
+- `qq_query.py --db-dir <authorized-qq-db-dir> collect --out-dir <out-dir>`
+  writes `lake/qq/events.jsonl`, `manifest.json`, `qq.collect.json`, and
+  `SUMMARY.md`.
+- The manifest records filter policy, owner-UIN presence without leaking the
+  UIN, field coverage, source audit, communication-surface counts, and the
+  generic-to-lens evidence boundary.
+- If no readable QQ database exists, the collector writes an explicit gap
+  package with `collection_readiness.status=needs_readable_qq_db` instead of
+  returning an ambiguous empty result.
+- Fixture validation covers normal package output, package-gate validation, and
+  missing-database gap packages.
+- This improves QQ's FinClaw-callable product path, but it does not claim real
+  decrypted QQ NT message validation on the current machine because local
+  passphrase capture remains blocked by the LLDB/SIP precondition.
+
+The prior completed wave: FinClaw catalog validation now checks runnable invocation contracts:
 
 - `tools/validate_project.py` now verifies that each
   `collectors/finclaw-investor-catalog.json` entry points to the correct
@@ -26,12 +43,10 @@ FinClaw catalog validation now checks runnable invocation contracts:
   cannot accidentally run the wrong lens profile.
 - Non-SoulMirror entries must declare a concrete `<out-dir>` target; SoulMirror
   entries must use `apiVersion: soulmirror/v1` in their collector YAML.
-- The new gate caught and fixed the `qq` catalog command: `--db-dir` is a
-  top-level `qq_query.py` option, and the command now writes both compact QQ
-  collect JSON and `lake/qq/events.jsonl` under `<out-dir>`.
-- This improves product-entry safety, but it does not make QQ a full standard
-  package collector yet; QQ still needs a complete `manifest.json`/`SUMMARY.md`
-  package pass before broad FinClaw exposure.
+- The new gate caught and fixed the historical `qq` catalog command:
+  `--db-dir` is a top-level `qq_query.py` option.
+- This improves product-entry safety; QQ's full standard package path is now
+  covered by the later QQ package wave above.
 
 The prior completed wave: `ticktick-cli` now has a SoulMirror-aligned live collector path:
 
@@ -397,7 +412,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; Windows/Linux are code-level simulations or fallback paths |
 | `ths-portfolio` | `deep-beta`; strong local package and GUI snapshot design exists, but needs broader real-device validation to claim production |
 | `ths-watchlist` | `baseline+audit`; authorized local export collector for same-channel watchlist/attention-universe evidence with standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
-| `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow exists, current machine still has LLDB/passphrase capture limitation |
+| `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow plus standard package output, manifest/summary, field/filter audit, gap packages, and fixture package validation exist; current machine still has LLDB/passphrase capture limitation for real encrypted NT messages |
 
 ## Product Rule
 

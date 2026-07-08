@@ -387,10 +387,10 @@
       "readiness": "deep-beta",
       "gate": "G3-partial",
       "finclaw_action": "beta-communication-collector-after-user-authorizes-local-store",
-      "cli": "python3 skills/qq-export/scripts/qq_query.py --db-dir <authorized-qq-db-dir> collect --out <out-dir>/qq.collect.json --event-export <out-dir>/lake/qq/events.jsonl",
-      "collects": "Authorized QQ contacts, groups, messages, and compact communication evidence.",
+      "cli": "python3 skills/qq-export/scripts/qq_query.py --db-dir <authorized-qq-db-dir> collect --out-dir <out-dir>",
+      "collects": "Authorized QQ contacts, groups, messages, compact communication evidence, standard Lake events, manifest, field/filter audit, and explicit gap packages.",
       "must_not_collect": "Passphrases in output, decrypted keys, unrelated raw dumps, or investment conclusions.",
-      "production_gap": "Current macOS passphrase capture limitation and investor lens routing."
+      "production_gap": "Current macOS passphrase capture limitation, real decrypted-store validation, and investor communication lens backtest."
     }
   ]
 }

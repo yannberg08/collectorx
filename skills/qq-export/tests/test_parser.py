@@ -10,8 +10,12 @@ import sys
 from pathlib import Path
 
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+REPO_ROOT = Path(__file__).resolve().parents[3]
+SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(SCRIPTS_DIR))
 
+from qq_query import cmd_collect
 from qq.collect import collect_records, collect_records_to_messages
 from qq.events import messages_to_events, write_events_jsonl
 from qq.keyprobe import assess_version_compatibility, build_flash_guide
@@ -118,6 +122,105 @@ def test_sqlite_read_and_event_export():
     collect_events = messages_to_events(collect_messages)
     assert len(collect_events) == 3
     assert collect_events[0]["kind"] == "message"
+
+
+def test_collect_standard_package_output():
+    from tools.validate_collector_package import validate_package
+
+    root = Path("/tmp/collectorx_qq_collect_package")
+    shutil.rmtree(root, ignore_errors=True)
+    db_dir = root / "db"
+    db_dir.mkdir(parents=True)
+    db_path = db_dir / "Msg_test.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.execute(
+        "CREATE TABLE message (msgId TEXT, peerUin TEXT, chatName TEXT, senderUin TEXT, senderName TEXT, msgTime INTEGER, content TEXT, msgType TEXT, isGroup INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO message VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("m-001", "friend-1", "张三", "10001", "我", 1_720_000_000, "这家公司先放观察池。", "text", 0),
+    )
+    conn.execute(
+        "INSERT INTO message VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("m-002", "group-1", "投资讨论群", "10002", "李四", 1_720_000_060, "等半年报出来再看。", "text", 1),
+    )
+    conn.execute(
+        "INSERT INTO message VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("m-003", "group-1", "投资讨论群", "10001", "我", 1_720_000_120, "我先跟踪。", "text", 1),
+    )
+    conn.commit()
+    conn.close()
+
+    out_dir = root / "package"
+    cmd_collect(
+        db_dir,
+        out_dir=str(out_dir),
+        owner_uin="10001",
+        collected_at="2026-07-08T10:00:00+08:00",
+    )
+
+    collect_payload = json.loads((out_dir / "qq.collect.json").read_text(encoding="utf-8"))
+    assert len(collect_payload) == 3
+
+    event_lines = (out_dir / "lake" / "qq" / "events.jsonl").read_text(encoding="utf-8").strip().splitlines()
+    assert len(event_lines) == 3
+    first_event = json.loads(event_lines[0])
+    assert first_event["collector"] == "qq"
+    assert first_event["kind"] == "message"
+    assert first_event["privacy"]["local_only"] is True
+
+    manifest_text = (out_dir / "manifest.json").read_text(encoding="utf-8")
+    manifest = json.loads(manifest_text)
+    assert manifest["schema"] == "collectorx.qq.collect_manifest.v1"
+    assert manifest["collector"] == "qq"
+    assert manifest["record_count"] == 3
+    assert manifest["message_event_count"] == 3
+    assert manifest["event_count"] == 3
+    assert manifest["collection_readiness"]["status"] == "events_collected"
+    assert manifest["evidence_policy"]["collector_writes_wiki_directly"] is False
+    assert manifest["filter_policy"]["owner_uin_provided"] is True
+    assert "10001" not in manifest_text
+    assert "investor communication lens" in (out_dir / "SUMMARY.md").read_text(encoding="utf-8")
+
+    summary, errors = validate_package(out_dir, collector="qq")
+    assert summary["valid"] is True
+    assert errors == []
+
+
+def test_collect_gap_package_when_database_is_missing():
+    from tools.validate_collector_package import validate_package
+
+    root = Path("/tmp/collectorx_qq_collect_gap")
+    shutil.rmtree(root, ignore_errors=True)
+    db_dir = root / "empty"
+    db_dir.mkdir(parents=True)
+    out_dir = root / "package"
+
+    cmd_collect(
+        db_dir,
+        out_dir=str(out_dir),
+        collected_at="2026-07-08T10:00:00+08:00",
+    )
+
+    events = [
+        json.loads(line)
+        for line in (out_dir / "lake" / "qq" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(events) == 1
+    assert events[0]["kind"] == "gap"
+    assert events[0]["data"]["reason"] == "no_readable_qq_message_database"
+
+    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["record_count"] == 0
+    assert manifest["message_event_count"] == 0
+    assert manifest["event_count"] == 1
+    assert manifest["collection_readiness"]["status"] == "needs_readable_qq_db"
+    assert manifest["collection_readiness"]["can_enter_investor_wiki_directly"] is False
+
+    summary, errors = validate_package(out_dir, collector="qq")
+    assert summary["valid"] is True
+    assert errors == []
 
 
 def test_nt_wrapped_probe_and_prepare():
@@ -306,7 +409,12 @@ def test_read_decrypted_nt_entities():
 if __name__ == "__main__":
     test_normalize_message()
     test_sqlite_read_and_event_export()
+    test_collect_standard_package_output()
+    test_collect_gap_package_when_database_is_missing()
     test_nt_wrapped_probe_and_prepare()
+    test_keyprobe_flash_guide_for_sip_enabled()
+    test_keyprobe_version_compatibility_flags_wechat_41()
+    test_keyprobe_version_compatibility_blocks_missing_qq_offset()
     test_read_decrypted_nt_message_tables()
     test_read_decrypted_nt_entities()
     print("All QQ collector tests passed!")

@@ -214,6 +214,42 @@ Preconditions:
 - Windows/Linux need the supported local database path and authorized key or
   decrypted database setup.
 
+### QQ 聊天
+
+```bash
+python3 skills/qq-export/scripts/qq_query.py \
+  --db-dir <authorized-qq-db-dir> \
+  collect \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Converts authorized readable QQ message databases into a standard CollectorX
+  package: `lake/qq/events.jsonl`, `manifest.json`, `qq.collect.json`, and
+  `SUMMARY.md`.
+- Captures owner-relevant private chats plus explicitly included or recently
+  owner-active groups, with chat, sender, time, text, sender ownership, field
+  coverage, filter policy, source audit, communication surface summary, and
+  generic-to-lens evidence policy.
+- If no readable QQ database is available, writes an explicit gap package with
+  `collection_readiness.status=needs_readable_qq_db`, so FinClaw can guide the
+  user instead of mistaking the run for a complete collection.
+- Does not output QQ passphrases, decrypted keys, passwords, cookies, tokens,
+  raw database pages, or direct investment conclusions.
+- This is a generic communication collector. Feed `lake/qq/events.jsonl` into
+  an investor communication lens before using any result as investor Wiki
+  evidence.
+
+Preconditions:
+
+- User has authorized local QQ access.
+- For QQ NT, the user must provide or prepare a readable/decrypted database
+  through the documented read-only flow. On the current Mac, passphrase capture
+  is still blocked by the local LLDB/SIP precondition.
+- Windows/Linux need the supported local database path or authorized decrypted
+  database setup.
+
 ### 本地文件
 
 ```bash

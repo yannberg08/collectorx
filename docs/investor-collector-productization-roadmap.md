@@ -1847,6 +1847,33 @@ Findings:
 - This improves FinClaw product-call safety, but does not claim QQ standard
   package readiness yet.
 
+### Wave AD: Supporting QQ standard package pass
+
+Status: `completed-deep-beta`
+
+Validation record:
+
+- `docs/validations/qq-standard-package-validation-2026-07-08.md`
+
+Findings:
+
+- Added `collect --out-dir <out-dir>` to `qq_query.py` so FinClaw can call QQ
+  as a standard CollectorX package collector.
+- The package now writes `lake/qq/events.jsonl`, `manifest.json`,
+  `qq.collect.json`, and `SUMMARY.md`.
+- The manifest records source audit, filter policy, field coverage,
+  communication-surface counts, owner-UIN presence without leaking the UIN, and
+  generic communication evidence policy.
+- Missing or unreadable QQ databases now produce an explicit gap package with
+  `collection_readiness.status=needs_readable_qq_db`, so FinClaw can show the
+  user the correct next action.
+- Fixture validation covers normal package output, package validator
+  compatibility, and missing-database gap output.
+- This improves QQ as a supporting communication channel for the investor
+  avatar, but it still requires real authorized/decrypted QQ NT message
+  validation and investor communication lens backtesting before production
+  exposure.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

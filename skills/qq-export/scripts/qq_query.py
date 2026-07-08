@@ -6,7 +6,8 @@ QQ聊天记录查询工具
 import json
 import os
 import sys
-from datetime import datetime
+import hashlib
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from qq.collect import collect_records, collect_records_to_messages, dump_collect_payload
@@ -29,6 +30,8 @@ try:
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 except (AttributeError, OSError):
     pass
+
+CN_TZ = timezone(timedelta(hours=8))
 
 
 def cmd_recent(db_dir: Path, limit: int = 10):
@@ -144,6 +147,7 @@ def cmd_collect(
     db_dir: Path,
     *,
     out: str = None,
+    out_dir: str = None,
     pretty: bool = False,
     days: int = None,
     after: str = None,
@@ -159,7 +163,42 @@ def cmd_collect(
     """微信采集器同构模式：输出紧凑 QQ collect JSON。"""
     db_path = get_db_path(db_dir)
     if not db_path:
-        _print_no_readable_db_error(db_dir, prefix="COLLECT-ERROR")
+        if out_dir:
+            collected = collected_at or _now_iso()
+            probe = probe_db_dir(db_dir)
+            events = [
+                _build_gap_event(
+                    db_dir=db_dir,
+                    collected_at=collected,
+                    reason="no_readable_qq_message_database",
+                    probe=probe,
+                )
+            ]
+            manifest = _build_collect_manifest(
+                db_dir=db_dir,
+                db_path=None,
+                records=[],
+                message_event_count=0,
+                package_event_count=len(events),
+                collected_at=collected,
+                filter_policy=_build_filter_policy(
+                    days=days,
+                    after=after,
+                    limit=limit,
+                    exclude=exclude,
+                    include_groups=include_groups,
+                    active_group_days=active_group_days,
+                    participated_only=participated_only,
+                    owner_uin=owner_uin,
+                ),
+                readiness_status="needs_readable_qq_db",
+                next_action="Authorize a readable QQ message database, or prepare/decrypt QQ NT data before collecting.",
+                probe=probe,
+            )
+            _write_collect_package(Path(out_dir).expanduser(), "[]", records=[], events=events, manifest=manifest)
+            print(json.dumps(_package_result(manifest, out_dir), ensure_ascii=False))
+        else:
+            _print_no_readable_db_error(db_dir, prefix="COLLECT-ERROR")
         return
 
     after_ts = None
@@ -170,6 +209,7 @@ def cmd_collect(
             print(f"COLLECT-ERROR: bad --after {after!r}, expect 'YYYY-MM-DD HH:MM:SS'")
             return
 
+    collected = collected_at or _now_iso()
     rows = read_message_rows(db_path)
     messages = normalize_messages(rows, owner_uin=owner_uin)
     if days is not None:
@@ -192,19 +232,58 @@ def cmd_collect(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(payload, encoding="utf-8")
         print(f"COLLECTED {len(records)}")
-    else:
+    elif not out_dir:
         print(payload)
 
+    event_messages = collect_records_to_messages(records)
+    message_events = messages_to_events(
+        event_messages,
+        source="QQ collect 模式",
+        raw_file=str(db_path),
+        collected_at=collected,
+    )
     if event_export:
-        event_messages = collect_records_to_messages(records)
-        events = messages_to_events(
-            event_messages,
-            source="QQ collect 模式",
-            raw_file=str(db_path),
-            collected_at=collected_at,
+        write_events_jsonl(event_export, message_events)
+        print(f"事件导出完成: {len(message_events)} 条 -> {event_export}")
+
+    if out_dir:
+        package_events = message_events
+        if not package_events:
+            package_events = [
+                _build_gap_event(
+                    db_dir=db_dir,
+                    collected_at=collected,
+                    reason="no_records_after_filters",
+                    probe={"status": "ok", "db_file": str(db_path)},
+                )
+            ]
+        manifest = _build_collect_manifest(
+            db_dir=db_dir,
+            db_path=db_path,
+            records=records,
+            message_event_count=len(message_events),
+            package_event_count=len(package_events),
+            collected_at=collected,
+            filter_policy=_build_filter_policy(
+                days=days,
+                after=after,
+                limit=limit,
+                exclude=exclude,
+                include_groups=include_groups,
+                active_group_days=active_group_days,
+                participated_only=participated_only,
+                owner_uin=owner_uin,
+            ),
+            readiness_status="events_collected" if message_events else "no_records_after_filters",
+            next_action=(
+                "Run the investment-dialogue lens on lake/qq/events.jsonl before writing investor Wiki evidence."
+                if message_events
+                else "Relax filters or validate that the authorized QQ database contains owner-relevant messages."
+            ),
+            probe={"status": "ok", "db_file": str(db_path)},
         )
-        write_events_jsonl(event_export, events)
-        print(f"事件导出完成: {len(events)} 条 -> {event_export}")
+        _write_collect_package(Path(out_dir).expanduser(), payload, records=records, events=package_events, manifest=manifest)
+        print(json.dumps(_package_result(manifest, out_dir), ensure_ascii=False))
 
 
 def cmd_export(
@@ -280,6 +359,7 @@ def main():
     collect_parser.add_argument("--days", type=int, help="只采最近N天消息")
     collect_parser.add_argument("--after", help='只采该时刻之后消息，格式 "YYYY-MM-DD HH:MM:SS"')
     collect_parser.add_argument("--out", help="写出collect JSON路径")
+    collect_parser.add_argument("--out-dir", help="写出标准CollectorX包目录")
     collect_parser.add_argument("--pretty", action="store_true", help="人工排查时输出缩进JSON；默认紧凑JSON")
     collect_parser.add_argument("--limit", type=int, help="限制输出数量")
     collect_parser.add_argument("--exclude", help="黑名单，会话名逗号分隔")
@@ -354,6 +434,7 @@ def main():
         cmd_collect(
             db_dir,
             out=args.out,
+            out_dir=args.out_dir,
             pretty=args.pretty,
             days=args.days,
             after=args.after,
@@ -387,6 +468,203 @@ def _split_csv(value: str = None):
     if not value:
         return None
     return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _now_iso() -> str:
+    return datetime.now(CN_TZ).isoformat(timespec="seconds")
+
+
+def _build_filter_policy(
+    *,
+    days: int = None,
+    after: str = None,
+    limit: int = None,
+    exclude: str = None,
+    include_groups: str = None,
+    active_group_days: int = 30,
+    participated_only: bool = False,
+    owner_uin: str = None,
+) -> dict:
+    return {
+        "days": days,
+        "after": after,
+        "limit": limit,
+        "exclude": _split_csv(exclude) or [],
+        "include_groups": _split_csv(include_groups) or [],
+        "active_group_days": active_group_days,
+        "participated_only": participated_only,
+        "owner_uin_provided": bool(owner_uin),
+    }
+
+
+def _build_collect_manifest(
+    *,
+    db_dir: Path,
+    db_path: Path = None,
+    records: list = None,
+    message_event_count: int = 0,
+    package_event_count: int = 0,
+    collected_at: str,
+    filter_policy: dict,
+    readiness_status: str,
+    next_action: str,
+    probe: dict = None,
+) -> dict:
+    records = records or []
+    private_chats = set()
+    group_chats = set()
+    owner_message_count = 0
+    time_values = []
+
+    for record in records:
+        data = record.get("data") or {}
+        chat = data.get("chat") or ""
+        source = record.get("source") or ""
+        if source.startswith("QQ群"):
+            group_chats.add(chat)
+        elif chat:
+            private_chats.add(chat)
+        if data.get("sender") == "我":
+            owner_message_count += 1
+        if data.get("time"):
+            time_values.append(data["time"])
+
+    return {
+        "schema": "collectorx.qq.collect_manifest.v1",
+        "collector": "qq",
+        "collected_at": collected_at,
+        "record_count": len(records),
+        "message_event_count": message_event_count,
+        "event_count": package_event_count,
+        "outputs": {
+            "compact_collect_json": "qq.collect.json",
+            "events": "lake/qq/events.jsonl",
+            "summary": "SUMMARY.md",
+        },
+        "source_audit": {
+            "db_dir": str(Path(db_dir).expanduser()),
+            "db_file": str(db_path) if db_path else None,
+            "readable_db_found": bool(db_path),
+            "probe_status": (probe or {}).get("status"),
+            "local_only": True,
+        },
+        "filter_policy": filter_policy,
+        "field_coverage": _field_coverage(records),
+        "communication_surface_summary": {
+            "private_chat_count": len(private_chats),
+            "group_chat_count": len(group_chats),
+            "chat_count": len(private_chats | group_chats),
+            "owner_message_count": owner_message_count,
+            "received_message_count": max(0, len(records) - owner_message_count),
+            "time_min": min(time_values) if time_values else None,
+            "time_max": max(time_values) if time_values else None,
+        },
+        "evidence_policy": {
+            "generic_communication_collector": True,
+            "collector_writes_wiki_directly": False,
+            "raw_json_writes_wiki_directly": False,
+            "downstream_lens_required": True,
+            "recommended_lens": "wechat-investment-dialogue-compatible investor communication lens",
+            "investment_conclusion_policy": "Do not treat QQ messages as investment facts until a lens classifies and corroborates them.",
+        },
+        "collection_readiness": {
+            "status": readiness_status,
+            "can_enter_finclaw_lake": package_event_count > 0,
+            "can_enter_investor_wiki_directly": False,
+            "next_action": next_action,
+        },
+    }
+
+
+def _field_coverage(records: list) -> dict:
+    fields = ["chat", "sender", "time", "text"]
+    coverage = {}
+    for field in fields:
+        present = 0
+        for record in records:
+            data = record.get("data") or {}
+            if data.get(field) not in (None, ""):
+                present += 1
+        coverage[field] = {
+            "present": present,
+            "missing": max(0, len(records) - present),
+        }
+    return coverage
+
+
+def _build_gap_event(*, db_dir: Path, collected_at: str, reason: str, probe: dict = None) -> dict:
+    probe = probe or {}
+    digest_body = f"{db_dir}|{reason}|{probe.get('status') or ''}"
+    digest = hashlib.sha256(digest_body.encode("utf-8")).hexdigest()[:24]
+    return {
+        "schema": "collectorx.event.v1",
+        "id": f"qq:gap:{digest}",
+        "collector": "qq",
+        "source": "QQ collect 模式",
+        "owner_scope": "personal",
+        "kind": "gap",
+        "time": collected_at,
+        "collected_at": collected_at,
+        "data": {
+            "reason": reason,
+            "probe_status": probe.get("status"),
+            "message": "QQ collection did not emit message events; see manifest.collection_readiness.next_action.",
+        },
+        "raw_ref": {
+            "db_dir": str(Path(db_dir).expanduser()),
+        },
+        "privacy": {
+            "sensitive": True,
+            "local_only": True,
+            "contains": ["local_database_reference"],
+        },
+        "wiki_targets": [],
+    }
+
+
+def _write_collect_package(out_dir: Path, payload: str, *, records: list, events: list, manifest: dict) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "qq.collect.json").write_text(payload, encoding="utf-8")
+    write_events_jsonl(str(out_dir / "lake" / "qq" / "events.jsonl"), events)
+    (out_dir / "manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (out_dir / "SUMMARY.md").write_text(_render_collect_summary(manifest), encoding="utf-8")
+
+
+def _render_collect_summary(manifest: dict) -> str:
+    readiness = manifest.get("collection_readiness") or {}
+    surface = manifest.get("communication_surface_summary") or {}
+    audit = manifest.get("source_audit") or {}
+    return "\n".join(
+        [
+            "# QQ Collector Package",
+            "",
+            f"- Status: {readiness.get('status')}",
+            f"- Records: {manifest.get('record_count', 0)}",
+            f"- Events: {manifest.get('event_count', 0)}",
+            f"- Private chats: {surface.get('private_chat_count', 0)}",
+            f"- Group chats: {surface.get('group_chat_count', 0)}",
+            f"- Time range: {surface.get('time_min') or 'n/a'} to {surface.get('time_max') or 'n/a'}",
+            f"- Readable database found: {audit.get('readable_db_found')}",
+            f"- Next action: {readiness.get('next_action')}",
+            "",
+            "This is a generic communication package. FinClaw should run an investor communication lens before writing any QQ-derived evidence into the investor Wiki.",
+            "",
+        ]
+    )
+
+
+def _package_result(manifest: dict, out_dir: str) -> dict:
+    readiness = manifest.get("collection_readiness") or {}
+    return {
+        "collector": "qq",
+        "status": readiness.get("status"),
+        "records": manifest.get("record_count", 0),
+        "events": manifest.get("event_count", 0),
+        "out_dir": str(Path(out_dir).expanduser()),
+    }
 
 
 def _print_no_readable_db_error(db_dir: Path, prefix: str = "ERROR"):
