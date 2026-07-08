@@ -8,6 +8,7 @@ import csv
 import json
 import mailbox
 import os
+import re
 import sys
 import tempfile
 import zipfile
@@ -78,6 +79,23 @@ EMAIL_HEADER_MARKERS = (
     b"delivered-to:",
     b"mime-version:",
 )
+SUPPORTED_LOCAL_SCAN_PLATFORMS = {"auto", "mac", "windows", "linux", "generic"}
+DEFAULT_MAC_EMAIL_ROOTS = (
+    Path.home() / "Library" / "Mail",
+    Path.home() / "Library" / "Containers" / "com.apple.mail" / "Data" / "Library" / "Mail",
+    Path.home() / "Library" / "Thunderbird" / "Profiles",
+)
+DEFAULT_WINDOWS_EMAIL_ROOTS = (
+    Path.home() / "AppData" / "Roaming" / "Thunderbird" / "Profiles",
+    Path.home() / "AppData" / "Roaming" / "Mozilla" / "Thunderbird" / "Profiles",
+    Path.home() / "Documents" / "Mail",
+)
+DEFAULT_LINUX_EMAIL_ROOTS = (
+    Path.home() / ".thunderbird",
+    Path.home() / ".local" / "share" / "evolution" / "mail",
+    Path.home() / "Mail",
+)
+LOCAL_EMAIL_SCAN_MAX_FILES = 50000
 
 
 def _load_state() -> dict:
@@ -416,15 +434,32 @@ def cmd_import(
     source: str = "授权邮件导出",
     collected_at: str = None,
     event_include_body: bool = False,
+    local_scan: bool = False,
+    platform: str = "auto",
+    container_root: str = None,
+    probe_export: str = None,
 ):
     """Import user-authorized local email exports without requiring IMAP registration."""
-    emails, import_audit = collect_imported_emails_with_audit(inputs or [], limit=limit)
+    local_scan_files = find_local_email_files(container_root=container_root, platform=platform) if local_scan else []
+    if probe_export:
+        write_json(
+            probe_export,
+            build_local_email_scan_report(platform=platform, container_root=container_root, files=local_scan_files),
+        )
+    emails, import_audit = collect_imported_emails_with_audit(
+        inputs or [],
+        limit=limit,
+        local_scan=local_scan,
+        platform=platform,
+        container_root=container_root,
+        local_scan_files=local_scan_files,
+    )
     if not emails:
         events = [gap_event(collected_at=collected_at, reason="email_authorized_export_missing")]
     else:
         events = emails_to_events(
             emails,
-            source=source,
+            source="授权本机邮箱扫描" if local_scan else source,
             collected_at=collected_at,
             include_body=event_include_body,
         )
@@ -448,12 +483,36 @@ def collect_imported_emails(inputs: list[str], *, limit: int = None) -> list[dic
     return emails
 
 
-def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) -> tuple[list[dict], dict]:
+def collect_imported_emails_with_audit(
+    inputs: list[str],
+    *,
+    limit: int = None,
+    local_scan: bool = False,
+    platform: str = "auto",
+    container_root: str = None,
+    local_scan_files: list[Path] = None,
+) -> tuple[list[dict], dict]:
     input_list = list(inputs)
+    local_scan_files = local_scan_files if local_scan_files is not None else (
+        find_local_email_files(container_root=container_root, platform=platform) if local_scan else []
+    )
+    local_scan_report = build_local_email_scan_report(
+        platform=platform,
+        container_root=container_root,
+        files=local_scan_files,
+    ) if local_scan else None
+    local_scan_meta = {
+        path_key(path): {
+            "local_scan": True,
+            "source_platform": (local_scan_report or {}).get("platform", {}).get("resolved"),
+            "source_path_label": local_email_file_label(path),
+        }
+        for path in local_scan_files
+    }
     audit = {
-        "source_type": "authorized_email_export",
+        "source_type": "authorized_email_export_or_local_scan" if local_scan else "authorized_email_export",
         "input_count": len(input_list),
-        "requested_inputs": [str(Path(raw).expanduser()) for raw in input_list],
+        "requested_inputs": [str(Path(raw).expanduser()) for raw in input_list] + [local_email_file_label(path) for path in local_scan_files],
         "resolved_input_file_count": 0,
         "input_missing_count": 0,
         "imported_email_count": 0,
@@ -476,13 +535,21 @@ def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) 
         "apple_mail_emlx_file_count": 0,
         "maildir_message_import_supported": True,
         "maildir_message_file_count": 0,
+        "local_scan_requested": local_scan,
+        "local_scan_platform": (local_scan_report or {}).get("platform"),
+        "local_scan_roots": (local_scan_report or {}).get("scan_roots", []),
+        "local_scan_candidate_file_count": len(local_scan_files),
+        "local_scan_candidate_files": [local_email_file_label(path) for path in local_scan_files],
+        "local_scan_candidate_selection": (local_scan_report or {}).get("candidate_selection", {}),
+        "local_scan_imported_email_count": 0,
         "attachment_bodies_included": False,
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
         "path_results": [],
     }
     collected: list[dict] = []
-    for raw in input_list:
+    scan_inputs = [*input_list, *(str(path) for path in local_scan_files)]
+    for raw in scan_inputs:
         if limit is not None and len(collected) >= limit:
             audit["limit_reached"] = True
             break
@@ -518,13 +585,15 @@ def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) 
                 audit["apple_mail_emlx_file_count"] += 1
             if is_maildir_message_path(path):
                 audit["maildir_message_file_count"] += 1
-            result = path_result(path, status="pending")
+            source_meta = local_scan_meta.get(path_key(path))
+            result = path_result(path, status="pending", source_meta=source_meta)
             before_archive_member_count = audit["archive_member_count"]
             before_skipped_archive_member_count = audit["skipped_archive_member_count"]
             try:
                 if path.suffix.lower() == ".zip":
                     audit["archive_count"] += 1
                     parsed = parse_email_zip(path, audit=audit, limit=remaining_limit(limit, collected))
+                    parsed = [annotate_local_scan_email_record(record, source_meta=source_meta) for record in parsed]
                     result.update(
                         {
                             "status": "parsed" if parsed else "no_records_parsed",
@@ -539,6 +608,7 @@ def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) 
                     parsed = parse_email_export(path)
                     remaining = remaining_limit(limit, collected)
                     parsed = parsed if remaining is None else parsed[:remaining]
+                    parsed = [annotate_local_scan_email_record(record, source_meta=source_meta) for record in parsed]
                     result.update(
                         {
                             "status": "parsed" if parsed else "no_records_parsed",
@@ -555,6 +625,8 @@ def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) 
                 result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0, "imported_email_count": 0})
             audit["path_results"].append(result)
             collected.extend(parsed)
+            if source_meta:
+                audit["local_scan_imported_email_count"] += len(parsed)
             if limit is not None and len(collected) >= limit:
                 audit["limit_reached"] = True
                 collected = collected[:limit]
@@ -576,6 +648,116 @@ def iter_import_paths(inputs: list[str]):
                     yield child
         elif path.is_file() and is_supported_import_path(path):
             yield path
+
+
+def resolve_local_email_scan_platform(platform: str = "auto") -> str:
+    if platform not in SUPPORTED_LOCAL_SCAN_PLATFORMS:
+        raise ValueError(f"Unsupported email local-scan platform: {platform}")
+    if platform != "auto":
+        return platform
+    if sys.platform == "darwin":
+        return "mac"
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    return "generic"
+
+
+def local_email_scan_roots(container_root: str = None, *, platform: str = "auto") -> list[Path]:
+    if container_root:
+        return [Path(container_root).expanduser()]
+    resolved = resolve_local_email_scan_platform(platform)
+    if resolved == "mac":
+        return list(DEFAULT_MAC_EMAIL_ROOTS)
+    if resolved == "windows":
+        return list(DEFAULT_WINDOWS_EMAIL_ROOTS)
+    if resolved == "linux":
+        return list(DEFAULT_LINUX_EMAIL_ROOTS)
+    return []
+
+
+def find_local_email_files(container_root: str = None, *, platform: str = "auto") -> list[Path]:
+    found: list[Path] = []
+    for root in local_email_scan_roots(container_root, platform=platform):
+        if not root.exists():
+            continue
+        scanned = 0
+        try:
+            iterator = root.rglob("*") if root.is_dir() else iter([root])
+            for path in iterator:
+                if not path.is_file():
+                    continue
+                scanned += 1
+                if scanned > LOCAL_EMAIL_SCAN_MAX_FILES:
+                    break
+                if is_supported_import_path(path):
+                    found.append(path)
+        except OSError:
+            continue
+    return dedupe_paths(found)
+
+
+def build_local_email_scan_report(
+    *,
+    platform: str = "auto",
+    container_root: str = None,
+    files: list[Path] = None,
+) -> dict:
+    resolved = resolve_local_email_scan_platform(platform)
+    file_list = dedupe_paths(files if files is not None else find_local_email_files(container_root=container_root, platform=platform))
+    roots = local_email_scan_roots(container_root, platform=platform)
+    return {
+        "probe_type": "email_local_scan",
+        "platform": {
+            "requested": platform,
+            "resolved": resolved,
+            "structure_status": (
+                "verified_on_current_mac"
+                if resolved == "mac" and sys.platform == "darwin"
+                else "candidate_rules_need_real_machine_verification"
+            ),
+        },
+        "scan_roots": [safe_path_label(root) for root in roots],
+        "mail_candidates": {
+            "file_count": len(file_list),
+            "files": [local_email_file_label(path) for path in file_list],
+            "status": "available" if file_list else "not_found",
+        },
+        "candidate_selection": {
+            "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
+            "maildir_parent_names": sorted(MAILDIR_PARENT_NAMES),
+            "max_scan_files_per_root": LOCAL_EMAIL_SCAN_MAX_FILES,
+        },
+        "privacy_policy": {
+            "credentials": "not_read",
+            "cookies_tokens_sessions": "not_read",
+            "attachment_bodies": "not_read_into_events",
+            "full_body_in_events": "disabled_by_default",
+            "path_emails_and_long_numeric_fragments": "masked_in_probe_and_local_scan_refs",
+        },
+    }
+
+
+def annotate_local_scan_email_record(record: dict, *, source_meta: dict = None) -> dict:
+    if not source_meta:
+        return record
+    annotated = dict(record)
+    annotated["folder"] = annotated.get("folder") or "local-email-scan"
+    raw_ref = dict(annotated.get("raw_ref") or {})
+    original_path = str(raw_ref.get("path") or "")
+    source_path_label = source_meta.get("source_path_label") or (safe_path_label(Path(original_path)) if original_path else "")
+    if original_path and source_path_label:
+        raw_ref["path"] = original_path.replace(original_path.split("::", 1)[0], source_path_label)
+    elif source_path_label:
+        raw_ref["path"] = source_path_label
+    if raw_ref.get("archive"):
+        raw_ref["archive"] = source_path_label
+    raw_ref["local_scan"] = True
+    raw_ref["source_platform"] = source_meta.get("source_platform")
+    raw_ref["source_path_label"] = source_path_label
+    annotated["raw_ref"] = raw_ref
+    return annotated
 
 
 def is_supported_import_path(path: Path) -> bool:
@@ -614,15 +796,45 @@ def parser_name_for_path(path: Path) -> str:
     return "unknown"
 
 
-def path_result(path: Path, *, status: str, reason: str = None) -> dict:
+def path_result(path: Path, *, status: str, reason: str = None, source_meta: dict = None) -> dict:
     result = {
-        "path": str(path),
+        "path": (source_meta or {}).get("source_path_label") or str(path),
         "extension": extension_label(path),
         "status": status,
     }
     if reason:
         result["reason"] = reason
     return result
+
+
+def dedupe_paths(paths: list[Path]) -> list[Path]:
+    seen = set()
+    result = []
+    for path in paths:
+        key = path_key(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return result
+
+
+def path_key(path: Path) -> str:
+    try:
+        return str(path.expanduser().resolve())
+    except OSError:
+        return str(path.expanduser().absolute())
+
+
+def safe_path_label(path: Path) -> str:
+    text = str(path.expanduser())
+    text = re.sub(r"([A-Za-z0-9._%+-]{2})[A-Za-z0-9._%+-]*(@)", r"\1***\2", text)
+    text = re.sub(r"(?<!\d)\d{6,}(?!\d)", "<digits>", text)
+    return text
+
+
+def local_email_file_label(path: Path) -> str:
+    return safe_path_label(path)
 
 
 def parse_email_export(path: Path, *, audit: dict = None) -> list[dict]:
@@ -974,7 +1186,12 @@ def build_email_manifest(
         next_action = next_action_for_gap(events[0], is_imap=is_imap)
     else:
         status = "events_collected"
-        source_scope = "authorized_imap" if is_imap else "partial_authorized_input"
+        if is_imap:
+            source_scope = "authorized_imap"
+        elif int(audit.get("local_scan_imported_email_count") or 0) > 0:
+            source_scope = "partial_authorized_local_scan_or_input"
+        else:
+            source_scope = "partial_authorized_input"
         next_action = "Feed lake/email/events.jsonl into email-research lens."
     field_coverage = build_email_field_coverage(events)
     body_policy = {
@@ -1056,7 +1273,7 @@ def next_action_for_gap(event: dict, *, is_imap: bool) -> str:
     if reason == "email_imap_collection_failed":
         return "Review collection_audit account/folder errors and rerun after fixing authorization."
     if reason == "email_authorized_export_missing":
-        return "Provide authorized local email exports."
+        return "Provide authorized local email exports or run import --local-scan on an authorized mail root."
     return "Resolve the collection gap and rerun the collector."
 
 
@@ -1168,6 +1385,8 @@ def mailbox_boundary_proof_level(email_events: list[dict], *, audit: dict, is_im
         if audit.get("status") == "partial_success":
             return "partial_authorized_imap_folder_window"
         return "authorized_imap_folder_window"
+    if int(audit.get("local_scan_imported_email_count") or 0) > 0:
+        return "authorized_local_email_scan_boundary"
     return "authorized_local_export_boundary"
 
 
@@ -1223,6 +1442,13 @@ def local_export_boundary_from_audit(audit: dict) -> dict:
         "skipped_archive_member_reason_counts": audit.get("skipped_archive_member_reason_counts", {}),
         "apple_mail_emlx_file_count": audit.get("apple_mail_emlx_file_count", 0),
         "maildir_message_file_count": audit.get("maildir_message_file_count", 0),
+        "local_scan_requested": audit.get("local_scan_requested", False),
+        "local_scan_platform": audit.get("local_scan_platform"),
+        "local_scan_roots": audit.get("local_scan_roots", []),
+        "local_scan_candidate_file_count": audit.get("local_scan_candidate_file_count", 0),
+        "local_scan_candidate_files": audit.get("local_scan_candidate_files", []),
+        "local_scan_candidate_selection": audit.get("local_scan_candidate_selection", {}),
+        "local_scan_imported_email_count": audit.get("local_scan_imported_email_count", 0),
         "limit": audit.get("limit"),
         "limit_reached": audit.get("limit_reached", False),
         "attachment_bodies_included": audit.get("attachment_bodies_included", False),
@@ -1535,8 +1761,12 @@ def main():
     col_parser.add_argument("--event-include-body", action="store_true", help="事件中包含完整正文，默认只包含预览")
 
     # import命令
-    import_parser = subparsers.add_parser("import", help="导入用户授权的本地邮件导出文件/目录")
+    import_parser = subparsers.add_parser("import", help="导入用户授权的本地邮件导出文件/目录，或扫描授权本机邮箱目录")
     import_parser.add_argument("--input", action="append", help="本地邮件导出文件或目录，可重复；支持 EML/EMLX/Maildir/MBOX/JSON/JSONL/CSV/TSV/ZIP")
+    import_parser.add_argument("--local-scan", action="store_true", help="扫描授权本机邮箱目录中的 EML/EMLX/Maildir/MBOX/JSON/CSV/ZIP 邮件文件")
+    import_parser.add_argument("--platform", choices=sorted(SUPPORTED_LOCAL_SCAN_PLATFORMS), default="auto", help="本机邮箱扫描平台适配器")
+    import_parser.add_argument("--container-root", help="用户授权的本机邮箱目录；不填则按平台尝试常见邮件目录")
+    import_parser.add_argument("--probe-export", help="导出本机邮箱扫描探测报告 JSON")
     import_parser.add_argument("--out-dir", help="输出标准采集包目录")
     import_parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
     import_parser.add_argument("--limit", type=int, help="限制数量")
@@ -1585,6 +1815,10 @@ def main():
             source=args.source,
             collected_at=args.collected_at,
             event_include_body=args.event_include_body,
+            local_scan=args.local_scan,
+            platform=args.platform,
+            container_root=args.container_root,
+            probe_export=args.probe_export,
         )
     elif args.command == "status":
         cmd_status()

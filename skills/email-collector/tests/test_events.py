@@ -509,6 +509,107 @@ def test_local_email_import_apple_mail_emlx_and_maildir():
         assert proof["local_export_boundary"]["maildir_message_file_count"] == 1
 
 
+def test_local_email_scan_package_masks_source_paths():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        local_root = root / "Library" / "Mail" / "private.path.account@example.net" / "13800138000"
+        apple_dir = local_root / "V10" / "A1"
+        maildir_new = local_root / "Maildir" / "new"
+        apple_dir.mkdir(parents=True)
+        maildir_new.mkdir(parents=True)
+        out = root / "out"
+        probe = root / "probe.json"
+
+        apple_msg = EmailMessage()
+        apple_msg["Message-ID"] = "<local-scan-apple@example.com>"
+        apple_msg["From"] = "Broker Research <research@broker.example>"
+        apple_msg["To"] = "Owner <owner@example.com>"
+        apple_msg["Subject"] = str(Header("本机 Apple Mail 晨会纪要", "utf-8"))
+        apple_msg["Date"] = "Wed, 08 Jul 2026 07:30:00 +0800"
+        apple_msg.set_content("本机 Apple Mail 晨会纪要。")
+        apple_raw = apple_msg.as_bytes()
+        (apple_dir / "123456789.emlx").write_bytes(
+            str(len(apple_raw)).encode("ascii")
+            + b"\n"
+            + apple_raw
+            + b"\n<?xml version=\"1.0\"?><plist></plist>"
+        )
+
+        maildir_msg = EmailMessage()
+        maildir_msg["Message-ID"] = "<local-scan-maildir@example.com>"
+        maildir_msg["From"] = "IR <ir@company.example>"
+        maildir_msg["To"] = "Owner <owner@example.com>"
+        maildir_msg["Subject"] = str(Header("本机 Maildir 路演邀请", "utf-8"))
+        maildir_msg["Date"] = "Wed, 08 Jul 2026 10:00:00 +0800"
+        maildir_msg.set_content("邀请参加线上调研。")
+        (maildir_new / "1720000000.M123P456Q789.host:2,S").write_bytes(maildir_msg.as_bytes())
+        (local_root / "not-mail.txt").write_text("not an email export", encoding="utf-8")
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--local-scan",
+                "--platform",
+                "mac",
+                "--container-root",
+                str(local_root),
+                "--probe-export",
+                str(probe),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T13:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 2
+        assert {event["source"] for event in events} == {"授权本机邮箱扫描"}
+        assert all(event["raw_ref"]["local_scan"] is True for event in events)
+        assert all(event["raw_ref"]["source_platform"] == "mac" for event in events)
+        assert {event["raw_ref"]["format"] for event in events} == {"emlx", "maildir"}
+        serialized_events = json.dumps(events, ensure_ascii=False)
+        assert "13800138000" not in serialized_events
+        assert "private.path.account@example.net" not in serialized_events
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_local_scan_or_input"
+        audit = manifest["collection_audit"]
+        assert audit["source_type"] == "authorized_email_export_or_local_scan"
+        assert audit["input_count"] == 0
+        assert audit["resolved_input_file_count"] == 2
+        assert audit["imported_email_count"] == 2
+        assert audit["local_scan_requested"] is True
+        assert audit["local_scan_platform"]["resolved"] == "mac"
+        assert audit["local_scan_candidate_file_count"] == 2
+        assert audit["local_scan_imported_email_count"] == 2
+        assert audit["apple_mail_emlx_file_count"] == 1
+        assert audit["maildir_message_file_count"] == 1
+        assert "13800138000" not in json.dumps(manifest, ensure_ascii=False)
+        assert "private.path.account@example.net" not in json.dumps(manifest, ensure_ascii=False)
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["proof_level"] == "authorized_local_email_scan_boundary"
+        assert proof["local_export_boundary"]["local_scan_imported_email_count"] == 2
+        assert proof["local_export_boundary"]["attachment_bodies_included"] is False
+
+        probe_payload = json.loads(probe.read_text(encoding="utf-8"))
+        assert probe_payload["probe_type"] == "email_local_scan"
+        assert probe_payload["platform"]["resolved"] == "mac"
+        assert probe_payload["mail_candidates"]["file_count"] == 2
+        assert probe_payload["privacy_policy"]["credentials"] == "not_read"
+        assert "13800138000" not in json.dumps(probe_payload, ensure_ascii=False)
+        assert "private.path.account@example.net" not in json.dumps(probe_payload, ensure_ascii=False)
+
+
 def test_local_email_import_gap_event():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -766,6 +867,7 @@ if __name__ == "__main__":
     test_imap_collect_gap_package_without_registered_account()
     test_local_email_import_package()
     test_local_email_import_apple_mail_emlx_and_maildir()
+    test_local_email_scan_package_masks_source_paths()
     test_local_email_import_gap_event()
     test_local_email_import_missing_input_gap_audit()
     test_local_email_import_zip_package()

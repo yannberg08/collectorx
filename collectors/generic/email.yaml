@@ -16,6 +16,7 @@ scope:
   channels:
     - imap
     - local_email_export
+    - local_email_scan
     - apple_mail_emlx
     - maildir
     - local_email_export_zip
@@ -28,6 +29,7 @@ scope:
     - attachment_refs
     - imap_account_folder_audit
     - local_import_path_level_audit
+    - local_scan_provenance
     - missing_input_audit
     - skipped_file_reason_counts
     - skipped_archive_member_reason_counts
@@ -45,15 +47,21 @@ scope:
     - archive_path_traversal_members
 
 description: |
-  邮箱是通用个人证据源。它采集用户授权邮箱或本地邮件导出中的邮件头、
+  邮箱是通用个人证据源。它采集用户授权邮箱、本机邮箱目录或本地邮件导出中的邮件头、
   正文预览和附件引用；manifest 记录账户/文件夹审计、逐输入导入审计、
-  跳过文件/ZIP 成员原因、正文/附件策略和邮箱边界证明。投资相关筛选由
+  本机扫描审计、跳过文件/ZIP 成员原因、正文/附件策略和邮箱边界证明。投资相关筛选由
   `email-research` lens 完成。
 
 prompt: |
   IMAP 采集：
     python3 skills/email-collector/scripts/email_api.py collect \
       --account all \
+      --out-dir <输出目录>
+
+  本机授权扫描：
+    python3 skills/email-collector/scripts/email_api.py import \
+      --local-scan \
+      --container-root <用户授权的本机邮箱目录> \
       --out-dir <输出目录>
 
   本地授权导入：
@@ -64,7 +72,8 @@ prompt: |
   IMAP 和本地导入都会输出 lake/email/events.jsonl、manifest.json、
   SUMMARY.md。默认只输出 body_preview 和 attachment_refs；除非用户显式
   授权 --event-include-body，否则不把完整正文写入事件。ZIP 包保留
-  archive.zip::member 来源，并跳过路径穿越成员；Apple Mail EMLX 会剥离本地
-  长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件。本地导入
+  archive.zip::member 来源，并跳过路径穿越成员；本机扫描会在 probe、manifest
+  和 raw_ref 中掩码路径里的邮箱地址和长数字账号片段；Apple Mail EMLX 会剥离本地
+  长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件。本机扫描/本地导入
   manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir 计数、
   limit 截断和 mailbox_boundary_proof。投资相关筛选必须交给 email-research lens。

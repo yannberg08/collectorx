@@ -453,6 +453,15 @@ python3 skills/email-collector/scripts/email_api.py collect \
   --out-dir <out-dir>
 ```
 
+Fallback for authorized local mail roots:
+
+```bash
+python3 skills/email-collector/scripts/email_api.py import \
+  --local-scan \
+  --container-root <authorized-email-root> \
+  --out-dir <out-dir>
+```
+
 Fallback for local authorized exports:
 
 ```bash
@@ -463,19 +472,22 @@ python3 skills/email-collector/scripts/email_api.py import \
 
 Current status:
 
-- IMAP `collect --out-dir` and local `import --out-dir` both write
+- IMAP `collect --out-dir`, local `import --local-scan --out-dir`, and local
+  `import --input --out-dir` all write
   `lake/email/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
 - Manifest output records account/folder audit, field coverage, body policy,
   attachment policy, mailbox boundary proof, and the generic-to-lens evidence
   boundary.
-- Local import supports user-authorized EML, Apple Mail EMLX, Maildir, MBOX,
-  JSON/JSONL/NDJSON, CSV/TSV, and ZIP packages. Maildir detection is limited to
-  RFC822-like files under `cur/` and `new/` so ordinary extensionless files are
-  skipped.
-- Local import manifests record requested inputs, missing inputs, per-file parse
-  results, extension coverage, skipped file reasons, ZIP member counts, skipped
-  ZIP member reasons, Apple Mail/Maildir counts, archive provenance, and
-  `--limit` truncation.
+- Local scan/import supports user-authorized EML, Apple Mail EMLX, Maildir,
+  MBOX, JSON/JSONL/NDJSON, CSV/TSV, and ZIP packages. Maildir detection is
+  limited to RFC822-like files under `cur/` and `new/` so ordinary extensionless
+  files are skipped.
+- Local scan/import manifests record requested inputs, local-scan platform/root
+  and candidate files, missing inputs, per-file parse results, extension
+  coverage, skipped file reasons, ZIP member counts, skipped ZIP member reasons,
+  Apple Mail/Maildir counts, archive provenance, and `--limit` truncation.
+- Local scan probe, manifest, and raw refs mask path email addresses and long
+  numeric account fragments.
 - `manifest.mailbox_boundary_proof` tells FinClaw which account/folder/time
   window or local export boundary was actually collected and explicitly keeps
   complete-mailbox-history claims false.

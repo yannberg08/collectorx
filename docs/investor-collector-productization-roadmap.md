@@ -1101,6 +1101,35 @@ Findings:
 - Current local machine still has no registered mailbox, so this pass improves
   lens-level product evidence without claiming real mailbox validation.
 
+### Wave N6: P0 email local mail-root scan pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-local-scan-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.4`.
+- Added `email_api.py import --local-scan` with `--platform`,
+  `--container-root`, and `--probe-export`.
+- Local scan reuses the existing EML, Apple Mail EMLX, Maildir, MBOX,
+  JSON/JSONL/NDJSON, CSV/TSV, and ZIP parsers, while recording separate
+  local-scan provenance.
+- Probe output, manifest local-scan fields, and event raw refs mask path email
+  addresses and long numeric account fragments.
+- Manifest `collection_audit` now records local-scan platform, roots, candidate
+  files, candidate-selection rules, Apple Mail/Maildir counts, and local-scan
+  imported email counts.
+- `mailbox_boundary_proof` now distinguishes
+  `authorized_local_email_scan_boundary` from ordinary local export imports.
+- Full bodies remain excluded by default, attachment bodies are still not
+  written, and investor Wiki use still requires the `email-research` lens.
+- Fixture validation covers a simulated Apple Mail/Maildir local root,
+  candidate discovery, local-scan event raw refs, path masking, probe output,
+  manifest audit fields, and mailbox-boundary proof.
+
 ### Wave O: P0 filesystem cross-platform manifest pass 1
 
 Status: `completed-baseline`
@@ -2954,7 +2983,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text `.xls` extraction, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, binary `.xls`/`xlrd` validation where needed, Wiki backtest against real trades/reviews |
-| 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
+| 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, skipped file/ZIP-member reasons, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local mail roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist local-scan plus import path with standard Lake output, manifest, local-scan provenance, path-level source audit, ZIP provenance, skipped-reason accounting, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun local-store validation, default app path validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
 | 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, legacy `.xls`/Excel XML/HTML-table export parsing, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
