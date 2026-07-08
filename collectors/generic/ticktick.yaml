@@ -29,10 +29,11 @@ prompt: |
     python <SKILL_DIR>/scripts/collect_for_soulmirror.py
 
   Write exactly the JSON array printed by that command to the result file
-  provided by SoulMirror. Each item should keep a stable `id` and a `data`
-  object with the raw task fields. Do not write lake/ticktick/events.jsonl,
-  manifest.json, or SUMMARY.md from the skill; the SoulMirror daemon will diff
-  the snapshot and append events itself.
+  provided by SoulMirror. Each item should keep a stable `id`, visible task
+  planning fields such as project/status/priority/timezone/repeat/reminders/
+  checklist counts, and a `data` object with the raw task fields. Do not write
+  lake/ticktick/events.jsonl, manifest.json, or SUMMARY.md from the skill; the
+  SoulMirror daemon will diff the snapshot and append events itself.
 
   Only after successfully writing a JSON array should the final reply be:
     COLLECTED <number-of-records>

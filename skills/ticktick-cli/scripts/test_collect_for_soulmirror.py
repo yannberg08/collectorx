@@ -80,9 +80,16 @@ def test_authorized_snapshot_collects_active_and_completed_tasks() -> None:
                             "projectId": "p-research",
                             "title": "复盘宁德时代交易",
                             "dueDate": "2026-07-09T09:00:00+0800",
+                            "timeZone": "Asia/Shanghai",
+                            "repeatFlag": "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                            "reminders": ["TRIGGER:PT30M"],
                             "status": 0,
                             "priority": 3,
                             "tags": ["复盘"],
+                            "items": [
+                                {"id": "i-1", "title": "检查买入理由", "status": 1},
+                                {"id": "i-2", "title": "复核仓位", "status": 0},
+                            ],
                         },
                         {
                             "id": "t-inbox",
@@ -144,6 +151,11 @@ def test_authorized_snapshot_collects_active_and_completed_tasks() -> None:
     assert [record["id"] for record in records] == ["ticktick:t-active", "ticktick:t-inbox", "ticktick:t-done"]
     assert records[0]["project"] == "投研任务"
     assert records[0]["due"] == "2026-07-09T09:00:00+0800"
+    assert records[0]["timeZone"] == "Asia/Shanghai"
+    assert records[0]["repeat"] == "RRULE:FREQ=WEEKLY;BYDAY=TH"
+    assert records[0]["reminders"] == ["TRIGGER:PT30M"]
+    assert records[0]["checklistTotal"] == 2
+    assert records[0]["checklistCompleted"] == 1
     assert records[0]["data"]["sourceBucket"] == "active"
     assert records[1]["project"] == "收件箱"
     assert records[2]["data"]["sourceBucket"] == "completed"

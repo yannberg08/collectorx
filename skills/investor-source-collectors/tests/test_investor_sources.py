@@ -1164,7 +1164,20 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
                     "content_preview": "跟踪财报、估值模型和基本面变化。",
                     "project_name": "投资研究",
                     "due": "2026-07-09T09:00:00+08:00",
+                    "time_zone": "Asia/Shanghai",
+                    "recurrence": "RRULE:FREQ=WEEKLY;BYDAY=TH",
+                    "recurrence_frequency": "weekly",
                     "reminders": ["2026-07-09T08:30:00+08:00"],
+                    "has_checklist": True,
+                    "checklist_total": 3,
+                    "checklist_completed": 2,
+                    "checklist_pending": 1,
+                    "checklist_completion_rate": 0.6667,
+                    "checklist_items": [
+                        {"title": "更新财报模型", "is_completed": True},
+                        {"title": "复核估值假设", "is_completed": True},
+                        {"title": "写交易结论", "is_completed": False},
+                    ],
                     "is_completed": False,
                     "is_overdue": False,
                 },
@@ -1300,9 +1313,18 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
         assert surface["events_with_reminders"] == 1
         assert surface["events_with_meeting_url"] == 1
         assert surface["events_with_project_or_calendar"] == 4
+        assert surface["events_with_time_zone"] == 1
+        assert surface["events_with_recurrence"] == 1
+        assert surface["recurrence_frequency_counts"] == {"weekly": 1}
         assert surface["events_with_duration_minutes"] == 1
         assert surface["multi_day_event_count"] == 0
         assert surface["invalid_time_range_count"] == 0
+        assert surface["events_with_checklist"] == 1
+        assert surface["checklist_item_total"] == 3
+        assert surface["checklist_item_completed_count"] == 2
+        assert surface["checklist_item_pending_count"] == 1
+        assert surface["average_checklist_completion_rate"] == 0.6667
+        assert surface["tasks_with_incomplete_checklist"] == 1
         assert surface["collector_writes_wiki_directly"] is False
         proof = manifest["task_calendar_boundary_proof"]
         assert proof["proof_level"] == "authorized_task_calendar_with_time_quality"
@@ -1317,6 +1339,12 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
         assert proof["time_boundary"]["events_with_reminders"] == 1
         assert proof["time_boundary"]["events_with_meeting_url"] == 1
         assert proof["time_boundary"]["events_with_duration_minutes"] == 1
+        assert proof["time_boundary"]["events_with_time_zone"] == 1
+        assert proof["time_boundary"]["events_with_recurrence"] == 1
+        assert proof["task_structure_boundary"]["events_with_checklist"] == 1
+        assert proof["task_structure_boundary"]["checklist_item_total"] == 3
+        assert proof["task_structure_boundary"]["checklist_item_completed_count"] == 2
+        assert proof["task_structure_boundary"]["checklist_item_pending_count"] == 1
         assert proof["complete_task_list_claimed"] is False
         assert proof["complete_calendar_claimed"] is False
         assert proof["complete_task_calendar_context_claimed"] is False
@@ -1328,6 +1356,7 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["task-calendar-investor"]
         assert evidence_surface["task_calendar_surface_counts"]["trade_plan"] == 1
         assert evidence_surface["events_with_duration_minutes"] == 1
+        assert evidence_surface["events_with_checklist"] == 1
         assert evidence_surface["generic_task_calendar_lens"] is True
 
 

@@ -1453,6 +1453,39 @@ Findings:
   TickTick OAuth validation, real calendar account validation, or mixed-corpus
   false-positive backtesting.
 
+### Wave R6: P1 task checklist and recurrence surface pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-task-calendar-checklist-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `ticktick-cli` to `0.1.11` and `investor-source-collectors` to
+  `0.1.18`.
+- TickTick/Dida live snapshots now expose timezone, repeat, reminders, and
+  checklist counts at the top level while preserving raw task fields in `data`.
+- Offline TickTick/Dida authorized import now normalizes start/due/completed
+  times, captures all-day/timezone fields, recurrence frequency, checklist
+  items, checklist total/completed/pending counts, and checklist completion
+  rate.
+- `manifest.time_status_summary` now reports invalid task time ranges,
+  duration coverage, timezone coverage, repeat-frequency counts, checklist
+  totals, completed/pending checklist items, and average checklist completion
+  rate.
+- `task-calendar-investor` lens summaries and
+  `manifest.task_calendar_boundary_proof.task_structure_boundary` now preserve
+  investment-task checklist execution structure so FinClaw can see whether
+  research/trading/review tasks were broken into executable steps.
+- Fixture validation covers TickTick checklist item parsing, live snapshot
+  checklist counts, recurrence/timezone propagation, and task-calendar lens
+  evidence propagation.
+- This improves P1 task-execution evidence quality, but still does not claim
+  real TickTick OAuth validation, real calendar account validation, or
+  mixed-corpus false-positive backtesting.
+
 ### Wave S: P1 meeting artifacts platform coverage pass 1
 
 Status: `completed-baseline`
@@ -2735,7 +2768,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, table import audit, Canvas import audit, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; calendar reports duration/multi-day/invalid-time/conflict quality; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, reminder/time coverage, calendar time-quality surface, and task/calendar boundary proof | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
+| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; TickTick/Dida task events now preserve timezone, all-day, repeat frequency, reminders, checklist items, checklist completed/pending counts, and completion rate; calendar reports duration/multi-day/invalid-time/conflict quality; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, reminder/time/timezone/repeat coverage, task checklist execution surface, calendar time-quality surface, and task/calendar boundary proof | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, checklist-heavy trading-plan backtest, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, source audit, missing/unsupported input accounting, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries plus meeting-minutes boundary proof; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries plus WeChat article boundary proof | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action/topic coverage; manifests now include field coverage, usage topic summary, usage surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps, ZIP provenance, usage boundary proof, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports, topic false-positive review |

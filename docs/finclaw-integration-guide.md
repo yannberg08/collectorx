@@ -664,7 +664,8 @@ Current status:
   `TICKTICK_AUTH_REQUIRED 需要先通过“连接滴答清单”完成 OAuth 授权。`
 - The snapshot captures active tasks plus recent completed tasks, with stable
   ids, title, project, project id, status, priority, tags, due/start time, and
-  raw task fields.
+  raw task fields. It also exposes timezone, repeat/reminder fields, and
+  checklist counts when the API returns checklist/subtask items.
 - `auth.py connect` supports a FinClaw-managed OAuth Broker through
   `TICKTICK_OAUTH_BROKER_URL` so ordinary users do not need to create their own
   Dida365 developer app.
@@ -689,9 +690,11 @@ Offline helper status:
   coverage, missing sources, event counts, and `real_account_validation`.
 - Writes `manifest.field_coverage`, `time_status_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect title/project/status/start/due/
-  completion/recurrence/reminder coverage, overdue counts, ZIP provenance,
-  total/skipped ZIP members, skip reasons, per-input parse results, and the
-  required `task-calendar-investor` lens boundary.
+  completion/timezone/all-day/recurrence/reminder/checklist coverage, overdue
+  counts, invalid start/due ranges, repeat-frequency counts, checklist item
+  totals/completed/pending counts, ZIP provenance, total/skipped ZIP members,
+  skip reasons, per-input parse results, and the required
+  `task-calendar-investor` lens boundary.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-task status directly.
@@ -731,8 +734,9 @@ Current status:
 - The `task-calendar-investor` lens writes
   `manifest.task_calendar_boundary_proof` with authorized input counts,
   upstream task/calendar source counts, candidate/matched/filtered counts,
-  time/reminder/meeting-link coverage, calendar time-quality fields, and an
-  explicit no-complete-task-list/no-complete-calendar boundary.
+  time/reminder/meeting-link/timezone/repeat coverage, task checklist execution
+  structure, calendar time-quality fields, and an explicit
+  no-complete-task-list/no-complete-calendar boundary.
 
 ### 飞书通用授权导入
 

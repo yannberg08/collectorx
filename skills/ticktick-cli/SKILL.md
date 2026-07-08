@@ -1,7 +1,7 @@
 ---
 name: ticktick-cli
 description: 使用 Python CLI 与 Dida365 Open API 交互以管理滴答清单任务/项目，适用于需要通过脚本或命令行调用滴答清单接口的场景（如项目/任务的查询、创建、更新、完成、删除）。
-version: 0.1.10
+version: 0.1.11
 ---
 
 ## 调用约定（AI 必读）
@@ -279,6 +279,7 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect \
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.1.11 | 2026-07-08 | 补强投资任务计划面：SoulMirror snapshot 顶层保留 timezone/repeat/reminders/checklist 计数；离线授权导入标准化 start/due/completed 时间，输出 timeZone/all-day/重复频率/checklist 子项、完成数、未完成数和完成率，并在 manifest 中汇总时间质量和 checklist 执行拆解度 |
 | 0.1.10 | 2026-07-08 | 对齐 SoulMirror 原版采集器模式：`collectors/generic/ticktick.yaml` 改为 `soulmirror/v1` prompt 采集；主路径由 AgentRunner 调用 `collect_for_soulmirror.py` 并只返回 JSON array；明确禁止 skill 直接写 lake；离线 `ticktick_events.py` 输出改到 `exports/ticktick/events.jsonl`，避免和 daemon 写 lake 的职责混淆 |
 | 0.1.7 | 2026-07-08 | 产品化授权改造：新增 `auth.py connect` 托管 OAuth 入口，普通用户不再需要去开发者中心创建应用；新增 `collect_for_soulmirror.py`，未授权时明确返回 `ticktick_auth_required` 并失败，不再伪装成空数组；`task list` 默认改为当前账号全部未完成任务，移除硬编码 inbox ID 假设；新增 `task collect-all` 供采集器导出快照；Worker 模板支持 FinClaw 自有域名部署 |
 | 0.1.6 | 2026-04-30 | 修浏览器自动打开在 Windows/客户端环境失败的问题：原本 `os.startfile(url)` 在 QClaw/Claude Code 的 subprocess 沙箱里偶发 silent 失败（找不到默认浏览器关联或没 GUI session），用户看到『终端没反应』。三层兜底：① 优先用 stdlib `webbrowser.open()`（内部针对 Windows 试 cmd start 比裸 os.startfile 兼容性好）；② 再显式 `cmd /c start "" <url>`（`""` 是窗口标题占位，不加会把 URL 当标题）；③ 都失败时把 URL 用分隔线包起来打印得**很**显眼，用户能 1 秒看到然后手动复制 |

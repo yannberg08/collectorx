@@ -1,6 +1,6 @@
 {
   "slug": "ticktick-cli",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "status": "baseline+audit",
-  "description": "TickTick/Dida task collector aligned to SoulMirror YAML + AgentRunner with managed-OAuth readiness, live snapshot export, offline authorized JSON/ZIP conversion, source audit, and token non-leakage validation."
+  "description": "TickTick/Dida task collector aligned to SoulMirror YAML + AgentRunner with managed-OAuth readiness, live snapshot export, task checklist/timezone/repeat/reminder surfaces, offline authorized JSON/ZIP conversion, source audit, and token non-leakage validation."
 }

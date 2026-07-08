@@ -690,11 +690,23 @@ def build_task_calendar_boundary_proof(
             "events_with_reminders": surface.get("events_with_reminders", 0),
             "events_with_meeting_url": surface.get("events_with_meeting_url", 0),
             "events_with_project_or_calendar": surface.get("events_with_project_or_calendar", 0),
+            "events_with_time_zone": surface.get("events_with_time_zone", 0),
+            "events_with_recurrence": surface.get("events_with_recurrence", 0),
+            "recurrence_frequency_counts": surface.get("recurrence_frequency_counts", {}),
             "events_with_duration_minutes": surface.get("events_with_duration_minutes", 0),
             "multi_day_event_count": surface.get("multi_day_event_count", 0),
             "invalid_time_range_count": surface.get("invalid_time_range_count", 0),
             "completed_task_count": surface.get("completed_task_count", 0),
             "overdue_task_count": surface.get("overdue_task_count", 0),
+        },
+        "task_structure_boundary": {
+            "events_with_checklist": surface.get("events_with_checklist", 0),
+            "checklist_item_total": surface.get("checklist_item_total", 0),
+            "checklist_item_completed_count": surface.get("checklist_item_completed_count", 0),
+            "checklist_item_pending_count": surface.get("checklist_item_pending_count", 0),
+            "average_checklist_completion_rate": surface.get("average_checklist_completion_rate", 0),
+            "tasks_with_complete_checklist": surface.get("tasks_with_complete_checklist", 0),
+            "tasks_with_incomplete_checklist": surface.get("tasks_with_incomplete_checklist", 0),
         },
         "task_calendar_boundary": surface,
         "complete_task_list_claimed": False,
@@ -725,6 +737,8 @@ def task_calendar_proof_level(
     surface = task_calendar_surface_summary(usable_events)
     if int(surface.get("events_with_duration_minutes") or 0) > 0 or int(surface.get("invalid_time_range_count") or 0) > 0:
         return "authorized_task_calendar_with_time_quality"
+    if int(surface.get("events_with_checklist") or 0) > 0:
+        return "authorized_task_calendar_with_checklist_surface"
     if int(surface.get("events_with_reminders") or 0) > 0:
         return "authorized_task_calendar_with_reminder_surface"
     if int(surface.get("events_with_due_or_start") or 0) > 0:
@@ -1706,11 +1720,20 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
     events_with_reminders = 0
     events_with_meeting_url = 0
     events_with_project_or_calendar = 0
+    events_with_time_zone = 0
+    events_with_recurrence = 0
+    recurrence_frequency_counts: Counter[str] = Counter()
     events_with_duration_minutes = 0
     multi_day_event_count = 0
     invalid_time_range_count = 0
     completed_task_count = 0
     overdue_task_count = 0
+    events_with_checklist = 0
+    checklist_item_total = 0
+    checklist_item_completed_count = 0
+    checklist_completion_rates: List[float] = []
+    tasks_with_complete_checklist = 0
+    tasks_with_incomplete_checklist = 0
     for event in usable_events:
         data = event.get("data") or {}
         payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
@@ -1737,6 +1760,12 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
             events_with_meeting_url += 1
         if payload.get("project_name") or payload.get("calendar_name"):
             events_with_project_or_calendar += 1
+        if payload.get("time_zone") or payload.get("timezone"):
+            events_with_time_zone += 1
+        if payload.get("recurrence"):
+            events_with_recurrence += 1
+        if payload.get("recurrence_frequency"):
+            recurrence_frequency_counts[str(payload.get("recurrence_frequency"))] += 1
         if isinstance(payload.get("duration_minutes"), int):
             events_with_duration_minutes += 1
         if payload.get("is_multi_day") is True:
@@ -1747,6 +1776,20 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
             completed_task_count += 1
         if payload.get("is_overdue") is True:
             overdue_task_count += 1
+        if payload.get("has_checklist") is True or isinstance(payload.get("checklist_total"), int):
+            total = int(payload.get("checklist_total") or 0)
+            completed = int(payload.get("checklist_completed") or 0)
+            pending = int(payload.get("checklist_pending") or max(total - completed, 0))
+            if total > 0:
+                events_with_checklist += 1
+                checklist_item_total += total
+                checklist_item_completed_count += completed
+                if isinstance(payload.get("checklist_completion_rate"), (int, float)):
+                    checklist_completion_rates.append(float(payload.get("checklist_completion_rate")))
+                if pending == 0:
+                    tasks_with_complete_checklist += 1
+                else:
+                    tasks_with_incomplete_checklist += 1
     return {
         "event_count": len(usable_events),
         "expected_task_calendar_surfaces": list(TASK_CALENDAR_SURFACE_ORDER[:-1]),
@@ -1764,11 +1807,23 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
         "events_with_reminders": events_with_reminders,
         "events_with_meeting_url": events_with_meeting_url,
         "events_with_project_or_calendar": events_with_project_or_calendar,
+        "events_with_time_zone": events_with_time_zone,
+        "events_with_recurrence": events_with_recurrence,
+        "recurrence_frequency_counts": dict(sorted(recurrence_frequency_counts.items())),
         "events_with_duration_minutes": events_with_duration_minutes,
         "multi_day_event_count": multi_day_event_count,
         "invalid_time_range_count": invalid_time_range_count,
         "completed_task_count": completed_task_count,
         "overdue_task_count": overdue_task_count,
+        "events_with_checklist": events_with_checklist,
+        "checklist_item_total": checklist_item_total,
+        "checklist_item_completed_count": checklist_item_completed_count,
+        "checklist_item_pending_count": checklist_item_total - checklist_item_completed_count,
+        "average_checklist_completion_rate": round(sum(checklist_completion_rates) / len(checklist_completion_rates), 4)
+        if checklist_completion_rates
+        else 0,
+        "tasks_with_complete_checklist": tasks_with_complete_checklist,
+        "tasks_with_incomplete_checklist": tasks_with_incomplete_checklist,
         "generic_task_calendar_lens": True,
         "collector_writes_wiki_directly": False,
     }

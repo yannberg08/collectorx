@@ -81,6 +81,7 @@ def to_record(task: dict[str, Any], project_names: dict[str, str], bucket: str) 
     data = dict(task)
     data["projectName"] = project_name
     data["sourceBucket"] = bucket
+    checklist_total, checklist_completed = checklist_counts(task)
     return {
         "id": f"ticktick:{task_id}" if task_id else None,
         "title": task.get("title"),
@@ -90,8 +91,27 @@ def to_record(task: dict[str, Any], project_names: dict[str, str], bucket: str) 
         "status": task.get("status"),
         "priority": task.get("priority"),
         "tags": task.get("tags"),
+        "timeZone": task.get("timeZone"),
+        "repeat": task.get("repeatFlag") or task.get("repeat"),
+        "reminders": task.get("reminders") or [],
+        "checklistTotal": checklist_total,
+        "checklistCompleted": checklist_completed,
         "data": data,
     }
+
+
+def checklist_counts(task: dict[str, Any]) -> tuple[int, int]:
+    items = task.get("items")
+    if not isinstance(items, list):
+        return 0, 0
+    completed = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        status = str(item.get("status") or "").lower()
+        if item.get("completedTime") or status in {"1", "2", "done", "completed", "complete", "已完成"}:
+            completed += 1
+    return len(items), completed
 
 
 def main() -> int:

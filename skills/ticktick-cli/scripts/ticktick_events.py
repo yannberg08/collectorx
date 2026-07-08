@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -39,10 +40,16 @@ TASK_RECOMMENDED_FIELDS = (
     "start",
     "due",
     "completed_at",
+    "time_zone",
+    "is_all_day",
     "is_completed",
     "tags",
     "recurrence",
+    "recurrence_frequency",
     "reminders",
+    "checklist_total",
+    "checklist_completed",
+    "checklist_completion_rate",
     "time",
 )
 
@@ -228,7 +235,13 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
     source_app = first(record, [SOURCE_APP_KEY]) or infer_task_source(record, path_label)
     recurrence = first(record, ["recurrence", "repeat", "repeatFlag", "rrule", "重复", "重复规则"])
     reminders = reminders_for(record)
-    event_time = normalize_time(due or start or completed)
+    start_time = normalize_time(start)
+    due_time = normalize_time(due)
+    completed_time = normalize_time(completed)
+    checklist_items = checklist_items_for(record)
+    checklist_completed = sum(1 for item in checklist_items if item.get("is_completed") is True)
+    checklist_total = len(checklist_items)
+    event_time = due_time or start_time or completed_time
     data = {
         "source_app": source_app,
         "title": title,
@@ -239,14 +252,24 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
         "task_id": first(record, ["id", "task_id"]),
         "status": status,
         "priority": first(record, ["priority", "优先级"]),
-        "start": start,
-        "due": due,
-        "completed_at": completed,
+        "start": start_time,
+        "due": due_time,
+        "completed_at": completed_time,
+        "time_zone": first(record, ["timeZone", "time_zone", "timezone", "tz", "时区"]),
+        "is_all_day": bool_value(first(record, ["isAllDay", "is_all_day", "all_day", "全天"])),
+        **task_time_quality(start_time, due_time),
         "is_completed": is_completed(status, completed),
         "is_overdue": is_overdue(due, completed, collected_at),
         "recurrence": recurrence,
+        "recurrence_frequency": recurrence_frequency(recurrence),
         "reminders": reminders,
         "tags": tags_for(record),
+        "checklist_items": checklist_items,
+        "checklist_total": checklist_total if checklist_total else None,
+        "checklist_completed": checklist_completed if checklist_total else None,
+        "checklist_pending": (checklist_total - checklist_completed) if checklist_total else None,
+        "checklist_completion_rate": round(checklist_completed / checklist_total, 4) if checklist_total else None,
+        "has_checklist": bool(checklist_total),
         "raw": sanitized(record),
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
@@ -385,6 +408,9 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- overdue_tasks: {manifest['time_status_summary']['overdue_task_count']}",
+        f"- invalid_time_ranges: {manifest['time_status_summary']['events_with_invalid_time_range']}",
+        f"- checklist_tasks: {manifest['time_status_summary']['tasks_with_checklist']}",
+        f"- checklist_items: {manifest['time_status_summary']['checklist_item_total']}",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         "",
@@ -454,6 +480,61 @@ def reminders_for(record: Dict[str, Any]) -> List[str]:
     return []
 
 
+def checklist_items_for(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = (
+        record.get("items")
+        or record.get("checklist")
+        or record.get("checklistItems")
+        or record.get("subtasks")
+        or record.get("subTasks")
+        or record.get("子任务")
+        or record.get("清单项")
+        or []
+    )
+    if not isinstance(raw, list):
+        return []
+    items: List[Dict[str, Any]] = []
+    for index, item in enumerate(raw[:200], start=1):
+        if isinstance(item, dict):
+            title = first(item, ["title", "name", "content", "desc", "任务", "标题", "内容"])
+            status = first(item, ["status", "状态"])
+            completed_at = normalize_time(first(item, ["completedTime", "completed_time", "完成时间"]))
+            normalized = {
+                "id": first(item, ["id", "item_id"]),
+                "title": title,
+                "status": status,
+                "completed_at": completed_at,
+                "start": normalize_time(first(item, ["startDate", "start_date", "start", "开始时间"])),
+                "due": normalize_time(first(item, ["dueDate", "due_date", "due", "截止时间"])),
+                "time_zone": first(item, ["timeZone", "time_zone", "timezone", "tz", "时区"]),
+                "sort_order": first(item, ["sortOrder", "sort_order", "排序"]),
+                "is_completed": checklist_item_completed(status, completed_at),
+            }
+        else:
+            normalized = {
+                "id": None,
+                "title": str(item),
+                "status": None,
+                "completed_at": None,
+                "start": None,
+                "due": None,
+                "time_zone": None,
+                "sort_order": str(index),
+                "is_completed": False,
+            }
+        items.append({key: value for key, value in normalized.items() if value not in (None, "", [], {})})
+    return items
+
+
+def checklist_item_completed(status: Optional[str], completed_at: Optional[str]) -> bool:
+    if completed_at:
+        return True
+    if status is None:
+        return False
+    text = str(status).lower()
+    return text in {"1", "2", "done", "completed", "complete", "已完成"}
+
+
 def is_completed(status: Optional[str], completed: Optional[str]) -> bool:
     if completed:
         return True
@@ -463,10 +544,24 @@ def is_completed(status: Optional[str], completed: Optional[str]) -> bool:
     return text in {"2", "done", "completed", "complete", "已完成"}
 
 
+def bool_value(value: Optional[str]) -> Optional[bool]:
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "全天"}:
+        return True
+    if text in {"0", "false", "no", "n", "否"}:
+        return False
+    return None
+
+
 def normalize_time(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
-    return value
+    parsed = parse_datetime(value)
+    if parsed is not None:
+        return parsed.isoformat(timespec="seconds")
+    return str(value)
 
 
 def is_overdue(due: Optional[str], completed: Optional[str], collected_at: Optional[str]) -> bool:
@@ -484,8 +579,12 @@ def parse_datetime(value: Optional[str]) -> Optional[datetime]:
         return None
     text = str(value).strip()
     try:
+        if text.isdigit() and len(text) >= 13:
+            return datetime.fromtimestamp(int(text[:13]) / 1000, tz=CN_TZ)
         if text.endswith("Z"):
             return datetime.fromisoformat(text[:-1] + "+00:00")
+        if len(text) == 8 and text.isdigit():
+            return datetime.strptime(text, "%Y%m%d").replace(tzinfo=CN_TZ)
         if len(text) == 10 and text[4] == "-" and text[7] == "-":
             return datetime.fromisoformat(text + "T23:59:59+08:00")
         parsed = datetime.fromisoformat(text)
@@ -494,6 +593,36 @@ def parse_datetime(value: Optional[str]) -> Optional[datetime]:
         return parsed
     except ValueError:
         return None
+
+
+def task_time_quality(start: Optional[str], due: Optional[str]) -> Dict[str, Any]:
+    start_dt = parse_datetime(start)
+    due_dt = parse_datetime(due)
+    metadata: Dict[str, Any] = {"has_time_range": bool(start and due)}
+    if start_dt is None or due_dt is None:
+        return metadata
+    order_valid = due_dt >= start_dt
+    metadata["time_order_valid"] = order_valid
+    if order_valid:
+        metadata["duration_minutes"] = int((due_dt - start_dt).total_seconds() // 60)
+    return metadata
+
+
+def recurrence_frequency(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    text = str(value).strip()
+    match = re.search(r"FREQ=([A-Z]+)", text.upper())
+    if match:
+        return match.group(1).lower()
+    lowered = text.lower()
+    for token in ("daily", "weekly", "monthly", "yearly"):
+        if token in lowered:
+            return token
+    for token, label in {"每天": "daily", "每日": "daily", "每周": "weekly", "每月": "monthly", "每年": "yearly"}.items():
+        if token in text:
+            return label
+    return "custom"
 
 
 def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -520,8 +649,33 @@ def task_field_present(event: Dict[str, Any], field: str) -> bool:
     return value not in (None, "", [], {})
 
 
-def time_status_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+def time_status_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     task_events = [event for event in events if event.get("kind") == "task"]
+    durations = [
+        int((event.get("data") or {}).get("duration_minutes"))
+        for event in task_events
+        if isinstance((event.get("data") or {}).get("duration_minutes"), int)
+    ]
+    checklist_totals = [
+        int((event.get("data") or {}).get("checklist_total"))
+        for event in task_events
+        if isinstance((event.get("data") or {}).get("checklist_total"), int)
+    ]
+    checklist_completed = [
+        int((event.get("data") or {}).get("checklist_completed"))
+        for event in task_events
+        if isinstance((event.get("data") or {}).get("checklist_completed"), int)
+    ]
+    checklist_rates = [
+        float((event.get("data") or {}).get("checklist_completion_rate"))
+        for event in task_events
+        if isinstance((event.get("data") or {}).get("checklist_completion_rate"), (int, float))
+    ]
+    recurrence_frequency_counts = Counter(
+        str((event.get("data") or {}).get("recurrence_frequency"))
+        for event in task_events
+        if (event.get("data") or {}).get("recurrence_frequency")
+    )
     return {
         "task_event_count": len(task_events),
         "completed_task_count": sum(1 for event in task_events if (event.get("data") or {}).get("is_completed") is True),
@@ -529,9 +683,37 @@ def time_status_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
         "overdue_task_count": sum(1 for event in task_events if (event.get("data") or {}).get("is_overdue") is True),
         "events_with_start": sum(1 for event in task_events if (event.get("data") or {}).get("start")),
         "events_with_due": sum(1 for event in task_events if (event.get("data") or {}).get("due")),
+        "events_with_time_zone": sum(1 for event in task_events if (event.get("data") or {}).get("time_zone")),
+        "all_day_task_count": sum(1 for event in task_events if (event.get("data") or {}).get("is_all_day") is True),
+        "events_with_time_range": sum(1 for event in task_events if (event.get("data") or {}).get("has_time_range") is True),
+        "events_with_invalid_time_range": sum(1 for event in task_events if (event.get("data") or {}).get("time_order_valid") is False),
+        "events_with_duration_minutes": len(durations),
+        "min_duration_minutes": min(durations) if durations else 0,
+        "max_duration_minutes": max(durations) if durations else 0,
+        "average_duration_minutes": round(sum(durations) / len(durations), 1) if durations else 0,
         "events_with_completion_time": sum(1 for event in task_events if (event.get("data") or {}).get("completed_at")),
         "events_with_recurrence": sum(1 for event in task_events if (event.get("data") or {}).get("recurrence")),
+        "events_with_recurrence_frequency": sum(1 for event in task_events if (event.get("data") or {}).get("recurrence_frequency")),
+        "recurrence_frequency_counts": dict(sorted(recurrence_frequency_counts.items())),
         "events_with_reminders": sum(1 for event in task_events if (event.get("data") or {}).get("reminders")),
+        "tasks_with_checklist": sum(1 for event in task_events if (event.get("data") or {}).get("has_checklist") is True),
+        "tasks_without_checklist": sum(1 for event in task_events if (event.get("data") or {}).get("has_checklist") is not True),
+        "tasks_with_complete_checklist": sum(
+            1
+            for event in task_events
+            if (event.get("data") or {}).get("has_checklist") is True
+            and (event.get("data") or {}).get("checklist_pending") == 0
+        ),
+        "tasks_with_incomplete_checklist": sum(
+            1
+            for event in task_events
+            if (event.get("data") or {}).get("has_checklist") is True
+            and int((event.get("data") or {}).get("checklist_pending") or 0) > 0
+        ),
+        "checklist_item_total": sum(checklist_totals),
+        "checklist_item_completed_count": sum(checklist_completed),
+        "checklist_item_pending_count": sum(checklist_totals) - sum(checklist_completed),
+        "average_checklist_completion_rate": round(sum(checklist_rates) / len(checklist_rates), 4) if checklist_rates else 0,
     }
 
 

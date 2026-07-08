@@ -31,10 +31,16 @@ def test_ticktick_json_to_task_events() -> None:
                         "content": "看现金流和估值",
                         "startDate": "2026-07-08T09:00:00+08:00",
                         "dueDate": "2026-07-09T10:00:00+08:00",
+                        "timeZone": "Asia/Shanghai",
+                        "isAllDay": False,
                         "status": 0,
                         "priority": 3,
-                        "repeatFlag": "weekly",
+                        "repeatFlag": "RRULE:FREQ=WEEKLY;BYDAY=TH",
                         "reminders": ["2026-07-09T09:30:00+08:00"],
+                        "items": [
+                            {"id": "item-1", "title": "读现金流量表", "status": 1, "completedTime": "2026-07-08T10:00:00+08:00"},
+                            {"id": "item-2", "title": "更新估值假设", "status": 0},
+                        ],
                         "tags": ["投资"],
                         "token": "must-not-leak",
                     }
@@ -60,8 +66,20 @@ def test_ticktick_json_to_task_events() -> None:
         assert event["data"]["is_completed"] is False
         assert event["data"]["is_overdue"] is False
         assert event["data"]["content_length"] == len("看现金流和估值")
-        assert event["data"]["recurrence"] == "weekly"
+        assert event["data"]["recurrence"] == "RRULE:FREQ=WEEKLY;BYDAY=TH"
+        assert event["data"]["recurrence_frequency"] == "weekly"
         assert event["data"]["reminders"] == ["2026-07-09T09:30:00+08:00"]
+        assert event["data"]["time_zone"] == "Asia/Shanghai"
+        assert event["data"]["is_all_day"] is False
+        assert event["data"]["has_time_range"] is True
+        assert event["data"]["time_order_valid"] is True
+        assert event["data"]["duration_minutes"] == 1500
+        assert event["data"]["checklist_total"] == 2
+        assert event["data"]["checklist_completed"] == 1
+        assert event["data"]["checklist_pending"] == 1
+        assert event["data"]["checklist_completion_rate"] == 0.5
+        assert event["data"]["checklist_items"][0]["title"] == "读现金流量表"
+        assert event["data"]["checklist_items"][0]["is_completed"] is True
         assert "must-not-leak" not in json.dumps(event, ensure_ascii=False)
         assert event["wiki_targets"] == ["internal.productivity.tasks"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -70,10 +88,23 @@ def test_ticktick_json_to_task_events() -> None:
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["ticktick"]
         assert manifest["platform_coverage"]["missing_expected_platforms"] == ["dida365"]
         assert manifest["field_coverage"]["field_counts"]["recurrence"] == 1
+        assert manifest["field_coverage"]["field_counts"]["recurrence_frequency"] == 1
         assert manifest["field_coverage"]["field_counts"]["reminders"] == 1
+        assert manifest["field_coverage"]["field_counts"]["checklist_total"] == 1
+        assert manifest["field_coverage"]["field_counts"]["checklist_completed"] == 1
+        assert manifest["field_coverage"]["field_counts"]["checklist_completion_rate"] == 1
         assert manifest["time_status_summary"]["pending_task_count"] == 1
         assert manifest["time_status_summary"]["events_with_due"] == 1
         assert manifest["time_status_summary"]["overdue_task_count"] == 0
+        assert manifest["time_status_summary"]["events_with_time_zone"] == 1
+        assert manifest["time_status_summary"]["events_with_duration_minutes"] == 1
+        assert manifest["time_status_summary"]["events_with_invalid_time_range"] == 0
+        assert manifest["time_status_summary"]["recurrence_frequency_counts"] == {"weekly": 1}
+        assert manifest["time_status_summary"]["tasks_with_checklist"] == 1
+        assert manifest["time_status_summary"]["checklist_item_total"] == 2
+        assert manifest["time_status_summary"]["checklist_item_completed_count"] == 1
+        assert manifest["time_status_summary"]["checklist_item_pending_count"] == 1
+        assert manifest["time_status_summary"]["average_checklist_completion_rate"] == 0.5
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["resolved_input_file_count"] == 1
         assert manifest["source_audit"]["extension_counts"] == {".json": 1}
