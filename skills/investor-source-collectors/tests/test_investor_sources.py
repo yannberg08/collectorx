@@ -712,6 +712,167 @@ def test_task_calendar_lens_keeps_investment_task_and_calendar_only() -> None:
         assert {event["data"]["payload"]["title"] for event in lens_events} == {"复盘贵州茅台财报", "贵州茅台财报电话会"}
 
 
+def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "task-calendar-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "ticktick:research",
+                "collector": "ticktick",
+                "source": "滴答清单用户授权任务数据",
+                "owner_scope": "personal",
+                "kind": "task",
+                "time": "2026-07-09T09:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "ticktick",
+                    "title": "研究任务：半导体财报模型",
+                    "content_preview": "跟踪财报、估值模型和基本面变化。",
+                    "project_name": "投资研究",
+                    "due": "2026-07-09T09:00:00+08:00",
+                    "reminders": ["2026-07-09T08:30:00+08:00"],
+                    "is_completed": False,
+                    "is_overdue": False,
+                },
+                "raw_ref": {"source_app": "ticktick", "task_id": "research"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "ticktick:trade-plan",
+                "collector": "ticktick",
+                "source": "滴答清单用户授权任务数据",
+                "owner_scope": "personal",
+                "kind": "task",
+                "time": "2026-07-09T10:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "ticktick",
+                    "title": "交易计划：明早买入ETF",
+                    "content_preview": "仓位 10%，设置止损和风控检查。",
+                    "project_name": "交易计划",
+                    "due": "2026-07-09T10:00:00+08:00",
+                    "is_completed": False,
+                    "is_overdue": False,
+                },
+                "raw_ref": {"source_app": "ticktick", "task_id": "trade-plan"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "ticktick:review",
+                "collector": "ticktick",
+                "source": "滴答清单用户授权任务数据",
+                "owner_scope": "personal",
+                "kind": "task",
+                "time": "2026-07-11T18:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_app": "ticktick",
+                    "title": "周五复盘组合回撤",
+                    "content_preview": "总结错因、归因和交易纪律。",
+                    "project_name": "复盘",
+                    "due": "2026-07-11T18:00:00+08:00",
+                    "is_completed": False,
+                    "is_overdue": False,
+                },
+                "raw_ref": {"source_app": "ticktick", "task_id": "review"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "calendar:earnings",
+                "collector": "calendar",
+                "source": "用户授权日历事件",
+                "owner_scope": "personal",
+                "kind": "calendar",
+                "time": "2026-07-10T09:30:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "source_platform": "feishu_calendar",
+                    "title": "贵州茅台财报电话会",
+                    "description_preview": "业绩说明会、调研会议，关注现金流和风险。",
+                    "calendar_name": "投资日历",
+                    "start": "2026-07-10T09:30:00+08:00",
+                    "meeting_url": "https://example.com/meeting",
+                },
+                "raw_ref": {"source_platform": "feishu_calendar", "event_id": "earnings"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "calendar:life",
+                "collector": "calendar",
+                "source": "用户授权日历事件",
+                "owner_scope": "personal",
+                "kind": "calendar",
+                "time": "2026-07-10T12:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {"source_platform": "apple_calendar", "title": "牙医预约", "calendar_name": "生活"},
+                "raw_ref": {"source_platform": "apple_calendar", "event_id": "life"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "task-calendar-investor",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T12:30:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "task-calendar-investor" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 4
+        assert {event["raw_ref"]["upstream_event_id"] for event in lens_events} == {
+            "ticktick:research",
+            "ticktick:trade-plan",
+            "ticktick:review",
+            "calendar:earnings",
+        }
+        classifications = [event["data"]["classification"] for event in lens_events]
+        assert any("research_task" in item["task_calendar_surfaces"] for item in classifications)
+        assert any("trade_plan" in item["task_calendar_surfaces"] for item in classifications)
+        assert any("review_reminder" in item["task_calendar_surfaces"] for item in classifications)
+        assert any("earnings_calendar" in item["task_calendar_surfaces"] for item in classifications)
+        assert any("research_meeting" in item["task_calendar_surfaces"] for item in classifications)
+        assert any("risk_check" in item["task_calendar_surfaces"] for item in classifications)
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        surface = manifest["lens_surface_summary"]
+        assert surface["event_count"] == 4
+        assert surface["missing_expected_task_calendar_surfaces"] == []
+        assert surface["upstream_collector_counts"] == {"calendar": 1, "ticktick": 3}
+        assert surface["kind_counts"] == {"calendar": 1, "task": 3}
+        assert surface["source_platform_counts"] == {"feishu_calendar": 1, "ticktick": 3}
+        assert surface["task_calendar_surface_counts"]["research_task"] == 2
+        assert surface["task_calendar_surface_counts"]["trade_plan"] == 1
+        assert surface["task_calendar_surface_counts"]["review_reminder"] == 1
+        assert surface["task_calendar_surface_counts"]["earnings_calendar"] == 2
+        assert surface["task_calendar_surface_counts"]["research_meeting"] == 1
+        assert surface["task_calendar_surface_counts"]["risk_check"] == 3
+        assert surface["events_with_time"] == 4
+        assert surface["events_with_due_or_start"] == 4
+        assert surface["events_with_reminders"] == 1
+        assert surface["events_with_meeting_url"] == 1
+        assert surface["events_with_project_or_calendar"] == 4
+        assert surface["collector_writes_wiki_directly"] is False
+
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["task-calendar-investor"]
+        assert evidence_surface["task_calendar_surface_counts"]["trade_plan"] == 1
+        assert evidence_surface["generic_task_calendar_lens"] is True
+
+
 def test_meeting_minutes_lens_keeps_investment_minutes_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1058,6 +1219,7 @@ if __name__ == "__main__":
     test_research_documents_filters_broad_titles_and_skips_unsupported_files()
     test_research_documents_limit_records_path_truncation()
     test_task_calendar_lens_keeps_investment_task_and_calendar_only()
+    test_task_calendar_lens_reports_planning_surface_from_upstream_events()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()
     test_social_investment_influence_lens_keeps_investment_activity_only()

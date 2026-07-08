@@ -284,7 +284,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-task-or-calendar-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source task-calendar-investor --input <task-or-calendar-events-jsonl> --out-dir <out-dir>",
-      "collects": "Trading plans, research tasks, review reminders, earnings/event follow-ups, and execution discipline signals.",
+      "collects": "Trading plans, research tasks, review reminders, earnings/event follow-ups, research meetings, risk checks, upstream source surface, reminder/time surface, and execution discipline signals.",
       "must_not_collect": "Unrelated personal tasks as investor facts.",
       "production_gap": "Real task/calendar backtest and threshold tuning."
     },

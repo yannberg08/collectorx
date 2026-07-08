@@ -233,6 +233,74 @@ INVESTMENT_NOTE_TYPE_TERMS = {
         "护城河",
     },
 }
+TASK_CALENDAR_SURFACE_ORDER = (
+    "research_task",
+    "trade_plan",
+    "review_reminder",
+    "earnings_calendar",
+    "research_meeting",
+    "risk_check",
+)
+TASK_CALENDAR_SURFACE_TERMS = {
+    "research_task": {
+        "研究任务",
+        "研究",
+        "跟踪",
+        "研报",
+        "财报",
+        "行业",
+        "模型",
+        "估值",
+        "基本面",
+    },
+    "trade_plan": {
+        "交易计划",
+        "买入",
+        "卖出",
+        "加仓",
+        "减仓",
+        "调仓",
+        "仓位",
+        "委托",
+        "打新",
+    },
+    "review_reminder": {
+        "复盘",
+        "交易复盘",
+        "回顾",
+        "总结",
+        "反思",
+        "归因",
+        "错因",
+    },
+    "earnings_calendar": {
+        "财报",
+        "年报",
+        "季报",
+        "业绩",
+        "公告",
+        "业绩说明会",
+        "电话会",
+    },
+    "research_meeting": {
+        "调研",
+        "路演",
+        "电话会",
+        "专家会",
+        "交流会",
+        "投委会",
+        "会议",
+        "纪要",
+    },
+    "risk_check": {
+        "风险",
+        "回撤",
+        "止损",
+        "止盈",
+        "风控",
+        "纪律",
+    },
+}
 
 
 def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -284,6 +352,15 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
             for hits in investment_note_type_matches.values():
                 matched_terms.extend(hits[:4])
 
+    task_calendar_surface_matches: Dict[str, List[str]] = {}
+    if source_id == "task-calendar-investor":
+        task_calendar_surface_matches = classify_task_calendar_surfaces(text, lowered)
+        if task_calendar_surface_matches:
+            score += min(0.30, len(task_calendar_surface_matches) * 0.08)
+            reasons.append("matched_task_calendar_surface")
+            for hits in task_calendar_surface_matches.values():
+                matched_terms.extend(hits[:4])
+
     score += source_specific_score(source_id, record, text, lowered, reasons, matched_terms)
 
     if collector_class == "vertical":
@@ -308,6 +385,14 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
             note_type: hits[:8]
             for note_type, hits in sorted(investment_note_type_matches.items())
         }
+    if source_id == "task-calendar-investor":
+        surfaces = [surface for surface in TASK_CALENDAR_SURFACE_ORDER if surface in task_calendar_surface_matches]
+        result["task_calendar_surfaces"] = surfaces
+        result["primary_task_calendar_surface"] = surfaces[0] if surfaces else "unclassified_task_calendar"
+        result["task_calendar_surface_terms"] = {
+            surface: hits[:8]
+            for surface, hits in sorted(task_calendar_surface_matches.items())
+        }
     return result
 
 
@@ -318,6 +403,16 @@ def classify_investment_note_types(text: str, lowered: str) -> Dict[str, List[st
         hits = term_hits(terms, text, lowered)
         if hits:
             matches[note_type] = hits
+    return matches
+
+
+def classify_task_calendar_surfaces(text: str, lowered: str) -> Dict[str, List[str]]:
+    matches: Dict[str, List[str]] = {}
+    for surface in TASK_CALENDAR_SURFACE_ORDER:
+        terms = TASK_CALENDAR_SURFACE_TERMS[surface]
+        hits = term_hits(terms, text, lowered)
+        if hits:
+            matches[surface] = hits
     return matches
 
 

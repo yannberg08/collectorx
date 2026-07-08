@@ -115,7 +115,7 @@ Operational docs:
 | `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists, valuation assumptions, source-app surface, and preview/full-content surface; note adapters pending |
-| `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders; upstream task/calendar platform coverage manifests available |
+| `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders, earnings calendar, research meetings, risk checks, upstream source surface, and reminder/time surface |
 | `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; upstream saved/read/share action coverage available |
 | `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator and social influence signals |
 

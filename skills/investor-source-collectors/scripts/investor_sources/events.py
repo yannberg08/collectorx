@@ -37,6 +37,15 @@ INVESTMENT_NOTE_TYPE_ORDER = (
     "research_note",
     "unclassified_investment_note",
 )
+TASK_CALENDAR_SURFACE_ORDER = (
+    "research_task",
+    "trade_plan",
+    "review_reminder",
+    "earnings_calendar",
+    "research_meeting",
+    "risk_check",
+    "unclassified_task_calendar",
+)
 
 
 def now_iso() -> str:
@@ -296,6 +305,8 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
 def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if source_id == "investment-notes":
         return investment_note_surface_summary(events)
+    if source_id == "task-calendar-investor":
+        return task_calendar_surface_summary(events)
     return {}
 
 
@@ -307,6 +318,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_source[source_id].append(event)
     if "investment-notes" in by_source:
         summaries["investment-notes"] = investment_note_surface_summary(by_source["investment-notes"])
+    if "task-calendar-investor" in by_source:
+        summaries["task-calendar-investor"] = task_calendar_surface_summary(by_source["task-calendar-investor"])
     return summaries
 
 
@@ -381,6 +394,86 @@ def ordered_counts(counts: Counter[str], order: Iterable[str]) -> Dict[str, int]
         if key not in result:
             result[key] = value
     return result
+
+
+def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface_counts: Counter[str] = Counter()
+    primary_surface_counts: Counter[str] = Counter()
+    upstream_collector_counts: Counter[str] = Counter()
+    kind_counts: Counter[str] = Counter()
+    source_platform_counts: Counter[str] = Counter()
+    matched_symbol_event_count = 0
+    events_with_time = 0
+    events_with_due_or_start = 0
+    events_with_reminders = 0
+    events_with_meeting_url = 0
+    events_with_project_or_calendar = 0
+    completed_task_count = 0
+    overdue_task_count = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        surfaces = classification.get("task_calendar_surfaces") if isinstance(classification.get("task_calendar_surfaces"), list) else []
+        if not surfaces:
+            surfaces = ["unclassified_task_calendar"]
+        for surface in surfaces:
+            surface_counts[str(surface)] += 1
+        primary_surface_counts[str(classification.get("primary_task_calendar_surface") or surfaces[0])] += 1
+        upstream = str(payload.get("upstream_collector") or event.get("raw_ref", {}).get("upstream_collector") or event.get("kind") or "direct_input")
+        upstream_collector_counts[upstream] += 1
+        kind_counts[str(event.get("kind") or "unknown")] += 1
+        source_platform_counts[task_calendar_source_platform(event)] += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        if event.get("time") or payload.get("time"):
+            events_with_time += 1
+        if payload.get("due") or payload.get("start") or event.get("time"):
+            events_with_due_or_start += 1
+        if payload.get("reminders"):
+            events_with_reminders += 1
+        if payload.get("meeting_url"):
+            events_with_meeting_url += 1
+        if payload.get("project_name") or payload.get("calendar_name"):
+            events_with_project_or_calendar += 1
+        if payload.get("is_completed") is True:
+            completed_task_count += 1
+        if payload.get("is_overdue") is True:
+            overdue_task_count += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_task_calendar_surfaces": list(TASK_CALENDAR_SURFACE_ORDER[:-1]),
+        "task_calendar_surface_counts": ordered_counts(surface_counts, TASK_CALENDAR_SURFACE_ORDER),
+        "primary_task_calendar_surface_counts": ordered_counts(primary_surface_counts, TASK_CALENDAR_SURFACE_ORDER),
+        "missing_expected_task_calendar_surfaces": [
+            surface for surface in TASK_CALENDAR_SURFACE_ORDER[:-1] if surface_counts.get(surface, 0) == 0
+        ],
+        "upstream_collector_counts": dict(sorted(upstream_collector_counts.items())),
+        "kind_counts": dict(sorted(kind_counts.items())),
+        "source_platform_counts": dict(sorted(source_platform_counts.items())),
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "events_with_time": events_with_time,
+        "events_with_due_or_start": events_with_due_or_start,
+        "events_with_reminders": events_with_reminders,
+        "events_with_meeting_url": events_with_meeting_url,
+        "events_with_project_or_calendar": events_with_project_or_calendar,
+        "completed_task_count": completed_task_count,
+        "overdue_task_count": overdue_task_count,
+        "generic_task_calendar_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def task_calendar_source_platform(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    value = payload.get("source_app") or payload.get("source_platform") or raw_ref.get("source_app") or raw_ref.get("source_platform")
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref")
+    if not value and isinstance(upstream_raw_ref, dict):
+        value = upstream_raw_ref.get("source_app") or upstream_raw_ref.get("source_platform")
+    return str(value or "unknown")
 
 
 def normalize_record_payload(record: Dict[str, Any]) -> Dict[str, Any]:

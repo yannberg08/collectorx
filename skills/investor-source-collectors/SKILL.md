@@ -130,6 +130,7 @@ P2 必做：
 - 命中证券/基金代码、交易动作、仓位、估值、研报、财报、调研、复盘等特征才会进入投资证据。
 - 事件会带 `data.classification`，包含置信度、命中原因、关键词和证券代码。
 - `investment-notes` 会额外标注投资笔记子类型：复盘、规则库、交易 checklist、估值假设和研究记录；manifest/evidence 会汇总这些面谱。
+- `task-calendar-investor` 会额外标注任务/日历面谱：研究任务、交易计划、复盘提醒、财报日程、调研会议和风险检查。
 - 默认阈值是 `--min-score 0.30`。
 - `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
 - 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。
