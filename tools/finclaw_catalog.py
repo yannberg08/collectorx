@@ -116,6 +116,7 @@ def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[s
     for key, value in replacements.items():
         command = command.replace(f"<{key}>", shlex.quote(value))
     placeholders = sorted(set(re.findall(r"<([^<>]+)>", command)))
+    argv = shlex.split(command)
     runner = "soulmirror" if command.startswith("SoulMirror") else "command"
     contract = entry.get("invocation_contract") or {}
     next_action, blocked_reason = plan_status(runner, placeholders, contract)
@@ -123,6 +124,7 @@ def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[s
         "id": entry["id"],
         "runner": runner,
         "command": command,
+        "argv": argv,
         "ready_to_run": runner == "command" and not placeholders,
         "next_action": next_action,
         "blocked_reason": blocked_reason,
@@ -236,6 +238,7 @@ def doctor_item(entry: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         "user_step": plan["user_step"],
         "preflight": plan["preflight"],
         "command": plan["command"],
+        "argv": plan["argv"],
     }
 
 

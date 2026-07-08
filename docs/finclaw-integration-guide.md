@@ -87,18 +87,19 @@ python3 tools/finclaw_catalog.py plan ths-watchlist \
   --require-ready
 ```
 
-The `plan` output includes `ready_to_run`, unresolved placeholders, the
-rendered command, `next_action`, `blocked_reason`, `user_step`, `preflight`,
-`failure_state`, product surface, and evidence role. The `doctor` output gives
-the same fields for every selected catalog entry, plus summary counts by
-priority, category, runner, and `next_action`; FinClaw should use it to render
-collector setup and authorization checklists.
+The `plan` output includes `ready_to_run`, unresolved placeholders, the display
+`command`, executable `argv`, `next_action`, `blocked_reason`, `user_step`,
+`preflight`, `failure_state`, product surface, and evidence role. The `doctor`
+output gives the same fields for every selected catalog entry, plus summary
+counts by priority, category, runner, and `next_action`; FinClaw should use it
+to render collector setup and authorization checklists.
 
 Product runners should use `--require-ready` before ordinary shell execution.
 If the helper exits with status `2`, FinClaw should parse the same JSON
 response and follow `next_action` instead of running the command:
 
-- `run_command`: execute the rendered command, then run the package gate.
+- `run_command`: execute the rendered `argv` list without shell reparsing, then
+  run the package gate. The `command` string is for display and audit only.
 - `fill_placeholders`: ask the user for the missing authorized file, folder,
   account precondition, or output path shown in `missing_placeholders`.
 - `wait_for_upstream_lake`: run or select the upstream collectors shown in

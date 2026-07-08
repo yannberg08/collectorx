@@ -23,6 +23,8 @@ FinClaw now has a catalog helper readiness doctor for product-side discovery and
   `collectors/finclaw-invocation-contracts.json`.
 - Product runners can list collectors, inspect authorization/preflight details,
   and render a collector command with placeholder replacement before execution.
+- `plan` and `doctor` now include both a display `command` and executable
+  `argv`, so FinClaw can run collectors without shell string reparsing.
 - `doctor --out-dir-root ... --json` produces a batch readiness matrix for
   setup screens and collection-run planning.
 - `plan --require-ready` exits with status `2` when a command is not ready for
@@ -34,8 +36,8 @@ FinClaw now has a catalog helper readiness doctor for product-side discovery and
   SoulMirror-owned collectors such as TickTick, preventing accidental treatment
   as a normal shell command.
 - `tools/test_finclaw_catalog.py` and project validation now cover catalog
-  listing, lens upstream contracts, command placeholder replacement, and
-  ready-to-run gate/doctor handling.
+  listing, lens upstream contracts, command placeholder replacement, safe argv
+  rendering, and ready-to-run gate/doctor handling.
 - This improves FinClaw product-call ergonomics, but it does not claim new
   real-account validation for any collector.
 

@@ -64,6 +64,24 @@ def test_plan_replaces_placeholders() -> None:
     assert "<out-dir>" not in plan["command"]
     assert "<authorized-ths-watchlist-export>" not in plan["command"]
     assert "skills/ths-watchlist/scripts/ths_watchlist.py" in plan["command"]
+    assert plan["argv"][:3] == ["python3", "skills/ths-watchlist/scripts/ths_watchlist.py", "collect"]
+    assert plan["argv"][-1] == "/tmp/collectorx-out"
+
+
+def test_plan_argv_preserves_paths_with_spaces_without_shell_quotes() -> None:
+    plan = run_json(
+        "plan",
+        "ths-watchlist",
+        "--out-dir",
+        "/tmp/collectorx out",
+        "--set",
+        "authorized-ths-watchlist-export=/tmp/watch list.csv",
+        "--json",
+    )
+    assert plan["ready_to_run"] is True
+    assert "'/tmp/watch list.csv'" in plan["command"]
+    assert plan["argv"][plan["argv"].index("--input") + 1] == "/tmp/watch list.csv"
+    assert plan["argv"][plan["argv"].index("--out-dir") + 1] == "/tmp/collectorx out"
 
 
 def test_plan_reports_missing_placeholders_and_require_ready_fails() -> None:
@@ -141,6 +159,7 @@ def test_doctor_reports_batch_readiness_summary() -> None:
     assert by_id["eastmoney-portfolio"]["ready_to_run"] is True
     assert by_id["eastmoney-portfolio"]["next_action"] == "run_command"
     assert "/tmp/collectorx-out/eastmoney-portfolio" in by_id["eastmoney-portfolio"]["command"]
+    assert by_id["eastmoney-portfolio"]["argv"][-1] == "/tmp/collectorx-out/eastmoney-portfolio"
     assert by_id["ths-watchlist"]["next_action"] == "fill_placeholders"
     assert by_id["ths-watchlist"]["missing_placeholders"] == ["authorized-ths-watchlist-export"]
     assert by_id["wechat-investment-dialogue"]["next_action"] == "wait_for_upstream_lake"
@@ -166,6 +185,7 @@ def main() -> int:
     test_list_includes_catalog_and_contract_fields()
     test_show_lens_includes_upstream_contract()
     test_plan_replaces_placeholders()
+    test_plan_argv_preserves_paths_with_spaces_without_shell_quotes()
     test_plan_reports_missing_placeholders_and_require_ready_fails()
     test_require_ready_allows_ready_command_plan()
     test_soulmirror_plan_is_not_plain_command()

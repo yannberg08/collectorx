@@ -2414,6 +2414,25 @@ Findings:
 - This improves FinClaw product orchestration across the P0/P1/P2 matrix. It
   does not claim new real-account validation for any collector.
 
+### Wave AJ - FinClaw Safe Invocation Argv
+
+Validation record:
+
+- `docs/validations/finclaw-catalog-argv-validation-2026-07-08.md`
+
+Findings:
+
+- Added executable `argv` to `tools/finclaw_catalog.py plan` output.
+- Added executable `argv` to each `doctor` item.
+- Kept `command` as a display and audit string.
+- Verified paths with spaces are shell-quoted in `command` but preserved
+  without quotes in `argv`.
+- Updated FinClaw integration docs to require product runners to execute the
+  `argv` list instead of reparsing the display command string.
+- Added catalog tests for safe argv rendering and doctor argv propagation.
+- This improves product execution reliability. It does not claim new
+  real-account validation for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
