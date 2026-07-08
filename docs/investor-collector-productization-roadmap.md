@@ -2342,6 +2342,31 @@ Findings:
 - This improves FinClaw user-precondition handling and catalog completeness. It
   does not claim new real-account validation for any individual collector.
 
+### Wave AG: FinClaw catalog helper CLI
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/finclaw-catalog-helper-validation-2026-07-08.md`
+
+Findings:
+
+- Added `tools/finclaw_catalog.py` with `list`, `show`, and `plan` commands.
+- The helper merges `collectors/finclaw-investor-catalog.json` and
+  `collectors/finclaw-invocation-contracts.json` so FinClaw product code does
+  not need to duplicate catalog-join logic.
+- `plan` renders a command after replacing `<out-dir>` and arbitrary
+  placeholders provided by `--set placeholder=value`, reports unresolved
+  placeholders, and marks ordinary command plans as ready only when all
+  placeholders are filled.
+- SoulMirror-owned collectors such as `ticktick` report `runner=soulmirror` and
+  are not marked as ordinary ready-to-run shell commands.
+- Added `tools/test_finclaw_catalog.py` and wired the helper CLI help plus tests
+  into `tools/validate_project.py`.
+- This improves FinClaw catalog consumption and user-precondition handling. It
+  does not claim new real-account validation for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

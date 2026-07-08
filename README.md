@@ -71,6 +71,9 @@ Operational docs:
   authorize, call, and gate collectors.
 - `tools/validate_collector_package.py` validates a collector output directory
   before FinClaw ingests it into Lake or runs Wiki distillation.
+- `tools/finclaw_catalog.py` gives FinClaw a stable CLI for listing catalog
+  entries, inspecting authorization/preflight details, and rendering invocation
+  plans from the catalog plus invocation contracts.
 - `tools/validate_investor_wiki_evidence.py` validates
   `finclaw.investor_wiki_evidence.v1` packages before SoulMirror/FinClaw writes
   the final investor Wiki.
@@ -178,6 +181,7 @@ The suite currently checks:
 - no `.DS_Store` files
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
+- FinClaw catalog helper CLI and invocation-plan tests
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets

@@ -25,6 +25,7 @@ from tools.validate_collector_package import validate_package
 PY_COMPILE_EXCLUDES = {".git", ".venv", "__pycache__", ".pytest_cache"}
 
 CLI_HELP_TARGETS = [
+    "tools/finclaw_catalog.py",
     "tools/validate_collector_package.py",
     "tools/validate_investor_wiki_evidence.py",
     "skills/wechat-export/scripts/wechat_query.py",
@@ -53,6 +54,7 @@ CLI_HELP_TARGETS = [
 ]
 
 PARSER_TESTS = [
+    "tools/test_finclaw_catalog.py",
     "tools/test_collector_package_validator.py",
     "tools/test_investor_wiki_contract.py",
     "skills/email-collector/tests/test_events.py",

@@ -71,6 +71,23 @@ Before running a catalog entry, FinClaw should look up the same `id` in
 contract `failure_state` instead of running the collector and treating an empty
 result as personal data.
 
+FinClaw can use the helper CLI instead of joining the JSON files itself:
+
+```bash
+python3 tools/finclaw_catalog.py list --json
+python3 tools/finclaw_catalog.py show ths-watchlist --json
+python3 tools/finclaw_catalog.py plan ths-watchlist \
+  --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
+  --out-dir /path/to/out \
+  --json
+```
+
+The `plan` output includes `ready_to_run`, unresolved placeholders, the
+rendered command, `user_step`, `preflight`, `failure_state`, product surface,
+and evidence role. SoulMirror-owned collectors such as TickTick report
+`runner=soulmirror` so the product does not treat them as ordinary shell
+commands.
+
 ## Package Gate
 
 After any collector finishes, FinClaw should validate the output directory
