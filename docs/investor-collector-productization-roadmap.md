@@ -931,6 +931,33 @@ Findings:
   refusal, unsupported ZIP members, ZIP limit accounting, sanitized attachment
   refs, and no-full-body policy.
 
+### Wave N4: P0 email Apple Mail and Maildir local import pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-local-formats-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.2`.
+- Added Apple Mail `.emlx` import for user-authorized local exports. The parser
+  strips the Apple Mail byte-count prefix before reading the RFC822 message.
+- Added Maildir `cur/` and `new/` message import for Linux/server-style local
+  exports. Maildir detection requires RFC822-like headers so ordinary
+  extensionless files remain skipped.
+- Added ZIP support for `.emlx` and Maildir members while preserving
+  `archive.zip::member` provenance.
+- Manifest audit now records Apple Mail EMLX file count, Maildir message file
+  count, `<maildir>` extension coverage, per-file parser names, and ZIP member
+  extension counts for these local formats.
+- Fixture validation covers folder import, ZIP import, no-full-body policy,
+  unsupported extensionless noise skipping, and raw-ref `format` values
+  (`emlx`, `maildir`).
+- Current local machine still has no registered mailbox, so this pass improves
+  local authorized export coverage without claiming live mailbox validation.
+
 ### Wave O: P0 filesystem cross-platform manifest pass 1
 
 Status: `completed-baseline`
@@ -1964,7 +1991,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, and explicit filtered-all gap status; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF/image samples, Chinese OCR quality review, Wiki backtest against real trades/reviews |
-| 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
+| 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
 

@@ -65,8 +65,19 @@ PROVIDER_PRESETS = {
 }
 
 DEFAULT_FOLDERS = ["INBOX"]
-SUPPORTED_IMPORT_EXTENSIONS = {".eml", ".mbox", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".zip"}
+SUPPORTED_IMPORT_EXTENSIONS = {".eml", ".emlx", ".mbox", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".zip"}
 SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS = SUPPORTED_IMPORT_EXTENSIONS - {".zip"}
+MAILDIR_PARENT_NAMES = {"cur", "new"}
+EMAIL_HEADER_MARKERS = (
+    b"from:",
+    b"to:",
+    b"subject:",
+    b"date:",
+    b"message-id:",
+    b"return-path:",
+    b"delivered-to:",
+    b"mime-version:",
+)
 
 
 def _load_state() -> dict:
@@ -461,6 +472,10 @@ def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) 
         "limit": limit,
         "limit_reached": False,
         "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
+        "apple_mail_emlx_supported": True,
+        "apple_mail_emlx_file_count": 0,
+        "maildir_message_import_supported": True,
+        "maildir_message_file_count": 0,
         "attachment_bodies_included": False,
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
@@ -499,6 +514,10 @@ def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) 
                 audit["path_results"].append(path_result(path, status="skipped", reason="unsupported_extension"))
                 continue
             audit["resolved_input_file_count"] += 1
+            if path.suffix.lower() == ".emlx":
+                audit["apple_mail_emlx_file_count"] += 1
+            if is_maildir_message_path(path):
+                audit["maildir_message_file_count"] += 1
             result = path_result(path, status="pending")
             before_archive_member_count = audit["archive_member_count"]
             before_skipped_archive_member_count = audit["skipped_archive_member_count"]
@@ -553,17 +572,19 @@ def iter_import_paths(inputs: list[str]):
         path = Path(raw).expanduser()
         if path.is_dir():
             for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS:
+                if child.is_file() and is_supported_import_path(child):
                     yield child
-        elif path.is_file() and path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS:
+        elif path.is_file() and is_supported_import_path(path):
             yield path
 
 
 def is_supported_import_path(path: Path) -> bool:
-    return path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS
+    return path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS or is_maildir_message_path(path)
 
 
 def extension_label(path: Path) -> str:
+    if is_maildir_message_path(path):
+        return "<maildir>"
     return path.suffix.lower() or "<none>"
 
 
@@ -580,6 +601,10 @@ def parser_name_for_path(path: Path) -> str:
         return "zip"
     if suffix == ".eml":
         return "eml"
+    if suffix == ".emlx":
+        return "emlx"
+    if is_maildir_message_path(path):
+        return "maildir"
     if suffix == ".mbox":
         return "mbox"
     if suffix in {".json", ".jsonl", ".ndjson"}:
@@ -606,6 +631,14 @@ def parse_email_export(path: Path, *, audit: dict = None) -> list[dict]:
         raw = path.read_bytes()
         msg = email.message_from_bytes(raw, policy=email_policy.default)
         return [message_to_record(msg, path=path, row=1)]
+    if suffix == ".emlx":
+        raw = apple_mail_emlx_message_bytes(path.read_bytes())
+        msg = email.message_from_bytes(raw, policy=email_policy.default)
+        return [message_to_record(msg, path=path, row=1)]
+    if is_maildir_message_path(path):
+        raw = path.read_bytes()
+        msg = email.message_from_bytes(raw, policy=email_policy.default)
+        return [message_to_record(msg, path=path, row=1)]
     if suffix == ".mbox":
         box = mailbox.mbox(str(path))
         try:
@@ -629,15 +662,15 @@ def parse_email_zip(path: Path, *, audit: dict = None, limit: int = None) -> lis
         for index, info in enumerate(members):
             member_name = info.filename.replace("\\", "/")
             member_path = PurePosixPath(member_name)
-            suffix = Path(member_name).suffix.lower()
+            member_ext = archive_member_extension_label(member_name)
             if audit is not None:
                 audit["archive_member_count"] += 1
-                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
+                increment_counter(audit, "archive_member_extension_counts", member_ext)
             skip_reason = archive_member_skip_reason(info)
             if skip_reason:
                 if audit is not None:
                     audit["skipped_archive_member_count"] += 1
-                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_extension_counts", member_ext)
                     increment_counter(audit, "skipped_archive_member_reason_counts", skip_reason)
                     append_archive_member_result(audit, member_name, status="skipped", reason=skip_reason)
                 continue
@@ -649,7 +682,7 @@ def parse_email_zip(path: Path, *, audit: dict = None, limit: int = None) -> lis
             except Exception:
                 if audit is not None:
                     audit["skipped_archive_member_count"] += 1
-                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_extension_counts", member_ext)
                     increment_counter(audit, "skipped_archive_member_reason_counts", "parse_error")
                     append_archive_member_result(audit, member_name, status="parse_error", reason="parse_error")
                 continue
@@ -694,9 +727,51 @@ def archive_member_skip_reason(info: zipfile.ZipInfo):
         return "directory"
     if not is_safe_archive_member(member_path) or windows_path.drive:
         return "unsafe_path"
-    if suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS:
+    if suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS and not archive_member_is_maildir_message_path(member_name):
         return "unsupported_extension"
     return None
+
+
+def archive_member_extension_label(member_name: str) -> str:
+    if archive_member_is_maildir_message_path(member_name):
+        return "<maildir>"
+    return Path(member_name).suffix.lower() or "<none>"
+
+
+def archive_member_is_maildir_message_path(member_name: str) -> bool:
+    parts = PurePosixPath(member_name.replace("\\", "/")).parts
+    if not parts:
+        return False
+    return len(parts) >= 2 and parts[-2] in MAILDIR_PARENT_NAMES and not parts[-1].startswith(".")
+
+
+def is_maildir_message_path(path: Path) -> bool:
+    if path.name.startswith(".") or path.parent.name not in MAILDIR_PARENT_NAMES:
+        return False
+    return looks_like_rfc822_message(path)
+
+
+def looks_like_rfc822_message(path: Path) -> bool:
+    try:
+        chunk = path.read_bytes()[:4096].lower()
+    except OSError:
+        return False
+    return any(marker in chunk for marker in EMAIL_HEADER_MARKERS)
+
+
+def apple_mail_emlx_message_bytes(raw: bytes) -> bytes:
+    first_newline = raw.find(b"\n")
+    if first_newline < 0:
+        return raw
+    count = raw[:first_newline].strip()
+    if not count.isdigit():
+        return raw
+    start = first_newline + 1
+    size = int(count)
+    end = start + size
+    if len(raw) >= end:
+        return raw[start:end]
+    return raw[start:]
 
 
 def append_archive_member_result(audit: dict, member: str, *, status: str, reason: str = None, parsed_record_count: int = None, imported_email_count: int = None) -> None:
@@ -724,8 +799,15 @@ def message_to_record(msg, *, path: Path, row: int) -> dict:
         "date": decode_mime_header(msg.get("Date")),
         "body": get_email_body(msg)[:5000],
         "attachment_refs": get_email_attachments(msg),
-        "raw_ref": {"path": str(path), "row": row, "format": path.suffix.lower().lstrip(".")},
+        "raw_ref": {"path": str(path), "row": row, "format": source_format_for_path(path)},
     }
+
+
+def source_format_for_path(path: Path) -> str:
+    if is_maildir_message_path(path):
+        return "maildir"
+    suffix = path.suffix.lower().lstrip(".")
+    return suffix or "rfc822"
 
 
 def parse_email_json(path: Path) -> list[dict]:
@@ -1296,7 +1378,7 @@ def main():
 
     # import命令
     import_parser = subparsers.add_parser("import", help="导入用户授权的本地邮件导出文件/目录")
-    import_parser.add_argument("--input", action="append", help="本地邮件导出文件或目录，可重复；支持 EML/MBOX/JSON/JSONL/CSV/TSV/ZIP")
+    import_parser.add_argument("--input", action="append", help="本地邮件导出文件或目录，可重复；支持 EML/EMLX/Maildir/MBOX/JSON/JSONL/CSV/TSV/ZIP")
     import_parser.add_argument("--out-dir", help="输出标准采集包目录")
     import_parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
     import_parser.add_argument("--limit", type=int, help="限制数量")

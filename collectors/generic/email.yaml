@@ -16,6 +16,8 @@ scope:
   channels:
     - imap
     - local_email_export
+    - apple_mail_emlx
+    - maildir
     - local_email_export_zip
   collects:
     - message_headers
@@ -29,6 +31,8 @@ scope:
     - missing_input_audit
     - skipped_file_reason_counts
     - skipped_archive_member_reason_counts
+    - apple_mail_emlx_audit
+    - maildir_message_audit
     - field_coverage
     - archive_member_provenance
   excludes:
@@ -53,12 +57,13 @@ prompt: |
 
   本地授权导入：
     python3 skills/email-collector/scripts/email_api.py import \
-      --input <用户授权的 EML/MBOX/JSON/CSV/ZIP 邮件导出文件或目录> \
+      --input <用户授权的 EML/EMLX/Maildir/MBOX/JSON/CSV/ZIP 邮件导出文件或目录> \
       --out-dir <输出目录>
 
   IMAP 和本地导入都会输出 lake/email/events.jsonl、manifest.json、
   SUMMARY.md。默认只输出 body_preview 和 attachment_refs；除非用户显式
   授权 --event-include-body，否则不把完整正文写入事件。ZIP 包保留
-  archive.zip::member 来源，并跳过路径穿越成员；本地导入 manifest 记录
-  缺失输入、逐文件解析结果、跳过原因和 limit 截断。投资相关筛选必须交给
-  email-research lens。
+  archive.zip::member 来源，并跳过路径穿越成员；Apple Mail EMLX 会剥离本地
+  长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件。本地导入
+  manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir 计数
+  和 limit 截断。投资相关筛选必须交给 email-research lens。

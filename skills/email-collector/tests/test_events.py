@@ -399,6 +399,85 @@ def test_local_email_import_package():
         assert len(manifest["collection_audit"]["path_results"]) == 4
 
 
+def test_local_email_import_apple_mail_emlx_and_maildir():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        apple_dir = root / "Apple Mail"
+        maildir_cur = root / "Maildir" / "cur"
+        out = root / "out"
+        apple_dir.mkdir()
+        maildir_cur.mkdir(parents=True)
+
+        apple_msg = EmailMessage()
+        apple_msg["Message-ID"] = "<apple-mail-research@example.com>"
+        apple_msg["From"] = "Broker Research <research@broker.example>"
+        apple_msg["To"] = "Owner <owner@example.com>"
+        apple_msg["Subject"] = str(Header("Apple Mail 晨会纪要", "utf-8"))
+        apple_msg["Date"] = "Wed, 08 Jul 2026 07:30:00 +0800"
+        apple_msg.set_content("Apple Mail 本地导出的晨会纪要。")
+        apple_raw = apple_msg.as_bytes()
+        (apple_dir / "12345.emlx").write_bytes(
+            str(len(apple_raw)).encode("ascii")
+            + b"\n"
+            + apple_raw
+            + b"\n<?xml version=\"1.0\"?><plist></plist>"
+        )
+
+        maildir_msg = EmailMessage()
+        maildir_msg["Message-ID"] = "<maildir-roadshow@example.com>"
+        maildir_msg["From"] = "IR <ir@company.example>"
+        maildir_msg["To"] = "Owner <owner@example.com>"
+        maildir_msg["Subject"] = str(Header("Maildir 调研邀请", "utf-8"))
+        maildir_msg["Date"] = "Wed, 08 Jul 2026 10:00:00 +0800"
+        maildir_msg.set_content("邀请参加线上调研。")
+        (maildir_cur / "1720000000.M123P456Q789.host:2,S").write_bytes(maildir_msg.as_bytes())
+        (root / "README").write_text("not an email export", encoding="utf-8")
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(root),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:15:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 2
+        by_subject = {event["data"]["subject"]: event for event in events}
+        assert "Apple Mail 晨会纪要" in by_subject
+        assert "Maildir 调研邀请" in by_subject
+        assert by_subject["Apple Mail 晨会纪要"]["raw_ref"]["format"] == "emlx"
+        assert by_subject["Maildir 调研邀请"]["raw_ref"]["format"] == "maildir"
+        assert all("body_preview" in event["data"] for event in events)
+        assert all("body" not in event["data"] for event in events)
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["resolved_input_file_count"] == 2
+        assert audit["imported_email_count"] == 2
+        assert audit["parsed_record_count"] == 2
+        assert audit["skipped_file_count"] == 1
+        assert audit["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert audit["skipped_extension_counts"] == {"<none>": 1}
+        assert audit["extension_counts"] == {".emlx": 1, "<maildir>": 1, "<none>": 1}
+        assert audit["apple_mail_emlx_file_count"] == 1
+        assert audit["maildir_message_file_count"] == 1
+        parser_counts = {result.get("parser") for result in audit["path_results"] if result["status"] == "parsed"}
+        assert parser_counts == {"emlx", "maildir"}
+
+
 def test_local_email_import_gap_event():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -505,6 +584,67 @@ def test_local_email_import_zip_package():
         assert manifest["attachment_policy"]["attachment_bodies_included"] is False
 
 
+def test_local_email_import_zip_supports_emlx_and_maildir_members():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        zip_path = root / "mail-local-formats.zip"
+        out = root / "out"
+
+        apple_msg = EmailMessage()
+        apple_msg["Message-ID"] = "<zip-apple@example.com>"
+        apple_msg["From"] = "Broker Research <research@broker.example>"
+        apple_msg["To"] = "Owner <owner@example.com>"
+        apple_msg["Subject"] = str(Header("ZIP Apple Mail 策略", "utf-8"))
+        apple_msg.set_content("Apple Mail ZIP 成员。")
+        apple_raw = apple_msg.as_bytes()
+
+        maildir_msg = EmailMessage()
+        maildir_msg["Message-ID"] = "<zip-maildir@example.com>"
+        maildir_msg["From"] = "IR <ir@company.example>"
+        maildir_msg["To"] = "Owner <owner@example.com>"
+        maildir_msg["Subject"] = str(Header("ZIP Maildir 路演", "utf-8"))
+        maildir_msg.set_content("Maildir ZIP 成员。")
+
+        with zipfile.ZipFile(zip_path, "w") as package:
+            package.writestr(
+                "Apple Mail/strategy.emlx",
+                str(len(apple_raw)).encode("ascii") + b"\n" + apple_raw + b"\n<plist></plist>",
+            )
+            package.writestr("Maildir/cur/1720000001.M1P1Q1.host:2,S", maildir_msg.as_bytes())
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(zip_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:45:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 2
+        archive_members = {event["raw_ref"]["archive_member"]: event for event in events}
+        assert archive_members["Apple Mail/strategy.emlx"]["raw_ref"]["format"] == "emlx"
+        assert archive_members["Maildir/cur/1720000001.M1P1Q1.host:2,S"]["raw_ref"]["format"] == "maildir"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["archive_member_count"] == 2
+        assert audit["archive_member_imported_email_count"] == 2
+        assert audit["skipped_archive_member_count"] == 0
+        assert audit["archive_member_extension_counts"] == {".emlx": 1, "<maildir>": 1}
+
+
 def test_local_email_import_zip_limit_counts_only_imported_records():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -585,9 +725,11 @@ if __name__ == "__main__":
     test_imap_collect_standard_package()
     test_imap_collect_gap_package_without_registered_account()
     test_local_email_import_package()
+    test_local_email_import_apple_mail_emlx_and_maildir()
     test_local_email_import_gap_event()
     test_local_email_import_missing_input_gap_audit()
     test_local_email_import_zip_package()
+    test_local_email_import_zip_supports_emlx_and_maildir_members()
     test_local_email_import_zip_limit_counts_only_imported_records()
     test_register_refuses_local_password_storage()
     print("All email collector event tests passed!")

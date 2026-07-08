@@ -93,11 +93,14 @@ python <SKILL_DIR>/scripts/email_api.py import \
 注册账户数、选中账户数、登录/搜索/抓取状态、匹配邮件数、抓取邮件数和失败原因。
 如果没有注册邮箱、授权失败或时间窗口没有邮件，也会输出 gap 事件和明确下一步。
 
-`import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV、ZIP 邮件包。
+`import` 命令支持 EML、Apple Mail EMLX、Maildir、MBOX、JSON/JSONL/NDJSON、
+CSV/TSV、ZIP 邮件包。Maildir 只识别 `cur/` 和 `new/` 下具备 RFC822 邮件头的
+文件，避免把普通无扩展文件误采。
 默认只写入 `body_preview` 和 `attachment_refs`，附件只记录文件名、类型和大小，
 不写入附件正文。ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。
 `manifest.collection_audit` 会记录请求输入、缺失输入、逐文件解析结果、跳过文件原因、
-ZIP 成员数量、ZIP 成员跳过原因和 `--limit` 截断状态。
+Apple Mail EMLX 文件数、Maildir 文件数、ZIP 成员数量、ZIP 成员跳过原因和
+`--limit` 截断状态。
 只有显式使用 `--event-include-body` 时才会把完整正文写入事件。
 
 ## 安全说明
