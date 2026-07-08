@@ -176,6 +176,8 @@ The suite currently checks:
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
 - package-level validation for standard CollectorX outputs
+- FinClaw catalog entrypoints: collector YAML category, skill directory, script
+  references, lens source ids, and output targets
 - parser unit tests for portfolio/watchlist collectors
 - investor lens classifier tests for matched and non-matched evidence
 - event example shape

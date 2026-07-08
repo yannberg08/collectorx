@@ -16,7 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`ticktick-cli` now has a SoulMirror-aligned live collector path:
+FinClaw catalog validation now checks runnable invocation contracts:
+
+- `tools/validate_project.py` now verifies that each
+  `collectors/finclaw-investor-catalog.json` entry points to the correct
+  collector YAML category, an existing skill directory, and existing Python
+  script paths.
+- Lens catalog entries must include `--source <collector-id>` so the product
+  cannot accidentally run the wrong lens profile.
+- Non-SoulMirror entries must declare a concrete `<out-dir>` target; SoulMirror
+  entries must use `apiVersion: soulmirror/v1` in their collector YAML.
+- The new gate caught and fixed the `qq` catalog command: `--db-dir` is a
+  top-level `qq_query.py` option, and the command now writes both compact QQ
+  collect JSON and `lake/qq/events.jsonl` under `<out-dir>`.
+- This improves product-entry safety, but it does not make QQ a full standard
+  package collector yet; QQ still needs a complete `manifest.json`/`SUMMARY.md`
+  package pass before broad FinClaw exposure.
+
+The prior completed wave: `ticktick-cli` now has a SoulMirror-aligned live collector path:
 
 - `collectors/generic/ticktick.yaml` is aligned to the SoulMirror
   YAML + AgentRunner + skill contract.

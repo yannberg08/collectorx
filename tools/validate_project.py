@@ -6,6 +6,7 @@ from __future__ import annotations
 import py_compile
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -206,9 +207,10 @@ def validate_investor_catalog() -> None:
     if not isinstance(entries, list) or not entries:
         raise SystemExit("FinClaw investor catalog must contain entries")
 
+    category_folder = {"generic": "generic", "vertical": "vertical", "lens": "lenses"}
     collector_files = {
         path.stem
-        for folder in ("generic", "vertical", "lenses")
+        for folder in category_folder.values()
         for path in (ROOT / "collectors" / folder).glob("*.yaml")
     }
     required_fields = {
@@ -226,6 +228,7 @@ def validate_investor_catalog() -> None:
     }
     expected_priorities = {"P0", "P1", "P2", "supporting"}
     expected_categories = {"generic", "vertical", "lens"}
+    expected_readiness = set(catalog.get("readiness_levels") or {})
     ids: set[str] = set()
     priorities: dict[str, int] = {"P0": 0, "P1": 0, "P2": 0}
 
@@ -243,12 +246,44 @@ def validate_investor_catalog() -> None:
             raise SystemExit(f"Catalog entry {cid} has invalid priority")
         if entry["category"] not in expected_categories:
             raise SystemExit(f"Catalog entry {cid} has invalid category")
+        category_path = ROOT / "collectors" / category_folder[entry["category"]] / f"{cid}.yaml"
+        if not category_path.exists():
+            raise SystemExit(f"Catalog entry {cid} category does not match collector YAML folder")
+        if entry["readiness"] not in expected_readiness:
+            raise SystemExit(f"Catalog entry {cid} has unknown readiness: {entry['readiness']}")
+        skill_dir = ROOT / "skills" / entry["skill"]
+        if not (skill_dir / "SKILL.md").exists():
+            raise SystemExit(f"Catalog entry {cid} references missing skill: {entry['skill']}")
+        cli = str(entry["cli"])
+        script_refs = extract_catalog_script_refs(cli, entry["skill"])
+        if not script_refs:
+            raise SystemExit(f"Catalog entry {cid} CLI does not reference a runnable script")
+        for script in script_refs:
+            if not script.exists():
+                raise SystemExit(f"Catalog entry {cid} references missing script: {script.relative_to(ROOT)}")
+        if entry["category"] == "lens" and f"--source {cid}" not in cli:
+            raise SystemExit(f"Catalog lens entry {cid} CLI must include --source {cid}")
+        if not cli.startswith("SoulMirror") and "<out-dir>" not in cli:
+            raise SystemExit(f"Catalog entry {cid} CLI must declare <out-dir> output")
+        if cli.startswith("SoulMirror"):
+            text = category_path.read_text(encoding="utf-8")
+            if "apiVersion: soulmirror/v1" not in text:
+                raise SystemExit(f"Catalog entry {cid} uses SoulMirror CLI but YAML is not soulmirror/v1")
         if entry["priority"] in priorities:
             priorities[entry["priority"]] += 1
 
     for priority, count in priorities.items():
         if count == 0:
             raise SystemExit(f"Catalog has no {priority} entries")
+
+
+def extract_catalog_script_refs(cli: str, skill: str) -> list[Path]:
+    refs: list[Path] = []
+    for raw in re.findall(r"skills/[^\s`'\"]+?\.py", cli):
+        refs.append(ROOT / raw)
+    for raw in re.findall(r"<SKILL_DIR>/([^\s`'\"]+?\.py)", cli):
+        refs.append(ROOT / "skills" / skill / raw)
+    return refs
 
 
 def run_first_loop_smoke_test() -> None:

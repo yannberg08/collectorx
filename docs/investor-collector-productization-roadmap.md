@@ -1823,6 +1823,30 @@ Findings:
   account validation until the managed OAuth Broker is deployed and a real
   recurring-task/timezone backtest is run.
 
+### Wave AC: FinClaw catalog invocation contract gate
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/finclaw-catalog-invocation-gate-validation-2026-07-08.md`
+
+Findings:
+
+- Strengthened `tools/validate_project.py` catalog validation so product entries
+  cannot point to missing collector YAML, missing skills, or missing Python
+  scripts.
+- Catalog category must match the collector YAML folder.
+- Catalog readiness must be declared in `readiness_levels`.
+- Lens entries must include `--source <collector-id>`.
+- Non-SoulMirror catalog entries must declare a concrete `<out-dir>` target.
+- SoulMirror catalog entries must use `apiVersion: soulmirror/v1`.
+- The gate caught and fixed the `qq` catalog command: `--db-dir` is a top-level
+  `qq_query.py` option, and the catalog now writes compact collect JSON plus
+  `lake/qq/events.jsonl` under `<out-dir>`.
+- This improves FinClaw product-call safety, but does not claim QQ standard
+  package readiness yet.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
