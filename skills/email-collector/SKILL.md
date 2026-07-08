@@ -96,6 +96,8 @@ python <SKILL_DIR>/scripts/email_api.py import \
 `import` 命令支持 EML、MBOX、JSON/JSONL/NDJSON、CSV/TSV、ZIP 邮件包。
 默认只写入 `body_preview` 和 `attachment_refs`，附件只记录文件名、类型和大小，
 不写入附件正文。ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。
+`manifest.collection_audit` 会记录请求输入、缺失输入、逐文件解析结果、跳过文件原因、
+ZIP 成员数量、ZIP 成员跳过原因和 `--limit` 截断状态。
 只有显式使用 `--event-include-body` 时才会把完整正文写入事件。
 
 ## 安全说明

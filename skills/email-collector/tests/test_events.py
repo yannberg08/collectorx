@@ -312,6 +312,7 @@ def test_local_email_import_package():
         eml_path = root / "broker-research.eml"
         json_path = root / "mail-export.json"
         csv_path = root / "mail-export.csv"
+        unsupported_path = root / "notes.txt"
         out = root / "out"
 
         msg = EmailMessage()
@@ -347,6 +348,7 @@ def test_local_email_import_package():
             "analyst@example.com,owner@example.com,行业深度,2026-07-08T11:00:00+08:00,见附件,industry.pdf\n",
             encoding="utf-8",
         )
+        unsupported_path.write_text("not an email export", encoding="utf-8")
 
         script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
         subprocess.run(
@@ -380,6 +382,21 @@ def test_local_email_import_package():
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
         assert manifest["collection_readiness"]["full_body_included"] is False
+        assert manifest["collection_audit"]["source_type"] == "authorized_email_export"
+        assert manifest["collection_audit"]["input_count"] == 1
+        assert manifest["collection_audit"]["resolved_input_file_count"] == 3
+        assert manifest["collection_audit"]["imported_email_count"] == 3
+        assert manifest["collection_audit"]["parsed_record_count"] == 3
+        assert manifest["collection_audit"]["skipped_file_count"] == 1
+        assert manifest["collection_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["collection_audit"]["skipped_extension_counts"] == {".txt": 1}
+        assert manifest["collection_audit"]["extension_counts"] == {
+            ".csv": 1,
+            ".eml": 1,
+            ".json": 1,
+            ".txt": 1,
+        }
+        assert len(manifest["collection_audit"]["path_results"]) == 4
 
 
 def test_local_email_import_gap_event():
@@ -398,6 +415,35 @@ def test_local_email_import_gap_event():
         ]
         assert len(events) == 1
         assert events[0]["data"]["gap"] == "email_authorized_export_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_audit"]["input_count"] == 0
+        assert manifest["collection_audit"]["resolved_input_file_count"] == 0
+        assert manifest["collection_audit"]["imported_email_count"] == 0
+
+
+def test_local_email_import_missing_input_gap_audit():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        missing = root / "missing-mail-export"
+        out = root / "out"
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [sys.executable, str(script), "import", "--input", str(missing), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "email_authorized_export_missing"
+        assert manifest["collection_audit"]["input_count"] == 1
+        assert manifest["collection_audit"]["input_missing_count"] == 1
+        assert manifest["collection_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["collection_audit"]["path_results"][0]["status"] == "missing"
 
 
 def test_local_email_import_zip_package():
@@ -418,6 +464,7 @@ def test_local_email_import_zip_package():
         with zipfile.ZipFile(zip_path, "w") as package:
             package.writestr("nested/research.eml", msg.as_bytes())
             package.writestr("../escape.eml", msg.as_bytes())
+            package.writestr("C:\\escape.eml", msg.as_bytes())
             package.writestr("nested/ignored.txt", "not email")
 
         script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
@@ -445,9 +492,65 @@ def test_local_email_import_zip_package():
         assert events[0]["raw_ref"]["archive_member"] == "nested/research.eml"
         assert events[0]["data"]["attachment_refs"][0]["filename"] == "zip-report.pdf"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["collection_audit"]["archive_member_count"] == 3
-        assert manifest["collection_audit"]["skipped_archive_member_count"] == 2
+        assert manifest["collection_audit"]["archive_count"] == 1
+        assert manifest["collection_audit"]["archive_member_count"] == 4
+        assert manifest["collection_audit"]["archive_member_imported_email_count"] == 1
+        assert manifest["collection_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["collection_audit"]["skipped_archive_member_reason_counts"] == {
+            "unsafe_path": 2,
+            "unsupported_extension": 1,
+        }
+        assert manifest["collection_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["collection_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["attachment_policy"]["attachment_bodies_included"] is False
+
+
+def test_local_email_import_zip_limit_counts_only_imported_records():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        zip_path = root / "mail-export.zip"
+        out = root / "out"
+        messages = []
+        for index in range(2):
+            msg = EmailMessage()
+            msg["Message-ID"] = f"<zip-limit-{index}@example.com>"
+            msg["From"] = "Broker Research <research@broker.example>"
+            msg["To"] = "Owner <owner@example.com>"
+            msg["Subject"] = f"策略报告 {index}"
+            msg["Date"] = "Wed, 08 Jul 2026 09:00:00 +0800"
+            msg.set_content("见附件。")
+            messages.append(msg)
+        with zipfile.ZipFile(zip_path, "w") as package:
+            package.writestr("mail/one.eml", messages[0].as_bytes())
+            package.writestr("mail/two.eml", messages[1].as_bytes())
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(zip_path),
+                "--out-dir",
+                str(out),
+                "--limit",
+                "1",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert len(events) == 1
+        assert manifest["collection_audit"]["limit_reached"] is True
+        assert manifest["collection_audit"]["imported_email_count"] == 1
+        assert manifest["collection_audit"]["archive_member_imported_email_count"] == 1
+        assert manifest["collection_audit"]["path_results"][0]["imported_email_count"] == 1
 
 
 def test_register_refuses_local_password_storage():
@@ -483,6 +586,8 @@ if __name__ == "__main__":
     test_imap_collect_gap_package_without_registered_account()
     test_local_email_import_package()
     test_local_email_import_gap_event()
+    test_local_email_import_missing_input_gap_audit()
     test_local_email_import_zip_package()
+    test_local_email_import_zip_limit_counts_only_imported_records()
     test_register_refuses_local_password_storage()
     print("All email collector event tests passed!")

@@ -16,8 +16,26 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`social-activity` now has stronger source audit coverage for authorized Weibo,
-Bilibili, and Xiaohongshu activity packages:
+`email` now has stronger local-import source audit coverage for authorized EML,
+MBOX, JSON, CSV, TSV, and ZIP email export packages:
+
+- `email_api.py import --input <authorized-email-export-or-folder> --out-dir
+  <dir>` records `manifest.collection_audit` with requested inputs, missing
+  inputs, per-file parse results, extension coverage, imported counts, skipped
+  file reasons, ZIP member counts, skipped ZIP member reasons, limit truncation,
+  and path-safety flags.
+- IMAP `collect --out-dir` keeps the account/folder audit path, while local
+  `import --out-dir` now has equivalent explainability for user-selected files
+  and folders.
+- Full bodies remain excluded by default and require explicit
+  `--event-include-body`; attachment bodies are never written, only sanitized
+  refs are retained.
+- This improves the P0 email import path, but it does not claim real mailbox
+  validation on the current machine because no mailbox is registered in the
+  local email collector state.
+
+The prior completed wave: `social-activity` now has stronger source audit
+coverage for authorized Weibo, Bilibili, and Xiaohongshu activity packages:
 
 - `social_activity.py collect --input <authorized-social-activity-export-or-zip>
   --out-dir <dir>` records `manifest.source_audit` with requested inputs,
@@ -230,7 +248,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons and per-root results; research-documents manifest records extraction policy, skipped extensions, parser counts, and content-read counts | Broader private PDF/XLSX/DOCX samples, screenshot OCR decision, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, and explicit non-broker-trade evidence policy; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, pagination marker audit, raw sanitization, and SoulMirror sync; neither is a real account adapter | Real Xueqiu login/export discovery, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/JSON/CSV/ZIP, platform inference, numeric asset fields, platform coverage, field coverage, source audit, asset value summary, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no real account export found yet | Per-platform export/UI adapters, real account validation, complete account-boundary proof |
-| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir` and local EML/MBOX/JSON/CSV/ZIP `import --out-dir` both produce standard packages with account/folder audit, field coverage, sanitized attachment refs, body/attachment policy, generic-to-lens evidence boundary, and research-attachment filename matching; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, real mailbox validation, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
+| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir` and local EML/MBOX/JSON/CSV/TSV/ZIP `import --out-dir` both produce standard packages with account/folder audit, per-input import audit, skipped file/ZIP-member reasons, field coverage, sanitized attachment refs, body/attachment policy, generic-to-lens evidence boundary, and research-attachment filename matching; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, real mailbox validation, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
 
 ## P1 Status
 

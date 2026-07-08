@@ -1,1 +1,1 @@
-{"collector":"email","class":"generic","version":"0.4.0","status":"baseline","description":"Email collector with IMAP collection plus authorized local EML/MBOX/JSON/CSV import packages."}
+{"collector":"email","class":"generic","version":"0.5.1","status":"baseline+audit","description":"Email collector with IMAP collection plus authorized local EML/MBOX/JSON/CSV/ZIP import packages, account/folder audit, per-input import audit, skipped reasons, and body/attachment policy manifests."}

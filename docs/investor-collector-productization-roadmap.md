@@ -780,6 +780,31 @@ Findings:
   attachment sanitization, IMAP attachment refs, and research-attachment lens
   matching.
 
+### Wave N3: P0 email local import source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.1` and aligned `.collectorx.json` with
+  `baseline+audit`.
+- Added `source_type=authorized_email_export` and path-level audit fields for
+  requested inputs, missing inputs, resolved files, extension counts, skipped
+  file counts, skipped reasons, parsed/imported counts, and limit truncation.
+- Added ZIP member reason audit for unsafe paths, Windows drive paths,
+  unsupported extensions, parse errors, imported member email counts, and
+  unvisited members when `--limit` truncates collection.
+- Kept IMAP package behavior unchanged while making local import manifests as
+  explainable as the later package collectors.
+- Fixture validation covers mixed EML/JSON/CSV import, unsupported file skips,
+  missing input gap audit, ZIP provenance, POSIX traversal, Windows drive member
+  refusal, unsupported ZIP members, ZIP limit accounting, sanitized attachment
+  refs, and no-full-body policy.
+
 ### Wave O: P0 filesystem cross-platform manifest pass 1
 
 Status: `completed-baseline`
@@ -1448,7 +1473,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, and explicit filtered-all gap status; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, screenshot OCR decision, Wiki backtest against real trades/reviews |
-| 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, import audit, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
+| 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, asset value summary, ZIP provenance, raw sanitization, and SoulMirror sync; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 

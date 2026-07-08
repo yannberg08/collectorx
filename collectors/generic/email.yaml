@@ -25,6 +25,10 @@ scope:
     - body_preview
     - attachment_refs
     - imap_account_folder_audit
+    - local_import_path_level_audit
+    - missing_input_audit
+    - skipped_file_reason_counts
+    - skipped_archive_member_reason_counts
     - field_coverage
     - archive_member_provenance
   excludes:
@@ -37,7 +41,9 @@ scope:
 
 description: |
   邮箱是通用个人证据源。它采集用户授权邮箱或本地邮件导出中的邮件头、
-  正文预览和附件引用；投资相关筛选由 `email-research` lens 完成。
+  正文预览和附件引用；manifest 记录账户/文件夹审计、逐输入导入审计、
+  跳过文件/ZIP 成员原因和正文/附件策略。投资相关筛选由
+  `email-research` lens 完成。
 
 prompt: |
   IMAP 采集：
@@ -53,5 +59,6 @@ prompt: |
   IMAP 和本地导入都会输出 lake/email/events.jsonl、manifest.json、
   SUMMARY.md。默认只输出 body_preview 和 attachment_refs；除非用户显式
   授权 --event-include-body，否则不把完整正文写入事件。ZIP 包保留
-  archive.zip::member 来源，并跳过路径穿越成员。投资相关筛选必须交给
+  archive.zip::member 来源，并跳过路径穿越成员；本地导入 manifest 记录
+  缺失输入、逐文件解析结果、跳过原因和 limit 截断。投资相关筛选必须交给
   email-research lens。

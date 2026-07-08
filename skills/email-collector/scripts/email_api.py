@@ -17,6 +17,7 @@ from email import policy as email_policy
 from email.header import decode_header
 from pathlib import Path
 from pathlib import PurePosixPath
+from pathlib import PureWindowsPath
 
 from email_collector.events import emails_to_events, gap_event, write_events_jsonl, write_json
 
@@ -437,30 +438,112 @@ def collect_imported_emails(inputs: list[str], *, limit: int = None) -> list[dic
 
 
 def collect_imported_emails_with_audit(inputs: list[str], *, limit: int = None) -> tuple[list[dict], dict]:
-    paths = list(iter_import_paths(inputs))
+    input_list = list(inputs)
     audit = {
-        "input_count": len(inputs),
-        "resolved_input_file_count": len(paths),
+        "source_type": "authorized_email_export",
+        "input_count": len(input_list),
+        "requested_inputs": [str(Path(raw).expanduser()) for raw in input_list],
+        "resolved_input_file_count": 0,
+        "input_missing_count": 0,
         "imported_email_count": 0,
+        "parsed_record_count": 0,
         "extension_counts": {},
+        "skipped_extension_counts": {},
+        "skipped_reason_counts": {},
+        "skipped_file_count": 0,
+        "archive_count": 0,
         "archive_member_count": 0,
         "archive_member_extension_counts": {},
+        "archive_member_imported_email_count": 0,
         "skipped_archive_member_count": 0,
         "skipped_archive_member_extension_counts": {},
+        "skipped_archive_member_reason_counts": {},
         "limit": limit,
+        "limit_reached": False,
         "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
         "attachment_bodies_included": False,
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+        "path_results": [],
     }
-    collected = []
-    for path in paths:
-        increment_counter(audit, "extension_counts", path.suffix.lower() or "<none>")
-        for item in parse_email_export(path, audit=audit):
-            collected.append(item)
+    collected: list[dict] = []
+    for raw in input_list:
+        if limit is not None and len(collected) >= limit:
+            audit["limit_reached"] = True
+            break
+        input_path = Path(raw).expanduser()
+        if not input_path.exists():
+            audit["input_missing_count"] += 1
+            increment_counter(audit, "skipped_reason_counts", "input_missing")
+            audit["path_results"].append(path_result(input_path, status="missing", reason="input_missing"))
+            continue
+        if input_path.is_dir():
+            paths = sorted(child for child in input_path.rglob("*") if child.is_file())
+        elif input_path.is_file():
+            paths = [input_path]
+        else:
+            increment_counter(audit, "skipped_reason_counts", "unsupported_input_kind")
+            audit["path_results"].append(path_result(input_path, status="skipped", reason="unsupported_input_kind"))
+            continue
+
+        for path in paths:
             if limit is not None and len(collected) >= limit:
-                audit["imported_email_count"] = len(collected[:limit])
-                finalize_import_audit(audit)
-                return collected[:limit], audit
+                audit["limit_reached"] = True
+                break
+            ext = extension_label(path)
+            increment_counter(audit, "extension_counts", ext)
+            if not is_supported_import_path(path):
+                audit["skipped_file_count"] += 1
+                increment_counter(audit, "skipped_extension_counts", ext)
+                increment_counter(audit, "skipped_reason_counts", "unsupported_extension")
+                audit["path_results"].append(path_result(path, status="skipped", reason="unsupported_extension"))
+                continue
+            audit["resolved_input_file_count"] += 1
+            result = path_result(path, status="pending")
+            before_archive_member_count = audit["archive_member_count"]
+            before_skipped_archive_member_count = audit["skipped_archive_member_count"]
+            try:
+                if path.suffix.lower() == ".zip":
+                    audit["archive_count"] += 1
+                    parsed = parse_email_zip(path, audit=audit, limit=remaining_limit(limit, collected))
+                    result.update(
+                        {
+                            "status": "parsed" if parsed else "no_records_parsed",
+                            "parser": "zip",
+                            "parsed_record_count": len(parsed),
+                            "imported_email_count": len(parsed),
+                            "archive_member_count": audit["archive_member_count"] - before_archive_member_count,
+                            "skipped_archive_member_count": audit["skipped_archive_member_count"] - before_skipped_archive_member_count,
+                        }
+                    )
+                else:
+                    parsed = parse_email_export(path)
+                    remaining = remaining_limit(limit, collected)
+                    parsed = parsed if remaining is None else parsed[:remaining]
+                    result.update(
+                        {
+                            "status": "parsed" if parsed else "no_records_parsed",
+                            "parser": parser_name_for_path(path),
+                            "parsed_record_count": len(parsed),
+                            "imported_email_count": len(parsed),
+                        }
+                    )
+            except Exception:
+                parsed = []
+                audit["skipped_file_count"] += 1
+                increment_counter(audit, "skipped_extension_counts", ext)
+                increment_counter(audit, "skipped_reason_counts", "parse_error")
+                result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0, "imported_email_count": 0})
+            audit["path_results"].append(result)
+            collected.extend(parsed)
+            if limit is not None and len(collected) >= limit:
+                audit["limit_reached"] = True
+                collected = collected[:limit]
+                break
+        if limit is not None and len(collected) >= limit:
+            break
     audit["imported_email_count"] = len(collected)
+    audit["parsed_record_count"] = len(collected)
     finalize_import_audit(audit)
     return collected, audit
 
@@ -474,6 +557,47 @@ def iter_import_paths(inputs: list[str]):
                     yield child
         elif path.is_file() and path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS:
             yield path
+
+
+def is_supported_import_path(path: Path) -> bool:
+    return path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS
+
+
+def extension_label(path: Path) -> str:
+    return path.suffix.lower() or "<none>"
+
+
+def remaining_limit(limit: int = None, collected: list[dict] = None):
+    collected = collected or []
+    if limit is None:
+        return None
+    return max(limit - len(collected), 0)
+
+
+def parser_name_for_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return "zip"
+    if suffix == ".eml":
+        return "eml"
+    if suffix == ".mbox":
+        return "mbox"
+    if suffix in {".json", ".jsonl", ".ndjson"}:
+        return "json"
+    if suffix in {".csv", ".tsv"}:
+        return "table"
+    return "unknown"
+
+
+def path_result(path: Path, *, status: str, reason: str = None) -> dict:
+    result = {
+        "path": str(path),
+        "extension": extension_label(path),
+        "status": status,
+    }
+    if reason:
+        result["reason"] = reason
+    return result
 
 
 def parse_email_export(path: Path, *, audit: dict = None) -> list[dict]:
@@ -497,38 +621,94 @@ def parse_email_export(path: Path, *, audit: dict = None) -> list[dict]:
     return []
 
 
-def parse_email_zip(path: Path, *, audit: dict = None) -> list[dict]:
+def parse_email_zip(path: Path, *, audit: dict = None, limit: int = None) -> list[dict]:
     records: list[dict] = []
     with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-email-zip-") as tmp:
         tmp_root = Path(tmp)
-        for info in archive.infolist():
-            if info.is_dir():
-                continue
+        members = sorted(archive.infolist(), key=lambda item: item.filename.replace("\\", "/"))
+        for index, info in enumerate(members):
             member_name = info.filename.replace("\\", "/")
             member_path = PurePosixPath(member_name)
             suffix = Path(member_name).suffix.lower()
             if audit is not None:
                 audit["archive_member_count"] += 1
                 increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
-            if not is_safe_archive_member(member_path) or suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS:
+            skip_reason = archive_member_skip_reason(info)
+            if skip_reason:
                 if audit is not None:
                     audit["skipped_archive_member_count"] += 1
                     increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_reason_counts", skip_reason)
+                    append_archive_member_result(audit, member_name, status="skipped", reason=skip_reason)
                 continue
             target = tmp_root.joinpath(*member_path.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(info))
-            for record in parse_email_export(target):
+            try:
+                target.write_bytes(archive.read(info))
+                parsed = parse_email_export(target)
+            except Exception:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_reason_counts", "parse_error")
+                    append_archive_member_result(audit, member_name, status="parse_error", reason="parse_error")
+                continue
+            remaining = None if limit is None else max(limit - len(records), 0)
+            emittable = parsed if remaining is None else parsed[:remaining]
+            if audit is not None:
+                append_archive_member_result(
+                    audit,
+                    member_name,
+                    status="parsed" if parsed else "no_records_parsed",
+                    parsed_record_count=len(parsed),
+                    imported_email_count=len(emittable),
+                )
+            for record in emittable:
                 raw_ref = record.setdefault("raw_ref", {})
                 raw_ref["path"] = f"{path}::{member_name}"
                 raw_ref["archive"] = str(path)
                 raw_ref["archive_member"] = member_name
                 records.append(record)
+                if audit is not None:
+                    audit["archive_member_imported_email_count"] += 1
+            if limit is not None and len(records) >= limit:
+                if audit is not None:
+                    audit["limit_reached"] = True
+                    audit["unvisited_archive_member_count_due_limit"] = max(0, len(members) - index - 1)
+                return records
+    if audit is not None and "unvisited_archive_member_count_due_limit" not in audit:
+        audit["unvisited_archive_member_count_due_limit"] = 0
     return records
 
 
 def is_safe_archive_member(member_path: PurePosixPath) -> bool:
     return bool(member_path.parts) and not member_path.is_absolute() and ".." not in member_path.parts
+
+
+def archive_member_skip_reason(info: zipfile.ZipInfo):
+    member_name = info.filename.replace("\\", "/")
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(info.filename)
+    suffix = Path(member_name).suffix.lower()
+    if info.is_dir():
+        return "directory"
+    if not is_safe_archive_member(member_path) or windows_path.drive:
+        return "unsafe_path"
+    if suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS:
+        return "unsupported_extension"
+    return None
+
+
+def append_archive_member_result(audit: dict, member: str, *, status: str, reason: str = None, parsed_record_count: int = None, imported_email_count: int = None) -> None:
+    results = audit.setdefault("archive_member_results", [])
+    result = {"member": member, "status": status}
+    if reason:
+        result["reason"] = reason
+    if parsed_record_count is not None:
+        result["parsed_record_count"] = parsed_record_count
+    if imported_email_count is not None:
+        result["imported_email_count"] = imported_email_count
+    results.append(result)
 
 
 def message_to_record(msg, *, path: Path, row: int) -> dict:
@@ -820,8 +1000,11 @@ def increment_counter(audit: dict, key: str, value: str) -> None:
 def finalize_import_audit(audit: dict) -> None:
     for key in (
         "extension_counts",
+        "skipped_extension_counts",
+        "skipped_reason_counts",
         "archive_member_extension_counts",
         "skipped_archive_member_extension_counts",
+        "skipped_archive_member_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
