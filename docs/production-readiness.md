@@ -16,8 +16,23 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`notes-collector` now has stronger source audit coverage for authorized
-Obsidian vaults and notes exports:
+`wechat-favorites` now has stronger source audit coverage for authorized
+WeChat favorites and public-account article exports:
+
+- `wechat_favorites.py collect --input <authorized-export> --out-dir <dir>`
+  records `manifest.source_audit` with requested inputs, missing inputs,
+  per-file parse results, extension coverage, parsed/emitted counts, skipped
+  file reasons, ZIP member counts, skipped ZIP member reasons, and path-safety
+  flags.
+- The collector remains a generic saved-article/action source and does not
+  claim investment relevance; `wechat-article-favorites` remains responsible
+  for investor Wiki evidence.
+- This improves the P1 public-account article package path, but it does not
+  claim real WeChat favorites database, public-account read-history, Windows,
+  or Linux validation.
+
+The prior completed wave: `notes-collector` now has stronger source audit
+coverage for authorized Obsidian vaults and notes exports:
 
 - `notes_api.py obsidian/import --out-dir <dir>` records
   `manifest.source_audit` with input kind, resolved files, extension coverage,
@@ -154,7 +169,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | 飞书/钉钉/腾讯会议/企业微信会议纪要 | `meeting-artifacts` local/platform-export/ZIP collector + `feishu` authorized export package collector + `collaboration-exports` for `dingtalk`/`wecom` + `meeting-minutes` lens classifier | `baseline+audit`; macOS local meeting-file validation passed; HTML/CSV/JSON/ZIP platform-export fixture validation passed; meeting manifest reports platform coverage, field coverage, meeting surface summary, ZIP provenance, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; Feishu now has a CollectorX `collect` package path for messages/documents/files/folders/meetings/recordings with field coverage, surface summary, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; DingTalk/WeCom collaboration exports support ZIP plus equivalent audit fields; platform account APIs pending | Build/port real Feishu/DingTalk/WeCom/Tencent Meeting account adapters, validate real authorized exports, participant identity normalization, false-positive review |
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + authorized export/ZIP import + `investment-notes` lens classifier | `baseline+audit`; macOS Obsidian-style real validation passed; Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP fixtures pass; manifest reports platform coverage, field coverage, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, path-safety boundary, content policy, and generic-collector evidence policy | Validate real Notion/Youdao/Evernote account exports or APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 日历/任务/滴答清单 | `ticktick-cli` API tool + `ticktick_events.py`; `calendar-collector`; `task-calendar-investor` lens classifier | `baseline+audit`; TickTick/Dida JSON/ZIP export and generic calendar ICS/JSON/CSV/TSV/ZIP paths exist; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, ZIP provenance, ZIP skip counts/reasons, per-input parse audit, source audit, and generic-collector evidence policy; real TickTick/API calendar validation blocked by missing account tokens/exports | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, backtest investment task classifier |
-| 公众号/微信收藏文章 | `wechat-favorites` local file/folder/ZIP collector + `wechat-article-favorites` lens classifier | `baseline+audit`; macOS saved-article validation passed; JSON/HTML/ZIP fixtures cover favorite/read/share/saved-file actions; manifest reports action coverage, field coverage, article surface summary, ZIP provenance, source audit, content policy, and generic-collector evidence policy; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
+| 公众号/微信收藏文章 | `wechat-favorites` local file/folder/ZIP collector + `wechat-article-favorites` lens classifier | `baseline+audit`; macOS saved-article validation passed; JSON/HTML/ZIP fixtures cover favorite/read/share/saved-file actions; manifest reports action coverage, field coverage, article surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, content policy, and generic-collector evidence policy; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
 | 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage/browser-history/ZIP collector | `baseline+audit`; JSON/CSV/HTML/TXT/ZIP fixture validation passed; Chromium browser-history validation passed; manifest reports platform/action coverage, field coverage, usage surface summary, ZIP provenance, browser-history source audit, content policy, and evidence policy; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui app caches, account APIs, real subscription/alert stores, Safari/Windows/Linux browser-history paths; do not crawl public news as personal evidence |
 
 ## P2 Status

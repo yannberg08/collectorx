@@ -64,7 +64,7 @@ skill-name/
 | calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |
 | meeting-artifacts | 7+ | 通用会议产物采集器 baseline；支持授权本地文件/平台导出/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤，仍需真实飞书/钉钉/企业微信/腾讯会议账号验证 |
 | collaboration-exports | 7+ | 钉钉/企业微信通用协作导出采集器 baseline；支持授权 JSON/CSV/HTML/文本/ZIP、消息/联系人/文件/会议指针、ZIP 跳过审计和逐文件解析 manifest，仍需真实账号/API 验证 |
-| wechat-favorites | 7+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、动作覆盖 manifest 和凭证字段过滤，仍需真实微信收藏/公众号阅读库验证 |
+| wechat-favorites | 8+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、动作覆盖、逐输入来源审计、跳过原因和凭证字段过滤，仍需真实微信收藏/公众号阅读库验证 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
 | filesystem-collector | 8+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界；manifest 记录授权根、扩展覆盖、跳过原因和逐根目录结果，仍保持 metadata-only |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |

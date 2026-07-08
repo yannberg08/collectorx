@@ -17,30 +17,29 @@ from wechat_favorites.events import (
     write_jsonl,
     write_summary,
 )
-from wechat_favorites.parser import iter_paths, parse_path
+from wechat_favorites.parser import collect_records_with_audit
 
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
     events = []
-    paths = list(iter_paths(args.input or []))
-    if not paths:
+    records, collection_audit = collect_records_with_audit(args.input or [], limit=args.limit)
+    if not records:
         events = [gap_event(collected_at=collected_at, reason="wechat_favorites_input_missing")]
     else:
-        for path in paths:
-            for row, record in enumerate(parse_path(path), start=1):
-                events.append(favorite_to_event(record, path=path, row=row, collected_at=collected_at))
-                if args.limit is not None and len(events) >= args.limit:
-                    break
-            if args.limit is not None and len(events) >= args.limit:
-                break
+        row_counts: dict[str, int] = {}
+        for path, record in records:
+            key = str(path)
+            row_counts[key] = row_counts.get(key, 0) + 1
+            events.append(favorite_to_event(record, path=path, row=row_counts[key], collected_at=collected_at))
+    collection_audit["emitted_event_count"] = len(events)
 
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
         out_dir = Path(args.out_dir).expanduser()
         write_jsonl(out_dir / "lake" / COLLECTOR / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)
 

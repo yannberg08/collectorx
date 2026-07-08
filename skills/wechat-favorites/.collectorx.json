@@ -1,1 +1,1 @@
-{"collector":"wechat-favorites","class":"generic","status":"baseline","version":"0.1.1","description":"WeChat favorites and public-account article collector with authorized file/folder/ZIP imports and action coverage manifest."}
+{"collector":"wechat-favorites","class":"generic","status":"baseline+audit","version":"0.1.3","description":"WeChat favorites and public-account article collector with authorized file/folder/ZIP imports, action coverage, and per-input source audit manifest."}

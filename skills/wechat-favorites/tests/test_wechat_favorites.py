@@ -21,6 +21,7 @@ def test_collect_json_and_html_events() -> None:
         export = root / "favorites.json"
         article = root / "wechat_article.html"
         share_zip = root / "wechat-share.zip"
+        unsupported = root / "ignore.bin"
         out = root / "out"
         export.write_text(
             json.dumps(
@@ -74,6 +75,7 @@ def test_collect_json_and_html_events() -> None:
             archive.writestr("../unsafe.json", json.dumps([{"title": "不应读取"}], ensure_ascii=False))
             archive.writestr("..\\windows-traversal.json", json.dumps([{"title": "不应读取 Windows traversal"}], ensure_ascii=False))
             archive.writestr("C:\\unsafe.json", json.dumps([{"title": "不应读取 Windows drive"}], ensure_ascii=False))
+        unsupported.write_bytes(b"not a supported favorite export")
         subprocess.run(
             [
                 sys.executable,
@@ -114,14 +116,60 @@ def test_collect_json_and_html_events() -> None:
         assert manifest["field_coverage"]["field_counts"]["action_type"] == 4
         assert manifest["article_surface_summary"]["events_with_url"] >= 2
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
         assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 3
+        assert manifest["source_audit"]["parsed_record_count"] == 4
+        assert manifest["source_audit"]["emitted_event_count"] == 4
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["content_policy"]["full_public_account_crawl"] is False
         assert manifest["content_policy"]["full_content_included_by_default"] is False
         assert manifest["evidence_policy"]["required_lens"] == "wechat-article-favorites"
         assert manifest["source_account_count"] == 4
 
 
+def test_collect_missing_input_writes_gap_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        missing = root / "missing-export"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(missing),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T02:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "wechat-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "wechat_favorites_input_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_wechat_favorites_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["input_missing_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+
+
 if __name__ == "__main__":
     test_collect_json_and_html_events()
+    test_collect_missing_input_writes_gap_audit()
     print("wechat-favorites tests passed.")

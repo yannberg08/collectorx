@@ -504,6 +504,9 @@ Current status:
   `manifest.source_audit`, `manifest.content_policy`, and
   `manifest.evidence_policy` so Lake can see which article/source fields are
   actually present before the investor lens runs.
+- `manifest.source_audit` records requested inputs, missing inputs,
+  per-file parse results, extension coverage, skipped file reasons, ZIP member
+  counts, skipped ZIP member reasons, and path-safety flags.
 - Captures ZIP member provenance, source account count, text length, and filters
   credential-like raw keys.
 - Does not claim investment-article status directly.

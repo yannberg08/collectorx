@@ -117,7 +117,12 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
     item_counts = Counter((event.get("data") or {}).get("item_type", "unknown") for event in events)
@@ -151,7 +156,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         },
         "field_coverage": field_coverage(events),
         "article_surface_summary": article_surface_summary(events),
-        "source_audit": source_audit(events),
+        "source_audit": source_audit(events, collection_audit=collection_audit),
         "content_policy": {
             "full_public_account_crawl": False,
             "full_content_included_by_default": False,
@@ -221,13 +226,13 @@ def article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
-def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     archives = [
         (event.get("raw_ref") or {}).get("source_archive")
         for event in events
         if (event.get("raw_ref") or {}).get("source_archive")
     ]
-    return {
+    audit = {
         "source_ref_count": sum(
             1
             for event in events
@@ -237,6 +242,19 @@ def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "archive_count": len(set(archives)),
         "archive_path_traversal_members_collected": False,
     }
+    if collection_audit:
+        audit.update(collection_audit)
+        audit["source_ref_count"] = max(
+            int(audit.get("source_ref_count") or 0),
+            sum(1 for event in events if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")),
+        )
+        audit["archive_member_event_count"] = max(
+            int(audit.get("archive_member_event_count") or 0),
+            sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        )
+        audit["archive_path_traversal_members_collected"] = False
+        audit["windows_drive_archive_members_collected"] = False
+    return audit
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -263,6 +281,7 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- missing_expected_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         "",
         "Generic WeChat favorite/article events are not written to the investor Wiki directly. Use the wechat-article-favorites lens.",
     ]

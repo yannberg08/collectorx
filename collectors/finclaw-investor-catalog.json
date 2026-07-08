@@ -297,7 +297,7 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-saved-article-or-favorites-import",
       "cli": "python3 skills/wechat-favorites/scripts/wechat_favorites.py collect --input <authorized-wechat-favorites-export> --out-dir <out-dir>",
-      "collects": "WeChat favorite/read/share/saved-file actions, article titles, source accounts, URLs, tags, text previews, and source audit.",
+      "collects": "WeChat favorite/read/share/saved-file actions, article titles, source accounts, URLs, tags, text previews, action coverage, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
       "must_not_collect": "WeChat secrets, unrelated article bodies as conclusions, or platform-wide public account scraping.",
       "production_gap": "Real WeChat favorites/public-account stores and Windows/Linux path validation."
     },

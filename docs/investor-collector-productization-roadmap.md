@@ -1108,6 +1108,32 @@ Findings:
 - Hardened ZIP import against POSIX traversal and Windows drive/traversal
   members.
 
+### Wave T3: P1 WeChat favorites source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-wechat-favorites-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added `collect_records_with_audit` while keeping the existing `parse_path`
+  and `parse_zip` APIs compatible.
+- `wechat_favorites.py collect --out-dir` now writes `manifest.source_audit`
+  with requested inputs, missing inputs, resolved files, extension coverage,
+  parsed/emitted counts, skipped file reasons, ZIP member counts, skipped ZIP
+  member reasons, path-level parse results, limit status, and path-safety
+  flags.
+- Missing input now produces both a gap event and an auditable
+  `input_missing` reason instead of only a zero-result package.
+- The generic/lens boundary remains explicit: saved article and action events
+  enter Lake, while `wechat-article-favorites` classifies investment relevance
+  for Wiki evidence.
+- Fixture validation covers favorite/read/share/saved-file actions,
+  unsupported input files, unsafe ZIP members, missing input gap audit,
+  credential-key filtering, and preview-only content policy.
+
 ### Wave U: P1 financial news usage coverage pass 1
 
 Status: `completed-baseline`
