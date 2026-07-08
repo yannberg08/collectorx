@@ -294,6 +294,59 @@ def test_runbook_can_disable_auto_upstream_linking() -> None:
     assert runbook["summary"]["by_stage"]["ready_lenses"] == 0
 
 
+def test_batch_manifest_renders_executable_p0_steps() -> None:
+    manifest = run_json("batch-manifest", "--priority", "P0", "--out-dir-root", "/tmp/collectorx-out", "--json")
+    assert manifest["schema"] == "collectorx.finclaw_batch_manifest.v1"
+    assert manifest["summary"]["ready_steps"] == 6
+    assert manifest["summary"]["blocked_steps"] == 6
+    assert manifest["summary"]["by_stage"]["ready_collectors"] == 4
+    assert manifest["summary"]["by_stage"]["ready_lenses"] == 2
+    assert [step["id"] for step in manifest["ready_steps"]] == [
+        "eastmoney-portfolio",
+        "ths-portfolio",
+        "wechat",
+        "email",
+        "wechat-investment-dialogue",
+        "email-research",
+    ]
+    email_lens = next(step for step in manifest["ready_steps"] if step["id"] == "email-research")
+    assert email_lens["stage"] == "ready_lenses"
+    assert email_lens["depends_on"] == ["email"]
+    assert email_lens["input_events_jsonl"] == "/tmp/collectorx-out/email/lake/email/events.jsonl"
+    assert email_lens["output_dir"] == "/tmp/collectorx-out/email-research"
+    assert email_lens["lake_events_jsonl"] == "/tmp/collectorx-out/email-research/lake/email-research/events.jsonl"
+    assert email_lens["post_run_validation"]["argv"] == [
+        "python3",
+        "tools/validate_collector_package.py",
+        "/tmp/collectorx-out/email-research",
+        "--collector",
+        "email-research",
+        "--require-evidence",
+        "--json",
+    ]
+    blocked_ids = {step["id"] for step in manifest["blocked_steps"]}
+    assert "research-documents" in blocked_ids
+    assert "china-wealth-assets" in blocked_ids
+
+
+def test_batch_manifest_can_disable_auto_upstream_linking() -> None:
+    manifest = run_json(
+        "batch-manifest",
+        "--priority",
+        "P0",
+        "--out-dir-root",
+        "/tmp/collectorx-out",
+        "--no-auto-link-upstream",
+        "--json",
+    )
+    assert manifest["auto_upstream_links"] == []
+    assert manifest["summary"]["ready_steps"] == 4
+    assert manifest["summary"]["blocked_steps"] == 8
+    blocked_by_id = {step["id"]: step for step in manifest["blocked_steps"]}
+    assert blocked_by_id["email-research"]["next_action"] == "wait_for_upstream_lake"
+    assert blocked_by_id["email-research"]["requires_upstream"] == ["email"]
+
+
 def test_runbook_require_all_ready_fails_when_any_entry_is_blocked() -> None:
     proc = run_proc("runbook", "--priority", "P0", "--out-dir-root", "/tmp/collectorx-out", "--json", "--require-all-ready")
     assert proc.returncode == 2
@@ -318,6 +371,8 @@ def main() -> int:
     test_runbook_groups_p0_entries_by_product_stage()
     test_runbook_respects_explicit_lens_input_over_auto_link()
     test_runbook_can_disable_auto_upstream_linking()
+    test_batch_manifest_renders_executable_p0_steps()
+    test_batch_manifest_can_disable_auto_upstream_linking()
     test_runbook_require_all_ready_fails_when_any_entry_is_blocked()
     print("finclaw catalog tests passed.")
     return 0

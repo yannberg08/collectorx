@@ -16,9 +16,10 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw now has a catalog helper readiness doctor and runbook for product-side discovery and invocation planning:
+FinClaw now has a catalog helper readiness doctor, runbook, and compact batch
+manifest for product-side discovery and invocation planning:
 
-- `tools/finclaw_catalog.py list/show/plan/doctor/runbook` merges
+- `tools/finclaw_catalog.py list/show/plan/doctor/runbook/batch-manifest` merges
   `collectors/finclaw-investor-catalog.json` with
   `collectors/finclaw-invocation-contracts.json`.
 - Product runners can list collectors, inspect authorization/preflight details,
@@ -32,6 +33,10 @@ FinClaw now has a catalog helper readiness doctor and runbook for product-side d
 - `runbook --out-dir-root ... --json` groups the same catalog items into
   executable product stages: ready collectors, ready lenses, upstream-Lake
   waits, user-input waits, and SoulMirror-runner handoff.
+- `batch-manifest --out-dir-root ... --json` emits ordered `ready_steps` with
+  executable `argv`, dependency ids, output directories, expected Lake
+  `events.jsonl` paths, and post-run validation commands; blocked entries move
+  to `blocked_steps` with the same `next_action` contract.
 - Runbook auto-links deterministic `<upstream-id-events-jsonl>` lens inputs from
   ready upstream package paths, while ambiguous inputs still remain explicit
   user/product choices.
@@ -45,8 +50,9 @@ FinClaw now has a catalog helper readiness doctor and runbook for product-side d
   as a normal shell command.
 - `tools/test_finclaw_catalog.py` and project validation now cover catalog
   listing, lens upstream contracts, command placeholder replacement, safe argv
-  rendering, package-validation argv rendering, upstream auto-linking, and
-  ready-to-run gate/doctor/runbook handling.
+  rendering, package-validation argv rendering, upstream auto-linking,
+  batch-manifest execution output, and ready-to-run gate/doctor/runbook
+  handling.
 - This improves FinClaw product-call ergonomics, but it does not claim new
   real-account validation for any collector.
 

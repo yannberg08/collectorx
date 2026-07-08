@@ -425,6 +425,25 @@ def build_runbook(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_runbook_for_options(
+    entries: list[dict[str, Any]],
+    *,
+    replacements: dict[str, str],
+    out_dir_root: str | None,
+    auto_link_upstream: bool,
+) -> dict[str, Any]:
+    report = build_doctor_report(entries, replacements=replacements, out_dir_root=out_dir_root)
+    if auto_link_upstream:
+        auto_replacements, links = auto_upstream_replacements(report)
+        if auto_replacements:
+            merged_replacements = {**auto_replacements, **replacements}
+            report = build_doctor_report(entries, replacements=merged_replacements, out_dir_root=out_dir_root)
+        report["auto_upstream_links"] = links
+    else:
+        report["auto_upstream_links"] = []
+    return build_runbook(report)
+
+
 def build_upstream_lake_path(upstream_item: dict[str, Any]) -> str | None:
     package_validation = upstream_item.get("package_validation") or {}
     package_dir = package_validation.get("package_dir")
@@ -463,6 +482,81 @@ def auto_upstream_replacements(report: dict[str, Any]) -> tuple[dict[str, str], 
     return replacements, links
 
 
+def execution_step(item: dict[str, Any], *, stage_name: str, step_number: int) -> dict[str, Any]:
+    package_validation = item["package_validation"]
+    input_events_jsonl = value_after(item["argv"], {"--input"})
+    step = {
+        "step": step_number,
+        "id": item["id"],
+        "stage": stage_name,
+        "priority": item["priority"],
+        "category": item["category"],
+        "runner": item["runner"],
+        "argv": item["argv"],
+        "display_command": item["command"],
+        "depends_on": item["requires_upstream"],
+        "output_dir": package_validation.get("package_dir"),
+        "lake_events_jsonl": build_upstream_lake_path(item),
+        "post_run_validation": {
+            "ready": package_validation["ready"],
+            "argv": package_validation["argv"],
+            "command": package_validation["command"],
+            "require_evidence": package_validation["require_evidence"],
+        },
+        "preflight": item["preflight"],
+        "failure_state": item["failure_state"],
+        "evidence_role": item["evidence_role"],
+        "product_surface": item["product_surface"],
+    }
+    if input_events_jsonl and Path(input_events_jsonl).name == "events.jsonl":
+        step["input_events_jsonl"] = input_events_jsonl
+    return step
+
+
+def blocked_step(item: dict[str, Any], *, stage_name: str) -> dict[str, Any]:
+    return {
+        "id": item["id"],
+        "stage": stage_name,
+        "priority": item["priority"],
+        "category": item["category"],
+        "next_action": item["next_action"],
+        "blocked_reason": item["blocked_reason"],
+        "missing_placeholders": item["missing_placeholders"],
+        "requires_upstream": item["requires_upstream"],
+        "user_step": item["user_step"],
+        "preflight": item["preflight"],
+        "failure_state": item["failure_state"],
+        "evidence_role": item["evidence_role"],
+        "product_surface": item["product_surface"],
+    }
+
+
+def build_batch_manifest(runbook: dict[str, Any]) -> dict[str, Any]:
+    ready_steps: list[dict[str, Any]] = []
+    blocked_steps: list[dict[str, Any]] = []
+    for stage in runbook["stages"]:
+        stage_name = stage["name"]
+        for item in stage["items"]:
+            if stage_name in {"ready_collectors", "ready_lenses"}:
+                ready_steps.append(execution_step(item, stage_name=stage_name, step_number=len(ready_steps) + 1))
+            else:
+                blocked_steps.append(blocked_step(item, stage_name=stage_name))
+
+    return {
+        "schema": "collectorx.finclaw_batch_manifest.v1",
+        "runbook_schema": runbook["schema"],
+        "summary": {
+            "total": runbook["total"],
+            "ready_steps": len(ready_steps),
+            "blocked_steps": len(blocked_steps),
+            "by_stage": runbook["summary"]["by_stage"],
+        },
+        "auto_upstream_links": runbook.get("auto_upstream_links", []),
+        "ready_steps": ready_steps,
+        "blocked_steps": blocked_steps,
+    }
+
+
 def print_human_runbook(runbook: dict[str, Any]) -> None:
     print(f"total: {runbook['total']}")
     for stage in runbook["stages"]:
@@ -474,21 +568,48 @@ def print_human_runbook(runbook: dict[str, Any]) -> None:
 def cmd_runbook(args: argparse.Namespace) -> int:
     entries = filtered_entries(args)
     replacements = parse_set_values(args.set_values or [])
-    report = build_doctor_report(entries, replacements=replacements, out_dir_root=args.out_dir_root)
-    if args.auto_link_upstream:
-        auto_replacements, links = auto_upstream_replacements(report)
-        if auto_replacements:
-            merged_replacements = {**auto_replacements, **replacements}
-            report = build_doctor_report(entries, replacements=merged_replacements, out_dir_root=args.out_dir_root)
-        report["auto_upstream_links"] = links
-    else:
-        report["auto_upstream_links"] = []
-    runbook = build_runbook(report)
+    runbook = build_runbook_for_options(
+        entries,
+        replacements=replacements,
+        out_dir_root=args.out_dir_root,
+        auto_link_upstream=args.auto_link_upstream,
+    )
     if args.json:
         print(json.dumps(runbook, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         print_human_runbook(runbook)
     if args.require_all_ready and runbook["not_ready"]:
+        return 2
+    return 0
+
+
+def print_human_batch_manifest(manifest: dict[str, Any]) -> None:
+    print(f"total: {manifest['summary']['total']}")
+    print(f"ready_steps: {manifest['summary']['ready_steps']}")
+    print(f"blocked_steps: {manifest['summary']['blocked_steps']}")
+    for step in manifest["ready_steps"]:
+        print(f"  {step['step']}. {step['id']} ({step['stage']}): {shlex.join(step['argv'])}")
+    if manifest["blocked_steps"]:
+        print("blocked:")
+        for step in manifest["blocked_steps"]:
+            print(f"  - {step['id']} ({step['stage']}): {step['next_action']}")
+
+
+def cmd_batch_manifest(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    replacements = parse_set_values(args.set_values or [])
+    runbook = build_runbook_for_options(
+        entries,
+        replacements=replacements,
+        out_dir_root=args.out_dir_root,
+        auto_link_upstream=args.auto_link_upstream,
+    )
+    manifest = build_batch_manifest(runbook)
+    if args.json:
+        print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_batch_manifest(manifest)
+    if args.require_all_ready and manifest["summary"]["blocked_steps"]:
         return 2
     return 0
 
@@ -582,6 +703,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 2 unless every selected entry is ready for ordinary command execution.",
     )
     runbook_parser.set_defaults(func=cmd_runbook)
+
+    batch_manifest_parser = subparsers.add_parser(
+        "batch-manifest",
+        help="Build a compact execution manifest for FinClaw product runners.",
+    )
+    batch_manifest_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    batch_manifest_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    batch_manifest_parser.add_argument("--readiness")
+    batch_manifest_parser.add_argument(
+        "--out-dir-root",
+        help="Replace <out-dir> with <out-dir-root>/<collector-id> for each catalog entry.",
+    )
+    batch_manifest_parser.add_argument(
+        "--set",
+        dest="set_values",
+        action="append",
+        default=[],
+        metavar="PLACEHOLDER=VALUE",
+        help="Replace an arbitrary command placeholder across all plans.",
+    )
+    batch_manifest_parser.add_argument(
+        "--no-auto-link-upstream",
+        dest="auto_link_upstream",
+        action="store_false",
+        default=True,
+        help="Do not auto-fill <upstream-id-events-jsonl> placeholders from ready upstream package paths.",
+    )
+    batch_manifest_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    batch_manifest_parser.add_argument(
+        "--require-all-ready",
+        action="store_true",
+        help="Exit with status 2 unless every selected entry is ready for ordinary command execution.",
+    )
+    batch_manifest_parser.set_defaults(func=cmd_batch_manifest)
     return parser
 
 

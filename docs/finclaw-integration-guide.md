@@ -84,6 +84,10 @@ python3 tools/finclaw_catalog.py runbook \
   --priority P0 \
   --out-dir-root /path/to/run \
   --json
+python3 tools/finclaw_catalog.py batch-manifest \
+  --priority P0 \
+  --out-dir-root /path/to/run \
+  --json
 python3 tools/finclaw_catalog.py plan ths-watchlist \
   --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
   --out-dir /path/to/out \
@@ -118,6 +122,23 @@ runbook with `--out-dir-root /path/to/run` will point `email-research` at
 `/path/to/run/email/lake/email/events.jsonl` after `email` is collected. Use
 `--no-auto-link-upstream` when the product needs to force explicit upstream Lake
 selection.
+
+For the actual product runner, `batch-manifest --json` is the compact execution
+contract. It keeps the same filtering and auto-linking behavior as `runbook`,
+but emits:
+
+- `ready_steps`: ordered command steps with `argv`, dependency ids, output
+  directory, expected `lake_events_jsonl`, optional `input_events_jsonl`, and
+  `post_run_validation`.
+- `blocked_steps`: non-runnable entries with `next_action`,
+  `missing_placeholders`, `requires_upstream`, `user_step`, `preflight`, and
+  `failure_state`.
+- `auto_upstream_links`: the deterministic Lake paths the helper filled in for
+  lens inputs.
+
+FinClaw should execute only `ready_steps[*].argv`, in listed order, and run
+`ready_steps[*].post_run_validation.argv` before treating that step's output as
+Lake-ready. `display_command` is for UI and audit display only.
 
 Product runners should use `--require-ready` before ordinary shell execution.
 If the helper exits with status `2`, FinClaw should parse the same JSON

@@ -75,7 +75,8 @@ Operational docs:
   entries, inspecting authorization/preflight details, rendering invocation
   plans, producing a batch readiness matrix, and building a staged runbook from
   the catalog plus invocation contracts. Product runners should use `doctor`
-  for setup screens, `runbook` for batch execution order, and
+  for setup screens, `runbook` for batch execution order, `batch-manifest` for
+  compact product execution manifests, and
   `plan --require-ready` before executing a single collector, then execute the
   returned `argv` list rather than reparsing the display command string.
   Runbook auto-links deterministic `<upstream-id-events-jsonl>` lens inputs

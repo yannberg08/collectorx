@@ -2504,6 +2504,32 @@ Findings:
   ambiguous or multi-source lens inputs. It does not claim new real-account
   validation for any collector.
 
+### Wave AN - FinClaw Batch Execution Manifest
+
+Validation record:
+
+- `docs/validations/finclaw-batch-manifest-validation-2026-07-08.md`
+
+Findings:
+
+- Added `tools/finclaw_catalog.py batch-manifest`.
+- The manifest reuses the same catalog filters, output-root replacement, and
+  upstream auto-linking behavior as `runbook`.
+- It emits ordered `ready_steps` with executable `argv`, dependency ids,
+  output directories, expected Lake `events.jsonl` paths, optional upstream
+  `input_events_jsonl`, and post-run package validation commands.
+- It emits `blocked_steps` for user-input waits, upstream-Lake waits, and
+  SoulMirror-runner handoff so FinClaw can route each non-runnable item without
+  guessing from prose.
+- P0 default batch manifest currently has six ready steps:
+  `eastmoney-portfolio`, `ths-portfolio`, `wechat`, `email`,
+  `wechat-investment-dialogue`, and `email-research`.
+- Added tests for P0 execution ordering, auto-linked lens input paths,
+  post-run validation argv, blocked-step reporting, and disabled auto-link
+  behavior.
+- This improves FinClaw product execution safety. It does not claim new
+  real-account validation for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
