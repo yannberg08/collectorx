@@ -305,7 +305,14 @@ def collect_from_inputs_with_audit(
         and not events
     )
     audit["china_wealth_scope_policy_filtered_all"] = scope_policy_filtered_all
-    if not events and not scope_policy_filtered_all:
+    if scope_policy_filtered_all:
+        events = [
+            scope_policy_filtered_all_event(
+                collection_audit=audit,
+                collected_at=collected_at,
+            )
+        ]
+    elif not events:
         events = [gap_event(collected_at=collected_at, reason="china_wealth_records_empty")]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
@@ -1043,15 +1050,16 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
 
 
 def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+    timestamp = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "中国基金理财授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
         "data": {
             "subtype": "collector_gap",
             "gap": reason,
@@ -1059,6 +1067,47 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
         },
         "raw_ref": {"preflight": True},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio"]},
+        "wiki_targets": ["investor.data_quality.collection_gaps"],
+    }
+
+
+def scope_policy_filtered_all_event(
+    *,
+    collection_audit: Dict[str, Any],
+    collected_at: Optional[str],
+) -> Dict[str, Any]:
+    timestamp = collected_at or now_iso()
+    return {
+        "schema": "collectorx.event.v1",
+        "id": stable_id(
+            COLLECTOR,
+            "china_wealth_scope_policy_filtered_all",
+            json.dumps(collection_audit.get("scope_policy_filter_reason_counts", {}), ensure_ascii=False, sort_keys=True),
+        ),
+        "collector": COLLECTOR,
+        "source": "中国基金理财授权范围策略",
+        "owner_scope": "personal",
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
+        "data": {
+            "subtype": "collector_gap",
+            "gap": "china_wealth_scope_policy_filtered_all",
+            "status": "scope_policy_filtered_all",
+            "profile_type": "china_wealth_scope_policy_filtered_all",
+            "candidate_record_count": collection_audit.get("candidate_record_count", 0),
+            "retained_record_count": 0,
+            "filtered_record_count": collection_audit.get("scope_policy_filtered_record_count", 0),
+            "filter_reason_counts": collection_audit.get("scope_policy_filter_reason_counts", {}),
+            "policy_is_user_authorization_scope": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "business_records_written": False,
+            "complete_asset_boundary_claimed": False,
+            "read_only": True,
+            "message": "输入已读取，但全部被基金/理财授权范围策略排除；未把任何资产、持仓或交易记录写入 Lake。",
+        },
+        "raw_ref": {"scope_policy_enabled": True},
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "collection_gap"]},
         "wiki_targets": ["investor.data_quality.collection_gaps"],
     }
 

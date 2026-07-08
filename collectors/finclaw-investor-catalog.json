@@ -174,7 +174,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-package-import",
       "cli": "python3 skills/china-wealth-assets/scripts/china_wealth.py collect --input <authorized-fund-or-wealth-export> --out-dir <out-dir> --sync-soulmirror",
-      "collects": "Alipay, Tiantian Fund, Danjuan, Qieman, and bank-wealth holdings, transactions, asset snapshots, value fields, PnL, fees, Excel/legacy-XLS/HTML-table/PDF-statement exports, authorized HAR response bodies, platform/account/subtype/product-code/product-name/currency/side/keyword scope-policy audit, filtered-all readiness, platform/field/account/asset-surface/currency coverage, source/PDF/HAR audit, asset value summary, and partial asset-boundary proof strength.",
+      "collects": "Alipay, Tiantian Fund, Danjuan, Qieman, and bank-wealth holdings, transactions, asset snapshots, value fields, PnL, fees, Excel/legacy-XLS/HTML-table/PDF-statement exports, authorized HAR response bodies, platform/account/subtype/product-code/product-name/currency/side/keyword scope-policy audit, filtered-all gap package, platform/field/account/asset-surface/currency coverage, source/PDF/HAR audit, asset value summary, and partial asset-boundary proof strength.",
       "must_not_collect": "Payment passwords, bank credentials, complete asset-boundary claims from partial input, or account mutation.",
       "production_gap": "Per-platform real export, PDF statement, HAR, or read-only screen samples plus complete account-boundary proof."
     },

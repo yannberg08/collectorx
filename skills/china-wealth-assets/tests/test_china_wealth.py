@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "china_wealth.py"
+PACKAGE_VALIDATOR = ROOT.parents[1] / "tools" / "validate_collector_package.py"
 
 
 def test_collect_fund_holding_and_transaction() -> None:
@@ -49,6 +50,8 @@ def test_collect_without_input_gap() -> None:
         out = Path(tmp) / "out"
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
         event = json.loads((out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["kind"] == "profile"
+        assert event["time"]
         assert event["data"]["subtype"] == "collector_gap"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_audit"]["resolved_input_file_count"] == 0
@@ -58,6 +61,12 @@ def test_collect_without_input_gap() -> None:
         assert proof["overall_proof_level"] == "no_authorized_asset_evidence"
         assert proof["complete_asset_boundary_claimed"] is False
         assert proof["missing_global_requirements"] == ["authorized_asset_input"]
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "china-wealth-assets"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
 
 
 def test_collects_mixed_platform_json_and_sanitizes_raw() -> None:
@@ -749,9 +758,22 @@ def test_scope_policy_filtered_all_readiness() -> None:
             capture_output=True,
         )
         event_lines = (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()
-        assert event_lines == []
+        assert len(event_lines) == 1
+        event = json.loads(event_lines[0])
+        assert event["kind"] == "profile"
+        assert event["time"]
+        assert event["data"]["subtype"] == "collector_gap"
+        assert event["data"]["gap"] == "china_wealth_scope_policy_filtered_all"
+        assert event["data"]["status"] == "scope_policy_filtered_all"
+        assert event["data"]["candidate_record_count"] == 1
+        assert event["data"]["retained_record_count"] == 0
+        assert event["data"]["filtered_record_count"] == 1
+        assert event["data"]["filter_reason_counts"] == {"platform_not_allowed": 1}
+        assert event["data"]["business_records_written"] is False
+        assert "product_code" not in event["data"]
+        assert "market_value" not in event["data"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["asset_boundary_scope"] == "scope_policy_excluded_all"
@@ -766,6 +788,15 @@ def test_scope_policy_filtered_all_readiness() -> None:
         assert proof["proof_scope"] == "scope_policy_excluded_all"
         assert proof["authorization_scope_boundary"]["china_wealth_scope_policy_filtered_all"] is True
         assert proof["missing_global_requirements"] == ["scope_policy_retained_records"]
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["support_level_counts"] == {"none": 20}
+        assert evidence["coverage_summary"]["asset_value_summary"] == {}
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "china-wealth-assets"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
 
 
 if __name__ == "__main__":

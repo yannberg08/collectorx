@@ -9,7 +9,9 @@ private real-account files are committed.
 ## Scope
 
 - Collector: `china-wealth-assets`
-- Version: `0.4.6`
+- Version: `0.4.6`; filtered-all package ingestion was later hardened in
+  version `0.4.7` with
+  `docs/validations/investor-p0-china-wealth-filtered-all-gap-validation-2026-07-09.md`.
 - FinClaw route: partial fund/wealth/cash-management asset facts for the
   Investor Wiki; never a complete asset-boundary claim without real account or
   read-only-screen validation.
@@ -27,7 +29,9 @@ private real-account files are committed.
 - Manifest `asset_boundary_proof.authorization_scope_boundary` exposes the same
   policy boundary to FinClaw gating.
 - When every candidate record is filtered, readiness reports
-  `scope_policy_filtered_all` and the collector emits no synthetic gap event.
+  `scope_policy_filtered_all`. As of version `0.4.7`, the collector also emits
+  one `china_wealth_scope_policy_filtered_all` profile gap event so FinClaw can
+  ingest a traceable authorization-boundary package.
 
 ## Fixture Coverage
 
@@ -35,7 +39,7 @@ private real-account files are committed.
   while filtering other candidates by platform, account, subtype, product code,
   product name, currency, and deny-keyword behavior.
 - Filtered-all fixture verifies that a provided Tiantian Fund export with an
-  Alipay-only policy produces empty Lake events, explicit filtered-all
+  Alipay-only policy produces one profile gap event, explicit filtered-all
   readiness, and `asset_boundary_proof.overall_proof_level=scope_policy_filtered_all`.
 - Existing coverage still validates CSV/JSON/Excel/legacy-XLS/HTML/PDF/HAR/ZIP
   parsing, exact numeric preservation, credential stripping, account/asset/

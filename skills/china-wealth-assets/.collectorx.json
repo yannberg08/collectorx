@@ -1,6 +1,6 @@
 {
   "slug": "china-wealth-assets",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "status": "baseline+audit",
-  "description": "China fund and wealth asset collector for normalized Alipay, Tiantian Fund, Danjuan, Qieman, bank wealth, Excel/legacy-XLS/HTML-table/PDF-statement/JSON/CSV/ZIP/HAR exports, scope-policy audit, filtered-all readiness, source audit, account/asset/currency summaries, asset-boundary proof, and SoulMirror lake packages."
+  "description": "China fund and wealth asset collector for normalized Alipay, Tiantian Fund, Danjuan, Qieman, bank wealth, Excel/legacy-XLS/HTML-table/PDF-statement/JSON/CSV/ZIP/HAR exports, scope-policy audit, filtered-all gap packages, source audit, account/asset/currency summaries, asset-boundary proof, and SoulMirror lake packages."
 }

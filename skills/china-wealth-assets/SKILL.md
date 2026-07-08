@@ -66,7 +66,8 @@ PDF 文件数、页数、表格数、PDF 表格记录数、发出事件数和路
 可用 platform、account、subtype、product-code、product-name、currency、side、
 keyword 的 allow/deny 授权范围过滤。`manifest.collection_audit.china_wealth_scope_policy`
 会记录配置、候选记录数、保留数、过滤数和过滤原因；如果全部候选记录都被授权范围排除，
-`manifest.collection_readiness.status` 会变为 `scope_policy_filtered_all`，不会伪造空成功。
+`manifest.collection_readiness.status` 会变为 `scope_policy_filtered_all`，并输出一条
+`china_wealth_scope_policy_filtered_all` profile gap 事件，不会伪造空成功或业务资产记录。
 `manifest.asset_boundary_proof.authorization_scope_boundary` 会给 FinClaw 检查资产授权边界。
 
 ## 完整性口径

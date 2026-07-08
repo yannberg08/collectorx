@@ -16,8 +16,27 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`eastmoney-portfolio` now supports event-level authorization scope filters
-before production-candidate strong trading evidence enters the Lake:
+`china-wealth-assets` now emits validator-safe filtered-all gap packages:
+
+- When a readable fund/wealth input is fully excluded by platform, account,
+  subtype, product, currency, side, or keyword authorization filters, the Lake
+  file contains one `china_wealth_scope_policy_filtered_all` profile gap event
+  instead of being empty.
+- Manifest readiness remains `scope_policy_filtered_all` with
+  `can_enter_finclaw=false`, so filtered-out inputs cannot become usable asset,
+  portfolio, or execution evidence.
+- The gap event carries candidate, retained, filtered, and reason counts but no
+  product identity, amount, transaction, credential, cookie, token, payment
+  password, bank password, account mutation, or raw input path.
+- No-input and filtered-all gap packages now carry non-empty event `time`
+  values and pass `tools/validate_collector_package.py --collector
+  china-wealth-assets`.
+- Investor Wiki evidence keeps all 20 subdimensions at `support_level=none`
+  for filtered-all packages.
+
+The prior completed wave: `eastmoney-portfolio` now supports event-level
+authorization scope filters before production-candidate strong trading
+evidence enters the Lake:
 
 - `eastmoney_query.py --collect-local` accepts event-kind, symbol, account,
   source, and keyword allow/deny filters.
@@ -227,8 +246,10 @@ authorization scope-policy boundaries:
 - Manifest `collection_audit` records configured filters, candidate record
   count, retained/emitted count, filtered count, reason counts, and
   `china_wealth_scope_policy_filtered_all`.
-- Filtered-all runs produce `scope_policy_filtered_all` readiness and do not
-  emit a synthetic gap event.
+- As of version `0.4.7`, filtered-all runs produce one
+  `china_wealth_scope_policy_filtered_all` profile gap event with
+  `scope_policy_filtered_all` readiness, so FinClaw can ingest a traceable
+  authorization-boundary package instead of an empty Lake file.
 - `asset_boundary_proof.authorization_scope_boundary` exposes the same policy
   boundary to FinClaw so partial asset facts remain user-authorized and do not
   become complete asset-boundary claims.
@@ -1059,7 +1080,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, WeChat dialogue boundary proof, dialogue surface summary, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons and per-root results; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all status, extraction policy, parser counts, content-read counts, limit truncation, screenshot metadata-only/default policy, explicit `--include-image-ocr` tesseract adapter audit, legacy XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide-text extraction, research document surface summary, and research corpus boundary proof | Broader private PDF/XLS/XLSX/DOCX/PPTX/image samples, real binary `.xls` with xlrd validation, OCR quality review on real Chinese screenshots, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, authorization scope-policy audit, filtered-all readiness, and explicit non-broker-trade evidence policy; watchlist emits attention-universe boundary proof for symbol/market/group/industry/tag/keyword scope; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, activity/source/domain/symbol/author/keyword scope boundaries, activity-boundary proof, pagination completeness summary, HAR browser-network export parsing for `xueqiu.com` response bodies, copied Chromium/Safari browser history with Xueqiu-domain filtering, visit/typed counts, transition types, credential/query stripping audit, raw sanitization, and SoulMirror sync; not yet a one-click real account adapter | Real Xueqiu account/HAR/browser-history samples, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
-| 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/legacy `.xls`/Excel XML/HTML table/PDF statement/JSON/CSV/ZIP plus HAR browser-network export parsing for whitelisted fund/wealth domains, platform inference, numeric asset fields, platform/account/subtype/product/currency/side/keyword scope-policy audit, filtered-all readiness, platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, authorization scope boundary, asset surface summary, currency summary, transaction-side summary, source/PDF/HAR audit, asset value summary, credential/query stripping, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no one-click real account adapter yet | Real platform PDF/HAR/export samples, per-platform UI adapters, real account validation, complete account-boundary proof |
+| 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/legacy `.xls`/Excel XML/HTML table/PDF statement/JSON/CSV/ZIP plus HAR browser-network export parsing for whitelisted fund/wealth domains, platform inference, numeric asset fields, platform/account/subtype/product/currency/side/keyword scope-policy audit, filtered-all gap packages, platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, authorization scope boundary, asset surface summary, currency summary, transaction-side summary, source/PDF/HAR audit, asset value summary, credential/query stripping, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no one-click real account adapter yet | Real platform PDF/HAR/export samples, per-platform UI adapters, real account validation, complete account-boundary proof |
 | 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir`, local email `import --local-scan --out-dir`, and local EML/Apple Mail EMLX/Maildir/MBOX/Thunderbird mbox/JSON/CSV/TSV/ZIP `import --out-dir` produce standard packages with account/folder audit, local-scan/import audit, skipped file/ZIP-member reasons, Apple Mail/Maildir/Thunderbird counts, Thunderbird `.msf` index skip audit, local-scan root status, field coverage, sanitized attachment refs, body/attachment policy, mailbox boundary proof, generic-to-lens evidence boundary, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, sender-domain/folder/mailbox/subject/attachment/email-surface/keyword scope-policy audit, filtered-all readiness, and email_research_boundary_proof.authorization_scope_boundary; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, validate real Apple Mail/Thunderbird/Maildir local roots, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
 
 ## P1 Status
