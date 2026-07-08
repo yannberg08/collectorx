@@ -60,6 +60,9 @@ Operational docs:
 - `collectors/finclaw-investor-catalog.json` is the machine-readable FinClaw
   investor-collector catalog: priority, readiness, CLI, product action,
   collection scope, exclusions, and remaining production gap.
+- `collectors/finclaw-invocation-contracts.json` is the machine-readable
+  authorization and product-surface contract for every FinClaw catalog entry:
+  authorization mode, user step, preflight, failure state, and evidence role.
 - `docs/finclaw-investor-collector-productization.md` is the human control board
   for the P0/P1/P2 investor-avatar collector program.
 - `docs/production-readiness.md` records what is genuinely runnable versus what
@@ -178,6 +181,11 @@ The suite currently checks:
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets
+- FinClaw catalog coverage: every collector YAML must be present in the
+  investor catalog or explicitly excluded with a reason
+- FinClaw invocation contracts: every catalog entry has a matching
+  authorization mode, product surface, evidence role, user step, preflight, and
+  failure state
 - FinClaw catalog skill metadata: every catalog-referenced skill has
   `.collectorx.json`, a `VERSION`, matching version values, and a non-empty
   machine-readable description

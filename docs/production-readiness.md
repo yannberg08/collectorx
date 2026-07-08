@@ -16,7 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw skill metadata is now part of the project validation gate:
+FinClaw catalog coverage and invocation contracts are now part of the project validation gate:
+
+- `ths-watchlist` is now a first-class FinClaw investor catalog entry instead
+  of only a YAML/README-described collector.
+- The `doubao` generic YAML is explicitly excluded from the FinClaw investor
+  catalog until investor-specific scope, evidence boundaries, and product
+  routing are reviewed.
+- `collectors/finclaw-invocation-contracts.json` now gives each catalog entry a
+  machine-readable authorization mode, product surface, evidence role,
+  preflight, user step, failure state, and lens upstream requirements where
+  applicable.
+- `tools/validate_project.py` now fails if a collector YAML is neither in the
+  investor catalog nor in explicit exclusions, or if any catalog entry lacks a
+  matching invocation contract.
+- This improves FinClaw call safety and user-facing precondition handling, but
+  it does not claim new real-account validation for any collector.
+
+The prior completed wave: FinClaw skill metadata is now part of the project validation gate:
 
 - Every skill referenced by `collectors/finclaw-investor-catalog.json` must have
   both `.collectorx.json` and `VERSION`.

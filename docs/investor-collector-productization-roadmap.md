@@ -2315,6 +2315,33 @@ Findings:
   calls from pointing at stale skill metadata. It does not claim new
   real-account validation for any individual collector.
 
+### Wave AF: FinClaw catalog coverage and invocation precondition gate
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/finclaw-invocation-contract-coverage-validation-2026-07-08.md`
+
+Findings:
+
+- Added `collectors/finclaw-invocation-contracts.json` as the machine-readable
+  authorization and product-surface contract for FinClaw product calls.
+- Every catalog entry now has authorization mode, product surface, evidence
+  role, user action, preflight, failure state, and lens upstream requirements
+  when applicable.
+- Added `ths-watchlist` to `collectors/finclaw-investor-catalog.json`, closing
+  the gap where the Tonghuashun watchlist collector existed but was not
+  discoverable through the FinClaw investor catalog.
+- Added explicit `catalog_exclusions` for `doubao`, which has a generic
+  CollectorX YAML but is not currently part of the investor-avatar catalog.
+- Strengthened `tools/validate_project.py` so collector YAML files must be
+  cataloged or explicitly excluded, invocation contracts must exactly cover
+  catalog entries, lens contracts must use `lake-lens`, and production/
+  supporting surfaces must match readiness intent.
+- This improves FinClaw user-precondition handling and catalog completeness. It
+  does not claim new real-account validation for any individual collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -2322,8 +2349,9 @@ Findings:
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF/image samples, Chinese OCR quality review, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, mailbox boundary proof, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
-| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
-| 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
+| 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist import path with standard Lake output, manifest, source audit, field coverage, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun watchlist export/local-store validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
+| 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
+| 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
 
 ## P1 Work Queue
 

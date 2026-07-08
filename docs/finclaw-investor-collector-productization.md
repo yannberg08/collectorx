@@ -24,6 +24,8 @@ FinClaw 应按下面顺序调用：
 
 1. 读取 `collectors/finclaw-investor-catalog.json`，展示采集器名称、优先级、状态、
    允许采集内容、禁止采集内容和前置条件。
+   同时读取 `collectors/finclaw-invocation-contracts.json`，获得机器可读的
+   授权方式、用户动作、preflight、失败状态、产品展示面和证据角色。
 2. 读取 `collectors/generic/*.yaml`、`collectors/vertical/*.yaml`、
    `collectors/lenses/*.yaml`，确认 `armed`、`scope.collects` 和 `scope.excludes`。
 3. 只有在用户完成授权后，才运行 catalog 中的 `cli`。
@@ -54,6 +56,7 @@ FinClaw 应按下面顺序调用：
 | --- | --- | --- | --- |
 | `eastmoney-portfolio` | 东方财富资产、持仓、成交、委托、资金流水和本地投资行为 | `production-candidate` on current macOS | Windows/Linux 真机、更多账户样本 |
 | `ths-portfolio` | 同花顺交易、持仓、元数据和只读 GUI 快照 | `deep-beta` | 多账户、多系统真机验证 |
+| `ths-watchlist` | 同花顺自选股、关注池和机会池 | `baseline+audit`；已进入 FinClaw investor catalog，授权导入 CSV/JSON/Excel/text 自选列表，输出标准 Lake、manifest 和 7/20 Wiki attention-universe 证据；不能替代持仓、成交、委托或资金流水 | 真实同花顺自选导出/本地库验证、Windows/macOS/Linux 路径验证、和交易/研究交叉回测 |
 | `wechat` + `wechat-investment-dialogue` | 微信原始对话和投资讨论 lens | `baseline+audit`；generic wechat 输出标准包，lens 支持联系人/群/发送者来源策略、source-policy gap、微信对话边界证明和交易意图/买卖理由/仓位/风险情绪/咨询网络/研究讨论/复盘面谱 | WeChat 4.x key/平台路径、真实 lake、联系人/群/发送者 allowlist 和交易前后回测 |
 | `filesystem` + `research-documents` | 文件元数据、研报/财报/估值表内容 lens | `baseline+audit`；filesystem 标准包记录授权根、扩展名覆盖、跳过原因和逐根目录结果，research-documents 负责内容授权、逐输入审计、研究语料边界证明、研报/财报/估值/公告/复盘/截图/表格面谱、截图默认 metadata-only、显式 `--include-image-ocr` 本地 tesseract 适配和 Wiki 证据路由 | Windows/Linux 真机、本地真实样本、中文截图 OCR 质量评审 |
 | `email` + `email-research` | 邮箱原始通道和券商/IR/研报邮件 lens | `baseline+audit`；IMAP 和本地导入都能输出标准包，本地导入支持 EML、Apple Mail EMLX、Maildir、MBOX、JSON/CSV/TSV/ZIP；manifest 记录账户/文件夹审计、逐输入导入审计、Apple Mail/Maildir 计数、跳过文件/ZIP 成员原因、字段覆盖、正文/附件策略、邮箱边界证明和 generic-to-lens 边界 | 注册真实邮箱、附件/正文泄漏评审、真实发件人回测 |

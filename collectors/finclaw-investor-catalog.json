@@ -14,6 +14,13 @@
     "baseline": "Runnable baseline exists with tests, but audit coverage or real validation is incomplete.",
     "migrated-review": "Migrated skill exists and must pass provenance, license, and investor-specific boundary review before broad exposure."
   },
+  "catalog_exclusions": [
+    {
+      "id": "doubao",
+      "category": "generic",
+      "reason": "Generic Doubao chat export is available in collectors/generic but is not part of the FinClaw P0/P1/P2 investor-avatar catalog until investor-specific scope, evidence boundaries, and product routing are reviewed."
+    }
+  ],
   "entries": [
     {
       "id": "eastmoney-portfolio",
@@ -40,6 +47,19 @@
       "collects": "Tonghuashun local executions, inferred holdings, personal metadata, and read-only visible trading-page snapshots.",
       "must_not_collect": "Trading passwords, order placement, order cancellation, or broker-side mutation.",
       "production_gap": "More real-device validation across Windows/macOS accounts and stronger GUI snapshot coverage."
+    },
+    {
+      "id": "ths-watchlist",
+      "priority": "P0",
+      "category": "vertical",
+      "skill": "ths-watchlist",
+      "readiness": "baseline+audit",
+      "gate": "G2",
+      "finclaw_action": "authorized-export-import",
+      "cli": "python3 skills/ths-watchlist/scripts/ths_watchlist.py collect --input <authorized-ths-watchlist-export> --out-dir <out-dir>",
+      "collects": "Tonghuashun watchlist symbols, names, groups, industries, tags, notes, added time, source audit, field coverage, and attention-universe Investor Wiki evidence.",
+      "must_not_collect": "Broker-confirmed holdings, executions, orders, fund flows, trading passwords, cookies, tokens, or sessions.",
+      "production_gap": "Real Tonghuashun watchlist export discovery, local-store validation, and cross-platform path validation."
     },
     {
       "id": "wechat",

@@ -23,10 +23,18 @@ Collectors do not write the final Wiki directly.
 FinClaw should read collector metadata from:
 
 ```text
+collectors/finclaw-investor-catalog.json
+collectors/finclaw-invocation-contracts.json
 collectors/generic/*.yaml
 collectors/vertical/*.yaml
 collectors/lenses/*.yaml
 ```
+
+The investor catalog is the product registry: priority, readiness, CLI,
+collection scope, exclusions, and production gaps. The invocation contracts file
+adds the user-facing precondition layer: authorization mode, product surface,
+evidence role, preflight, user step, failure state, and lens upstream
+requirements.
 
 Each YAML declares:
 
@@ -56,6 +64,12 @@ one or more of:
 
 The minimum useful output is `events.jsonl`, where each line is a
 `collectorx.event.v1` object.
+
+Before running a catalog entry, FinClaw should look up the same `id` in
+`collectors/finclaw-invocation-contracts.json` and show the matching
+`user_step`. If the preflight cannot be satisfied, FinClaw should surface the
+contract `failure_state` instead of running the collector and treating an empty
+result as personal data.
 
 ## Package Gate
 

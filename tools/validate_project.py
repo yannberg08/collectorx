@@ -208,11 +208,14 @@ def validate_investor_catalog() -> None:
         raise SystemExit("FinClaw investor catalog must contain entries")
 
     category_folder = {"generic": "generic", "vertical": "vertical", "lens": "lenses"}
-    collector_files = {
-        path.stem
-        for folder in category_folder.values()
-        for path in (ROOT / "collectors" / folder).glob("*.yaml")
-    }
+    collector_file_categories: dict[str, str] = {}
+    for category, folder in category_folder.items():
+        for yaml_path in (ROOT / "collectors" / folder).glob("*.yaml"):
+            cid = yaml_path.stem
+            if cid in collector_file_categories:
+                raise SystemExit(f"Collector YAML id appears in multiple categories: {cid}")
+            collector_file_categories[cid] = category
+    collector_files = set(collector_file_categories)
     required_fields = {
         "id",
         "priority",
@@ -272,9 +275,125 @@ def validate_investor_catalog() -> None:
         if entry["priority"] in priorities:
             priorities[entry["priority"]] += 1
 
+    exclusions = catalog.get("catalog_exclusions") or []
+    if not isinstance(exclusions, list):
+        raise SystemExit("FinClaw investor catalog catalog_exclusions must be a list when present")
+    excluded_ids: set[str] = set()
+    for exclusion in exclusions:
+        if not isinstance(exclusion, dict):
+            raise SystemExit("FinClaw investor catalog exclusion must be an object")
+        missing = {"id", "category", "reason"}.difference(exclusion)
+        if missing:
+            raise SystemExit(f"Catalog exclusion missing fields: {sorted(missing)}")
+        cid = exclusion["id"]
+        if cid in ids:
+            raise SystemExit(f"Catalog exclusion also appears as an entry: {cid}")
+        if cid in excluded_ids:
+            raise SystemExit(f"Duplicate catalog exclusion id: {cid}")
+        excluded_ids.add(cid)
+        if cid not in collector_files:
+            raise SystemExit(f"Catalog exclusion has no collector YAML: {cid}")
+        if exclusion["category"] != collector_file_categories[cid]:
+            raise SystemExit(f"Catalog exclusion {cid} category does not match collector YAML folder")
+        if not isinstance(exclusion.get("reason"), str) or not exclusion["reason"].strip():
+            raise SystemExit(f"Catalog exclusion {cid} must include a non-empty reason")
+
+    uncataloged = sorted(collector_files.difference(ids).difference(excluded_ids))
+    if uncataloged:
+        raise SystemExit(f"Collector YAML missing from FinClaw investor catalog or exclusions: {uncataloged}")
+
     for priority, count in priorities.items():
         if count == 0:
             raise SystemExit(f"Catalog has no {priority} entries")
+
+
+def validate_finclaw_invocation_contracts() -> None:
+    path = ROOT / "collectors" / "finclaw-invocation-contracts.json"
+    print(f"validate_invocation_contracts {path.relative_to(ROOT)}", flush=True)
+    if not path.exists():
+        raise SystemExit("Missing FinClaw invocation contracts file")
+    contracts_doc = json.loads(path.read_text(encoding="utf-8"))
+    if contracts_doc.get("schema") != "collectorx.finclaw_invocation_contracts.v1":
+        raise SystemExit("FinClaw invocation contracts have an invalid schema")
+
+    allowed_modes = set((contracts_doc.get("authorization_modes") or {}).keys())
+    allowed_surfaces = set((contracts_doc.get("product_surfaces") or {}).keys())
+    allowed_roles = set((contracts_doc.get("evidence_roles") or {}).keys())
+    if not allowed_modes or not allowed_surfaces or not allowed_roles:
+        raise SystemExit("FinClaw invocation contracts must declare modes, surfaces, and roles")
+
+    catalog = json.loads((ROOT / "collectors" / "finclaw-investor-catalog.json").read_text(encoding="utf-8"))
+    catalog_entries = {entry["id"]: entry for entry in catalog.get("entries", [])}
+    contracts = contracts_doc.get("contracts")
+    if not isinstance(contracts, list) or not contracts:
+        raise SystemExit("FinClaw invocation contracts must contain contracts")
+
+    required = {
+        "id",
+        "authorization_mode",
+        "product_surface",
+        "evidence_role",
+        "user_step",
+        "preflight",
+        "failure_state",
+    }
+    contract_ids: set[str] = set()
+    for contract in contracts:
+        if not isinstance(contract, dict):
+            raise SystemExit("FinClaw invocation contract must be an object")
+        missing = required.difference(contract)
+        if missing:
+            raise SystemExit(f"Invocation contract missing fields: {sorted(missing)}")
+        cid = contract["id"]
+        if cid in contract_ids:
+            raise SystemExit(f"Duplicate invocation contract id: {cid}")
+        contract_ids.add(cid)
+        if cid not in catalog_entries:
+            raise SystemExit(f"Invocation contract has no catalog entry: {cid}")
+        for key in required:
+            if not isinstance(contract.get(key), str) or not contract[key].strip():
+                raise SystemExit(f"Invocation contract {cid} field {key} must be a non-empty string")
+        if contract["authorization_mode"] not in allowed_modes:
+            raise SystemExit(f"Invocation contract {cid} has unknown authorization_mode")
+        if contract["product_surface"] not in allowed_surfaces:
+            raise SystemExit(f"Invocation contract {cid} has unknown product_surface")
+        if contract["evidence_role"] not in allowed_roles:
+            raise SystemExit(f"Invocation contract {cid} has unknown evidence_role")
+
+        entry = catalog_entries[cid]
+        upstream = contract.get("requires_upstream", [])
+        if upstream is None:
+            upstream = []
+        if not isinstance(upstream, list) or any(not isinstance(item, str) or not item for item in upstream):
+            raise SystemExit(f"Invocation contract {cid} requires_upstream must be a list of ids")
+        for upstream_id in upstream:
+            if upstream_id not in catalog_entries:
+                raise SystemExit(f"Invocation contract {cid} references missing upstream {upstream_id}")
+            if upstream_id == cid:
+                raise SystemExit(f"Invocation contract {cid} cannot depend on itself")
+
+        if entry["category"] == "lens":
+            if contract["authorization_mode"] != "lake-lens":
+                raise SystemExit(f"Lens invocation contract {cid} must use lake-lens authorization mode")
+            if contract["product_surface"] != "lens-beta":
+                raise SystemExit(f"Lens invocation contract {cid} must use lens-beta product surface")
+            if not upstream:
+                raise SystemExit(f"Lens invocation contract {cid} must declare requires_upstream")
+        elif contract["authorization_mode"] == "lake-lens":
+            raise SystemExit(f"Non-lens invocation contract {cid} cannot use lake-lens authorization mode")
+
+        if entry["readiness"] == "production-candidate" and contract["product_surface"] != "guarded-production":
+            raise SystemExit(f"Production-candidate contract {cid} must use guarded-production surface")
+        if entry["priority"] == "supporting" and contract["product_surface"] != "supporting-beta":
+            raise SystemExit(f"Supporting contract {cid} must use supporting-beta surface")
+
+    missing_contracts = sorted(set(catalog_entries).difference(contract_ids))
+    extra_contracts = sorted(contract_ids.difference(catalog_entries))
+    if missing_contracts or extra_contracts:
+        raise SystemExit(
+            "FinClaw invocation contracts do not match catalog entries: "
+            f"missing={missing_contracts}, extra={extra_contracts}"
+        )
 
 
 def validate_skill_metadata() -> None:
@@ -375,6 +494,7 @@ def main() -> int:
     run_parser_tests()
     validate_event_examples()
     validate_investor_catalog()
+    validate_finclaw_invocation_contracts()
     validate_skill_metadata()
     run_first_loop_smoke_test()
     print("CollectorX validation passed.")

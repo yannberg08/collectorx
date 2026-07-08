@@ -1,1 +1,1 @@
-{"collector":"ths-watchlist","class":"vertical","version":"0.1.0","status":"baseline","description":"Tonghuashun watchlist export collector for authorized CSV/JSON/Excel/text watchlist inputs."}
+{"collector":"ths-watchlist","class":"vertical","version":"0.1.0","status":"baseline+audit","description":"Tonghuashun watchlist export collector for authorized CSV/JSON/Excel/text watchlist inputs with source audit, field coverage, standard Investor Wiki evidence, and attention-universe boundary policy."}

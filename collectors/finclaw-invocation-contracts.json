@@ -1,0 +1,336 @@
+{
+  "schema": "collectorx.finclaw_invocation_contracts.v1",
+  "updated_at": "2026-07-08",
+  "authorization_modes": {
+    "authorized-local-export": "User selects or provides a local export, folder, ZIP, workbook, saved page, or read-only copied file.",
+    "authorized-mailbox-or-export": "User registers a mailbox through password_env or provides a local email export.",
+    "browser-history-or-export": "User provides a copied browser history database or a platform usage export.",
+    "lake-lens": "FinClaw runs the lens only after the upstream collector has written authorized Lake events.",
+    "local-database-readonly": "User authorizes a local application data store or decrypted/readable database path.",
+    "local-scan-readonly": "Collector scans a user-authorized local application or filesystem scope without mutation.",
+    "local-ui-readonly": "User logs in and unlocks the local application; collector reads visible/local data without order mutation.",
+    "managed-oauth-snapshot": "FinClaw-managed OAuth or equivalent connection is completed before scheduled snapshot collection."
+  },
+  "product_surfaces": {
+    "guarded-production": "May be exposed as a guarded user-facing collector after the stated preflight is satisfied.",
+    "deep-beta": "May be exposed to beta users with explicit caveats and gap states.",
+    "import-beta": "May be exposed as an authorized import or local-scan beta collector.",
+    "lens-beta": "May be exposed only as a downstream lens after its upstream Lake exists.",
+    "managed-oauth-beta": "May be exposed after managed authorization infrastructure is available.",
+    "supporting-beta": "May support investor workflows but is not a primary investor P0/P1/P2 source."
+  },
+  "evidence_roles": {
+    "attention-universe": "Self-selected symbols, watchlists, follows, or attention pools that must be corroborated by trades, holdings, notes, or research.",
+    "information-usage": "User reading, search, subscription, alert, or information-source traces.",
+    "investor-lens": "Filtered investment evidence derived from upstream personal Lake events.",
+    "partial-asset-facts": "Authorized asset or wealth facts that remain partial until full account boundary validation.",
+    "personal-channel-lake": "Generic personal channel evidence that should enter Lake before investor lens classification.",
+    "planning-context": "Task, calendar, reminder, or planning evidence for trade/research discipline.",
+    "research-material": "Authorized research-document evidence and explicit content extraction outputs.",
+    "strong-trade-asset-facts": "Broker or trading-app facts such as assets, positions, executions, orders, and fund flows.",
+    "supporting-communication": "Supporting communication evidence that needs an investor lens before Wiki use.",
+    "weak-influence": "Weak social influence evidence that requires corroboration and cannot stand alone as an investment conclusion.",
+    "workflow-metadata": "Professional terminal workflow metadata without vendor database or licensed content mirroring."
+  },
+  "contracts": [
+    {
+      "id": "eastmoney-portfolio",
+      "authorization_mode": "local-ui-readonly",
+      "product_surface": "guarded-production",
+      "evidence_role": "strong-trade-asset-facts",
+      "user_step": "Log in to EastMoney and unlock the trading page; CollectorX reads local files and visible trading tables only.",
+      "preflight": "EastMoney is installed, the user is logged in, and the read-only trading UI can be reached.",
+      "failure_state": "needs_unlocked_trading_account"
+    },
+    {
+      "id": "ths-portfolio",
+      "authorization_mode": "local-ui-readonly",
+      "product_surface": "deep-beta",
+      "evidence_role": "strong-trade-asset-facts",
+      "user_step": "Authorize a local Tonghuashun scan or open an unlocked read-only trading screen.",
+      "preflight": "Tonghuashun local data or visible trading UI is available without requesting a trading password.",
+      "failure_state": "needs_readable_ths_local_or_ui"
+    },
+    {
+      "id": "ths-watchlist",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "attention-universe",
+      "user_step": "Provide an authorized Tonghuashun watchlist export, folder, workbook, or text file.",
+      "preflight": "The input is a user-owned watchlist export and not a trade, holding, order, or fund-flow file.",
+      "failure_state": "needs_authorized_ths_watchlist_export"
+    },
+    {
+      "id": "wechat",
+      "authorization_mode": "local-database-readonly",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Authorize local WeChat collection and provide required readable database/key preconditions.",
+      "preflight": "WeChat local store is readable for the supported platform; no decrypted keys are written to output.",
+      "failure_state": "needs_readable_wechat_store"
+    },
+    {
+      "id": "wechat-investment-dialogue",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "investor-lens",
+      "requires_upstream": [
+        "wechat"
+      ],
+      "user_step": "Run after WeChat Lake exists, optionally narrowing to user-approved chats or senders.",
+      "preflight": "Upstream wechat events.jsonl exists and source-policy allow/deny rules are explicit when used.",
+      "failure_state": "needs_wechat_lake"
+    },
+    {
+      "id": "filesystem",
+      "authorization_mode": "local-scan-readonly",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Select an authorized root folder for metadata-only scanning.",
+      "preflight": "Root exists and the user understands file bodies are not read by the generic collector.",
+      "failure_state": "needs_authorized_root"
+    },
+    {
+      "id": "research-documents",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "research-material",
+      "requires_upstream": [
+        "filesystem",
+        "notes"
+      ],
+      "user_step": "Run on authorized research folders or upstream file/note Lake events; content extraction requires explicit flags.",
+      "preflight": "Research inputs are user-selected, and body/OCR extraction choices are explicit.",
+      "failure_state": "needs_authorized_research_input"
+    },
+    {
+      "id": "email",
+      "authorization_mode": "authorized-mailbox-or-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Register an IMAP account through password_env or provide a local email export.",
+      "preflight": "Mailbox credentials are referenced by environment variable or local export files are selected.",
+      "failure_state": "needs_mailbox_or_email_export"
+    },
+    {
+      "id": "email-research",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "investor-lens",
+      "requires_upstream": [
+        "email"
+      ],
+      "user_step": "Run after email Lake exists to classify broker research, IR mail, and attachment signals.",
+      "preflight": "Upstream email events.jsonl exists and full-body policy remains explicit.",
+      "failure_state": "needs_email_lake"
+    },
+    {
+      "id": "xueqiu-watchlist",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "attention-universe",
+      "user_step": "Provide an authorized Xueqiu watchlist export or package.",
+      "preflight": "Input is a user-owned Xueqiu watchlist export; it is not treated as broker holdings.",
+      "failure_state": "needs_authorized_xueqiu_watchlist_export"
+    },
+    {
+      "id": "xueqiu-investor-activity",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "attention-universe",
+      "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, or browser-network export.",
+      "preflight": "Input belongs to the user and does not include login secrets or platform-wide public crawling.",
+      "failure_state": "needs_authorized_xueqiu_activity_export"
+    },
+    {
+      "id": "china-wealth-assets",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "partial-asset-facts",
+      "user_step": "Provide authorized fund, wealth, cash-management, bank wealth, workbook, ZIP, or HAR exports.",
+      "preflight": "Input is read-only and user-owned; passwords and account mutation are out of scope.",
+      "failure_state": "needs_authorized_wealth_export"
+    },
+    {
+      "id": "meeting-artifacts",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Provide authorized meeting minutes, transcripts, subtitles, platform exports, or ZIP packages.",
+      "preflight": "Meeting artifact files are user-selected and attachment/recording bodies are not assumed.",
+      "failure_state": "needs_authorized_meeting_export"
+    },
+    {
+      "id": "dingtalk",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Provide authorized DingTalk collaboration exports or ZIP packages.",
+      "preflight": "Input is user-authorized and excludes credentials or file bodies unless explicitly handled by another collector.",
+      "failure_state": "needs_authorized_dingtalk_export"
+    },
+    {
+      "id": "wecom",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Provide authorized WeCom collaboration exports or ZIP packages.",
+      "preflight": "Input is user-authorized and excludes credentials or file bodies unless explicitly handled by another collector.",
+      "failure_state": "needs_authorized_wecom_export"
+    },
+    {
+      "id": "feishu",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Provide authorized Feishu exports or use the registered read-only Feishu tooling where available.",
+      "preflight": "Workspace scope is user-authorized and tenant/app secrets are not written to output.",
+      "failure_state": "needs_authorized_feishu_export"
+    },
+    {
+      "id": "meeting-minutes",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "investor-lens",
+      "requires_upstream": [
+        "meeting-artifacts",
+        "feishu",
+        "dingtalk",
+        "wecom"
+      ],
+      "user_step": "Run after meeting or collaboration Lake exists to classify investment meetings and decision surfaces.",
+      "preflight": "Upstream meeting/collaboration events.jsonl exists and recording-body authorization is explicit if used.",
+      "failure_state": "needs_meeting_or_collaboration_lake"
+    },
+    {
+      "id": "notes",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Provide an authorized note vault, Notion/Youdao/Evernote export, table export, or ZIP package.",
+      "preflight": "Input is user-selected; full-content inclusion remains explicit.",
+      "failure_state": "needs_authorized_notes_export"
+    },
+    {
+      "id": "investment-notes",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "investor-lens",
+      "requires_upstream": [
+        "notes"
+      ],
+      "user_step": "Run after notes Lake exists to classify investment reviews, rules, checklists, and valuation assumptions.",
+      "preflight": "Upstream notes events.jsonl exists and note allowlists are applied when needed.",
+      "failure_state": "needs_notes_lake"
+    },
+    {
+      "id": "ticktick",
+      "authorization_mode": "managed-oauth-snapshot",
+      "product_surface": "managed-oauth-beta",
+      "evidence_role": "planning-context",
+      "user_step": "Connect TickTick/Dida through FinClaw-managed OAuth before scheduled SoulMirror snapshots run.",
+      "preflight": "Managed OAuth broker or token environment is available; collection path does not start OAuth itself.",
+      "failure_state": "ticktick_auth_required"
+    },
+    {
+      "id": "calendar",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "planning-context",
+      "user_step": "Provide authorized calendar ICS, JSON, CSV, TSV, or ZIP exports.",
+      "preflight": "Calendar input is user-selected and includes enough time fields for time-quality checks when possible.",
+      "failure_state": "needs_authorized_calendar_export"
+    },
+    {
+      "id": "task-calendar-investor",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "investor-lens",
+      "requires_upstream": [
+        "ticktick",
+        "calendar"
+      ],
+      "user_step": "Run after task or calendar Lake exists to classify investment plans, review reminders, and research tasks.",
+      "preflight": "Upstream task/calendar events.jsonl exists and timezone/recurrence caveats are visible.",
+      "failure_state": "needs_task_or_calendar_lake"
+    },
+    {
+      "id": "wechat-favorites",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "personal-channel-lake",
+      "user_step": "Provide authorized WeChat favorites, saved article files, folders, or ZIP packages.",
+      "preflight": "Input is user-selected and does not imply public-account platform-wide scraping.",
+      "failure_state": "needs_authorized_wechat_favorites_export"
+    },
+    {
+      "id": "wechat-article-favorites",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "investor-lens",
+      "requires_upstream": [
+        "wechat-favorites"
+      ],
+      "user_step": "Run after WeChat favorites Lake exists to classify investment articles and reading actions.",
+      "preflight": "Upstream favorites events.jsonl exists and account/tag allowlists are explicit when used.",
+      "failure_state": "needs_wechat_favorites_lake"
+    },
+    {
+      "id": "financial-news-usage",
+      "authorization_mode": "browser-history-or-export",
+      "product_surface": "import-beta",
+      "evidence_role": "information-usage",
+      "user_step": "Provide authorized finance-news usage exports, saved pages, ZIP packages, or copied browser history.",
+      "preflight": "Only CLS, WallstreetCN, Gelonghui, or whitelisted finance-news usage traces are parsed.",
+      "failure_state": "needs_authorized_finance_news_usage_input"
+    },
+    {
+      "id": "hk-us-brokerage",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "strong-trade-asset-facts",
+      "user_step": "Provide authorized read-only Futu, Tiger, or IBKR statements, exports, workbooks, or ZIP packages.",
+      "preflight": "Brokerage input is read-only and user-owned; no order mutation or trading password is requested.",
+      "failure_state": "needs_authorized_hk_us_brokerage_export"
+    },
+    {
+      "id": "pro-terminal-usage",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "workflow-metadata",
+      "user_step": "Provide authorized Wind, Choice, iFinD, or Bloomberg workflow metadata exports.",
+      "preflight": "Input contains personal workflow metadata only, not vendor database mirrors or licensed content bodies.",
+      "failure_state": "needs_authorized_terminal_workflow_export"
+    },
+    {
+      "id": "social-activity",
+      "authorization_mode": "authorized-local-export",
+      "product_surface": "import-beta",
+      "evidence_role": "weak-influence",
+      "user_step": "Provide authorized Weibo, Bilibili, or Xiaohongshu activity exports, saved pages, workbooks, or ZIP packages.",
+      "preflight": "Social traces are treated as weak influence only and cannot become standalone investment conclusions.",
+      "failure_state": "needs_authorized_social_activity_export"
+    },
+    {
+      "id": "social-investment-influence",
+      "authorization_mode": "lake-lens",
+      "product_surface": "lens-beta",
+      "evidence_role": "weak-influence",
+      "requires_upstream": [
+        "social-activity"
+      ],
+      "user_step": "Run after social activity Lake exists and use the output only as weak influence evidence.",
+      "preflight": "Upstream social-activity events.jsonl exists and stronger trade/research corroboration is still required.",
+      "failure_state": "needs_social_activity_lake"
+    },
+    {
+      "id": "qq",
+      "authorization_mode": "local-database-readonly",
+      "product_surface": "supporting-beta",
+      "evidence_role": "supporting-communication",
+      "user_step": "Authorize a local readable or decrypted QQ NT store before running the supporting communication collector.",
+      "preflight": "QQ database path is readable; passphrases and decrypted keys are not written to output.",
+      "failure_state": "needs_readable_qq_db"
+    }
+  ]
+}
