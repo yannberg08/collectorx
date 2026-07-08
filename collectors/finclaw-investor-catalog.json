@@ -96,7 +96,7 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-root-metadata-scan-with-optional-metadata-scope-policy",
       "cli": "python3 skills/filesystem-collector/scripts/filesystem_query.py collect --root <authorized-root> --out-dir <out-dir>",
-      "collects": "Authorized local file metadata: path, extension, size, modified time, source audit, extension/path/file-name/directory/keyword scope-policy audit, filtered-all readiness, filesystem boundary proof, extension coverage, skipped reason counts, and per-root scan results.",
+      "collects": "Authorized local file metadata: path, extension, size, modified time, source audit, extension/path/file-name/directory/keyword scope-policy audit, filtered-all/no-metadata gap packages, filesystem boundary proof, extension coverage, skipped reason counts, and per-root scan results.",
       "must_not_collect": "File bodies by default, whole-disk scans, credentials, or investment conclusions.",
       "production_gap": "Real Windows/Linux device validation and broader private file-sample review."
     },

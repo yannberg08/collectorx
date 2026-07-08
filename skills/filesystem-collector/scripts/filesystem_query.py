@@ -8,7 +8,75 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from filesystem_collector.scanner import default_roots, platform_default_root_plan, scan_files_with_audit, write_json, write_jsonl
+from filesystem_collector.scanner import (
+    default_roots,
+    now_iso,
+    platform_default_root_plan,
+    scan_files_with_audit,
+    stable_id,
+    write_json,
+    write_jsonl,
+)
+
+
+def build_filesystem_gap_event(source_audit: dict, *, readiness_status: str) -> dict:
+    timestamp = now_iso()
+    policy = source_audit.get("filesystem_scope_policy") or {}
+    filtered_all = bool(source_audit.get("filesystem_scope_policy_filtered_all"))
+    gap = "filesystem_scope_policy_filtered_all" if filtered_all else "filesystem_no_metadata_events_collected"
+    status = "scope_policy_filtered_all" if filtered_all else readiness_status
+    data = {
+        "subtype": "collector_gap",
+        "gap": gap,
+        "status": status,
+        "profile_type": gap,
+        "root_count": source_audit.get("root_count", 0),
+        "resolved_root_count": source_audit.get("resolved_root_count", 0),
+        "missing_root_count": source_audit.get("missing_root_count", 0),
+        "scanned_file_count": source_audit.get("scanned_file_count", 0),
+        "candidate_file_count": policy.get("candidate_file_count", 0),
+        "retained_event_count": 0,
+        "filtered_file_count": policy.get("filtered_file_count", 0),
+        "filter_reason_counts": policy.get("filter_reason_counts", {}),
+        "skipped_file_count": source_audit.get("skipped_file_count", 0),
+        "skipped_directory_count": source_audit.get("skipped_directory_count", 0),
+        "skipped_reason_counts": source_audit.get("skipped_reason_counts", {}),
+        "policy_is_user_authorization_scope": bool(policy.get("policy_is_user_authorization_scope", True)),
+        "policy_does_not_assert_investment_relevance": True,
+        "metadata_only": True,
+        "file_content_collected": False,
+        "file_metadata_events_written": False,
+        "whole_disk_scan_claimed": False,
+        "investment_relevance_claimed": False,
+    }
+    return {
+        "schema": "collectorx.event.v1",
+        "id": stable_id(
+            gap,
+            data["root_count"],
+            data["scanned_file_count"],
+            data["candidate_file_count"],
+            data["filtered_file_count"],
+            data["skipped_file_count"],
+        ),
+        "collector": "filesystem",
+        "source": "本地文件元数据采集边界",
+        "owner_scope": "personal",
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
+        "data": data,
+        "raw_ref": {
+            "metadata_only": True,
+            "scope_policy_enabled": bool(policy.get("enabled")),
+        },
+        "privacy": {
+            "sensitive": True,
+            "local_only": True,
+            "contains": ["file_metadata", "collection_gap"],
+        },
+        "wiki_targets": ["investor.data_quality.collection_gaps"],
+    }
 
 
 def collect(args: argparse.Namespace) -> int:
@@ -33,25 +101,28 @@ def collect(args: argparse.Namespace) -> int:
         max_size_mb=args.max_size_mb,
         limit=args.limit,
     )
-    extension_counts = Counter((event.get("data") or {}).get("extension") or "<none>" for event in events)
-    total_size_bytes = sum(int((event.get("data") or {}).get("size_bytes") or 0) for event in events)
+    metadata_events = list(events)
+    extension_counts = Counter((event.get("data") or {}).get("extension") or "<none>" for event in metadata_events)
+    total_size_bytes = sum(int((event.get("data") or {}).get("size_bytes") or 0) for event in metadata_events)
     readiness_status = "events_collected" if events else "no_matching_files"
     if not events and source_audit.get("filesystem_scope_policy_filtered_all"):
         readiness_status = "scope_policy_filtered_all"
+    output_events = events if events else [build_filesystem_gap_event(source_audit, readiness_status=readiness_status)]
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if out_dir:
         lake_path = out_dir / "lake" / "filesystem" / "events.jsonl"
-        write_jsonl(lake_path, events)
+        write_jsonl(lake_path, output_events)
         manifest = {
             "schema": "collectorx.filesystem_collect.manifest.v1",
             "collector": "filesystem",
-            "event_count": len(events),
+            "event_count": len(output_events),
             "roots": [str(root) for root in roots],
-            "kind_counts": dict(Counter(event["kind"] for event in events)),
+            "kind_counts": dict(Counter(event["kind"] for event in output_events)),
             "extension_counts": dict(sorted(extension_counts.items())),
             "file_surface_summary": {
-                "metadata_event_count": len(events),
+                "metadata_event_count": len(metadata_events),
                 "content_read_event_count": 0,
+                "gap_event_count": max(0, len(output_events) - len(metadata_events)),
                 "total_size_bytes": total_size_bytes,
                 "extension_counts": dict(sorted(extension_counts.items())),
             },
@@ -65,6 +136,7 @@ def collect(args: argparse.Namespace) -> int:
                 "missing_root_count": source_audit.get("missing_root_count", 0),
                 "scanned_file_count": source_audit.get("scanned_file_count", 0),
                 "emitted_event_count": source_audit.get("emitted_event_count", 0),
+                "gap_event_count": max(0, len(output_events) - len(metadata_events)),
                 "skipped_file_count": source_audit.get("skipped_file_count", 0),
                 "skipped_directory_count": source_audit.get("skipped_directory_count", 0),
                 "authorization_scope_boundary": source_audit.get("filesystem_scope_policy", {}),
@@ -78,7 +150,7 @@ def collect(args: argparse.Namespace) -> int:
             "platform_default_root_plan": platform_default_root_plan(),
             "collection_readiness": {
                 "status": readiness_status,
-                "can_enter_finclaw": bool(events),
+                "can_enter_finclaw": bool(metadata_events),
                 "source_collection_scope": "authorized_roots",
                 "source_audit_status": "available",
                 "filesystem_scope_policy_filtered_all": bool(source_audit.get("filesystem_scope_policy_filtered_all")),
@@ -86,7 +158,11 @@ def collect(args: argparse.Namespace) -> int:
                 "next_action": (
                     "Review filesystem scope-policy allow/deny filters."
                     if readiness_status == "scope_policy_filtered_all"
-                    else "Feed lake/filesystem/events.jsonl into research-documents lens."
+                    else (
+                        "Review authorized roots and supported file extensions."
+                        if not metadata_events
+                        else "Feed lake/filesystem/events.jsonl into research-documents lens."
+                    )
                 ),
             },
         }
@@ -96,7 +172,8 @@ def collect(args: argparse.Namespace) -> int:
                 [
                     "# 本地文件元数据采集包",
                     "",
-                    f"- 事件数：{len(events)}",
+                    f"- 事件数：{len(output_events)}",
+                    f"- 文件元数据事件数：{len(metadata_events)}",
                     f"- 扫描文件数：{source_audit.get('scanned_file_count', 0)}",
                     f"- 跳过文件数：{source_audit.get('skipped_file_count', 0)}",
                     "- 内容读取：false",
@@ -106,14 +183,15 @@ def collect(args: argparse.Namespace) -> int:
             encoding="utf-8",
         )
     if args.event_export:
-        write_jsonl(Path(args.event_export).expanduser(), events)
+        write_jsonl(Path(args.event_export).expanduser(), output_events)
     if args.format == "json":
-        print(json.dumps(events, ensure_ascii=False, indent=2, sort_keys=True))
+        print(json.dumps(output_events, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         print(
             json.dumps(
                 {
-                    "event_count": len(events),
+                    "event_count": len(output_events),
+                    "metadata_event_count": len(metadata_events),
                     "content_read": False,
                     "skipped_file_count": source_audit.get("skipped_file_count", 0),
                 },

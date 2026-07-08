@@ -54,6 +54,9 @@ metadata-only、用户授权根目录、正文不读取。
 `manifest.source_audit.filesystem_scope_policy` 会记录可选的扩展名、路径、
 文件名、目录名和元数据关键词 allow/deny 范围；这只是用户授权边界，
 不代表投资相关性判断。
+如果授权范围过滤掉全部候选文件，或授权根目录没有产生任何可用文件元数据，
+`lake/filesystem/events.jsonl` 会写入一条 profile gap 事件，记录计数和原因，
+但不会伪造文件元数据、不会写正文、也不会把本地路径写进 gap 事件。
 
 `manifest.filesystem_boundary_proof` 会把授权根、metadata-only 状态、
 跳过统计和授权范围边界汇总给 FinClaw。该证明明确保持：

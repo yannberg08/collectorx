@@ -16,6 +16,7 @@ from filesystem_collector.scanner import default_roots, platform_default_root_pl
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "filesystem_query.py"
+PACKAGE_VALIDATOR = ROOT.parents[1] / "tools" / "validate_collector_package.py"
 
 
 def test_collect_metadata_only() -> None:
@@ -174,8 +175,30 @@ def test_filesystem_scope_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        assert (out / "lake" / "filesystem" / "events.jsonl").read_text(encoding="utf-8") == ""
+        lines = (out / "lake" / "filesystem" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["kind"] == "profile"
+        assert event["time"]
+        assert event["data"]["subtype"] == "collector_gap"
+        assert event["data"]["gap"] == "filesystem_scope_policy_filtered_all"
+        assert event["data"]["status"] == "scope_policy_filtered_all"
+        assert event["data"]["candidate_file_count"] == 1
+        assert event["data"]["retained_event_count"] == 0
+        assert event["data"]["filtered_file_count"] == 1
+        assert event["data"]["filter_reason_counts"] == {"allow_file_name_not_matched": 1}
+        assert event["data"]["metadata_only"] is True
+        assert event["data"]["file_content_collected"] is False
+        assert event["data"]["file_metadata_events_written"] is False
+        assert "path" not in event["data"]
+        assert str(root) not in json.dumps(event, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
+        assert manifest["file_surface_summary"]["metadata_event_count"] == 0
+        assert manifest["file_surface_summary"]["gap_event_count"] == 1
+        assert manifest["filesystem_boundary_proof"]["emitted_event_count"] == 0
+        assert manifest["filesystem_boundary_proof"]["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["filesystem_scope_policy_filtered_all"] is True
@@ -185,6 +208,12 @@ def test_filesystem_scope_policy_filtered_all_status() -> None:
         assert policy["filtered_all"] is True
         assert policy["filter_reason_counts"] == {"allow_file_name_not_matched": 1}
         assert manifest["filesystem_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "filesystem"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
 
 
 def test_collect_missing_root_has_source_audit() -> None:
@@ -206,9 +235,22 @@ def test_collect_missing_root_has_source_audit() -> None:
             text=True,
             capture_output=True,
         )
+        lines = (out / "lake" / "filesystem" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["kind"] == "profile"
+        assert event["data"]["gap"] == "filesystem_no_metadata_events_collected"
+        assert event["data"]["missing_root_count"] == 1
+        assert event["data"]["scanned_file_count"] == 0
+        assert event["data"]["file_content_collected"] is False
+        assert str(missing) not in json.dumps(event, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
+        assert manifest["file_surface_summary"]["metadata_event_count"] == 0
+        assert manifest["file_surface_summary"]["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "no_matching_files"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         audit = manifest["source_audit"]
         assert audit["root_count"] == 1
         assert audit["resolved_root_count"] == 0
@@ -217,6 +259,12 @@ def test_collect_missing_root_has_source_audit() -> None:
         assert audit["emitted_event_count"] == 0
         assert audit["skipped_reason_counts"] == {"root_missing": 1}
         assert audit["root_results"][0]["status"] == "missing"
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "filesystem"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
 
 
 def test_default_roots_cross_platform_plan() -> None:

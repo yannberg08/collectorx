@@ -7,7 +7,9 @@ Lake. The collector remains metadata-only and does not read file bodies.
 ## Scope
 
 - Skill: `filesystem-collector`
-- Version: `0.3.1`
+- Version: `0.3.1`; gap package ingestion was later hardened in version
+  `0.3.2` with
+  `docs/validations/investor-p0-filesystem-gap-package-validation-2026-07-09.md`.
 - Collector: `filesystem`
 - Downstream lens: `research-documents`
 - FinClaw route: authorized local file metadata for research-material discovery.
@@ -24,7 +26,8 @@ Lake. The collector remains metadata-only and does not read file bodies.
 - Manifest `filesystem_boundary_proof.authorization_scope_boundary` exposes the
   same policy boundary to FinClaw gating.
 - When every candidate file is filtered, readiness reports
-  `scope_policy_filtered_all`.
+  `scope_policy_filtered_all`. As of version `0.3.2`, this state also emits a
+  `filesystem_scope_policy_filtered_all` profile gap event.
 - The policy is an authorization boundary only. It does not classify investment
   relevance and does not read file content.
 

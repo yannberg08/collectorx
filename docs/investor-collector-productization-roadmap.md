@@ -3488,6 +3488,8 @@ Findings:
 - Added filtered-all readiness: when every candidate file is outside the
   configured authorization policy, the package marks
   `collection_readiness.status=scope_policy_filtered_all`.
+- As of version `0.3.2`, filtered-all and no-metadata packages also emit one
+  profile gap event instead of an empty `events.jsonl`.
 - Kept the SoulMirror filesystem boundary unchanged: metadata only, no file
   content, no whole-disk scan claim, and no investment relevance claim.
 
@@ -3616,12 +3618,34 @@ Findings:
   product identity, amount, transaction, credential, payment password, bank
   password, account mutation, or raw input path.
 
+### Wave BA - P0 Filesystem Gap Package Hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-filesystem-gap-package-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `filesystem-collector` to `0.3.2`.
+- Added validator-safe profile gap events for metadata-only filesystem packages
+  when no file metadata is retained.
+- Fully filtered runs emit `filesystem_scope_policy_filtered_all`; missing,
+  empty, unsupported, hidden-only, or otherwise no-metadata runs emit
+  `filesystem_no_metadata_events_collected`.
+- Kept `collection_readiness.can_enter_finclaw=false`,
+  `file_surface_summary.metadata_event_count=0`, `content_read=false`, and
+  `filesystem_boundary_proof.file_content_collected=false` for gap packages.
+- Gap events carry counts and reason summaries but no raw local path, file
+  body, whole-disk claim, or investment relevance claim.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, generic-to-lens evidence policy, preflight/no-message gap packages, and validator-safe gap events; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
-| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; filesystem metadata scope-policy audit with extension/path/file-name/directory/keyword filters, filtered-all readiness, and filesystem boundary proof; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all readiness, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
+| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; filesystem metadata scope-policy audit with extension/path/file-name/directory/keyword filters, filtered-all/no-metadata gap packages, package validation, and filesystem boundary proof; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all readiness, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, email-research sender-domain/folder/mailbox/subject/attachment/email-surface/keyword authorization scope-policy audit, filtered-all readiness, authorization scope boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-portfolio` | G2/G3 partial on current macOS/local paths; CSV/Xcs historical executions, estimated holdings, personal metadata, GUI read-only snapshots, standard package, SoulMirror sync, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, sidecar policy filtering, exact-number preservation, and `ths_portfolio_boundary_proof.authorization_scope_boundary` are fixture-tested | G3/G4: more real Tonghuashun accounts, Windows/macOS path validation, GUI current asset/holding/order/execution/cashflow coverage review, and Wiki backtest against research/review records |
 | 5 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist local-scan plus import path with standard Lake output, manifest, local-scan provenance, path-level source audit, ZIP provenance, skipped-reason accounting, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all readiness, authorization scope boundary, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun local-store validation, default app path validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
