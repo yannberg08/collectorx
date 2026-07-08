@@ -22,6 +22,9 @@ scope:
     - watch_history
     - comments
     - shares
+    - browser_history_visits
+    - browser_history_source_apps
+    - browser_history_domain_filtering
     - engagement_counts
     - social_topics
     - social_topic_summary
@@ -46,6 +49,7 @@ scope:
 
 description: |
   微博、B站、小红书等平台的通用用户活动采集器。它不判断投资含义；
-  支持授权 JSON/CSV/Excel/HTML/TXT/ZIP 活动包，并报告平台/动作/弱证据字段覆盖、
-  社交影响主题面谱、影响源可用面、社交活动边界证明、逐输入来源审计、跳过文件/ZIP 成员原因和内容策略。
+  支持授权 JSON/CSV/Excel/HTML/TXT/ZIP 活动包和 Chromium/Safari 浏览器历史副本，
+  并报告平台/动作/弱证据字段覆盖、浏览器历史来源、社交影响主题面谱、影响源可用面、
+  社交活动边界证明、逐输入来源审计、跳过文件/ZIP 成员原因和内容策略。
   social-investment-influence lens 再筛选投资内容影响源。

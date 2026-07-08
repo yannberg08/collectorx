@@ -2430,6 +2430,33 @@ Findings:
   social activity proof levels plus social influence lens proof and evidence
   proof summaries.
 
+### Wave X6: P2 social browser-history source pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-browser-history-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.6`.
+- Added read-only Chromium/Safari browser-history copy parsing for authorized
+  local history files and `.sqlite`/`.db` copies.
+- Added domain filtering for Weibo, Bilibili, Xiaohongshu, and supported social
+  short domains before browser-history rows become weak social events.
+- Browser-history events preserve `source_app`, URL/domain, visit count, typed
+  count, transition, transition type, and visit ID while keeping
+  `investment_claim_allowed: false` and `requires_corroboration: true`.
+- Added browser-history input/event/source-app counts to `manifest.source_audit`
+  and browser-history event count, visit totals, typed totals, and transition
+  type counts to `manifest.influence_surface_summary`.
+- Added browser-history source counts and domain-filtering boundaries to
+  `manifest.social_activity_boundary_proof`.
+- Fixture validation covers a Chromium `History` copy with Bilibili, Weibo,
+  Xiaohongshu, and unrelated domains, proving unrelated browser history is not
+  collected.
+
 ### Wave Y: Investor Wiki evidence contract pass
 
 Status: `completed-baseline+audit`
@@ -2917,7 +2944,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, workflow-topic false-positive review, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP/browser-history social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, domain filtering, and preview-only content policy; strict real-platform saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 
 ## Git Practice
 

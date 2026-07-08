@@ -1036,14 +1036,15 @@ Current status:
 
 ```bash
 python3 skills/social-activity/scripts/social_activity.py collect \
-  --input <authorized-weibo-bilibili-xiaohongshu-activity-export-or-zip> \
+  --input <authorized-weibo-bilibili-xiaohongshu-activity-export-or-browser-history-copy> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
 - Converts authorized JSON/JSONL/NDJSON, CSV/TSV, XLSX/XLSM, HTML, Markdown,
-  TXT, and ZIP activity records into generic `social-activity` events.
+  TXT, Chromium/Safari browser history copies, and ZIP activity records into
+  generic `social-activity` events.
 - Expands multi-section activity packages such as follows, likes, favorites,
   watch history, comments, shares, and reposts; ZIP packages preserve source
   archive and member provenance.
@@ -1051,6 +1052,8 @@ Current status:
   saved pages.
 - Captures creator IDs, creator URLs, domains, item IDs, tags, topics, symbols,
   engagement counts, watch progress, and comment/content previews.
+- Captures browser-history source apps, visit counts, typed counts, and browser
+  transition types after filtering to Weibo/Bilibili/Xiaohongshu domains.
 - Adds per-event `social_topics`, `primary_social_topic`, and
   `social_topic_terms` so FinClaw can map weak influence signals to macro,
   strategy, industry, fundamental, fund/wealth, trading review, risk control,
@@ -1063,8 +1066,8 @@ Current status:
   `manifest.content_policy` so Lake can see creator/URL/topic/symbol/engagement
   and social-topic availability, requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
-  skipped ZIP member reasons, limit truncation, export package provenance, and
-  preview-only content boundaries.
+  skipped ZIP member reasons, browser-history input/event counts, limit
+  truncation, export package provenance, and preview-only content boundaries.
 - Writes `manifest.social_activity_boundary_proof` so FinClaw can inspect the
   authorized social-activity input boundary, platform/action/topic coverage,
   weak-signal field coverage, source audit, content-preview policy, required

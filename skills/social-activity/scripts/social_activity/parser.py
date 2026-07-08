@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import re
+import sqlite3
 import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,7 @@ except ImportError:  # pragma: no cover - optional dependency for runtime instal
 
 COLLECTOR = "social-activity"
 CN_TZ = timezone(timedelta(hours=8))
+UTC = timezone.utc
 SUPPORTED_RECORD_EXTENSIONS = {
     ".json",
     ".jsonl",
@@ -36,9 +38,13 @@ SUPPORTED_RECORD_EXTENSIONS = {
     ".md",
     ".markdown",
     ".txt",
+    ".sqlite",
+    ".sqlite3",
+    ".db",
 }
 SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
-SUPPORTED_ZIP_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS
+SUPPORTED_ZIP_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS - {".sqlite", ".sqlite3", ".db"}
+BROWSER_HISTORY_NAMES = {"History", "History.db"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 CONTENT_KEY_FRAGMENTS = ("content", "body", "正文", "全文", "评论", "comment")
 EXPECTED_SOCIAL_PLATFORMS = ("weibo", "bilibili", "xiaohongshu")
@@ -224,13 +230,15 @@ def collect_from_inputs_with_audit(
     skipped_extension_counts: Counter[str] = Counter()
     skipped_reason_counts: Counter[str] = Counter()
     skipped_archive_member_reason_counts: Counter[str] = Counter()
+    browser_history_source_apps: set[str] = set()
     audit: Dict[str, Any] = {
-        "source_type": "authorized_social_activity_export",
+        "source_type": "authorized_social_activity_export_or_browser_history_copy",
         "input_count": len(input_list),
         "requested_inputs": [str(Path(raw).expanduser()) for raw in input_list],
         "resolved_input_file_count": 0,
         "input_missing_count": 0,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "supported_browser_history_names": sorted(BROWSER_HISTORY_NAMES),
         "limit": limit,
         "limit_reached": False,
         "extension_counts": {},
@@ -246,6 +254,9 @@ def collect_from_inputs_with_audit(
         "windows_drive_archive_members_collected": False,
         "parsed_record_count": 0,
         "emitted_event_count": 0,
+        "browser_history_input_count": 0,
+        "browser_history_event_count": 0,
+        "browser_history_source_apps": [],
         "path_results": [],
     }
 
@@ -297,10 +308,13 @@ def collect_from_inputs_with_audit(
                     )
                 else:
                     parsed = parse_path(path)
+                    parser = parser_name_for_path(path)
+                    if parser == "browser_history":
+                        audit["browser_history_input_count"] += 1
                     result.update(
                         {
                             "status": "parsed" if parsed else "no_records_parsed",
-                            "parser": parser_name_for_path(path),
+                            "parser": parser,
                             "parsed_record_count": len(parsed),
                         }
                     )
@@ -316,7 +330,11 @@ def collect_from_inputs_with_audit(
                 if not isinstance(record, dict):
                     continue
                 row += 1
-                events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+                event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+                events.append(event)
+                source_app = str((event.get("data") or {}).get("source_app") or "")
+                if source_app.endswith("_history"):
+                    browser_history_source_apps.add(source_app)
                 if limit is not None and len(events) >= limit:
                     audit["limit_reached"] = True
                     break
@@ -332,6 +350,10 @@ def collect_from_inputs_with_audit(
         events = [gap_event(collected_at=collected_at, reason=reason)]
     audit["parsed_record_count"] = len(usable_social_events(events))
     audit["emitted_event_count"] = len(events)
+    audit["browser_history_event_count"] = sum(
+        1 for event in usable_social_events(events) if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+    )
+    audit["browser_history_source_apps"] = sorted(browser_history_source_apps)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
@@ -351,10 +373,12 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
 
 
 def is_supported_path(path: Path) -> bool:
-    return path.suffix.lower() in SUPPORTED_EXTENSIONS
+    return path.suffix.lower() in SUPPORTED_EXTENSIONS or path.name in BROWSER_HISTORY_NAMES
 
 
 def extension_label(path: Path) -> str:
+    if path.name in BROWSER_HISTORY_NAMES:
+        return "<browser_history>"
     return path.suffix.lower() or "<none>"
 
 
@@ -362,6 +386,8 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix == ".zip":
         return parse_zip(path)
+    if suffix in {".sqlite", ".sqlite3", ".db"} or path.name in BROWSER_HISTORY_NAMES:
+        return parse_browser_history(path)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
@@ -490,6 +516,151 @@ def parse_workbook(path_or_stream: Any, *, path_label: Optional[str] = None) -> 
     finally:
         workbook.close()
     return records
+
+
+def parse_browser_history(path: Path) -> List[Dict[str, Any]]:
+    try:
+        conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return []
+    try:
+        conn.row_factory = sqlite3.Row
+        tables = table_names(conn)
+        if {"urls", "visits"}.issubset(tables):
+            return parse_chromium_history(conn, path)
+        if {"history_items", "history_visits"}.issubset(tables):
+            return parse_safari_history(conn, path)
+        return []
+    finally:
+        conn.close()
+
+
+def table_names(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    return {str(row[0]) for row in rows}
+
+
+def parse_chromium_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str, Any]]:
+    where_sql, params = social_domain_where("urls.url")
+    query = f"""
+        SELECT
+            visits.id AS visit_id,
+            urls.url AS url,
+            urls.title AS title,
+            urls.visit_count AS visit_count,
+            urls.typed_count AS typed_count,
+            visits.visit_time AS visit_time,
+            visits.transition AS transition
+        FROM visits
+        JOIN urls ON visits.url = urls.id
+        WHERE {where_sql}
+        ORDER BY visits.visit_time DESC
+    """
+    rows = conn.execute(query, params).fetchall()
+    return [
+        browser_history_record(
+            path=path,
+            browser="chromium",
+            url=str(row["url"] or ""),
+            title=str(row["title"] or ""),
+            event_time=chromium_time_to_iso(row["visit_time"]),
+            visit_id=row["visit_id"],
+            visit_count=row["visit_count"],
+            typed_count=row["typed_count"],
+            transition=row["transition"],
+        )
+        for row in rows
+        if platform_from_url(str(row["url"] or ""))
+    ]
+
+
+def parse_safari_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str, Any]]:
+    where_sql, params = social_domain_where("history_items.url")
+    query = f"""
+        SELECT
+            history_visits.id AS visit_id,
+            history_items.url AS url,
+            history_items.title AS title,
+            history_visits.visit_time AS visit_time
+        FROM history_visits
+        JOIN history_items ON history_visits.history_item = history_items.id
+        WHERE {where_sql}
+        ORDER BY history_visits.visit_time DESC
+    """
+    rows = conn.execute(query, params).fetchall()
+    return [
+        browser_history_record(
+            path=path,
+            browser="safari",
+            url=str(row["url"] or ""),
+            title=str(row["title"] or ""),
+            event_time=safari_time_to_iso(row["visit_time"]),
+            visit_id=row["visit_id"],
+        )
+        for row in rows
+        if platform_from_url(str(row["url"] or ""))
+    ]
+
+
+def social_domain_where(column: str) -> tuple[str, List[str]]:
+    clauses: List[str] = []
+    params: List[str] = []
+    for platform in EXPECTED_SOCIAL_PLATFORMS:
+        domains = PLATFORM_DOMAINS[platform]
+        for domain in domains:
+            clauses.append(f"LOWER({column}) LIKE ?")
+            params.append(f"%{domain}%")
+    return " OR ".join(clauses), params
+
+
+def browser_history_record(
+    *,
+    path: Path,
+    browser: str,
+    url: str,
+    title: str,
+    event_time: Optional[str],
+    visit_id: Any,
+    visit_count: Any = None,
+    typed_count: Any = None,
+    transition: Any = None,
+) -> Dict[str, Any]:
+    return {
+        "action_type": "watch",
+        "platform": platform_from_url(url) or "unknown",
+        "source_app": f"{browser}_history",
+        "title": title or url,
+        "url": url,
+        "time": event_time,
+        "visit_id": visit_id,
+        "visit_count": visit_count,
+        "typed_count": typed_count,
+        "transition": transition,
+        "source_section": "browser_history",
+        "_source_path": str(path),
+    }
+
+
+def chromium_time_to_iso(value: Any) -> Optional[str]:
+    try:
+        timestamp = int(value)
+    except (TypeError, ValueError):
+        return None
+    if timestamp <= 0:
+        return None
+    moment = datetime(1601, 1, 1, tzinfo=UTC) + timedelta(microseconds=timestamp)
+    return moment.astimezone(CN_TZ).isoformat(timespec="seconds")
+
+
+def safari_time_to_iso(value: Any) -> Optional[str]:
+    try:
+        timestamp = float(value)
+    except (TypeError, ValueError):
+        return None
+    if timestamp <= 0:
+        return None
+    moment = datetime(2001, 1, 1, tzinfo=UTC) + timedelta(seconds=timestamp)
+    return moment.astimezone(CN_TZ).isoformat(timespec="seconds")
 
 
 def parse_html(path: Path) -> Dict[str, Any]:
@@ -626,6 +797,8 @@ def remaining_limit(limit: Optional[int], events: List[Dict[str, Any]]) -> Optio
 
 def parser_name_for_path(path: Path) -> str:
     suffix = path.suffix.lower()
+    if suffix in {".sqlite", ".sqlite3", ".db"} or path.name in BROWSER_HISTORY_NAMES:
+        return "browser_history"
     if suffix == ".zip":
         return "zip"
     if suffix in {".xlsx", ".xlsm"}:
@@ -669,6 +842,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     text = first(record, ["text", "content", "body", "summary", "description", "comment", "评论", "正文", "内容", "简介", "备注"]) or ""
     creator = first(record, ["creator", "author", "owner", "uploader", "screen_name", "nickname", "up", "博主", "作者", "发布者", "UP主", "账号"])
     url = first(record, ["url", "link", "href", "链接", "地址"])
+    source_app = first(record, ["source_app", "browser", "client", "app", "来源应用", "浏览器", "客户端", "应用"])
+    transition = first(record, ["transition", "访问方式"])
     tags = tags_for(record)
     topics = list_values(record, ["topics", "topic", "话题"])
     symbols = list_values(record, ["symbols", "codes", "tickers", "证券", "股票", "代码"])
@@ -697,12 +872,18 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "creator_url": first(record, ["creator_url", "author_url", "主页", "作者主页"]),
         "url": url,
         "domain": host_for(url),
+        "source_app": source_app,
         "item_id": first(record, ["item_id", "post_id", "video_id", "note_id", "微博ID", "视频ID", "笔记ID"]),
+        "visit_id": first(record, ["visit_id", "访问ID"]),
         "tags": tags,
         "topics": topics,
         "symbols": symbols,
         "duration_seconds": number(first(record, ["duration_seconds", "duration", "时长"])),
         "progress": first(record, ["progress", "watch_progress", "观看进度"]),
+        "visit_count": number(first(record, ["visit_count", "访问次数"])),
+        "typed_count": number(first(record, ["typed_count", "输入访问次数"])),
+        "transition": transition,
+        "transition_type": first(record, ["transition_type", "访问方式类型"]) or browser_transition_type(transition),
         "like_count": number(first(record, ["like_count", "likes", "点赞数"])),
         "comment_count": number(first(record, ["comment_count", "comments", "评论数"])),
         "share_count": number(first(record, ["share_count", "shares", "分享数", "转发数"])),
@@ -724,6 +905,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "row": row,
         "platform": platform,
         "action_type": action_type,
+        "source_app": data.get("source_app"),
         "source_section": data.get("source_section"),
         "source_archive": first(record, [SOURCE_ARCHIVE_KEY]),
         "archive_member": first(record, [SOURCE_MEMBER_KEY]),
@@ -907,6 +1089,7 @@ def build_manifest(
             "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
             "comment_preview_max_chars": COMMENT_PREVIEW_MAX_CHARS,
             "investment_classification_done": False,
+            "browser_history_domain_filtering": True,
         },
         "weak_evidence_policy": {
             "evidence_role": "weak_influence_signal",
@@ -952,8 +1135,22 @@ def influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     primary_topic_counts: Counter[str] = Counter()
     platform_topic_counts: Counter[str] = Counter()
     action_topic_counts: Counter[str] = Counter()
+    source_app_counts: Counter[str] = Counter()
+    transition_type_counts: Counter[str] = Counter()
+    visit_values: List[int] = []
+    typed_values: List[int] = []
     for event in usable_events:
         data = event.get("data") or {}
+        if data.get("source_app"):
+            source_app_counts[str(data["source_app"])] += 1
+        if data.get("transition_type"):
+            transition_type_counts[str(data["transition_type"])] += 1
+        visit_count = int_number(data.get("visit_count"))
+        if visit_count is not None:
+            visit_values.append(visit_count)
+        typed_count = int_number(data.get("typed_count"))
+        if typed_count is not None:
+            typed_values.append(typed_count)
         topics = data.get("social_topics") if isinstance(data.get("social_topics"), list) else []
         if not topics:
             topics = ["unclassified_social_topic"]
@@ -979,6 +1176,16 @@ def influence_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "events_with_creator_url": sum(1 for event in usable_events if (event.get("data") or {}).get("creator_url")),
         "events_with_url": sum(1 for event in usable_events if (event.get("data") or {}).get("url")),
         "events_with_domain": sum(1 for event in usable_events if (event.get("data") or {}).get("domain")),
+        "events_with_source_app": sum(1 for event in usable_events if (event.get("data") or {}).get("source_app")),
+        "source_app_counts": dict(sorted(source_app_counts.items())),
+        "browser_history_event_count": sum(
+            1 for event in usable_events if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+        ),
+        "events_with_visit_count": len(visit_values),
+        "total_visit_count": sum(visit_values) if visit_values else 0,
+        "events_with_typed_count": len(typed_values),
+        "total_typed_count": sum(typed_values) if typed_values else 0,
+        "transition_type_counts": dict(sorted(transition_type_counts.items())),
         "events_with_item_id": sum(1 for event in usable_events if (event.get("data") or {}).get("item_id")),
         "events_with_tags": sum(1 for event in usable_events if (event.get("data") or {}).get("tags")),
         "events_with_topics": sum(1 for event in usable_events if (event.get("data") or {}).get("topics")),
@@ -1096,6 +1303,9 @@ def social_activity_boundary_proof(
             "events_with_creator_url": surface["events_with_creator_url"],
             "events_with_url": surface["events_with_url"],
             "events_with_domain": surface["events_with_domain"],
+            "events_with_source_app": surface["events_with_source_app"],
+            "browser_history_event_count": surface["browser_history_event_count"],
+            "transition_type_counts": surface["transition_type_counts"],
             "events_with_item_id": surface["events_with_item_id"],
             "events_with_tags": surface["events_with_tags"],
             "events_with_symbols": surface["events_with_symbols"],
@@ -1112,6 +1322,9 @@ def social_activity_boundary_proof(
             "archive_member_count": int(audit.get("archive_member_count") or 0),
             "archive_member_event_count": int(audit.get("archive_member_event_count") or 0),
             "skipped_archive_member_count": int(audit.get("skipped_archive_member_count") or 0),
+            "browser_history_input_count": int(audit.get("browser_history_input_count") or 0),
+            "browser_history_event_count": int(audit.get("browser_history_event_count") or 0),
+            "browser_history_source_apps": audit.get("browser_history_source_apps") or [],
             "limit_reached": bool(audit.get("limit_reached")),
             "path_level_audit_available": bool(audit.get("path_results")),
             "archive_path_traversal_members_collected": False,
@@ -1124,6 +1337,7 @@ def social_activity_boundary_proof(
             "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
             "comment_preview_max_chars": COMMENT_PREVIEW_MAX_CHARS,
             "credentials_collected": False,
+            "browser_history_domain_filtering": True,
         },
         "wiki_boundary": {
             "event_schema": "collectorx.event.v1",
@@ -1141,6 +1355,8 @@ def social_activity_boundary_proof(
             "complete_social_activity_history_claimed": False,
             "real_account_validation_claimed": False,
             "platform_wide_scrape_performed": False,
+            "unrelated_browser_history_collected": False,
+            "browser_history_domain_filtering": True,
             "full_creator_profile_scraped": False,
             "full_content_mirrored": False,
             "private_platform_credentials_collected": False,
@@ -1250,6 +1466,16 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
         "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
         "archive_count": len(set(archives)),
         "source_section_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("source_section")),
+        "browser_history_event_count": sum(
+            1 for event in usable_events if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+        ),
+        "browser_history_source_apps": sorted(
+            {
+                str((event.get("data") or {}).get("source_app"))
+                for event in usable_events
+                if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+            }
+        ),
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
     }
@@ -1267,6 +1493,10 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
         audit["source_section_event_count"] = max(
             int(audit.get("source_section_event_count") or 0),
             sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("source_section")),
+        )
+        audit["browser_history_event_count"] = max(
+            int(audit.get("browser_history_event_count") or 0),
+            len([event for event in usable_events if str((event.get("data") or {}).get("source_app", "")).endswith("_history")]),
         )
         audit["archive_path_traversal_members_collected"] = False
         audit["windows_drive_archive_members_collected"] = False
@@ -1301,6 +1531,7 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- investment_claim_allowed: `{manifest['weak_evidence_policy']['investment_claim_allowed']}`",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
+        f"- browser_history_events: {manifest['source_audit'].get('browser_history_event_count', 0)}",
         f"- content_policy: `weak-preview-only`",
         "",
         "Generic social activity events are not written to the investor Wiki directly. Use the social-investment-influence lens.",
@@ -1378,6 +1609,34 @@ def number(value: Optional[str]) -> Optional[float]:
         return float(text) * multiplier
     except ValueError:
         return None
+
+
+def int_number(value: Any) -> Optional[int]:
+    numeric = number(str(value)) if value not in (None, "") else None
+    return int(numeric) if numeric is not None else None
+
+
+def browser_transition_type(value: Optional[str]) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    try:
+        transition = int(str(value))
+    except ValueError:
+        return str(value)
+    core = transition & 0xFF
+    return {
+        0: "link",
+        1: "typed",
+        2: "auto_bookmark",
+        3: "auto_subframe",
+        4: "manual_subframe",
+        5: "generated",
+        6: "auto_toplevel",
+        7: "form_submit",
+        8: "reload",
+        9: "keyword",
+        10: "keyword_generated",
+    }.get(core, "unknown")
 
 
 def sanitized(value: Any, key_hint: str = "") -> Any:

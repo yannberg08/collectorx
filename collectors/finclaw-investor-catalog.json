@@ -380,9 +380,9 @@
       "skill": "social-activity",
       "readiness": "baseline+audit",
       "gate": "G2",
-      "finclaw_action": "authorized-social-activity-export-import",
-      "cli": "python3 skills/social-activity/scripts/social_activity.py collect --input <authorized-social-activity-export> --out-dir <out-dir>",
-      "collects": "Weibo, Bilibili, and Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, social influence topics, symbols, engagement counts, weak influence signals, platform/action/field coverage, social activity boundary proof, per-input source audit, skipped file reasons, and ZIP member audit.",
+      "finclaw_action": "authorized-social-activity-export-or-browser-history-copy-import",
+      "cli": "python3 skills/social-activity/scripts/social_activity.py collect --input <authorized-social-activity-export-or-browser-history-copy> --out-dir <out-dir>",
+      "collects": "Weibo, Bilibili, and Xiaohongshu follows, likes, favorites, watch history, comments, shares, browser-history visits, source apps, visit/typed counts, browser transition types, domain-filtered URLs, creators, social influence topics, symbols, engagement counts, weak influence signals, platform/action/field coverage, social activity boundary proof, per-input source audit, skipped file reasons, and ZIP member audit.",
       "must_not_collect": "Standalone investment conclusions, platform-wide scraping, full creator-profile scraping, or private platform secrets.",
       "production_gap": "Real platform exports, creator/domain allowlists, and weak-evidence backtest."
     },

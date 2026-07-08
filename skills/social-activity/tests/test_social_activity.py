@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -262,7 +263,7 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["collection_readiness"]["weak_signal_field_coverage_status"] == "all_expected_weak_signal_fields_observed"
         assert manifest["collection_readiness"]["collector_claims_investment_conclusion"] is False
-        assert manifest["source_audit"]["source_type"] == "authorized_social_activity_export"
+        assert manifest["source_audit"]["source_type"] == "authorized_social_activity_export_or_browser_history_copy"
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["resolved_input_file_count"] == 3
         assert manifest["source_audit"]["parsed_record_count"] == 8
@@ -327,6 +328,95 @@ def test_collect_zip_limit_counts_only_emitted_records() -> None:
         assert source_audit["path_results"][0]["parsed_record_count"] == 1
 
 
+def test_collect_browser_history_copy_filters_social_domains() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        history = root / "History"
+        out = root / "out"
+        conn = sqlite3.connect(history)
+        try:
+            conn.executescript(
+                """
+                CREATE TABLE urls (
+                    id INTEGER PRIMARY KEY,
+                    url TEXT,
+                    title TEXT,
+                    visit_count INTEGER,
+                    typed_count INTEGER
+                );
+                CREATE TABLE visits (
+                    id INTEGER PRIMARY KEY,
+                    url INTEGER,
+                    visit_time INTEGER,
+                    transition INTEGER
+                );
+                """
+            )
+            conn.executemany(
+                "INSERT INTO urls(id, url, title, visit_count, typed_count) VALUES (?, ?, ?, ?, ?)",
+                [
+                    (1, "https://www.bilibili.com/video/BV1", "半导体产业链复盘", 5, 1),
+                    (2, "https://weibo.com/123/456", "宏观流动性图表", 3, 0),
+                    (3, "https://www.xiaohongshu.com/explore/abc", "基金定投纪律", 2, 1),
+                    (4, "https://example.com/not-social", "unrelated", 9, 9),
+                ],
+            )
+            conn.executemany(
+                "INSERT INTO visits(id, url, visit_time, transition) VALUES (?, ?, ?, ?)",
+                [
+                    (11, 1, 13411670400000000, 1),
+                    (12, 2, 13411670300000000, 0),
+                    (13, 3, 13411670200000000, 8),
+                    (14, 4, 13411670100000000, 1),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(history),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 3
+        assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
+        assert {event["data"]["source_app"] for event in events} == {"chromium_history"}
+        assert {event["data"]["action_type"] for event in events} == {"watch"}
+        assert all("example.com" not in event["data"]["url"] for event in events)
+        bilibili = next(event for event in events if event["data"]["platform"] == "bilibili")
+        assert bilibili["data"]["visit_count"] == 5.0
+        assert bilibili["data"]["typed_count"] == 1.0
+        assert bilibili["data"]["transition_type"] == "typed"
+        assert bilibili["raw_ref"]["source_app"] == "chromium_history"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["source_audit"]["source_type"] == "authorized_social_activity_export_or_browser_history_copy"
+        assert manifest["source_audit"]["browser_history_input_count"] == 1
+        assert manifest["source_audit"]["browser_history_event_count"] == 3
+        assert manifest["source_audit"]["browser_history_source_apps"] == ["chromium_history"]
+        assert manifest["source_audit"]["extension_counts"] == {"<browser_history>": 1}
+        assert manifest["source_audit"]["path_results"][0]["parser"] == "browser_history"
+        assert manifest["influence_surface_summary"]["browser_history_event_count"] == 3
+        assert manifest["influence_surface_summary"]["events_with_source_app"] == 3
+        assert manifest["influence_surface_summary"]["total_visit_count"] == 10
+        assert manifest["influence_surface_summary"]["total_typed_count"] == 2
+        assert manifest["influence_surface_summary"]["transition_type_counts"] == {"link": 1, "reload": 1, "typed": 1}
+        assert manifest["social_activity_boundary_proof"]["source_boundary"]["browser_history_event_count"] == 3
+        assert manifest["social_activity_boundary_proof"]["content_boundary"]["browser_history_domain_filtering"] is True
+        assert manifest["social_activity_boundary_proof"]["false_claims"]["unrelated_browser_history_collected"] is False
+
+
 def test_collect_missing_input_writes_gap_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -369,5 +459,6 @@ if __name__ == "__main__":
     test_collect_social_activity_exports()
     test_collect_nested_sections_workbook_and_weak_policy()
     test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_browser_history_copy_filters_social_domains()
     test_collect_missing_input_writes_gap_audit()
     print("social-activity tests passed.")
