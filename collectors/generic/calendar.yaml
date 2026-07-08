@@ -23,6 +23,11 @@ scope:
     - time_quality_summary
     - calendar_conflict_summary
     - source_audit_manifest
+    - calendar_scope_policy_audit
+    - authorized_source_platform_filters
+    - authorized_calendar_filters
+    - authorized_attendee_filters
+    - authorized_keyword_filters
     - archive_member_provenance
     - archive_member_skip_audit
     - path_level_collection_audit
@@ -38,6 +43,6 @@ description: |
   支持 ICS/JSON/CSV/TSV/ZIP 授权导出，并在 manifest 中记录 Apple、Google、
   Outlook、飞书、钉钉、企业微信、腾讯会议等来源平台覆盖情况，以及字段覆盖、
   会议/提醒/循环时间面、时长/跨天/异常时间段/同日历冲突质量审计、ZIP 来源审计、
-  跳过成员原因和逐文件解析结果。
+  跳过成员原因、逐文件解析结果，以及来源平台/日历/参与人/关键词授权范围策略审计。
   投资分身需要的交易计划、财报日程、复盘提醒由 task-calendar-investor lens
   从 calendar/ticktick lake 中筛选。

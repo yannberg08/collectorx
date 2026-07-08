@@ -11,7 +11,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 
 COLLECTOR = "calendar"
@@ -55,8 +55,33 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    allow_source_platforms: Optional[Sequence[str]] = None,
+    deny_source_platforms: Optional[Sequence[str]] = None,
+    allow_calendars: Optional[Sequence[str]] = None,
+    deny_calendars: Optional[Sequence[str]] = None,
+    allow_attendees: Optional[Sequence[str]] = None,
+    deny_attendees: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        allow_source_platforms=allow_source_platforms,
+        deny_source_platforms=deny_source_platforms,
+        allow_calendars=allow_calendars,
+        deny_calendars=deny_calendars,
+        allow_attendees=allow_attendees,
+        deny_attendees=deny_attendees,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -65,10 +90,28 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_source_platforms: Optional[Sequence[str]] = None,
+    deny_source_platforms: Optional[Sequence[str]] = None,
+    allow_calendars: Optional[Sequence[str]] = None,
+    deny_calendars: Optional[Sequence[str]] = None,
+    allow_attendees: Optional[Sequence[str]] = None,
+    deny_attendees: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     paths = list(iter_paths(input_list))
-    audit = new_collection_audit(input_list, paths, limit=limit)
+    scope_policy = build_calendar_scope_policy(
+        allow_source_platforms=allow_source_platforms,
+        deny_source_platforms=deny_source_platforms,
+        allow_calendars=allow_calendars,
+        deny_calendars=deny_calendars,
+        allow_attendees=allow_attendees,
+        deny_attendees=deny_attendees,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
+    audit = new_collection_audit(input_list, paths, limit=limit, scope_policy=scope_policy)
     if not paths:
         events = [gap_event(collected_at=collected_at, reason="calendar_authorized_input_missing")]
         audit["emitted_event_count"] = len(events)
@@ -80,27 +123,47 @@ def collect_from_inputs_with_audit(
             "path": str(path),
             "extension": path.suffix.lower() or "<none>",
             "parsed_record_count": 0,
+            "candidate_record_count": 0,
             "emitted_event_count": 0,
+            "scope_policy_filtered_record_count": 0,
             "status": "parsed",
         }
         audit["path_results"].append(path_result)
         increment_counter(audit, "extension_counts", path_result["extension"])
         records = parse_path(path, audit=audit)
         path_result["parsed_record_count"] = len(records)
+        path_result["candidate_record_count"] = len(records)
         audit["parsed_record_count"] += len(records)
+        audit["candidate_record_count"] += len(records)
         for row, record in enumerate(records, start=1):
-            events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+            filter_reason = calendar_scope_policy_filter_reason(event, scope_policy)
+            if filter_reason:
+                path_result["scope_policy_filtered_record_count"] += 1
+                audit["calendar_scope_policy"]["filtered_record_count"] += 1
+                increment_counter(audit["calendar_scope_policy"], "filter_reason_counts", filter_reason)
+                continue
+            events.append(event)
             path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
                 audit["emitted_event_count"] = len(events[:limit])
                 finalize_audit(audit)
                 return events[:limit], audit
+        if records and not path_result["emitted_event_count"] and path_result["scope_policy_filtered_record_count"]:
+            path_result["status"] = "filtered_by_scope_policy"
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
 
 
-def new_collection_audit(inputs: List[str], paths: List[Path], *, limit: Optional[int] = None) -> Dict[str, Any]:
+def new_collection_audit(
+    inputs: List[str],
+    paths: List[Path],
+    *,
+    limit: Optional[int] = None,
+    scope_policy: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    calendar_scope_policy = scope_policy or build_calendar_scope_policy()
     return {
         "source_type": "authorized_local_calendar_export",
         "input_count": len(inputs),
@@ -112,12 +175,135 @@ def new_collection_audit(inputs: List[str], paths: List[Path], *, limit: Optiona
         "skipped_archive_member_extension_counts": {},
         "skipped_archive_member_reason_counts": {},
         "parsed_record_count": 0,
+        "candidate_record_count": 0,
         "emitted_event_count": 0,
         "limit": limit,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
+        "calendar_scope_policy": {
+            **calendar_scope_policy,
+            "filtered_record_count": 0,
+            "filter_reason_counts": {},
+            "policy_does_not_assert_investment_relevance": True,
+        },
+        "calendar_scope_policy_filtered_all": False,
         "path_results": [],
     }
+
+
+def build_calendar_scope_policy(
+    *,
+    allow_source_platforms: Optional[Sequence[str]] = None,
+    deny_source_platforms: Optional[Sequence[str]] = None,
+    allow_calendars: Optional[Sequence[str]] = None,
+    deny_calendars: Optional[Sequence[str]] = None,
+    allow_attendees: Optional[Sequence[str]] = None,
+    deny_attendees: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "enabled": False,
+        "allow_source_platforms": split_policy_terms(allow_source_platforms),
+        "deny_source_platforms": split_policy_terms(deny_source_platforms),
+        "allow_calendars": split_policy_terms(allow_calendars),
+        "deny_calendars": split_policy_terms(deny_calendars),
+        "allow_attendees": split_policy_terms(allow_attendees),
+        "deny_attendees": split_policy_terms(deny_attendees),
+        "allow_keywords": split_policy_terms(allow_keywords),
+        "deny_keywords": split_policy_terms(deny_keywords),
+    }
+    policy["enabled"] = any(policy[key] for key in policy if key != "enabled")
+    return policy
+
+
+def split_policy_terms(values: Optional[Sequence[str]]) -> List[str]:
+    terms: List[str] = []
+    for value in values or []:
+        for part in re.split(r"[,，]", str(value)):
+            term = part.strip()
+            if term:
+                terms.append(term)
+    return sorted(set(terms))
+
+
+def calendar_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    source_platform = str(
+        (event.get("data") or {}).get("source_platform") or (event.get("raw_ref") or {}).get("source_platform") or ""
+    ).lower()
+    calendar_surface = calendar_name_surface(event)
+    attendee_surface = calendar_attendee_surface(event)
+    keyword_surface = calendar_keyword_surface(event)
+
+    if policy_hit(policy.get("deny_source_platforms", []), source_platform):
+        return "source_platform_denied"
+    if policy_hit(policy.get("deny_calendars", []), calendar_surface):
+        return "calendar_denied"
+    if policy_hit(policy.get("deny_attendees", []), attendee_surface):
+        return "attendee_denied"
+    if policy_hit(policy.get("deny_keywords", []), keyword_surface):
+        return "keyword_denied"
+    if policy.get("allow_source_platforms") and not policy_hit(policy.get("allow_source_platforms", []), source_platform):
+        return "source_platform_not_allowed"
+    if policy.get("allow_calendars") and not policy_hit(policy.get("allow_calendars", []), calendar_surface):
+        return "calendar_not_allowed"
+    if policy.get("allow_attendees") and not policy_hit(policy.get("allow_attendees", []), attendee_surface):
+        return "attendee_not_allowed"
+    if policy.get("allow_keywords") and not policy_hit(policy.get("allow_keywords", []), keyword_surface):
+        return "keyword_not_allowed"
+    return None
+
+
+def calendar_name_surface(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    parts = [
+        data.get("calendar_name"),
+        data.get("source_platform"),
+        raw_ref.get("path"),
+        raw_ref.get("archive_member"),
+    ]
+    return " ".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def calendar_attendee_surface(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    parts: List[str] = []
+    organizer = data.get("organizer")
+    if organizer:
+        parts.append(str(organizer))
+    for attendee in data.get("attendees") or []:
+        if isinstance(attendee, dict):
+            parts.extend(str(value) for value in attendee.values() if value not in (None, ""))
+        elif attendee not in (None, ""):
+            parts.append(str(attendee))
+    return " ".join(parts).lower()
+
+
+def calendar_keyword_surface(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    parts = [
+        data.get("title"),
+        data.get("description_preview"),
+        data.get("calendar_name"),
+        data.get("location"),
+        data.get("meeting_url"),
+        data.get("source_platform"),
+        (event.get("raw_ref") or {}).get("path"),
+        (event.get("raw_ref") or {}).get("archive_member"),
+    ]
+    return " ".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def policy_hit(patterns: Sequence[str], surface: str) -> Optional[str]:
+    lowered = surface.lower()
+    for pattern in patterns:
+        probe = str(pattern).strip().lower()
+        if probe and probe in lowered:
+            return str(pattern)
+    return None
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -428,6 +614,7 @@ def build_manifest(
         for platform, count in source_platform_counts.items()
         if platform not in EXPECTED_P1_CALENDAR_PLATFORMS and platform not in GENERIC_CALENDAR_PLATFORMS
     )
+    readiness_status = calendar_readiness_status(events, collection_audit, gap_only=gap_only)
     return {
         "schema": "collectorx.calendar.manifest.v1",
         "collector": COLLECTOR,
@@ -455,12 +642,12 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_calendar_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": readiness_status,
+            "can_enter_finclaw": readiness_status == "events_collected",
             "can_claim_investment_calendar": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": calendar_source_collection_scope(readiness_status),
             "platform_coverage_status": platform_coverage_status(events, missing_expected),
-            "next_action": "Provide authorized ICS/JSON/CSV calendar export." if gap_only else "Feed calendar events into task-calendar-investor lens.",
+            "next_action": calendar_next_action(readiness_status),
         },
     }
 
@@ -476,6 +663,41 @@ def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: Lis
     if not missing_expected:
         return "all_expected_platforms_observed"
     return "partial_expected_platforms_observed"
+
+
+def calendar_readiness_status(
+    events: List[Dict[str, Any]],
+    collection_audit: Optional[Dict[str, Any]],
+    *,
+    gap_only: bool,
+) -> str:
+    if gap_only:
+        return "needs_calendar_authorized_input"
+    if events:
+        return "events_collected"
+    if collection_audit and collection_audit.get("calendar_scope_policy_filtered_all"):
+        return "scope_policy_filtered_all"
+    return "no_calendar_events_collected"
+
+
+def calendar_next_action(status: str) -> str:
+    if status == "needs_calendar_authorized_input":
+        return "Provide authorized ICS/JSON/CSV calendar export."
+    if status == "scope_policy_filtered_all":
+        return "Check calendar source-platform/calendar/attendee/keyword filters or provide a broader authorized calendar export."
+    if status == "events_collected":
+        return "Feed calendar events into task-calendar-investor lens."
+    return "Provide authorized calendar records."
+
+
+def calendar_source_collection_scope(status: str) -> str:
+    if status == "needs_calendar_authorized_input":
+        return "none"
+    if status == "scope_policy_filtered_all":
+        return "authorized_input_filtered_by_scope_policy"
+    if status == "events_collected":
+        return "partial_authorized_input"
+    return "none"
 
 
 def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -565,6 +787,14 @@ def finalize_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
         "skipped_archive_member_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    scope_policy = audit.get("calendar_scope_policy") or {}
+    scope_policy["filter_reason_counts"] = dict(sorted((scope_policy.get("filter_reason_counts") or {}).items()))
+    audit["calendar_scope_policy"] = scope_policy
+    audit["calendar_scope_policy_filtered_all"] = (
+        bool(scope_policy.get("enabled"))
+        and int(audit.get("candidate_record_count") or 0) > 0
+        and int(audit.get("emitted_event_count") or 0) == 0
+    )
     return audit
 
 

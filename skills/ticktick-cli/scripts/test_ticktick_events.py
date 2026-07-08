@@ -170,6 +170,127 @@ def test_ticktick_zip_dida_export_and_unsafe_member_skip() -> None:
         assert manifest["time_status_summary"]["completed_task_count"] == 1
 
 
+def test_ticktick_scope_policy_filters_source_project_tag_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "tasks.json"
+        out = root / "out"
+        source.write_text(
+            json.dumps(
+                [
+                    {
+                        "source_app": "ticktick",
+                        "id": "task-invest",
+                        "projectName": "投资研究",
+                        "title": "复盘贵州茅台财报",
+                        "content": "检查现金流和估值假设",
+                        "tags": ["投资"],
+                    },
+                    {
+                        "source_app": "ticktick",
+                        "id": "task-life",
+                        "projectName": "生活清单",
+                        "title": "周末买菜",
+                        "content": "买菜和家务",
+                        "tags": ["生活"],
+                    },
+                    {
+                        "source": "滴答清单",
+                        "id": "task-dida",
+                        "projectName": "投资研究",
+                        "title": "Dida 估值提醒",
+                        "tags": ["投资"],
+                    },
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(source),
+                "--out-dir",
+                str(out),
+                "--allow-source-app",
+                "ticktick",
+                "--allow-project",
+                "投资研究",
+                "--allow-tag",
+                "投资",
+                "--deny-keyword",
+                "买菜",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["title"] == "复盘贵州茅台财报"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["source_audit"]
+        policy = audit["task_scope_policy"]
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert audit["candidate_record_count"] == 3
+        assert audit["parsed_record_count"] == 3
+        assert audit["emitted_event_count"] == 1
+        assert policy["enabled"] is True
+        assert policy["allow_source_apps"] == ["ticktick"]
+        assert policy["allow_projects"] == ["投资研究"]
+        assert policy["allow_tags"] == ["投资"]
+        assert policy["deny_keywords"] == ["买菜"]
+        assert policy["filtered_record_count"] == 2
+        assert policy["filter_reason_counts"] == {"keyword_denied": 1, "source_app_not_allowed": 1}
+        assert policy["policy_does_not_assert_investment_relevance"] is True
+        assert audit["path_results"][0]["scope_policy_filtered_record_count"] == 2
+        assert audit["task_scope_policy_filtered_all"] is False
+
+
+def test_ticktick_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "tasks.json"
+        out = root / "out"
+        source.write_text(
+            json.dumps(
+                [{"source_app": "ticktick", "projectName": "投资研究", "title": "复盘任务", "tags": ["投资"]}],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(source),
+                "--out-dir",
+                str(out),
+                "--allow-tag",
+                "不存在的标签",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events_path = out / "exports" / "ticktick" / "events.jsonl"
+        assert events_path.read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["source_audit"]
+        assert audit["candidate_record_count"] == 1
+        assert audit["task_scope_policy_filtered_all"] is True
+        assert audit["task_scope_policy"]["filtered_record_count"] == 1
+        assert audit["task_scope_policy"]["filter_reason_counts"] == {"tag_not_allowed": 1}
+
+
 def test_ticktick_without_input_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -188,5 +309,7 @@ def test_ticktick_without_input_gap() -> None:
 if __name__ == "__main__":
     test_ticktick_json_to_task_events()
     test_ticktick_zip_dida_export_and_unsafe_member_skip()
+    test_ticktick_scope_policy_filters_source_project_tag_and_keyword()
+    test_ticktick_scope_policy_filtered_all_status()
     test_ticktick_without_input_gap()
     print("ticktick event tests passed.")

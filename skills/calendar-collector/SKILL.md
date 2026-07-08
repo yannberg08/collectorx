@@ -1,6 +1,6 @@
 ---
 name: calendar-collector
-description: 通用日历采集器。采集用户授权的 ICS、JSON、CSV、TSV、ZIP 日历导出，输出 CollectorX calendar 事件和平台覆盖 manifest。它只采日程原始证据，不判断是否投资相关；投资计划、财报提醒、复盘提醒由 task-calendar-investor lens 筛选。
+description: 通用日历采集器。采集用户授权的 ICS、JSON、CSV、TSV、ZIP 日历导出，输出 CollectorX calendar 事件和平台覆盖 manifest。支持来源平台、日历名、参与人、关键词授权范围过滤；它只采日程原始证据，不判断是否投资相关；投资计划、财报提醒、复盘提醒由 task-calendar-investor lens 筛选。
 ---
 
 # 通用日历采集器
@@ -27,17 +27,24 @@ description: 通用日历采集器。采集用户授权的 ICS、JSON、CSV、TS
 ```bash
 python <SKILL_DIR>/scripts/calendar_query.py collect \
   --input ~/Downloads/calendar.ics \
+  --allow-calendar 投资日历 \
+  --allow-keyword 复盘 \
   --out-dir ~/Desktop/calendar-collect
 ```
 
 支持 ICS、JSON、JSONL、CSV、TSV 和 ZIP 授权导出包。没有授权输入时，只输出缺口事件。
+如果用户只授权某些来源平台、日历、参与人或关键词范围，可传
+`--allow-source-platform` / `--deny-source-platform`、`--allow-calendar` /
+`--deny-calendar`、`--allow-attendee` / `--deny-attendee`、`--allow-keyword` /
+`--deny-keyword`。`manifest.source_audit.calendar_scope_policy` 会记录过滤条件、
+候选日程数、过滤日程数和原因；这些条件只收窄授权范围，不判断日程是否投资相关。
 
 `manifest.json` 会写入 `platform_coverage`，记录 P1 日历通道预期平台、
 本次实际观察平台、缺失平台、事件数和 `real_account_validation` 状态。
 它也会写入 `field_coverage`、`time_surface_summary`、`source_audit` 和
 `evidence_policy`，用于判断开始/结束时间、会议链接、参与人、循环、提醒、
 时长、跨天、异常时间段、同日历时间冲突、ZIP 来源、ZIP 跳过成员数量/原因、
-逐文件解析结果和 generic/lens 边界。
+逐文件解析结果、授权范围过滤审计和 generic/lens 边界。
 
 投资分身使用时，应把 `lake/calendar/events.jsonl` 交给
 `task-calendar-investor` lens，由 lens 只筛交易计划、研究任务、财报日程和复盘提醒。

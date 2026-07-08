@@ -64,8 +64,8 @@ skill-name/
 |--------|--------|------|
 | wechat-export | 15+ | 迁移 skill，需确认上游许可与真实环境 |
 | feishu | 8+ | 飞书 OAuth/API 工具 + 通用采集器 baseline；支持授权 JSON/CSV/HTML/Markdown/TXT/ZIP 本地导入、字段覆盖、飞书数据面、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤，仍需真实飞书账号/API 验证 |
-| ticktick-cli | 12+ | 滴答清单 API 工具 + SoulMirror YAML/AgentRunner 主采集路径；`collect_for_soulmirror.py` 输出任务快照数组，未授权以 `ticktick_auth_required` 失败，离线 JSON/ZIP 转换 helper 保留到 `exports/ticktick/events.jsonl`，已补任务时区/重复/提醒/checklist 完成度面谱，仍需托管 OAuth Broker 和真实账号验证 |
-| calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest、时长/跨天/异常时间段/同日历冲突质量审计，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |
+| ticktick-cli | 12+ | 滴答清单 API 工具 + SoulMirror YAML/AgentRunner 主采集路径；`collect_for_soulmirror.py` 输出任务快照数组，未授权以 `ticktick_auth_required` 失败，离线 JSON/ZIP 转换 helper 保留到 `exports/ticktick/events.jsonl`，已补任务时区/重复/提醒/checklist 完成度面谱和来源应用/项目/标签/关键词 scope-policy 审计，仍需托管 OAuth Broker 和真实账号验证 |
+| calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖、来源平台/日历/参与人/关键词 scope-policy 审计、ZIP 跳过审计、逐文件解析 manifest、时长/跨天/异常时间段/同日历冲突质量审计，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |
 | meeting-artifacts | 7+ | 通用会议产物采集器 baseline；支持授权本地文件/平台导出/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest、凭证字段过滤、参会人角色、行动项、决策点、风险点、录制引用和证券代码线索；`meeting-minutes` lens 已汇总路演/调研/投委会/专家会/业绩会/风险/后续行动面谱、会议边界证明和决策行动边界证明，仍需真实飞书/钉钉/企业微信/腾讯会议账号验证 |
 | collaboration-exports | 7+ | 钉钉/企业微信通用协作导出采集器 baseline；支持授权 JSON/CSV/HTML/文本/ZIP、消息/联系人/文件/会议指针、ZIP 跳过审计和逐文件解析 manifest，仍需真实账号/API 验证 |
 | wechat-favorites | 8+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、动作覆盖、行为字段、文章 ID、标的线索、逐输入来源审计、跳过原因和凭证字段过滤；`wechat-article-favorites` lens 已汇总文章面谱、动作、来源类型、阅读/收藏/分享行为边界和文章边界证明，仍需真实微信收藏/公众号阅读库验证 |
@@ -83,7 +83,7 @@ skill-name/
 | email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、Apple Mail EMLX、Maildir、Thunderbird mbox、账户/文件夹审计、本机扫描根目录审计、逐输入导入审计、跳过文件/ZIP 成员原因、字段覆盖和邮箱边界证明已补齐，仍需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
 | notes-collector | 8+ | 笔记通用采集器 baseline；支持 Obsidian Markdown/Canvas、Notion、有道/印象/Markdown/HTML/JSON/CSV/TSV/ENEX/ZIP 授权导入、来源应用/路径/标签授权范围策略、平台覆盖、表格/Canvas 导入审计、逐输入来源审计、跳过原因和内容策略 manifest，仍需真实 Notion/有道/印象账号验证 |
-| investor-source-collectors | 8+ | 投资分身分类、路由和 lens 证据包工具；wechat-investment-dialogue 已补来源策略、对话边界证明和微信投资对话面谱；research-documents 已补逐输入审计、显式内容抽取、legacy/binary `.xls` parser 边界审计、`--include-image-ocr` 本地截图 OCR 审计、研究语料边界证明和研究文档面谱；investment-notes 已补投资笔记边界证明和笔记类型面谱；task-calendar-investor 已补任务日历边界证明、投资面谱、任务 checklist/重复/时区执行结构，不替代通用/垂直源采集器 |
+| investor-source-collectors | 8+ | 投资分身分类、路由和 lens 证据包工具；wechat-investment-dialogue 已补来源策略、对话边界证明和微信投资对话面谱；research-documents 已补逐输入审计、显式内容抽取、legacy/binary `.xls` parser 边界审计、`--include-image-ocr` 本地截图 OCR 审计、研究语料边界证明和研究文档面谱；investment-notes 已补投资笔记边界证明和笔记类型面谱；task-calendar-investor 已补任务日历边界证明、scope-policy 边界、投资面谱、任务 checklist/重复/时区执行结构，不替代通用/垂直源采集器 |
 
 ## 输出契约
 

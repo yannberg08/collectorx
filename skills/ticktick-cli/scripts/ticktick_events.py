@@ -17,7 +17,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 
 COLLECTOR = "ticktick"
@@ -58,8 +58,33 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    allow_source_apps: Optional[Sequence[str]] = None,
+    deny_source_apps: Optional[Sequence[str]] = None,
+    allow_projects: Optional[Sequence[str]] = None,
+    deny_projects: Optional[Sequence[str]] = None,
+    allow_tags: Optional[Sequence[str]] = None,
+    deny_tags: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_projects=allow_projects,
+        deny_projects=deny_projects,
+        allow_tags=allow_tags,
+        deny_tags=deny_tags,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -68,10 +93,28 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_source_apps: Optional[Sequence[str]] = None,
+    deny_source_apps: Optional[Sequence[str]] = None,
+    allow_projects: Optional[Sequence[str]] = None,
+    deny_projects: Optional[Sequence[str]] = None,
+    allow_tags: Optional[Sequence[str]] = None,
+    deny_tags: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     paths = list(iter_paths(input_list))
-    audit = new_collection_audit(input_list, paths, limit=limit)
+    scope_policy = build_task_scope_policy(
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_projects=allow_projects,
+        deny_projects=deny_projects,
+        allow_tags=allow_tags,
+        deny_tags=deny_tags,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
+    audit = new_collection_audit(input_list, paths, limit=limit, scope_policy=scope_policy)
     if not paths:
         events = [gap_event(collected_at=collected_at, reason="ticktick_authorized_input_missing")]
         audit["emitted_event_count"] = len(events)
@@ -83,27 +126,47 @@ def collect_from_inputs_with_audit(
             "path": str(path),
             "extension": path.suffix.lower() or "<none>",
             "parsed_record_count": 0,
+            "candidate_record_count": 0,
             "emitted_event_count": 0,
+            "scope_policy_filtered_record_count": 0,
             "status": "parsed",
         }
         audit["path_results"].append(path_result)
         increment_counter(audit, "extension_counts", path_result["extension"])
         records = parse_path(path, audit=audit)
         path_result["parsed_record_count"] = len(records)
+        path_result["candidate_record_count"] = len(records)
         audit["parsed_record_count"] += len(records)
+        audit["candidate_record_count"] += len(records)
         for record in records:
-            events.append(task_to_event(record, path=path, collected_at=collected_at))
+            event = task_to_event(record, path=path, collected_at=collected_at)
+            filter_reason = task_scope_policy_filter_reason(event, scope_policy)
+            if filter_reason:
+                path_result["scope_policy_filtered_record_count"] += 1
+                audit["task_scope_policy"]["filtered_record_count"] += 1
+                increment_counter(audit["task_scope_policy"], "filter_reason_counts", filter_reason)
+                continue
+            events.append(event)
             path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
                 audit["emitted_event_count"] = len(events[:limit])
                 finalize_audit(audit)
                 return events[:limit], audit
+        if records and not path_result["emitted_event_count"] and path_result["scope_policy_filtered_record_count"]:
+            path_result["status"] = "filtered_by_scope_policy"
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
 
 
-def new_collection_audit(inputs: List[str], paths: List[Path], *, limit: Optional[int] = None) -> Dict[str, Any]:
+def new_collection_audit(
+    inputs: List[str],
+    paths: List[Path],
+    *,
+    limit: Optional[int] = None,
+    scope_policy: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    task_scope_policy = scope_policy or build_task_scope_policy()
     return {
         "source_type": "authorized_local_ticktick_export",
         "input_count": len(inputs),
@@ -115,12 +178,130 @@ def new_collection_audit(inputs: List[str], paths: List[Path], *, limit: Optiona
         "skipped_archive_member_extension_counts": {},
         "skipped_archive_member_reason_counts": {},
         "parsed_record_count": 0,
+        "candidate_record_count": 0,
         "emitted_event_count": 0,
         "limit": limit,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
+        "task_scope_policy": {
+            **task_scope_policy,
+            "filtered_record_count": 0,
+            "filter_reason_counts": {},
+            "policy_does_not_assert_investment_relevance": True,
+        },
+        "task_scope_policy_filtered_all": False,
         "path_results": [],
     }
+
+
+def build_task_scope_policy(
+    *,
+    allow_source_apps: Optional[Sequence[str]] = None,
+    deny_source_apps: Optional[Sequence[str]] = None,
+    allow_projects: Optional[Sequence[str]] = None,
+    deny_projects: Optional[Sequence[str]] = None,
+    allow_tags: Optional[Sequence[str]] = None,
+    deny_tags: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "enabled": False,
+        "allow_source_apps": split_policy_terms(allow_source_apps),
+        "deny_source_apps": split_policy_terms(deny_source_apps),
+        "allow_projects": split_policy_terms(allow_projects),
+        "deny_projects": split_policy_terms(deny_projects),
+        "allow_tags": split_policy_terms(allow_tags),
+        "deny_tags": split_policy_terms(deny_tags),
+        "allow_keywords": split_policy_terms(allow_keywords),
+        "deny_keywords": split_policy_terms(deny_keywords),
+    }
+    policy["enabled"] = any(policy[key] for key in policy if key != "enabled")
+    return policy
+
+
+def split_policy_terms(values: Optional[Sequence[str]]) -> List[str]:
+    terms: List[str] = []
+    for value in values or []:
+        for part in re.split(r"[,，]", str(value)):
+            term = part.strip()
+            if term:
+                terms.append(term)
+    return sorted(set(terms))
+
+
+def task_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    source_app = str((event.get("data") or {}).get("source_app") or (event.get("raw_ref") or {}).get("source_app") or "").lower()
+    project_surface = task_project_surface(event)
+    tag_surface = task_tag_surface(event)
+    keyword_surface = task_keyword_surface(event)
+
+    if policy_hit(policy.get("deny_source_apps", []), source_app):
+        return "source_app_denied"
+    if policy_hit(policy.get("deny_projects", []), project_surface):
+        return "project_denied"
+    if policy_hit(policy.get("deny_tags", []), tag_surface):
+        return "tag_denied"
+    if policy_hit(policy.get("deny_keywords", []), keyword_surface):
+        return "keyword_denied"
+    if policy.get("allow_source_apps") and not policy_hit(policy.get("allow_source_apps", []), source_app):
+        return "source_app_not_allowed"
+    if policy.get("allow_projects") and not policy_hit(policy.get("allow_projects", []), project_surface):
+        return "project_not_allowed"
+    if policy.get("allow_tags") and not policy_hit(policy.get("allow_tags", []), tag_surface):
+        return "tag_not_allowed"
+    if policy.get("allow_keywords") and not policy_hit(policy.get("allow_keywords", []), keyword_surface):
+        return "keyword_not_allowed"
+    return None
+
+
+def task_project_surface(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    parts = [
+        data.get("project_name"),
+        data.get("project_id"),
+        raw_ref.get("project_id"),
+        raw_ref.get("path"),
+        raw_ref.get("archive_member"),
+    ]
+    return " ".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def task_tag_surface(event: Dict[str, Any]) -> str:
+    tags = (event.get("data") or {}).get("tags") or []
+    if isinstance(tags, list):
+        return " ".join(str(tag) for tag in tags if str(tag)).lower()
+    return str(tags).lower()
+
+
+def task_keyword_surface(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    checklist_titles = []
+    for item in data.get("checklist_items") or []:
+        if isinstance(item, dict) and item.get("title"):
+            checklist_titles.append(str(item["title"]))
+    parts = [
+        data.get("title"),
+        data.get("content_preview"),
+        data.get("project_name"),
+        " ".join(str(tag) for tag in data.get("tags") or []),
+        " ".join(checklist_titles),
+        (event.get("raw_ref") or {}).get("path"),
+        (event.get("raw_ref") or {}).get("archive_member"),
+    ]
+    return " ".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def policy_hit(patterns: Sequence[str], surface: str) -> Optional[str]:
+    lowered = surface.lower()
+    for pattern in patterns:
+        probe = str(pattern).strip().lower()
+        if probe and probe in lowered:
+            return str(pattern)
+    return None
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -335,6 +516,7 @@ def build_manifest(
     observed_expected = [app for app in EXPECTED_P1_TASK_PLATFORMS if source_app_counts.get(app)]
     missing_expected = [app for app in EXPECTED_P1_TASK_PLATFORMS if not source_app_counts.get(app)]
     unknown_event_count = sum(count for app, count in source_app_counts.items() if app not in EXPECTED_P1_TASK_PLATFORMS)
+    readiness_status = task_readiness_status(events, collection_audit, gap_only=gap_only)
     return {
         "schema": "collectorx.ticktick.manifest.v1",
         "collector": COLLECTOR,
@@ -361,12 +543,12 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_ticktick_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": readiness_status,
+            "can_enter_finclaw": readiness_status == "events_collected",
             "can_claim_investment_tasks": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": task_source_collection_scope(readiness_status),
             "platform_coverage_status": platform_coverage_status(events, missing_expected),
-            "next_action": "Provide authorized TickTick export/API output." if gap_only else "Feed task events into task-calendar-investor lens.",
+            "next_action": task_next_action(readiness_status),
         },
     }
 
@@ -382,6 +564,41 @@ def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: Lis
     if not missing_expected:
         return "all_expected_platforms_observed"
     return "partial_expected_platforms_observed"
+
+
+def task_readiness_status(
+    events: List[Dict[str, Any]],
+    collection_audit: Optional[Dict[str, Any]],
+    *,
+    gap_only: bool,
+) -> str:
+    if gap_only:
+        return "needs_ticktick_authorized_input"
+    if events:
+        return "events_collected"
+    if collection_audit and collection_audit.get("task_scope_policy_filtered_all"):
+        return "scope_policy_filtered_all"
+    return "no_task_events_collected"
+
+
+def task_next_action(status: str) -> str:
+    if status == "needs_ticktick_authorized_input":
+        return "Provide authorized TickTick export/API output."
+    if status == "scope_policy_filtered_all":
+        return "Check task source-app/project/tag/keyword filters or provide a broader authorized task export."
+    if status == "events_collected":
+        return "Feed task events into task-calendar-investor lens."
+    return "Provide authorized TickTick/Dida task records."
+
+
+def task_source_collection_scope(status: str) -> str:
+    if status == "needs_ticktick_authorized_input":
+        return "none"
+    if status == "scope_policy_filtered_all":
+        return "authorized_input_filtered_by_scope_policy"
+    if status == "events_collected":
+        return "partial_authorized_input"
+    return "none"
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -422,7 +639,19 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        allow_source_apps=args.allow_source_app,
+        deny_source_apps=args.deny_source_app,
+        allow_projects=args.allow_project,
+        deny_projects=args.deny_project,
+        allow_tags=args.allow_tag,
+        deny_tags=args.deny_tag,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
+    )
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
@@ -444,6 +673,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
+    add_task_scope_policy_args(p_collect)
     p_collect.set_defaults(func=collect)
     return parser
 
@@ -452,6 +682,17 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     return args.func(args)
+
+
+def add_task_scope_policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--allow-source-app", action="append", help="Only keep tasks from this source app. Repeat or comma-separate.")
+    parser.add_argument("--deny-source-app", action="append", help="Drop tasks from this source app. Repeat or comma-separate.")
+    parser.add_argument("--allow-project", action="append", help="Only keep tasks whose project/list name contains this text. Repeat or comma-separate.")
+    parser.add_argument("--deny-project", action="append", help="Drop tasks whose project/list name contains this text. Repeat or comma-separate.")
+    parser.add_argument("--allow-tag", action="append", help="Only keep tasks with this tag. Repeat or comma-separate.")
+    parser.add_argument("--deny-tag", action="append", help="Drop tasks with this tag. Repeat or comma-separate.")
+    parser.add_argument("--allow-keyword", action="append", help="Only keep tasks whose title/content/checklist contains this text. Repeat or comma-separate.")
+    parser.add_argument("--deny-keyword", action="append", help="Drop tasks whose title/content/checklist contains this text. Repeat or comma-separate.")
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
@@ -747,6 +988,14 @@ def finalize_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
         "skipped_archive_member_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    scope_policy = audit.get("task_scope_policy") or {}
+    scope_policy["filter_reason_counts"] = dict(sorted((scope_policy.get("filter_reason_counts") or {}).items()))
+    audit["task_scope_policy"] = scope_policy
+    audit["task_scope_policy_filtered_all"] = (
+        bool(scope_policy.get("enabled"))
+        and int(audit.get("candidate_record_count") or 0) > 0
+        and int(audit.get("emitted_event_count") or 0) == 0
+    )
     return audit
 
 

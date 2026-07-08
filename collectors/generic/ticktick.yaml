@@ -28,6 +28,13 @@ prompt: |
   If authorization exists, run:
     python <SKILL_DIR>/scripts/collect_for_soulmirror.py
 
+  For user-authorized offline export imports handled by CollectorX rather than
+  the daemon snapshot path, `ticktick_events.py collect` supports source-app,
+  project/list, tag, and keyword allow/deny filters and writes the resulting
+  `task_scope_policy` audit to manifest.json. Those filters only narrow the
+  user-authorized collection scope; investment-task classification still belongs
+  to the task-calendar-investor lens.
+
   Write exactly the JSON array printed by that command to the result file
   provided by SoulMirror. Each item should keep a stable `id`, visible task
   planning fields such as project/status/priority/timezone/repeat/reminders/

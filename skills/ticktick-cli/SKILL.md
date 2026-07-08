@@ -1,7 +1,7 @@
 ---
 name: ticktick-cli
 description: 使用 Python CLI 与 Dida365 Open API 交互以管理滴答清单任务/项目，适用于需要通过脚本或命令行调用滴答清单接口的场景（如项目/任务的查询、创建、更新、完成、删除）。
-version: 0.1.11
+version: 0.1.12
 ---
 
 ## 调用约定（AI 必读）
@@ -217,11 +217,18 @@ CollectorX 事件包，供离线测试或迁移使用：
 ```bash
 python <SKILL_DIR>/scripts/ticktick_events.py collect \
   --input ~/Desktop/ticktick-tasks.json \
+  --allow-project 投资研究 \
+  --allow-tag 投资 \
   --out-dir ~/Desktop/ticktick-collect
 ```
 
 输出在 `exports/ticktick/events.jsonl`、`manifest.json`、`SUMMARY.md`。这里有意不写
 `lake/ticktick/events.jsonl`，避免和 SoulMirror daemon 的职责混淆。
+如果用户只授权某些项目/清单、标签、来源应用或关键词范围，可传
+`--allow-source-app` / `--deny-source-app`、`--allow-project` /
+`--deny-project`、`--allow-tag` / `--deny-tag`、`--allow-keyword` /
+`--deny-keyword`。`manifest.source_audit.task_scope_policy` 会记录过滤条件、
+候选任务数、过滤任务数和原因；这些条件只收窄授权范围，不判断任务是否投资相关。
 
 4) 冷门参数/字段怎么查
 - 运行 `python <SKILL_DIR>/scripts/ticktick_cli.py <command> --help` 查看该命令的参数
@@ -279,6 +286,7 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect \
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.1.12 | 2026-07-09 | 离线授权导入新增任务范围策略：按来源应用、项目/清单、标签和关键词 allow/deny 过滤，并在 manifest 中记录 `task_scope_policy`、候选/过滤计数、过滤原因和 filtered-all 状态 |
 | 0.1.11 | 2026-07-08 | 补强投资任务计划面：SoulMirror snapshot 顶层保留 timezone/repeat/reminders/checklist 计数；离线授权导入标准化 start/due/completed 时间，输出 timeZone/all-day/重复频率/checklist 子项、完成数、未完成数和完成率，并在 manifest 中汇总时间质量和 checklist 执行拆解度 |
 | 0.1.10 | 2026-07-08 | 对齐 SoulMirror 原版采集器模式：`collectors/generic/ticktick.yaml` 改为 `soulmirror/v1` prompt 采集；主路径由 AgentRunner 调用 `collect_for_soulmirror.py` 并只返回 JSON array；明确禁止 skill 直接写 lake；离线 `ticktick_events.py` 输出改到 `exports/ticktick/events.jsonl`，避免和 daemon 写 lake 的职责混淆 |
 | 0.1.7 | 2026-07-08 | 产品化授权改造：新增 `auth.py connect` 托管 OAuth 入口，普通用户不再需要去开发者中心创建应用；新增 `collect_for_soulmirror.py`，未授权时明确返回 `ticktick_auth_required` 并失败，不再伪装成空数组；`task list` 默认改为当前账号全部未完成任务，移除硬编码 inbox ID 假设；新增 `task collect-all` 供采集器导出快照；Worker 模板支持 FinClaw 自有域名部署 |

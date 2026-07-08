@@ -229,8 +229,8 @@
       "authorization_mode": "managed-oauth-snapshot",
       "product_surface": "managed-oauth-beta",
       "evidence_role": "planning-context",
-      "user_step": "Connect TickTick/Dida through FinClaw-managed OAuth before scheduled SoulMirror snapshots run.",
-      "preflight": "Managed OAuth broker or token environment is available; collection path does not start OAuth itself.",
+      "user_step": "Connect TickTick/Dida through FinClaw-managed OAuth before scheduled SoulMirror snapshots run; for offline authorized exports, optionally provide source-app, project/list, tag, or keyword allow/deny filters.",
+      "preflight": "Managed OAuth broker or token environment is available; collection path does not start OAuth itself; offline task scope filters are applied before package output when provided.",
       "failure_state": "ticktick_auth_required"
     },
     {
@@ -238,8 +238,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "planning-context",
-      "user_step": "Provide authorized calendar ICS, JSON, CSV, TSV, or ZIP exports.",
-      "preflight": "Calendar input is user-selected and includes enough time fields for time-quality checks when possible.",
+      "user_step": "Provide authorized calendar ICS, JSON, CSV, TSV, or ZIP exports; optionally provide source-platform, calendar, attendee, or keyword allow/deny filters.",
+      "preflight": "Calendar input is user-selected; calendar scope filters are applied before Lake output when provided; time-quality checks run when enough time fields exist.",
       "failure_state": "needs_authorized_calendar_export"
     },
     {
@@ -252,7 +252,7 @@
         "calendar"
       ],
       "user_step": "Run after task or calendar Lake exists to classify investment plans, review reminders, and research tasks.",
-      "preflight": "Upstream task/calendar events.jsonl exists and timezone/recurrence caveats are visible.",
+      "preflight": "Upstream task/calendar events.jsonl exists; scope-policy audits, timezone/recurrence caveats, and task/calendar boundary proof are visible.",
       "failure_state": "needs_task_or_calendar_lake"
     },
     {

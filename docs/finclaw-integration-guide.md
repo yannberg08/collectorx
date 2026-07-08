@@ -726,6 +726,8 @@ Offline conversion helper:
 ```bash
 python3 skills/ticktick-cli/scripts/ticktick_events.py collect \
   --input <authorized-ticktick-task-json-or-zip> \
+  --allow-project 投资研究 \
+  --allow-tag 投资 \
   --out-dir <out-dir>
 ```
 
@@ -733,6 +735,12 @@ Offline helper status:
 
 - Writes `manifest.platform_coverage` with `ticktick`/`dida365` source
   coverage, missing sources, event counts, and `real_account_validation`.
+- Optional source-app/project/tag/keyword allow/deny filters are applied before
+  offline package output. `manifest.source_audit.task_scope_policy` records the
+  configured filters, candidate task count, filtered task count, filter reason
+  counts, and `policy_does_not_assert_investment_relevance=true`.
+- If authorized input exists but every candidate task is outside the selected
+  scope, readiness reports `scope_policy_filtered_all`.
 - Writes `manifest.field_coverage`, `time_status_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect title/project/status/start/due/
   completion/timezone/all-day/recurrence/reminder/checklist coverage, overdue
@@ -754,6 +762,8 @@ Offline helper status:
 ```bash
 python3 skills/calendar-collector/scripts/calendar_query.py collect \
   --input <authorized-calendar-ics-json-csv-or-zip> \
+  --allow-calendar 投资日历 \
+  --allow-keyword 复盘 \
   --out-dir <out-dir>
 ```
 
@@ -767,6 +777,12 @@ Current status:
 - Writes `manifest.platform_coverage` with expected P1 calendar platforms
   (Apple, Google, Outlook, Feishu, DingTalk, WeCom, Tencent Meeting), observed
   platforms, missing platforms, event counts, and `real_account_validation`.
+- Optional source-platform/calendar/attendee/keyword allow/deny filters are
+  applied before Lake output. `manifest.source_audit.calendar_scope_policy`
+  records the configured filters, candidate event count, filtered event count,
+  filter reason counts, and `policy_does_not_assert_investment_relevance=true`.
+- If authorized input exists but every candidate calendar event is outside the
+  selected scope, readiness reports `scope_policy_filtered_all`.
 - Writes `manifest.field_coverage`, `time_surface_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect start/end, meeting URL, attendees,
   recurrence, reminders, duration coverage, all-day/multi-day events, invalid

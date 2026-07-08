@@ -261,6 +261,128 @@ def test_collect_calendar_time_quality_and_conflict_summary() -> None:
         assert len(conflict["sample_conflict_pairs"]) == 1
 
 
+def test_collect_calendar_scope_policy_filters_platform_calendar_attendee_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "events.json"
+        out = root / "out"
+        source.write_text(
+            json.dumps(
+                {
+                    "events": [
+                        {
+                            "platform": "Google Calendar",
+                            "calendar_name": "投资日历",
+                            "title": "复盘提醒",
+                            "description": "更新组合仓位",
+                            "start": "2026-07-08T20:00:00+08:00",
+                            "attendees": ["analyst@example.com"],
+                        },
+                        {
+                            "platform": "Google Calendar",
+                            "calendar_name": "家庭日历",
+                            "title": "牙医预约",
+                            "start": "2026-07-08T18:00:00+08:00",
+                            "attendees": ["family@example.com"],
+                        },
+                        {
+                            "platform": "Outlook",
+                            "calendar_name": "投资日历",
+                            "title": "Outlook 投委会",
+                            "start": "2026-07-08T19:00:00+08:00",
+                            "attendees": ["analyst@example.com"],
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(source),
+                "--out-dir",
+                str(out),
+                "--allow-source-platform",
+                "google",
+                "--allow-calendar",
+                "投资日历",
+                "--allow-attendee",
+                "analyst",
+                "--deny-keyword",
+                "牙医",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["title"] == "复盘提醒"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["source_audit"]
+        policy = audit["calendar_scope_policy"]
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert audit["candidate_record_count"] == 3
+        assert audit["parsed_record_count"] == 3
+        assert audit["emitted_event_count"] == 1
+        assert policy["enabled"] is True
+        assert policy["allow_source_platforms"] == ["google"]
+        assert policy["allow_calendars"] == ["投资日历"]
+        assert policy["allow_attendees"] == ["analyst"]
+        assert policy["deny_keywords"] == ["牙医"]
+        assert policy["filtered_record_count"] == 2
+        assert policy["filter_reason_counts"] == {"keyword_denied": 1, "source_platform_not_allowed": 1}
+        assert policy["policy_does_not_assert_investment_relevance"] is True
+        assert audit["path_results"][0]["scope_policy_filtered_record_count"] == 2
+        assert audit["calendar_scope_policy_filtered_all"] is False
+
+
+def test_collect_calendar_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source = root / "events.json"
+        out = root / "out"
+        source.write_text(
+            json.dumps(
+                {"events": [{"platform": "Google Calendar", "calendar_name": "投资日历", "title": "复盘提醒"}]},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(source),
+                "--out-dir",
+                str(out),
+                "--allow-calendar",
+                "不存在的日历",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events_path = out / "lake" / "calendar" / "events.jsonl"
+        assert events_path.read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["source_audit"]
+        assert audit["candidate_record_count"] == 1
+        assert audit["calendar_scope_policy_filtered_all"] is True
+        assert audit["calendar_scope_policy"]["filtered_record_count"] == 1
+        assert audit["calendar_scope_policy"]["filter_reason_counts"] == {"calendar_not_allowed": 1}
+
+
 def test_collect_without_input_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -279,5 +401,7 @@ if __name__ == "__main__":
     test_collect_json_and_csv_events()
     test_collect_all_expected_calendar_platforms_and_zip_safety()
     test_collect_calendar_time_quality_and_conflict_summary()
+    test_collect_calendar_scope_policy_filters_platform_calendar_attendee_and_keyword()
+    test_collect_calendar_scope_policy_filtered_all_status()
     test_collect_without_input_gap()
     print("calendar-collector tests passed.")

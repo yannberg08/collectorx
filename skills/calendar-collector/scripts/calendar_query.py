@@ -49,7 +49,19 @@ def write_summary(path: Path, manifest: dict) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        allow_source_platforms=args.allow_source_platform,
+        deny_source_platforms=args.deny_source_platform,
+        allow_calendars=args.allow_calendar,
+        deny_calendars=args.deny_calendar,
+        allow_attendees=args.allow_attendee,
+        deny_attendees=args.deny_attendee,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
+    )
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
@@ -71,6 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
+    add_calendar_scope_policy_args(p_collect)
     p_collect.set_defaults(func=collect)
     return parser
 
@@ -79,6 +92,17 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     return args.func(args)
+
+
+def add_calendar_scope_policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--allow-source-platform", action="append", help="Only keep events from this source platform. Repeat or comma-separate.")
+    parser.add_argument("--deny-source-platform", action="append", help="Drop events from this source platform. Repeat or comma-separate.")
+    parser.add_argument("--allow-calendar", action="append", help="Only keep events whose calendar name/path contains this text. Repeat or comma-separate.")
+    parser.add_argument("--deny-calendar", action="append", help="Drop events whose calendar name/path contains this text. Repeat or comma-separate.")
+    parser.add_argument("--allow-attendee", action="append", help="Only keep events whose organizer/attendee contains this text. Repeat or comma-separate.")
+    parser.add_argument("--deny-attendee", action="append", help="Drop events whose organizer/attendee contains this text. Repeat or comma-separate.")
+    parser.add_argument("--allow-keyword", action="append", help="Only keep events whose title/description/location contains this text. Repeat or comma-separate.")
+    parser.add_argument("--deny-keyword", action="append", help="Drop events whose title/description/location contains this text. Repeat or comma-separate.")
 
 
 if __name__ == "__main__":

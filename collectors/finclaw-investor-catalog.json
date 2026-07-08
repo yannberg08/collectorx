@@ -278,7 +278,7 @@
       "gate": "G2",
       "finclaw_action": "soulmirror-yaml-agentrunner-skill-with-managed-oauth",
       "cli": "SoulMirror loads collectors/generic/ticktick.yaml, AgentRunner invokes python <SKILL_DIR>/scripts/collect_for_soulmirror.py, and the daemon writes lake/ticktick/events.jsonl.",
-      "collects": "TickTick/Dida task titles, projects, status, start/due/completion times, recurrence, reminders, and raw task fields through the SoulMirror snapshot diff path. Offline JSON/ZIP export conversion remains available only as an auxiliary test/import path.",
+      "collects": "TickTick/Dida task titles, projects, status, start/due/completion times, recurrence, reminders, and raw task fields through the SoulMirror snapshot diff path. Offline JSON/ZIP export conversion remains available as an auxiliary test/import path with source-app/project/tag/keyword scope-policy audit.",
       "must_not_collect": "OAuth tokens in output or direct investment conclusions.",
       "production_gap": "Deploy and validate managed OAuth broker, then run real recurring task/timezone backtest."
     },
@@ -291,7 +291,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-calendar-export-import",
       "cli": "python3 skills/calendar-collector/scripts/calendar_query.py collect --input <authorized-calendar-export> --out-dir <out-dir>",
-      "collects": "Calendar events, start/end time, all-day flag, duration, multi-day status, invalid time ranges, same-calendar conflict summary, location, meeting links, organizer, attendees, recurrence, reminders, platform coverage, source audit, ZIP skip reasons, and path-level parse results.",
+      "collects": "Calendar events, start/end time, all-day flag, duration, multi-day status, invalid time ranges, same-calendar conflict summary, location, meeting links, organizer, attendees, recurrence, reminders, platform coverage, source-platform/calendar/attendee/keyword scope-policy audit, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "Calendar account credentials or direct investment conclusions.",
       "production_gap": "Real Apple/Google/Outlook/Feishu/DingTalk/WeCom/Tencent Meeting calendar validation."
     },
@@ -304,7 +304,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-task-or-calendar-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source task-calendar-investor --input <task-or-calendar-events-jsonl> --out-dir <out-dir>",
-      "collects": "Trading plans, research tasks, review reminders, earnings/event follow-ups, research meetings, risk checks, upstream source surface, reminder/time surface, calendar time-quality surface, task/calendar boundary proof, and execution discipline signals.",
+      "collects": "Trading plans, research tasks, review reminders, earnings/event follow-ups, research meetings, risk checks, upstream source surface, reminder/time surface, calendar time-quality surface, task/calendar scope-policy boundary, task/calendar boundary proof, and execution discipline signals.",
       "must_not_collect": "Unrelated personal tasks as investor facts.",
       "production_gap": "Real task/calendar backtest and threshold tuning."
     },
