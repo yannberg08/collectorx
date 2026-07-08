@@ -68,7 +68,7 @@ FinClaw 应按下面顺序调用：
 
 | Collector | 职责 | 当前状态 | 下一步真实验证 |
 | --- | --- | --- | --- |
-| `hk-us-brokerage` | 富途、老虎、盈透资产、持仓、成交、委托、资金、分红、换汇 | `baseline+audit` | 真实券商导出/只读屏幕、多币种、税费、保证金 |
+| `hk-us-brokerage` | 富途、老虎、盈透资产、持仓、成交、委托、资金、分红、换汇 | `baseline+audit`；manifest 记录券商/交易表/字段覆盖、资产金额汇总、逐输入解析结果、跳过文件/ZIP 成员原因和只读强交易边界 | 真实券商导出/只读屏幕、多币种、税费、保证金 |
 | `pro-terminal-usage` | Wind、Choice、iFinD、Bloomberg 工作流使用痕迹 | `baseline+audit` | 真实授权终端导出、许可安全评审 |
 | `social-activity` + `social-investment-influence` | 微博、B站、小红书影响源和弱证据 lens | `baseline+audit` | 真实平台导出、创作者 allowlist、弱证据回测 |
 

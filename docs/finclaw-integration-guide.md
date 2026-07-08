@@ -578,6 +578,9 @@ Current status:
   `manifest.evidence_policy` so Lake can see account/currency/amount/tax/
   margin availability, reported asset totals by currency, export package
   provenance, and read-only boundaries.
+- `manifest.source_audit` records requested inputs, missing inputs, per-file
+  parse results, extension coverage, skipped file reasons, ZIP member counts,
+  skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.
 - Preserves business numbers needed by the investor avatar.
 - Does not ask for passwords and does not place, cancel, or modify orders.
 - Real Futu/Tiger/IBKR account exports or read-only screens still require

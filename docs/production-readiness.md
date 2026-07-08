@@ -16,9 +16,27 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`financial-news-usage` now has stronger source audit coverage for authorized
-finance-news usage exports, saved pages, ZIP packages, and browser-history
-copies:
+`hk-us-brokerage` now has stronger source audit coverage for authorized
+read-only Futu, Tiger, and IBKR export packages:
+
+- `hk_us_brokerage.py collect --input <authorized-export-or-zip> --out-dir
+  <dir>` records `manifest.source_audit` with requested inputs, missing inputs,
+  per-file parse results, extension coverage, parsed/emitted counts, skipped
+  file reasons, ZIP member counts, skipped ZIP member reasons, and path-safety
+  flags.
+- Strong brokerage facts remain numeric and unsanitized where they are the
+  user's own authorized assets, positions, executions, orders, cashflows,
+  dividends, FX, margin, tax, and settlement fields.
+- The collector remains read-only and does not ask for passwords, collect
+  cookies/tokens, place orders, cancel orders, or claim a complete brokerage
+  boundary without real account validation.
+- This improves the P2 HK/US brokerage import path, but it does not claim real
+  Futu/Tiger/IBKR account export validation, read-only screen validation,
+  Windows/macOS/Linux path validation, or broker-specific real column maps.
+
+The prior completed wave: `financial-news-usage` now has stronger source audit
+coverage for authorized finance-news usage exports, saved pages, ZIP packages,
+and browser-history copies:
 
 - `financial_news_usage.py collect --input <authorized-export-or-history-copy>
   --out-dir <dir>` records `manifest.source_audit` with requested inputs,
@@ -193,7 +211,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, asset value summary, ZIP provenance, source audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
+| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, asset value summary, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow surface summary, ZIP provenance, source audit, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, and license-safe boundaries |
 | B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, influence surface summary, ZIP provenance, source audit, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, and weak-evidence backtest |
 

@@ -102,6 +102,7 @@ def test_collect_nested_sections_and_workbook() -> None:
         package = root / "tiger_full_statement.json"
         workbook_path = root / "futu_statement.xlsx"
         ibkr_zip = root / "ibkr_activity.zip"
+        unsupported = root / "ignore.bin"
         out = root / "out"
         package.write_text(
             json.dumps(
@@ -161,6 +162,7 @@ def test_collect_nested_sections_and_workbook() -> None:
             archive.writestr("../unsafe.json", json.dumps([{"broker": "IBKR", "record_type": "order"}], ensure_ascii=False))
             archive.writestr("..\\windows-traversal.json", json.dumps([{"broker": "IBKR", "record_type": "order"}], ensure_ascii=False))
             archive.writestr("C:\\unsafe.json", json.dumps([{"broker": "IBKR", "record_type": "order"}], ensure_ascii=False))
+        unsupported.write_bytes(b"not a supported brokerage export")
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -225,7 +227,23 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert manifest["asset_value_summary"]["reported_cash_by_currency"]["USD"] == 12000.0
         assert manifest["asset_value_summary"]["reported_cash_by_currency"]["HKD"] == 5000.0
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
         assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 3
+        assert manifest["source_audit"]["parsed_record_count"] == 10
+        assert manifest["source_audit"]["emitted_event_count"] == 10
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert manifest["source_audit"]["extension_counts"] == {
+            ".bin": 1,
+            ".json": 1,
+            ".xlsx": 1,
+            ".zip": 1,
+        }
+        assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
         assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["evidence_policy"]["read_only_collection"] is True
@@ -238,7 +256,100 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert evidence["coverage_summary"]["order_side_effects_allowed"] is False
 
 
+def test_collect_zip_limit_counts_only_emitted_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "futu.zip"
+        out = root / "out"
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr(
+                "positions.json",
+                json.dumps(
+                    [
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "symbol": "AAPL",
+                            "quantity": "10",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "symbol": "MSFT",
+                            "quantity": "5",
+                        },
+                    ],
+                    ensure_ascii=False,
+                ),
+            )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--limit",
+                "1",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "hk-us-brokerage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        source_audit = manifest["source_audit"]
+        assert source_audit["limit_reached"] is True
+        assert source_audit["archive_member_event_count"] == 1
+        assert source_audit["parsed_record_count"] == 1
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["path_results"][0]["parsed_record_count"] == 1
+
+
+def test_collect_missing_input_writes_gap_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        missing = root / "missing-export"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(missing),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T04:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "hk-us-brokerage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "hk_us_brokerage_authorized_input_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_hk_us_brokerage_authorized_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["input_missing_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+
+
 if __name__ == "__main__":
     test_collect_brokerage_exports()
     test_collect_nested_sections_and_workbook()
+    test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_missing_input_writes_gap_audit()
     print("hk-us-brokerage tests passed.")

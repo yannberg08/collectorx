@@ -1,1 +1,1 @@
-{"collector":"hk-us-brokerage","class":"vertical","version":"0.2.1","status":"baseline","description":"User-authorized read-only Futu/Tiger/IBKR exports and ZIP packages for HK/US assets, positions, executions, orders, cashflows, dividends, FX, and coverage manifests."}
+{"collector":"hk-us-brokerage","class":"vertical","version":"0.2.3","status":"baseline+audit","description":"User-authorized read-only Futu/Tiger/IBKR exports and ZIP packages for HK/US assets, positions, executions, orders, cashflows, dividends, FX, coverage manifests, and per-input source audit."}

@@ -1255,6 +1255,34 @@ Findings:
 - Hardened ZIP import against POSIX traversal and Windows drive/traversal
   members.
 
+### Wave V3: P2 HK/US brokerage source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-hk-us-brokerage-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added `collect_from_inputs_with_audit` while keeping the existing
+  `collect_from_inputs` API compatible.
+- `hk_us_brokerage.py collect --out-dir` now writes `manifest.source_audit`
+  with requested inputs, missing inputs, resolved files, extension coverage,
+  parsed/emitted counts, skipped file reasons, ZIP member counts, skipped ZIP
+  member reasons, path-level parse results, limit status, and path-safety
+  flags.
+- Missing input now produces both a gap event and an auditable `input_missing`
+  reason.
+- ZIP limit accounting now reports only records actually emitted to the lake.
+- The read-only strong-trade boundary remains explicit: no passwords, cookies,
+  tokens, order placement, order cancellation, or complete brokerage-boundary
+  claim without real account validation.
+- Fixture validation covers Futu CSV, Tiger nested JSON, Futu XLSX, IBKR ZIP,
+  unsupported input files, unsafe ZIP members, missing input gap audit,
+  credential filtering, ZIP limit accounting, field coverage, value summaries,
+  and read-only evidence policy.
+
 ### Wave W: P2 professional terminal coverage pass 1
 
 Status: `completed-baseline`
@@ -1384,7 +1412,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, asset value summary, source audit, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
+| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, asset value summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow surface summary, source audit, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, source audit, ZIP provenance, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 

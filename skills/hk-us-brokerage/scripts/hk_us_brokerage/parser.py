@@ -12,7 +12,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 try:
     import openpyxl
@@ -82,16 +82,135 @@ def now_iso() -> str:
 
 
 def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    paths = list(iter_paths(inputs))
-    if not paths:
-        return [gap_event(collected_at=collected_at, reason="hk_us_brokerage_authorized_input_missing")]
+    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    input_list = list(inputs)
     events: List[Dict[str, Any]] = []
-    for path in paths:
-        for row, record in enumerate(parse_path(path), start=1):
-            events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+    extension_counts: Counter[str] = Counter()
+    skipped_extension_counts: Counter[str] = Counter()
+    skipped_reason_counts: Counter[str] = Counter()
+    skipped_archive_member_reason_counts: Counter[str] = Counter()
+    audit: Dict[str, Any] = {
+        "source_type": "authorized_hk_us_brokerage_export",
+        "input_count": len(input_list),
+        "requested_inputs": [str(Path(raw).expanduser()) for raw in input_list],
+        "resolved_input_file_count": 0,
+        "input_missing_count": 0,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "limit": limit,
+        "limit_reached": False,
+        "extension_counts": {},
+        "skipped_extension_counts": {},
+        "skipped_reason_counts": {},
+        "skipped_file_count": 0,
+        "archive_count": 0,
+        "archive_member_count": 0,
+        "archive_member_event_count": 0,
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_reason_counts": {},
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+        "parsed_record_count": 0,
+        "emitted_event_count": 0,
+        "path_results": [],
+    }
+
+    for raw in input_list:
+        if limit is not None and len(events) >= limit:
+            audit["limit_reached"] = True
+            break
+        input_path = Path(raw).expanduser()
+        if not input_path.exists():
+            audit["input_missing_count"] += 1
+            skipped_reason_counts["input_missing"] += 1
+            audit["path_results"].append(path_result(input_path, status="missing", reason="input_missing"))
+            continue
+        if input_path.is_dir():
+            files = sorted(child for child in input_path.rglob("*") if child.is_file())
+        elif input_path.is_file():
+            files = [input_path]
+        else:
+            skipped_reason_counts["unsupported_input_kind"] += 1
+            audit["path_results"].append(path_result(input_path, status="skipped", reason="unsupported_input_kind"))
+            continue
+
+        for path in files:
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events or [gap_event(collected_at=collected_at, reason="hk_us_brokerage_records_empty")]
+                audit["limit_reached"] = True
+                break
+            ext = extension_label(path)
+            extension_counts[ext] += 1
+            if not is_supported_path(path):
+                audit["skipped_file_count"] += 1
+                skipped_extension_counts[ext] += 1
+                skipped_reason_counts["unsupported_extension"] += 1
+                audit["path_results"].append(path_result(path, status="skipped", reason="unsupported_extension"))
+                continue
+            audit["resolved_input_file_count"] += 1
+            result = path_result(path, status="pending")
+            try:
+                if path.suffix.lower() == ".zip":
+                    parsed, archive_audit = parse_zip_with_audit(path, limit=remaining_limit(limit, events))
+                    merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
+                    result.update(
+                        {
+                            "status": "parsed" if parsed else "no_records_parsed",
+                            "parser": "zip",
+                            "parsed_record_count": len(parsed),
+                            "archive_member_count": archive_audit["archive_member_count"],
+                            "skipped_archive_member_count": archive_audit["skipped_archive_member_count"],
+                        }
+                    )
+                else:
+                    parsed = parse_path(path)
+                    result.update(
+                        {
+                            "status": "parsed" if parsed else "no_records_parsed",
+                            "parser": parser_name_for_path(path),
+                            "parsed_record_count": len(parsed),
+                        }
+                    )
+            except Exception:
+                parsed = []
+                audit["skipped_file_count"] += 1
+                skipped_extension_counts[ext] += 1
+                skipped_reason_counts["parse_error"] += 1
+                result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0})
+            audit["path_results"].append(result)
+            row = 0
+            for record in parsed:
+                if not isinstance(record, dict):
+                    continue
+                row += 1
+                events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+                if limit is not None and len(events) >= limit:
+                    audit["limit_reached"] = True
+                    break
+        if limit is not None and len(events) >= limit:
+            break
+
+    if not events:
+        reason = (
+            "hk_us_brokerage_authorized_input_missing"
+            if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
+            else "hk_us_brokerage_records_empty"
+        )
+        events = [gap_event(collected_at=collected_at, reason=reason)]
+    audit["parsed_record_count"] = len(usable_brokerage_events(events))
+    audit["emitted_event_count"] = len(events)
+    audit["extension_counts"] = dict(sorted(extension_counts.items()))
+    audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
+    audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+    return events, audit
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -107,6 +226,10 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
 
 def is_supported_path(path: Path) -> bool:
     return path.suffix.lower() in SUPPORTED_EXTENSIONS
+
+
+def extension_label(path: Path) -> str:
+    return path.suffix.lower() or "<none>"
 
 
 def parse_path(path: Path) -> List[Dict[str, Any]]:
@@ -187,12 +310,33 @@ def parse_workbook(path_or_stream: Any, *, path_label: str) -> List[Dict[str, An
 
 
 def parse_zip(path: Path) -> List[Dict[str, Any]]:
+    records, _audit = parse_zip_with_audit(path)
+    return records
+
+
+def parse_zip_with_audit(path: Path, *, limit: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
+    skipped_reason_counts: Counter[str] = Counter()
+    audit: Dict[str, Any] = {
+        "archive": str(path),
+        "archive_member_count": 0,
+        "archive_member_event_count": 0,
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_reason_counts": {},
+        "limit_reached": False,
+        "member_results": [],
+    }
     with zipfile.ZipFile(path) as archive:
-        for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
-            if should_skip_zip_member(member):
-                continue
+        members = sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename))
+        for member in members:
+            audit["archive_member_count"] += 1
             member_name = normalize_zip_member_name(member.filename)
+            skip_reason = zip_member_skip_reason(member)
+            if skip_reason:
+                audit["skipped_archive_member_count"] += 1
+                skipped_reason_counts[skip_reason] += 1
+                audit["member_results"].append({"member": member_name, "status": "skipped", "reason": skip_reason})
+                continue
             suffix = Path(member_name).suffix.lower()
             path_label = f"{path}::{member_name}"
             try:
@@ -204,27 +348,94 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
                     parsed = parse_workbook(io.BytesIO(archive.read(member)), path_label=path_label)
             except Exception:
                 parsed = []
-            for record in parsed:
+                audit["skipped_archive_member_count"] += 1
+                skipped_reason_counts["parse_error"] += 1
+                audit["member_results"].append({"member": member_name, "status": "parse_error", "reason": "parse_error"})
+                continue
+            remaining = None if limit is None else max(limit - len(records), 0)
+            emittable = parsed if remaining is None else parsed[:remaining]
+            audit["member_results"].append(
+                {
+                    "member": member_name,
+                    "status": "parsed" if parsed else "no_records_parsed",
+                    "parsed_record_count": len(parsed),
+                    "emitted_record_count": len(emittable),
+                }
+            )
+            for record in emittable:
                 if isinstance(record, dict):
                     record[SOURCE_ARCHIVE_KEY] = str(path)
                     record[SOURCE_MEMBER_KEY] = member_name
-            records.extend(parsed)
-    return records
+                    audit["archive_member_event_count"] += 1
+            records.extend(emittable)
+            if limit is not None and len(records) >= limit:
+                audit["limit_reached"] = True
+                audit["unvisited_archive_member_count_due_limit"] = max(0, len(members) - audit["archive_member_count"])
+                audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+                return records, audit
+    audit["unvisited_archive_member_count_due_limit"] = 0
+    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    return records, audit
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    return zip_member_skip_reason(member) is not None
+
+
+def zip_member_skip_reason(member: zipfile.ZipInfo) -> Optional[str]:
     member_name = normalize_zip_member_name(member.filename)
     member_path = PurePosixPath(member_name)
     windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
-        return True
+        return "directory"
     if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
-        return True
-    return Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS
+        return "unsafe_path"
+    if Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS:
+        return "unsupported_extension"
+    return None
 
 
 def normalize_zip_member_name(name: str) -> str:
     return name.replace("\\", "/")
+
+
+def remaining_limit(limit: Optional[int], events: List[Dict[str, Any]]) -> Optional[int]:
+    if limit is None:
+        return None
+    return max(limit - len(events), 0)
+
+
+def parser_name_for_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return "zip"
+    if suffix in {".xlsx", ".xlsm"}:
+        return "workbook"
+    if suffix in {".csv", ".tsv"}:
+        return "table"
+    return "json"
+
+
+def path_result(path: Path, *, status: str, reason: Optional[str] = None) -> Dict[str, Any]:
+    result = {
+        "path": str(path),
+        "extension": extension_label(path),
+        "status": status,
+    }
+    if reason:
+        result["reason"] = reason
+    return result
+
+
+def merge_archive_audit(audit: Dict[str, Any], archive_audit: Dict[str, Any], skipped_reason_counts: Counter[str]) -> None:
+    audit["archive_count"] += 1
+    audit["archive_member_count"] += int(archive_audit.get("archive_member_count") or 0)
+    audit["archive_member_event_count"] += int(archive_audit.get("archive_member_event_count") or 0)
+    audit["skipped_archive_member_count"] += int(archive_audit.get("skipped_archive_member_count") or 0)
+    if archive_audit.get("limit_reached"):
+        audit["limit_reached"] = True
+    for reason, count in (archive_audit.get("skipped_archive_member_reason_counts") or {}).items():
+        skipped_reason_counts[str(reason)] += int(count)
 
 
 def extract_records(loaded: Any) -> List[Any]:
@@ -448,7 +659,12 @@ def wiki_targets_for_subtype(subtype: str) -> List[str]:
     return targets.get(subtype, ["investor.data_quality.collection_gaps"])
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in events)
     broker_counts = Counter((event.get("data") or {}).get("broker", "unknown") for event in events)
@@ -504,7 +720,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         },
         "strong_trade_surface_summary": strong_trade_surface_summary(events),
         "asset_value_summary": asset_value_summary(events),
-        "source_audit": source_audit(events),
+        "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
             "vertical_collector": True,
             "strong_trade_source": True,
@@ -611,14 +827,14 @@ def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     usable_events = usable_brokerage_events(events)
     archives = [
         (event.get("raw_ref") or {}).get("source_archive")
         for event in usable_events
         if (event.get("raw_ref") or {}).get("source_archive")
     ]
-    return {
+    audit = {
         "source_ref_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("path")),
         "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
         "archive_count": len(set(archives)),
@@ -626,6 +842,24 @@ def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
     }
+    if collection_audit:
+        audit.update(collection_audit)
+        audit["source_ref_count"] = max(
+            int(audit.get("source_ref_count") or 0),
+            sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("path")),
+        )
+        audit["archive_member_event_count"] = max(
+            int(audit.get("archive_member_event_count") or 0),
+            sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
+        )
+        audit["archive_count"] = max(int(audit.get("archive_count") or 0), len(set(archives)))
+        audit["source_section_event_count"] = max(
+            int(audit.get("source_section_event_count") or 0),
+            sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("source_section")),
+        )
+        audit["archive_path_traversal_members_collected"] = False
+        audit["windows_drive_archive_members_collected"] = False
+    return audit
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
