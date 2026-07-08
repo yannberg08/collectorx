@@ -1162,8 +1162,9 @@ Current status:
   `scope_policy_filtered_record_count`, `scope_policy_filter_reason_counts`,
   and `brokerage_scope_policy_filtered_all` explain what the authorization
   policy kept or excluded; `collection_readiness.status=scope_policy_filtered_all`
-  means the collector ran successfully but the user's policy excluded every
-  candidate record.
+  means the package contains a validator-safe
+  `brokerage_scope_policy_filtered_all` profile gap event and
+  `collection_readiness.can_enter_finclaw=false`, not a usable brokerage fact.
 - `manifest.brokerage_boundary_proof` gives FinClaw a single gate for the
   authorized input boundary, broker coverage, strong trade surfaces, account
   IDs, asset values, multi-currency, fee/tax/margin, cashflow activity, income

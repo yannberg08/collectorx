@@ -402,18 +402,23 @@ def collect_from_inputs_with_audit(
         and scope_policy_filtered_record_count == candidate_record_count
         and not events
     )
-    if not events and not scope_policy_filtered_all:
+    if not events:
         reason = (
-            "hk_us_brokerage_authorized_input_missing"
-            if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
-            else "hk_us_brokerage_records_empty"
+            "brokerage_scope_policy_filtered_all"
+            if scope_policy_filtered_all
+            else (
+                "hk_us_brokerage_authorized_input_missing"
+                if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
+                else "hk_us_brokerage_records_empty"
+            )
         )
-        events = [gap_event(collected_at=collected_at, reason=reason)]
     audit["candidate_record_count"] = candidate_record_count
     audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
     audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     audit["brokerage_scope_policy_filtered_all"] = scope_policy_filtered_all
     audit["parsed_record_count"] = candidate_record_count
+    if not events:
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
     audit["emitted_event_count"] = len(events)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
@@ -945,6 +950,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "archive_member": first(record, [SOURCE_MEMBER_KEY]),
     }
     raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
+    event_time = event_time or collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, row, broker, subtype, json.dumps(sanitized(record), ensure_ascii=False, sort_keys=True)),
@@ -953,7 +959,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "owner_scope": "personal",
         "kind": kind_for_subtype(subtype),
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": collected_at or event_time,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "trade"]},
@@ -961,23 +967,61 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    messages = {
+        "hk_us_brokerage_authorized_input_missing": "No user-authorized Futu/Tiger/IBKR export was provided.",
+        "hk_us_brokerage_records_empty": "Authorized Futu/Tiger/IBKR input did not contain usable brokerage records.",
+        "brokerage_scope_policy_filtered_all": "Brokerage records were found, but every candidate was outside the configured authorization scope policy.",
+    }
+    statuses = {
+        "hk_us_brokerage_authorized_input_missing": "needs_hk_us_brokerage_authorized_input",
+        "hk_us_brokerage_records_empty": "no_usable_hk_us_brokerage_records",
+        "brokerage_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    audit = collection_audit or {}
+    scope_policy = audit.get("brokerage_scope_policy") or {}
+    timestamp = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "港美股券商授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
         "data": {
             "subtype": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized Futu/Tiger/IBKR export was provided.",
+            "status": statuses.get(reason, "no_usable_hk_us_brokerage_records"),
+            "profile_type": reason,
+            "message": messages.get(reason, "No user-authorized Futu/Tiger/IBKR evidence was collected."),
+            "candidate_record_count": audit.get("candidate_record_count", audit.get("parsed_record_count", 0)),
+            "retained_record_count": max(
+                int(audit.get("candidate_record_count", audit.get("parsed_record_count", 0)) or 0)
+                - int(audit.get("scope_policy_filtered_record_count", 0) or 0),
+                0,
+            ),
+            "filtered_record_count": audit.get("scope_policy_filtered_record_count", 0),
+            "filter_reason_counts": audit.get("scope_policy_filter_reason_counts", {}),
+            "policy_is_user_authorization_scope": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "strong_trade_source_when_records_retained": True,
+            "broker_trade_fact_claimed": False,
+            "holding_fact_claimed": False,
+            "order_or_fund_flow_claimed": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "trade"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(scope_policy.get("enabled", False)),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "trade", "collection_gap"]},
         "wiki_targets": ["investor.data_quality.collection_gaps"],
     }
 
@@ -1050,6 +1094,8 @@ def build_manifest(
     broker_counts = Counter((event.get("data") or {}).get("broker", "unknown") for event in events)
     collection_audit = collection_audit or {}
     gap_only = bool(events) and set(subtype_counts) == {"collector_gap"}
+    brokerage_event_count = len(usable_brokerage_events(events))
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     scope_policy_filtered_all = bool(collection_audit.get("brokerage_scope_policy_filtered_all"))
     no_events = not events
     observed_brokers = sorted(broker for broker, count in broker_counts.items() if count and broker != "unknown")
@@ -1073,6 +1119,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "brokerage_event_count": brokerage_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "subtype_counts": dict(sorted(subtype_counts.items())),
         "broker_counts": dict(sorted(broker_counts.items())),
@@ -1788,12 +1836,9 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+    usable_event_list = usable_brokerage_events(events)
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    usable_events = 0
-    for event in events:
-        if (event.get("data") or {}).get("subtype") == "collector_gap":
-            continue
-        usable_events += 1
+    for event in usable_event_list:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
     evidence = {
@@ -1802,7 +1847,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         "generated_from": {
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
-            "event_count": usable_events,
+            "event_count": len(usable_event_list),
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1810,7 +1855,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "required_flow": ["collectorx.event.v1", "finclaw.investor_wiki_evidence.v1", "SoulMirror investor-portrait distill/organize"],
         },
         "coverage_summary": {
-            "strong_trade_source": True,
+            "strong_trade_source": bool(usable_event_list),
             "complete_trade_boundary_claimed": False,
             "read_only_collection": True,
             "order_side_effects_allowed": False,
@@ -1825,7 +1870,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
-    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
+    return augment_evidence_with_dimensions(evidence, usable_event_list, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

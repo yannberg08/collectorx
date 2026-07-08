@@ -2548,6 +2548,29 @@ Findings:
   preserving existing CSV/JSON/Excel/ZIP, account-boundary, cashflow,
   income-return, order-execution, source-audit, and read-only validations.
 
+### Wave V7: P2 HK/US Brokerage Gap Package Hardening
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-hk-us-brokerage-gap-package-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `hk-us-brokerage` to `0.2.8`.
+- Converted no-input, no-record, and filtered-all outputs into validator-safe
+  profile gap events with non-empty `time`, stable `data.status`,
+  `data.profile_type`, candidate/retained/filtered counts, filter reason
+  counts, and explicit non-business-fact boundary flags.
+- Added `manifest.brokerage_event_count` and `manifest.gap_event_count` so
+  FinClaw can distinguish package observability from real brokerage evidence.
+- Investor Wiki evidence now reports `strong_trade_source=false` and counts
+  zero events for pure gap packages.
+- Fixture validation now runs the shared CollectorX package validator with
+  Investor Wiki evidence required for normal, no-input, and filtered-all
+  brokerage packages.
+
 ### Wave W: P2 professional terminal coverage pass 1
 
 Status: `completed-baseline`
@@ -3742,7 +3765,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, broker/account/subtype/symbol/market/currency/keyword scope-policy audit, filtered-all readiness, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, authorization default scopes, and Windows/macOS/Linux path validation |
+| 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, broker/account/subtype/symbol/market/currency/keyword scope-policy audit, filtered-all/no-input gap packages, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, authorization default scopes, and Windows/macOS/Linux path validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, terminal/activity/workspace/project/dataset/field/keyword scope-policy audit, filtered-all readiness, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, authorization default scopes, workflow-topic false-positive review, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP/browser-history social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, platform/action/source-app/domain/creator/topic/keyword scope-policy audit, filtered-all readiness, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, domain filtering, and preview-only content policy; strict real-platform saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, platform/domain allowlists, creator/domain default allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 

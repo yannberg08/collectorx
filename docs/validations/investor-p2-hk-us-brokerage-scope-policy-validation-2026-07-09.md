@@ -4,6 +4,7 @@
 
 This validation covers `hk-us-brokerage` `0.2.7`, the vertical strong-trade
 collector for user-authorized read-only Futu, Tiger, and IBKR exports.
+Gap package ingestion was later hardened in `0.2.8`.
 
 The goal is to narrow authorized brokerage records before Lake output while
 preserving exact business numbers for records the user authorizes.
@@ -26,6 +27,9 @@ preserving exact business numbers for records the user authorizes.
 - If all candidate records are excluded by policy, readiness reports
   `scope_policy_filtered_all` and the collector does not emit a synthetic gap
   event.
+- As of version `0.2.8`, no-input and filtered-all states emit validator-safe
+  profile gap events with non-empty `time`, event-count summaries, and
+  non-business-fact boundary flags.
 
 ## Validation Commands
 

@@ -16,7 +16,31 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`xueqiu-watchlist` and `xueqiu-investor-activity` now emit validator-safe
+`hk-us-brokerage` now emits validator-safe filtered-all and no-input gap
+packages:
+
+- When user-authorized Futu, Tiger, or IBKR exports are fully excluded by
+  broker, account, subtype, symbol, market, currency, or keyword authorization
+  filters, the Lake file contains one profile gap event instead of an empty
+  package.
+- The filtered-all gap reason is `brokerage_scope_policy_filtered_all`;
+  readiness remains `scope_policy_filtered_all` and
+  `collection_readiness.can_enter_finclaw=false`.
+- Missing or unusable authorized inputs emit
+  `hk_us_brokerage_authorized_input_missing` or
+  `hk_us_brokerage_records_empty` with the same validator-safe event shape.
+- Manifest `brokerage_event_count=0` and `gap_event_count=1` keep package
+  observability separate from real asset, holding, execution, order, cashflow,
+  dividend, or FX evidence.
+- Gap events carry candidate/filter counts and reason summaries but no raw
+  local input path, credential, token, trading password, broker business fact,
+  order mutation, or investment conclusion.
+- Investor Wiki evidence counts only retained brokerage records and reports
+  `strong_trade_source=false` for pure gap packages.
+- Fixture tests now run the shared CollectorX package validator with Investor
+  Wiki evidence required for normal, no-input, and filtered-all paths.
+
+The prior completed wave: `xueqiu-watchlist` and `xueqiu-investor-activity` now emit validator-safe
 filtered-all and no-input gap packages:
 
 - When user-authorized Xueqiu watchlist or activity inputs are fully excluded
@@ -1176,7 +1200,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, broker/account/subtype/symbol/market/currency/keyword scope-policy audit, filtered-all readiness, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, authorization default scopes, and Windows/macOS/Linux paths |
+| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, broker/account/subtype/symbol/market/currency/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, authorization default scopes, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, terminal/activity/workspace/project/dataset/field/keyword scope-policy audit, filtered-all readiness, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, authorization default scopes, workflow-topic false positives, and license-safe boundaries |
 | B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP/browser-history activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, Chromium browser-history copy, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, platform/action/source-app/domain/creator/topic/keyword scope-policy audit, filtered-all readiness, social activity boundary proof, social influence boundary proof, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, domain filtering, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator/domain default allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
 
