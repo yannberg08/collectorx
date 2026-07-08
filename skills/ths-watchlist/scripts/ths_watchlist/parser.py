@@ -7,10 +7,14 @@ import hashlib
 import json
 import re
 import sys
+import tempfile
+import zipfile
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
+from pathlib import PurePosixPath
+from pathlib import PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 try:
@@ -30,7 +34,22 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 COLLECTOR = "ths-watchlist"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm", ".html", ".htm", ".txt", ".md", ".markdown"}
+SUPPORTED_EXTENSIONS = {
+    ".csv",
+    ".tsv",
+    ".json",
+    ".jsonl",
+    ".ndjson",
+    ".xlsx",
+    ".xlsm",
+    ".html",
+    ".htm",
+    ".txt",
+    ".md",
+    ".markdown",
+    ".zip",
+}
+ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 INVESTOR_WIKI_SUBDIMENSION_RULES = {
     "inv-market-view": {
@@ -82,32 +101,147 @@ def collect_from_inputs(
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    paths = list(iter_paths(inputs))
+    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    input_list = list(inputs)
+    input_resolution = resolve_input_paths(input_list)
+    paths = input_resolution["paths"]
+    audit = {
+        "source_type": "authorized_local_ths_watchlist_export",
+        "input_count": len(input_list),
+        "requested_inputs": input_resolution["requested_inputs"],
+        "resolved_input_file_count": len(paths),
+        "input_missing_count": input_resolution["input_missing_count"],
+        "skipped_file_count": input_resolution["skipped_file_count"],
+        "skipped_reason_counts": input_resolution["skipped_reason_counts"],
+        "extension_counts": {},
+        "skipped_extension_counts": input_resolution["skipped_extension_counts"],
+        "archive_count": 0,
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "archive_member_imported_record_count": 0,
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "skipped_archive_member_reason_counts": {},
+        "parsed_record_count": 0,
+        "filtered_record_count": 0,
+        "emitted_event_count": 0,
+        "limit": limit,
+        "limit_reached": False,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "archive_member_supported_extensions": sorted(ARCHIVE_MEMBER_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "broker_trade_source": False,
+        "path_results": list(input_resolution["path_results"]),
+        "archive_member_results": [],
+    }
     if not paths:
-        return [gap_event(collected_at=collected_at, reason="ths_watchlist_authorized_input_missing")]
+        events = [gap_event(collected_at=collected_at, reason="ths_watchlist_authorized_input_missing")]
+        audit["emitted_event_count"] = len(events)
+        finalize_audit(audit)
+        return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        for row, record in enumerate(parse_path(path), start=1):
-            if not first(record, ["symbol", "code", "stock_code", "证券代码", "代码"]):
+        if limit is not None and len(events) >= limit:
+            audit["limit_reached"] = True
+            break
+        extension = path.suffix.lower() or "<none>"
+        increment_counter(audit, "extension_counts", extension)
+        path_result = {
+            "path": str(path),
+            "extension": extension,
+            "parser": parser_name_for_path(path),
+            "status": "parsed",
+            "parsed_record_count": 0,
+            "filtered_record_count": 0,
+            "emitted_event_count": 0,
+        }
+        audit["path_results"].append(path_result)
+        try:
+            records = parse_path(path, audit=audit)
+        except Exception:
+            records = []
+            path_result["status"] = "parse_error"
+            increment_counter(audit, "skipped_reason_counts", "parse_error")
+            increment_counter(audit, "skipped_extension_counts", extension)
+            audit["skipped_file_count"] += 1
+        path_result["parsed_record_count"] = len(records)
+        audit["parsed_record_count"] += len(records)
+        for row, record in enumerate(records, start=1):
+            if not watchlist_symbol(record):
+                path_result["filtered_record_count"] += 1
+                audit["filtered_record_count"] += 1
                 continue
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events or [gap_event(collected_at=collected_at, reason="ths_watchlist_records_empty")]
+                audit["limit_reached"] = True
+                audit["emitted_event_count"] = len(events[:limit])
+                finalize_audit(audit)
+                return events[:limit], audit
+    if not events:
+        events = [gap_event(collected_at=collected_at, reason="ths_watchlist_records_empty")]
+    audit["emitted_event_count"] = len(events)
+    finalize_audit(audit)
+    return events, audit
+
+
+def resolve_input_paths(inputs: Iterable[str]) -> Dict[str, Any]:
+    paths: List[Path] = []
+    requested_inputs: List[str] = []
+    path_results: List[Dict[str, Any]] = []
+    skipped_reason_counts: Dict[str, int] = {}
+    skipped_extension_counts: Dict[str, int] = {}
+    skipped_file_count = 0
+    input_missing_count = 0
+    for raw in inputs:
+        path = Path(raw).expanduser()
+        requested_inputs.append(str(path))
+        if not path.exists():
+            input_missing_count += 1
+            increment_counter_value(skipped_reason_counts, "input_missing")
+            path_results.append(path_result(path, status="missing", reason="input_missing"))
+            continue
+        candidates = sorted(child for child in path.rglob("*") if child.is_file()) if path.is_dir() else [path]
+        for candidate in candidates:
+            extension = candidate.suffix.lower() or "<none>"
+            if candidate.name.startswith("."):
+                skipped_file_count += 1
+                increment_counter_value(skipped_reason_counts, "hidden_file")
+                increment_counter_value(skipped_extension_counts, extension)
+                path_results.append(path_result(candidate, status="skipped", reason="hidden_file"))
+                continue
+            if extension not in SUPPORTED_EXTENSIONS:
+                skipped_file_count += 1
+                increment_counter_value(skipped_reason_counts, "unsupported_extension")
+                increment_counter_value(skipped_extension_counts, extension)
+                path_results.append(path_result(candidate, status="skipped", reason="unsupported_extension"))
+                continue
+            paths.append(candidate)
+    return {
+        "paths": paths,
+        "requested_inputs": requested_inputs,
+        "input_missing_count": input_missing_count,
+        "skipped_file_count": skipped_file_count,
+        "skipped_reason_counts": skipped_reason_counts,
+        "skipped_extension_counts": skipped_extension_counts,
+        "path_results": path_results,
+    }
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
-    for raw in inputs:
-        path = Path(raw).expanduser()
-        if path.is_dir():
-            for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
-                    yield child
-        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
-            yield path
+    yield from resolve_input_paths(inputs)["paths"]
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix in {".csv", ".tsv"}:
         return parse_table(path)
@@ -115,7 +249,76 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
         return parse_json(path)
     if suffix in {".xlsx", ".xlsm"}:
         return parse_workbook(path)
+    if suffix == ".zip":
+        return parse_zip(path, audit=audit)
     return parse_text_codes(path)
+
+
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if audit is not None:
+        audit["archive_count"] += 1
+    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-ths-watchlist-") as tmp:
+        tmp_root = Path(tmp)
+        for info in archive.infolist():
+            member_name = info.filename.replace("\\", "/")
+            member_path = PurePosixPath(member_name)
+            member_extension = Path(member_name).suffix.lower() or "<none>"
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", member_extension)
+            skip_reason = archive_member_skip_reason(info)
+            if skip_reason:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", member_extension)
+                    increment_counter(audit, "skipped_archive_member_reason_counts", skip_reason)
+                    append_archive_member_result(audit, member_name, status="skipped", reason=skip_reason)
+                continue
+            target = tmp_root.joinpath(*member_path.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                target.write_bytes(archive.read(info))
+                parsed = parse_path(target)
+            except Exception:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", member_extension)
+                    increment_counter(audit, "skipped_archive_member_reason_counts", "parse_error")
+                    append_archive_member_result(audit, member_name, status="parse_error", reason="parse_error")
+                continue
+            if audit is not None:
+                append_archive_member_result(audit, member_name, status="parsed" if parsed else "no_records_parsed", parsed_record_count=len(parsed))
+            for member_row, record in enumerate(parsed, start=1):
+                if isinstance(record, dict):
+                    record["_collectorx_raw_ref"] = {
+                        "path": f"{path}::{member_name}",
+                        "archive": str(path),
+                        "archive_member": member_name,
+                        "member_row": member_row,
+                    }
+                records.append(record)
+                if audit is not None:
+                    audit["archive_member_imported_record_count"] += 1
+    return records
+
+
+def archive_member_skip_reason(info: zipfile.ZipInfo) -> Optional[str]:
+    member_name = info.filename.replace("\\", "/")
+    member_path = PurePosixPath(member_name)
+    windows_path = PureWindowsPath(info.filename)
+    suffix = Path(member_name).suffix.lower()
+    if info.is_dir():
+        return "directory"
+    if not is_safe_archive_member(member_path) or windows_path.drive:
+        return "unsafe_path"
+    if suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+        return "unsupported_extension"
+    return None
+
+
+def is_safe_archive_member(member_path: PurePosixPath) -> bool:
+    return bool(member_path.parts) and not member_path.is_absolute() and ".." not in member_path.parts
 
 
 def parse_table(path: Path) -> List[Dict[str, Any]]:
@@ -217,7 +420,7 @@ def parse_text_codes(path: Path) -> List[Dict[str, Any]]:
 
 
 def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_at: Optional[str]) -> Dict[str, Any]:
-    symbol = normalize_symbol(first(record, ["symbol", "code", "stock_code", "证券代码", "代码"]) or "")
+    symbol = normalize_symbol(watchlist_symbol(record) or "")
     name = first(record, ["name", "stock_name", "security_name", "证券名称", "名称"]) or ""
     group = first(record, ["group", "group_name", "folder", "watchlist", "分组", "自选分组"]) or first(record, ["sheet"])
     added_at = first(record, ["added_at", "created_at", "time", "date", "加入时间", "添加时间", "日期"])
@@ -232,8 +435,18 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "added_at": added_at,
         "source_section": first(record, ["source_section", "sheet"]),
         "raw": sanitized(record),
+        "broker_confirmed_trade": False,
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    raw_ref = {
+        "path": str(path),
+        "row": row,
+        "symbol": symbol,
+    }
+    if isinstance(record.get("_collectorx_raw_ref"), dict):
+        raw_ref.update(record["_collectorx_raw_ref"])
+        raw_ref["row"] = row
+        raw_ref["symbol"] = symbol
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, symbol, group, added_at),
@@ -244,11 +457,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "time": added_at,
         "collected_at": collected_at or now_iso(),
         "data": data,
-        "raw_ref": {
-            "path": str(path),
-            "row": row,
-            "symbol": symbol,
-        },
+        "raw_ref": raw_ref,
         "privacy": {
             "sensitive": True,
             "local_only": True,
@@ -281,11 +490,18 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     market_counts = Counter((event.get("data") or {}).get("market", "unknown") for event in events if event["kind"] == "watchlist")
     group_counts = Counter((event.get("data") or {}).get("group", "unknown") for event in events if event["kind"] == "watchlist")
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    field_coverage = build_watchlist_field_coverage(events)
+    audit = collection_audit or {}
     return {
         "schema": "collectorx.ths_watchlist.manifest.v1",
         "collector": COLLECTOR,
@@ -294,6 +510,14 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         "kind_counts": dict(sorted(kind_counts.items())),
         "market_counts": dict(sorted(market_counts.items())),
         "group_counts": dict(sorted(group_counts.items())),
+        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "field_coverage": field_coverage,
+        "evidence_policy": {
+            "ths_watchlist_is_strong_trade_source": False,
+            "broker_confirmed_trade_collection": False,
+            "evidence_role": "attention_universe_only",
+            "requires_corroboration_with": ["ths_portfolio", "eastmoney_portfolio", "research_documents", "investment_notes", "reviews"],
+        },
         "collection_readiness": {
             "status": "needs_ths_watchlist_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
@@ -301,6 +525,14 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
             "next_action": "Provide authorized Tonghuashun watchlist export." if gap_only else "Use as attention-universe evidence; corroborate with trades and research.",
         },
+        "collection_audit": audit,
+        "ths_watchlist_boundary_proof": build_watchlist_boundary_proof(
+            events,
+            collection_audit=audit,
+            field_coverage=field_coverage,
+            market_counts=market_counts,
+            group_counts=group_counts,
+        ),
     }
 
 
@@ -332,6 +564,94 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
     return augment_evidence_with_dimensions(evidence, usable_events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
+def build_watchlist_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    watchlist_events = [event for event in events if event.get("kind") == "watchlist"]
+    fields = [
+        "symbol",
+        "market",
+        "name",
+        "group",
+        "industry",
+        "reason",
+        "tags",
+        "added_at",
+        "source_section",
+    ]
+    coverage: Dict[str, Dict[str, int]] = {}
+    for field in fields:
+        present = sum(1 for event in watchlist_events if (event.get("data") or {}).get(field) not in (None, "", [], {}))
+        coverage[field] = {"present": present, "missing": max(len(watchlist_events) - present, 0)}
+    return {
+        "watchlist_event_count": len(watchlist_events),
+        "fields": coverage,
+    }
+
+
+def build_watchlist_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Dict[str, Any],
+    field_coverage: Dict[str, Any],
+    market_counts: Counter[str],
+    group_counts: Counter[str],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if event.get("kind") == "watchlist"]
+    gap_only = bool(events) and not usable_events
+    if not events or gap_only:
+        proof_level = "no_authorized_ths_watchlist_input"
+    elif int(collection_audit.get("archive_member_imported_record_count") or 0) > 0:
+        proof_level = "authorized_ths_watchlist_package_partial"
+    else:
+        proof_level = "authorized_ths_watchlist_partial"
+    return {
+        "source_type": "authorized_local_ths_watchlist_export",
+        "proof_level": proof_level,
+        "event_count": len(usable_events),
+        "parsed_record_count": collection_audit.get("parsed_record_count", 0),
+        "filtered_record_count": collection_audit.get("filtered_record_count", 0),
+        "emitted_event_count": collection_audit.get("emitted_event_count", len(events)),
+        "input_boundary": {
+            "input_count": collection_audit.get("input_count", 0),
+            "requested_inputs": collection_audit.get("requested_inputs", []),
+            "resolved_input_file_count": collection_audit.get("resolved_input_file_count", 0),
+            "input_missing_count": collection_audit.get("input_missing_count", 0),
+            "skipped_file_count": collection_audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": collection_audit.get("skipped_reason_counts", {}),
+            "limit": collection_audit.get("limit"),
+            "limit_reached": collection_audit.get("limit_reached", False),
+        },
+        "format_boundary": {
+            "extension_counts": collection_audit.get("extension_counts", {}),
+            "skipped_extension_counts": collection_audit.get("skipped_extension_counts", {}),
+            "archive_count": collection_audit.get("archive_count", 0),
+            "archive_member_count": collection_audit.get("archive_member_count", 0),
+            "archive_member_extension_counts": collection_audit.get("archive_member_extension_counts", {}),
+            "archive_member_imported_record_count": collection_audit.get("archive_member_imported_record_count", 0),
+            "skipped_archive_member_count": collection_audit.get("skipped_archive_member_count", 0),
+            "skipped_archive_member_reason_counts": collection_audit.get("skipped_archive_member_reason_counts", {}),
+        },
+        "watchlist_surface": {
+            "market_counts": dict(sorted(market_counts.items())),
+            "group_counts": dict(sorted(group_counts.items())),
+            "field_coverage": field_coverage,
+            "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
+        },
+        "strong_trade_boundary": {
+            "broker_confirmed_trade_collection": False,
+            "holdings_collected": False,
+            "executions_collected": False,
+            "orders_collected": False,
+            "fund_flows_collected": False,
+            "watchlist_attention_universe_only": True,
+            "requires_corroboration_with": ["ths_portfolio", "eastmoney_portfolio", "research_documents", "investment_notes", "reviews"],
+        },
+        "complete_attention_universe_claimed": False,
+        "direct_tonghuashun_account_reconnect": False,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": bool(usable_events),
+    }
+
+
 def write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -357,6 +677,78 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
     ]
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def watchlist_symbol(record: Dict[str, Any]) -> Optional[str]:
+    stock = first_raw(record, "stock")
+    stock_record = stock if isinstance(stock, dict) else {}
+    return first(record, ["symbol", "code", "stock_code", "stockCode", "证券代码", "股票代码", "代码"]) or first(
+        stock_record,
+        ["symbol", "code", "stock_code", "stockCode"],
+    )
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def increment_counter_value(counts: Dict[str, int], value: str) -> None:
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def path_result(path: Path, *, status: str, reason: Optional[str] = None) -> Dict[str, Any]:
+    result = {
+        "path": str(path),
+        "extension": path.suffix.lower() or "<none>",
+        "status": status,
+    }
+    if reason:
+        result["reason"] = reason
+    return result
+
+
+def parser_name_for_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".zip":
+        return "zip"
+    if suffix in {".csv", ".tsv"}:
+        return "csv"
+    if suffix in {".json", ".jsonl", ".ndjson"}:
+        return "json"
+    if suffix in {".xlsx", ".xlsm"}:
+        return "openpyxl"
+    if suffix in {".html", ".htm", ".txt", ".md", ".markdown"}:
+        return "text"
+    return "unknown"
+
+
+def append_archive_member_result(
+    audit: Dict[str, Any],
+    member: str,
+    *,
+    status: str,
+    reason: Optional[str] = None,
+    parsed_record_count: Optional[int] = None,
+) -> None:
+    result = {"member": member, "status": status}
+    if reason:
+        result["reason"] = reason
+    if parsed_record_count is not None:
+        result["parsed_record_count"] = parsed_record_count
+    audit.setdefault("archive_member_results", []).append(result)
+
+
+def finalize_audit(audit: Dict[str, Any]) -> None:
+    for key in (
+        "extension_counts",
+        "skipped_extension_counts",
+        "skipped_reason_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+        "skipped_archive_member_reason_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

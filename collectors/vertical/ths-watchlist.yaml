@@ -21,6 +21,11 @@ scope:
     - watchlist_tags
     - watchlist_notes
     - added_time
+    - path_level_source_audit
+    - zip_member_provenance
+    - skipped_file_reason_counts
+    - field_coverage
+    - ths_watchlist_boundary_proof
   excludes:
     - login_password
     - trading_password
@@ -43,7 +48,8 @@ prompt: |
       --input <用户授权的同花顺自选股导出文件或目录> \
       --out-dir <输出目录>
 
-  输入支持 CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT。
-  输出 collectorx.event.v1 到 lake/ths-watchlist/events.jsonl，并写入 manifest.json。
-  自选股只作为 attention-universe 证据，后续必须与交易、持仓、笔记、
-  研报和复盘数据交叉验证。
+  输入支持 CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT、ZIP。
+  输出 collectorx.event.v1 到 lake/ths-watchlist/events.jsonl，并写入 manifest.json、
+  investor_wiki_evidence.v1.json、逐输入 source audit、ZIP 成员 provenance、
+  field_coverage 和 ths_watchlist_boundary_proof。自选股只作为 attention-universe
+  证据，后续必须与交易、持仓、笔记、研报和复盘数据交叉验证。

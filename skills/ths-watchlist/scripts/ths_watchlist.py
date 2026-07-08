@@ -7,18 +7,18 @@ import argparse
 import json
 from pathlib import Path
 
-from ths_watchlist.parser import build_evidence, build_manifest, collect_from_inputs, now_iso, write_json, write_jsonl, write_summary
+from ths_watchlist.parser import build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso, write_json, write_jsonl, write_summary
 
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
         out_dir = Path(args.out_dir).expanduser()
         write_jsonl(out_dir / "lake" / "ths-watchlist" / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=audit)
         write_json(out_dir / "manifest.json", manifest)
         write_json(out_dir / "investor_wiki_evidence.v1.json", build_evidence(events, generated_at=collected_at))
         write_summary(out_dir / "SUMMARY.md", manifest)

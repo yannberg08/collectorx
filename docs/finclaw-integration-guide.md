@@ -296,9 +296,16 @@ Current status:
 
 - Converts authorized Tonghuashun watchlist exports into `ths-watchlist`
   `watchlist` events.
-- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, and TXT.
+- Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, TXT, and ZIP
+  packages.
 - Captures symbol, name, market, group, industry, tags, note/reason, and
   added time when present.
+- `manifest.collection_audit` records requested inputs, missing inputs,
+  resolved files, skipped files, skipped reasons, path-level parse results,
+  ZIP member provenance, unsafe ZIP member skips, and limit truncation.
+- `manifest.field_coverage` and `manifest.ths_watchlist_boundary_proof` tell
+  FinClaw what watchlist fields are present and explicitly keep holdings,
+  executions, orders, fund flows, and complete attention-universe claims false.
 - Recursively filters credential-like raw keys.
 - Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
   coverage for attention-universe subdimensions.

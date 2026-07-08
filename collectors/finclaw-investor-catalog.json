@@ -57,7 +57,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-import",
       "cli": "python3 skills/ths-watchlist/scripts/ths_watchlist.py collect --input <authorized-ths-watchlist-export> --out-dir <out-dir>",
-      "collects": "Tonghuashun watchlist symbols, names, groups, industries, tags, notes, added time, source audit, field coverage, and attention-universe Investor Wiki evidence.",
+      "collects": "Tonghuashun watchlist symbols, names, groups, industries, tags, notes, added time, path-level source audit, ZIP member provenance, skipped reason counts, field coverage, ths_watchlist_boundary_proof, and attention-universe Investor Wiki evidence.",
       "must_not_collect": "Broker-confirmed holdings, executions, orders, fund flows, trading passwords, cookies, tokens, or sessions.",
       "production_gap": "Real Tonghuashun watchlist export discovery, local-store validation, and cross-platform path validation."
     },

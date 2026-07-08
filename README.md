@@ -127,7 +127,7 @@ Operational docs:
 | `financial-news-usage` | `financial-news-usage` | Local usage export, saved-page, ZIP, and browser-history baseline for finance-app read, favorite, subscribe, search, and alert actions with platform/action/topic coverage, per-input source audit, skip reasons, and path-safety manifest |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only CSV/JSON/Excel/ZIP export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, FX, margin, tax, settlement fields, account-boundary/currency-market/fee-tax-margin summaries, unified brokerage-boundary proof, broker/trade-surface/field coverage, per-input source audit, skip reasons, and path-safety manifest |
 | `pro-terminal-usage` | `pro-terminal-usage` | Local workflow CSV/JSON/Excel/HTML/TXT/LOG/ZIP export baseline for Wind/Choice/iFinD/Bloomberg workspaces, watchlists, searches, downloads, templates, factors, datasets, fields, function codes, terminal/activity/field/topic coverage, unified workflow-boundary proof, per-input source audit, skip reasons, and license-safe manifest |
-| `ths-watchlist` | `ths-watchlist` | Authorized local export baseline for Tonghuashun watchlists with 7/20 Wiki evidence package; attention-universe evidence only, corroborate with trades/research |
+| `ths-watchlist` | `ths-watchlist` | Authorized local export/package baseline for Tonghuashun watchlists with path-level source audit, ZIP provenance, field coverage, ths_watchlist_boundary_proof, and 7/20 Wiki evidence package; attention-universe evidence only, corroborate with trades/research |
 
 ### Investor Lenses
 
