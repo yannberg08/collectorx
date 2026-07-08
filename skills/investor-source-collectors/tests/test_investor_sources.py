@@ -1743,8 +1743,15 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
                     "action_type": "favorite",
                     "title": "半导体行业景气跟踪",
                     "source_account": "券商研究公众号",
+                    "source_account_type": "broker_research_account",
                     "url": "https://mp.weixin.qq.com/s/research",
+                    "article_id": "research-001",
                     "tags": ["行业", "半导体"],
+                    "symbols": ["688981"],
+                    "favorite_reason": "跟踪半导体景气和估值假设",
+                    "read_duration_seconds": 240,
+                    "read_progress": "90%",
+                    "engagement": {"read_count": 5600, "like_count": 120},
                     "text_preview": "证券研究深度报告讨论财报、现金流、估值、ROE、安全边际和风险提示。",
                 },
                 "raw_ref": {"url": "https://mp.weixin.qq.com/s/research"},
@@ -1764,8 +1771,13 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
                     "action_type": "read",
                     "title": "市场策略周报：A股仓位与风格 000300",
                     "source_account": "财经策略号",
+                    "source_account_type": "finance_media_account",
                     "url": "https://mp.weixin.qq.com/s/strategy",
+                    "article_id": "strategy-001",
                     "tags": ["策略"],
+                    "symbols": ["000300"],
+                    "read_duration": "3分钟",
+                    "read_progress": "60%",
                     "text_preview": "A股策略讨论仓位、风格、配置、宏观政策、利率和流动性。",
                 },
                 "raw_ref": {"url": "https://mp.weixin.qq.com/s/strategy"},
@@ -1785,8 +1797,12 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
                     "action_type": "saved_file",
                     "title": "DCF估值模型笔记",
                     "source_account": "价值投资笔记",
+                    "source_account_type": "investment_creator_account",
                     "url": "https://mp.weixin.qq.com/s/valuation",
+                    "article_id": "valuation-001",
                     "tags": ["估值"],
+                    "symbols": ["600519"],
+                    "favorite_reason": "补充估值模型模板",
                     "text_preview": "估值模型拆解 DCF、PE、PB、ROE、目标价和安全边际。",
                 },
                 "raw_ref": {"url": "https://mp.weixin.qq.com/s/valuation"},
@@ -1806,8 +1822,13 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
                     "action_type": "share",
                     "title": "医药组合复盘：风险预警与调仓",
                     "source_account": "投资复盘号",
+                    "source_account_type": "investment_creator_account",
                     "url": "https://mp.weixin.qq.com/s/risk",
+                    "article_id": "risk-001",
                     "tags": ["组合", "风险"],
+                    "symbols": ["300760"],
+                    "share_target": "投研群",
+                    "engagement": {"share_count": 32, "comment_count": 8},
                     "text_preview": "组合持仓复盘、回撤、止损、下行风险和调仓动作。",
                 },
                 "raw_ref": {"url": "https://mp.weixin.qq.com/s/risk"},
@@ -1886,14 +1907,24 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
         assert surface["source_account_type_counts"]["investment_creator_account"] == 2
         assert surface["source_account_count"] == 4
         assert surface["public_account_article_count"] == 4
-        assert surface["matched_symbol_event_count"] == 1
+        assert surface["matched_symbol_event_count"] == 4
+        assert surface["symbol_event_count"] == 4
+        assert surface["symbol_count"] == 4
         assert surface["events_with_url"] == 4
+        assert surface["events_with_article_id"] == 4
         assert surface["events_with_tags"] == 4
         assert surface["events_with_text"] == 4
         assert surface["events_with_action_time"] == 4
+        assert surface["events_with_favorite_reason"] == 2
+        assert surface["events_with_share_target"] == 1
+        assert surface["events_with_read_duration"] == 2
+        assert surface["events_with_read_progress"] == 2
+        assert surface["events_with_engagement"] == 2
+        assert surface["average_read_duration_seconds"] == 210
+        assert surface["average_read_progress"] == 0.75
         assert surface["collector_writes_wiki_directly"] is False
         proof = manifest["wechat_article_boundary_proof"]
-        assert proof["proof_level"] == "authorized_wechat_articles_with_source_and_content_surface"
+        assert proof["proof_level"] == "authorized_wechat_articles_with_behavior_surface"
         assert proof["event_count"] == 4
         assert proof["candidate_record_count"] == 5
         assert proof["matched_event_count"] == 4
@@ -1908,11 +1939,22 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
         }
         assert proof["article_action_boundary"]["source_account_count"] == 4
         assert proof["article_action_boundary"]["public_account_article_count"] == 4
+        assert proof["article_action_boundary"]["matched_symbol_event_count"] == 4
+        assert proof["article_action_boundary"]["symbol_event_count"] == 4
+        assert proof["article_action_boundary"]["symbol_count"] == 4
         assert proof["content_pointer_boundary"]["events_with_url"] == 4
+        assert proof["content_pointer_boundary"]["events_with_article_id"] == 4
         assert proof["content_pointer_boundary"]["events_with_source_account"] == 4
         assert proof["content_pointer_boundary"]["events_with_tags"] == 4
         assert proof["content_pointer_boundary"]["events_with_text"] == 4
         assert proof["content_pointer_boundary"]["events_with_action_time"] == 4
+        assert proof["behavior_boundary"]["events_with_favorite_reason"] == 2
+        assert proof["behavior_boundary"]["events_with_share_target"] == 1
+        assert proof["behavior_boundary"]["events_with_read_duration"] == 2
+        assert proof["behavior_boundary"]["events_with_read_progress"] == 2
+        assert proof["behavior_boundary"]["events_with_engagement"] == 2
+        assert proof["behavior_boundary"]["average_read_duration_seconds"] == 210
+        assert proof["behavior_boundary"]["average_read_progress"] == 0.75
         assert proof["complete_wechat_favorites_claimed"] is False
         assert proof["complete_wechat_read_history_claimed"] is False
         assert proof["public_account_full_crawl_claimed"] is False

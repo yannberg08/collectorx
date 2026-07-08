@@ -34,6 +34,12 @@ def test_collect_json_and_html_events() -> None:
                             "action": "收藏",
                             "saved_at": "2026-07-08T09:00:00+08:00",
                             "summary": "讨论财报、估值和风险点。",
+                            "favorite_reason": "估值框架可复用",
+                            "read_duration_seconds": 180,
+                            "read_progress": "85%",
+                            "证券代码": "688981",
+                            "read_count": "1234",
+                            "like_count": 56,
                             "token": "must-not-leak",
                         },
                         {
@@ -41,6 +47,8 @@ def test_collect_json_and_html_events() -> None:
                             "author": "生活号",
                             "action": "阅读",
                             "saved_at": "2026-07-08T10:00:00+08:00",
+                            "read_duration": "2分钟",
+                            "read_progress": "50%",
                         },
                     ]
                 },
@@ -66,6 +74,9 @@ def test_collect_json_and_html_events() -> None:
                                 "url": "https://mp.weixin.qq.com/s/share",
                                 "action": "转发",
                                 "shared_at": "2026-07-08T11:00:00+08:00",
+                                "article_id": "share-article-001",
+                                "share_target": "投研群",
+                                "symbols": ["00700", "03690"],
                             }
                         ]
                     },
@@ -105,6 +116,17 @@ def test_collect_json_and_html_events() -> None:
         share_event = next(event for event in events if event["data"]["action_type"] == "share")
         assert share_event["raw_ref"]["source_archive"] == str(share_zip)
         assert share_event["raw_ref"]["archive_member"] == "shares.json"
+        assert share_event["data"]["article_id"] == "share-article-001"
+        assert share_event["data"]["share_target"] == "投研群"
+        assert share_event["data"]["symbols"] == ["00700", "03690"]
+        favorite_event = next(event for event in events if event["data"]["action_type"] == "favorite")
+        assert favorite_event["data"]["source_account_type"] == "broker_research_account"
+        assert favorite_event["data"]["favorite_reason"] == "估值框架可复用"
+        assert favorite_event["data"]["read_duration_seconds"] == 180
+        assert favorite_event["data"]["read_progress"] == 0.85
+        assert favorite_event["data"]["symbols"] == ["688981"]
+        assert favorite_event["data"]["engagement"]["read_count"] == 1234
+        assert favorite_event["data"]["engagement"]["like_count"] == 56
         assert "must-not-leak" not in json.dumps(events, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_article_favorites"] is False
@@ -114,7 +136,26 @@ def test_collect_json_and_html_events() -> None:
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["action_coverage"]["real_account_validation"] is False
         assert manifest["field_coverage"]["field_counts"]["action_type"] == 4
+        assert manifest["field_coverage"]["field_counts"]["source_account_type"] == 4
+        assert manifest["field_coverage"]["field_counts"]["article_id"] >= 2
+        assert manifest["field_coverage"]["field_counts"]["symbols"] == 2
+        assert manifest["field_coverage"]["field_counts"]["favorite_reason"] == 1
+        assert manifest["field_coverage"]["field_counts"]["share_target"] == 1
+        assert manifest["field_coverage"]["field_counts"]["read_duration_seconds"] == 2
+        assert manifest["field_coverage"]["field_counts"]["read_progress"] == 2
+        assert manifest["field_coverage"]["field_counts"]["engagement"] == 1
         assert manifest["article_surface_summary"]["events_with_url"] >= 2
+        assert manifest["article_surface_summary"]["events_with_article_id"] >= 2
+        assert manifest["article_surface_summary"]["events_with_symbols"] == 2
+        assert manifest["article_surface_summary"]["source_account_type_counts"]["broker_research_account"] == 1
+        assert manifest["article_surface_summary"]["source_account_type_counts"]["investment_creator_account"] >= 2
+        assert manifest["article_behavior_summary"]["events_with_favorite_reason"] == 1
+        assert manifest["article_behavior_summary"]["events_with_share_target"] == 1
+        assert manifest["article_behavior_summary"]["events_with_read_duration"] == 2
+        assert manifest["article_behavior_summary"]["events_with_read_progress"] == 2
+        assert manifest["article_behavior_summary"]["events_with_engagement"] == 1
+        assert manifest["article_behavior_summary"]["average_read_duration_seconds"] == 150
+        assert manifest["article_behavior_summary"]["average_read_progress"] == 0.675
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_member_count"] == 4
         assert manifest["source_audit"]["skipped_archive_member_count"] == 3

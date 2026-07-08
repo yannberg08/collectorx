@@ -862,14 +862,17 @@ Current status:
 - Writes `manifest.action_coverage` with expected user actions: favorite,
   read, share, and saved file.
 - Writes `manifest.field_coverage`, `manifest.article_surface_summary`,
-  `manifest.source_audit`, `manifest.content_policy`, and
-  `manifest.evidence_policy` so Lake can see which article/source fields are
-  actually present before the investor lens runs.
+  `manifest.article_behavior_summary`, `manifest.source_audit`,
+  `manifest.content_policy`, and `manifest.evidence_policy` so Lake can see
+  which article/source/behavior fields are actually present before the investor
+  lens runs.
 - `manifest.source_audit` records requested inputs, missing inputs,
   per-file parse results, extension coverage, skipped file reasons, ZIP member
   counts, skipped ZIP member reasons, and path-safety flags.
-- Captures ZIP member provenance, source account count, text length, and filters
-  credential-like raw keys.
+- Captures ZIP member provenance, source account type, article ID, favorite
+  reason, share target, read duration/progress, symbol hints, engagement
+  counters, source account count, text length, and filters credential-like raw
+  keys.
 - Does not claim investment-article status directly.
 - Feed `lake/wechat-favorites/events.jsonl` into `wechat-article-favorites`
   lens for investment public-account articles, saved/read/share/saved-file
@@ -879,8 +882,10 @@ Current status:
   `manifest.wechat_article_boundary_proof` with authorized input counts,
   upstream WeChat-favorites source counts, candidate/matched/filtered counts,
   favorite/read/share/saved-file action counts, source-account type counts,
-  URL/tag/text/time coverage, and explicit no-complete-favorites,
-  no-complete-read-history, and no-public-account-crawl boundaries.
+  URL/article-ID/tag/text/time coverage, behavior boundary counts
+  (favorite reason, share target, read duration/progress, engagement, symbols),
+  and explicit no-complete-favorites, no-complete-read-history, and
+  no-public-account-crawl boundaries.
 - Real WeChat favorites database/public-account read-history adapters still
   require version-specific validation.
 

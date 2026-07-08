@@ -30,6 +30,13 @@ scope:
     - risk_warning_articles
     - macro_policy_articles
     - source_authors
+    - article_ids
+    - favorite_reasons
+    - share_targets
+    - read_duration_progress
+    - symbol_mentions
+    - engagement_counters
+    - behavior_boundary_proof
     - wechat_article_boundary_proof
   excludes:
     - public_account_full_crawl
@@ -38,5 +45,5 @@ scope:
 
 description: |
   微信收藏/公众号通用采集器负责用户动作。本 lens 只筛投资类公众号、炒股文章和收藏来源，
-  并汇总文章面谱、用户动作、公众号来源类型和文章边界证明，供投资分身 Wiki 使用。
+  并汇总文章面谱、用户动作、行为强度、标的线索、公众号来源类型和文章边界证明，供投资分身 Wiki 使用。
   它不声明完整微信收藏、完整阅读历史、公众号全文爬取或公开文章镜像。

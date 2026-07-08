@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -897,13 +898,25 @@ def build_wechat_article_boundary_proof(
             "source_account_count": surface.get("source_account_count", 0),
             "public_account_article_count": surface.get("public_account_article_count", 0),
             "matched_symbol_event_count": surface.get("matched_symbol_event_count", 0),
+            "symbol_event_count": surface.get("symbol_event_count", 0),
+            "symbol_count": surface.get("symbol_count", 0),
         },
         "content_pointer_boundary": {
             "events_with_url": surface.get("events_with_url", 0),
+            "events_with_article_id": surface.get("events_with_article_id", 0),
             "events_with_source_account": surface.get("events_with_source_account", 0),
             "events_with_tags": surface.get("events_with_tags", 0),
             "events_with_text": surface.get("events_with_text", 0),
             "events_with_action_time": surface.get("events_with_action_time", 0),
+        },
+        "behavior_boundary": {
+            "events_with_favorite_reason": surface.get("events_with_favorite_reason", 0),
+            "events_with_share_target": surface.get("events_with_share_target", 0),
+            "events_with_read_duration": surface.get("events_with_read_duration", 0),
+            "events_with_read_progress": surface.get("events_with_read_progress", 0),
+            "events_with_engagement": surface.get("events_with_engagement", 0),
+            "average_read_duration_seconds": surface.get("average_read_duration_seconds"),
+            "average_read_progress": surface.get("average_read_progress"),
         },
         "wechat_article_boundary": surface,
         "complete_wechat_favorites_claimed": False,
@@ -933,6 +946,18 @@ def wechat_article_proof_level(
             return "no_readable_wechat_favorites_lake_input"
         return "no_usable_investment_articles_after_filter"
     surface = wechat_article_surface_summary(usable_events)
+    if any(
+        int(surface.get(key) or 0) > 0
+        for key in (
+            "events_with_favorite_reason",
+            "events_with_share_target",
+            "events_with_read_duration",
+            "events_with_read_progress",
+            "events_with_engagement",
+            "symbol_event_count",
+        )
+    ):
+        return "authorized_wechat_articles_with_behavior_surface"
     if int(surface.get("events_with_text") or 0) > 0 and int(surface.get("events_with_source_account") or 0) > 0:
         return "authorized_wechat_articles_with_source_and_content_surface"
     if int(surface.get("events_with_source_account") or 0) > 0:
@@ -2219,6 +2244,31 @@ def value_count(value: Any) -> int:
     return 1
 
 
+def numeric_value(value: Any) -> Optional[float]:
+    if value in (None, ""):
+        return None
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    if not match:
+        return None
+    number = float(match.group(0))
+    text = str(value).lower()
+    if "小时" in text or "hour" in text:
+        number *= 3600
+    elif "分钟" in text or "min" in text:
+        number *= 60
+    return max(0.0, number)
+
+
+def progress_number(value: Any) -> Optional[float]:
+    number = numeric_value(value)
+    if number is None:
+        return None
+    text = str(value)
+    if "%" in text or number > 1:
+        number /= 100
+    return round(min(max(number, 0.0), 1.0), 4)
+
+
 def wechat_article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
     surface_counts: Counter[str] = Counter()
@@ -2228,11 +2278,21 @@ def wechat_article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, An
     upstream_collector_counts: Counter[str] = Counter()
     source_account_type_counts: Counter[str] = Counter()
     matched_symbol_event_count = 0
+    symbol_event_count = 0
+    symbols = set()
     events_with_url = 0
+    events_with_article_id = 0
     events_with_source_account = 0
     events_with_tags = 0
     events_with_text = 0
     events_with_action_time = 0
+    events_with_favorite_reason = 0
+    events_with_share_target = 0
+    events_with_read_duration = 0
+    events_with_read_progress = 0
+    events_with_engagement = 0
+    read_durations: List[float] = []
+    read_progress_values: List[float] = []
     public_account_article_count = 0
     source_accounts = set()
     for event in usable_events:
@@ -2256,17 +2316,40 @@ def wechat_article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, An
         if source_account:
             source_accounts.add(source_account)
             events_with_source_account += 1
-        source_account_type_counts[wechat_source_account_type(source_account)] += 1
-        if classification.get("matched_symbols"):
+        source_account_type = str(payload.get("source_account_type") or wechat_source_account_type(source_account))
+        source_account_type_counts[source_account_type] += 1
+        matched_symbols = classification.get("matched_symbols") if isinstance(classification.get("matched_symbols"), list) else []
+        payload_symbols = payload.get("symbols") if isinstance(payload.get("symbols"), list) else []
+        event_symbols = [str(symbol) for symbol in [*matched_symbols, *payload_symbols] if symbol not in (None, "")]
+        if event_symbols:
+            symbol_event_count += 1
+            symbols.update(event_symbols)
+        if matched_symbols:
             matched_symbol_event_count += 1
         if payload.get("url") or event.get("raw_ref", {}).get("url"):
             events_with_url += 1
+        if value_present(first_payload_value(payload, ("article_id", "mid", "msgid", "文章ID"))):
+            events_with_article_id += 1
         if value_present(payload.get("tags")):
             events_with_tags += 1
         if payload.get("has_text") is True or value_present(payload.get("text_preview")) or value_present(payload.get("content")):
             events_with_text += 1
         if event.get("time") or first_payload_value(payload, ("action_time", "time", "saved_at", "read_at", "shared_at")):
             events_with_action_time += 1
+        if value_present(first_payload_value(payload, ("favorite_reason", "reason", "收藏理由", "收藏备注"))):
+            events_with_favorite_reason += 1
+        if value_present(first_payload_value(payload, ("share_target", "shared_to", "转发对象", "分享给"))):
+            events_with_share_target += 1
+        duration = numeric_value(first_payload_value(payload, ("read_duration_seconds", "read_duration", "duration", "阅读时长")))
+        if duration is not None:
+            read_durations.append(duration)
+            events_with_read_duration += 1
+        progress = progress_number(first_payload_value(payload, ("read_progress", "progress", "read_percent", "阅读进度")))
+        if progress is not None:
+            read_progress_values.append(progress)
+            events_with_read_progress += 1
+        if value_present(payload.get("engagement")):
+            events_with_engagement += 1
     return {
         "event_count": len(usable_events),
         "expected_wechat_article_surfaces": list(WECHAT_ARTICLE_SURFACE_ORDER[:-1]),
@@ -2282,11 +2365,21 @@ def wechat_article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, An
         "source_account_count": len(source_accounts),
         "public_account_article_count": public_account_article_count,
         "matched_symbol_event_count": matched_symbol_event_count,
+        "symbol_event_count": symbol_event_count,
+        "symbol_count": len(symbols),
         "events_with_url": events_with_url,
+        "events_with_article_id": events_with_article_id,
         "events_with_source_account": events_with_source_account,
         "events_with_tags": events_with_tags,
         "events_with_text": events_with_text,
         "events_with_action_time": events_with_action_time,
+        "events_with_favorite_reason": events_with_favorite_reason,
+        "events_with_share_target": events_with_share_target,
+        "events_with_read_duration": events_with_read_duration,
+        "events_with_read_progress": events_with_read_progress,
+        "events_with_engagement": events_with_engagement,
+        "average_read_duration_seconds": round(sum(read_durations) / len(read_durations), 2) if read_durations else None,
+        "average_read_progress": round(sum(read_progress_values) / len(read_progress_values), 4) if read_progress_values else None,
         "generic_wechat_article_lens": True,
         "collector_writes_wiki_directly": False,
     }
