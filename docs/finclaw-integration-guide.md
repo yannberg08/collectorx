@@ -478,6 +478,12 @@ Current status:
   action instead of pretending the mailbox was collected.
 - Feed `lake/email/events.jsonl` into `email-research` before using broker
   research, IR, roadshow, or research-attachment evidence in the investor Wiki.
+- `email-research` writes `manifest.lens_surface_summary` and
+  `manifest.email_research_boundary_proof` for morning meetings, broker
+  research, roadshow invitations, company IR threads, earnings/announcement
+  alerts, research attachment refs, sender domains, body-preview coverage, and
+  attachment boundaries. It keeps complete-mailbox claims, full-body Wiki
+  inclusion, and attachment-body collection false.
 
 ### 雪球投资活动
 

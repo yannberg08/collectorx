@@ -120,8 +120,8 @@
       "requires_upstream": [
         "email"
       ],
-      "user_step": "Run after email Lake exists to classify broker research, IR mail, and attachment signals.",
-      "preflight": "Upstream email events.jsonl exists and full-body policy remains explicit.",
+      "user_step": "Run after email Lake exists to classify broker research, morning meetings, roadshows, IR mail, earnings alerts, and attachment signals.",
+      "preflight": "Upstream email events.jsonl exists; full-body Wiki inclusion and attachment-body collection remain false by default.",
       "failure_state": "needs_email_lake"
     },
     {

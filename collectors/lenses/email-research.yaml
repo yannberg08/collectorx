@@ -21,6 +21,12 @@ scope:
     - roadshow_invites
     - company_ir_threads
     - research_attachment_refs
+    - earnings_announcement_alerts
+    - email_research_surface_summary
+    - email_research_boundary_proof
+    - sender_domain_counts
+    - body_preview_boundary
+    - attachment_ref_boundary
   excludes:
     - mailbox_credentials
     - unrelated_private_email
@@ -30,4 +36,6 @@ scope:
 description: |
   邮箱原始采集由 email collector 负责。本 lens 只筛券商、研报、调研和投资项目邮件。
   附件文件名含研报、深度报告、晨会、调研、路演、纪要、财报等特征时，可作为
-  邮件研报证据；附件正文仍不进入事件。
+  邮件研报证据；附件正文仍不进入事件。manifest 会输出邮件投研面谱
+  email_research_surface_summary 和 email_research_boundary_proof，说明晨会、
+  研报、路演邀请、IR 往来、公告提醒、附件引用、正文预览和邮箱边界。

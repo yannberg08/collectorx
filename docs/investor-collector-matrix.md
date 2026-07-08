@@ -23,7 +23,7 @@
 | `xueqiu-investor-activity` | `xueqiu-watchlist` -> dedicated skill | vertical：雪球自选、关注、发帖、评论、收藏、组合 |
 | `china-wealth-assets` | dedicated skill | vertical：支付宝、天天基金、蛋卷、且慢、银行理财 |
 | `email` | `email-collector` | generic：邮箱原始通道 |
-| `email-research` | `investor-source-collectors` | lens：邮件研报、券商晨会、调研邀请 |
+| `email-research` | `investor-source-collectors` | lens：邮件研报、券商晨会、路演/调研邀请、IR 往来、公告提醒、附件引用面谱和边界证明 |
 
 ## P1
 

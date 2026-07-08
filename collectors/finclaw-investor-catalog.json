@@ -135,9 +135,9 @@
       "gate": "G2",
       "finclaw_action": "run-after-email-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source email-research --input <email-events-jsonl> --out-dir <out-dir>",
-      "collects": "Broker research, morning notes, roadshow invitations, IR communications, and research attachment signals.",
-      "must_not_collect": "Generic personal mail as investor evidence.",
-      "production_gap": "Real mailbox validation and false-positive backtest."
+      "collects": "Broker research, morning notes, roadshow invitations, IR communications, earnings announcement alerts, research attachment signals, sender-domain/body-preview/attachment boundaries, email research surface summary, and email research boundary proof.",
+      "must_not_collect": "Generic personal mail as investor evidence, full bodies into Wiki by default, attachment bodies, mailbox credentials, or complete mailbox-history claims.",
+      "production_gap": "Real mailbox validation, broader broker/IR sender backtest, and no-full-body Wiki leakage review on real mailboxes."
     },
     {
       "id": "xueqiu-watchlist",

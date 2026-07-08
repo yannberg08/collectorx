@@ -8,7 +8,7 @@
 | P0 | `research-documents` | lens | `filesystem`/`notes` | 研报、财报、公告批注、估值表和本地研究文件 |
 | P0 | `xueqiu-investor-activity` | vertical | 雪球 | 自选、关注、发帖、评论、收藏、组合活动 |
 | P0 | `china-wealth-assets` | vertical | 支付宝/天天基金/蛋卷/且慢/银行理财 | 资产边界 |
-| P0 | `email-research` | lens | `email` | 邮件研报、券商晨会、调研邀请 |
+| P0 | `email-research` | lens | `email` | 邮件研报、券商晨会、路演/调研邀请、IR 往来、公告提醒、附件引用面谱和边界证明 |
 | P1 | `meeting-minutes` | lens | 飞书/钉钉/企业微信/腾讯会议 | 路演、调研、会议纪要和投委会记录 |
 | P1 | `investment-notes` | lens | `notes` | 投资笔记、规则库、复盘和交易 checklist |
 | P1 | `task-calendar-investor` | lens | `ticktick`/`calendar` | 交易计划、研究任务、复盘提醒 |

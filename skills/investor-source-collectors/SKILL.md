@@ -84,7 +84,7 @@ P0 必做：
 - `research-documents`：lens，读取 `filesystem`/`notes` lake，只筛研报、财报、公告批注、估值表。
 - `xueqiu-investor-activity`：vertical，采雪球个人自选、关注、发帖、评论、收藏、组合活动。
 - `china-wealth-assets`：vertical，采支付宝、天天基金、蛋卷、且慢、银行理财等非股票账户资产。
-- `email-research`：lens，读取 `email` lake，只筛邮件研报、券商晨会、调研邀请。
+- `email-research`：lens，读取 `email` lake，只筛邮件研报、券商晨会、调研邀请，并输出晨会/研报/路演/IR/公告提醒/附件引用面谱与 email_research_boundary_proof。
 
 P1 必做：
 

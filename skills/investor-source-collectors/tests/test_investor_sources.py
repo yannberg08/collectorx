@@ -489,6 +489,153 @@ def test_email_research_matches_research_attachment_filename() -> None:
         assert lens_events[0]["data"]["payload"]["attachment_refs"][0]["filename"] == "半导体深度报告.pdf"
 
 
+def test_email_research_reports_surface_and_boundary_proof() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "email-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:morning",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-08T08:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "INBOX",
+                    "from": "Broker Research <research@broker.example>",
+                    "to": "owner@example.com",
+                    "subject": "晨会纪要：半导体行业跟踪",
+                    "body_preview": "今日晨会讨论半导体行业财报和估值。",
+                    "attachment_refs": [{"filename": "半导体晨会纪要.pdf", "content_type": "application/pdf"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"message_id": "<morning@example.com>", "folder": "INBOX"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:roadshow",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "IR",
+                    "from": "IR <ir@company.example>",
+                    "to": "owner@example.com",
+                    "subject": "路演邀请：业绩说明会",
+                    "body_preview": "投资者关系团队邀请参加调研交流会。",
+                    "attachment_refs": [{"filename": "roadshow.ics", "content_type": "text/calendar"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"message_id": "<roadshow@example.com>", "folder": "IR"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:alert",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "Alerts",
+                    "from": "Alerts <alerts@example.com>",
+                    "to": "owner@example.com",
+                    "subject": "公告提醒：组合持仓公司财报披露",
+                    "body_preview": "年报公告和风险提示。",
+                },
+                "raw_ref": {"message_id": "<alert@example.com>", "folder": "Alerts"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:casual",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-08T11:00:00+08:00",
+                "collected_at": "2026-07-08T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "INBOX",
+                    "from": "friend@example.com",
+                    "to": "owner@example.com",
+                    "subject": "周末照片",
+                    "body_preview": "照片见附件。",
+                    "attachment_refs": [{"filename": "holiday.jpg", "content_type": "image/jpeg"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"message_id": "<casual@example.com>", "folder": "INBOX"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "email-research",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T12:10:00+08:00",
+        )
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "email-research" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 3
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        surface = manifest["lens_surface_summary"]
+        assert surface["email_research_surface_counts"]["morning_meeting"] == 1
+        assert surface["email_research_surface_counts"]["broker_research_report"] == 1
+        assert surface["email_research_surface_counts"]["roadshow_invite"] == 1
+        assert surface["email_research_surface_counts"]["company_ir_thread"] == 1
+        assert surface["email_research_surface_counts"]["earnings_announcement"] == 3
+        assert surface["email_research_surface_counts"]["research_attachment"] == 2
+        assert surface["email_research_surface_counts"]["portfolio_alert"] == 1
+        assert surface["body_preview_event_count"] == 3
+        assert surface["full_body_event_count"] == 0
+        assert surface["attachment_ref_event_count"] == 2
+        assert surface["attachment_filename_event_count"] == 2
+        assert surface["research_attachment_event_count"] == 2
+        assert surface["message_id_event_count"] == 3
+        assert surface["events_with_time"] == 3
+        assert surface["sender_domain_counts"] == {
+            "broker.example": 1,
+            "company.example": 1,
+            "example.com": 1,
+        }
+        proof = manifest["email_research_boundary_proof"]
+        assert proof["proof_level"] == "authorized_email_research_with_research_attachment_refs"
+        assert proof["event_count"] == 3
+        assert proof["candidate_record_count"] == 4
+        assert proof["matched_event_count"] == 3
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["mailbox_boundary"]["folder_counts"] == {"Alerts": 1, "INBOX": 1, "IR": 1}
+        assert proof["content_boundary"]["full_body_in_wiki_by_default"] is False
+        assert proof["content_boundary"]["attachment_bodies_collected"] is False
+        assert proof["complete_mailbox_claimed"] is False
+        assert proof["requires_upstream_email_collector"] is True
+        validator = run_package_validator(str(out_dir), "--collector", "email-research", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
+
+
 def test_research_documents_extracts_office_and_pdf_content_when_authorized() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         from docx import Document
@@ -1984,6 +2131,7 @@ if __name__ == "__main__":
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
     test_email_research_matches_research_attachment_filename()
+    test_email_research_reports_surface_and_boundary_proof()
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
     test_research_documents_extracts_legacy_xls_and_pptx_when_authorized()
     test_research_documents_without_include_content_keeps_binary_metadata_only()

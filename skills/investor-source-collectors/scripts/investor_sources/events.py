@@ -95,6 +95,16 @@ RESEARCH_DOCUMENT_SURFACE_ORDER = (
     "table_model",
     "unclassified_research_document",
 )
+EMAIL_RESEARCH_SURFACE_ORDER = (
+    "morning_meeting",
+    "broker_research_report",
+    "roadshow_invite",
+    "company_ir_thread",
+    "earnings_announcement",
+    "research_attachment",
+    "portfolio_alert",
+    "unclassified_email_research",
+)
 SOCIAL_INFLUENCE_TOPIC_ORDER = (
     "macro_policy",
     "market_strategy",
@@ -284,6 +294,11 @@ def build_manifest(
         if source_id == "social-investment-influence"
         else None
     )
+    email_research_proof = (
+        build_email_research_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "email-research"
+        else None
+    )
     manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -327,6 +342,8 @@ def build_manifest(
         manifest["wechat_article_boundary_proof"] = wechat_article_proof
     if social_influence_proof is not None:
         manifest["social_influence_boundary_proof"] = social_influence_proof
+    if email_research_proof is not None:
+        manifest["email_research_boundary_proof"] = email_research_proof
     return manifest
 
 
@@ -405,6 +422,93 @@ def research_corpus_proof_level(
     if int(audit.get("metadata_only_file_count") or 0) > 0:
         return "authorized_research_corpus_metadata_only"
     return "authorized_research_corpus_event_only"
+
+
+def build_email_research_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    surface = email_research_surface_summary(usable_events)
+    return {
+        "source_type": "email_lake_research_lens",
+        "proof_level": email_research_proof_level(usable_events, audit=audit, readiness=collection_readiness),
+        "event_count": len(usable_events),
+        "candidate_record_count": audit.get("candidate_record_count", 0),
+        "matched_event_count": audit.get("matched_event_count", 0),
+        "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
+        "input_boundary": {
+            "input_count": audit.get("input_count", 0),
+            "requested_inputs": audit.get("requested_inputs", []),
+            "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+            "input_missing_count": audit.get("input_missing_count", 0),
+            "skipped_file_count": audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+            "limit": audit.get("limit"),
+            "limit_reached": audit.get("limit_reached", False),
+        },
+        "source_policy_boundary": {
+            "enabled": source_policy.get("enabled", False),
+            "allow_senders": source_policy.get("allow_senders", []),
+            "deny_senders": source_policy.get("deny_senders", []),
+            "filtered_candidate_count": source_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": source_policy.get("filter_reason_counts", {}),
+            "policy_does_not_assert_investment_relevance": source_policy.get("policy_does_not_assert_investment_relevance", True),
+        },
+        "mailbox_boundary": {
+            "sender_domain_counts": surface.get("sender_domain_counts", {}),
+            "mailbox_counts": surface.get("mailbox_counts", {}),
+            "folder_counts": surface.get("folder_counts", {}),
+            "events_with_time": surface.get("events_with_time", 0),
+            "message_id_event_count": surface.get("message_id_event_count", 0),
+            "upstream_collector_counts": surface.get("upstream_collector_counts", {}),
+        },
+        "content_boundary": {
+            "body_preview_event_count": surface.get("body_preview_event_count", 0),
+            "full_body_event_count": surface.get("full_body_event_count", 0),
+            "attachment_ref_event_count": surface.get("attachment_ref_event_count", 0),
+            "research_attachment_event_count": surface.get("research_attachment_event_count", 0),
+            "attachment_filename_event_count": surface.get("attachment_filename_event_count", 0),
+            "full_body_in_wiki_by_default": False,
+            "attachment_bodies_collected": False,
+        },
+        "email_research_surface_summary": surface,
+        "complete_mailbox_claimed": False,
+        "complete_email_thread_context_claimed": False,
+        "attachment_body_collected_by_default": False,
+        "direct_email_reconnect": False,
+        "requires_upstream_email_collector": True,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness.get("can_enter_finclaw", False),
+    }
+
+
+def email_research_proof_level(
+    usable_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    readiness: Dict[str, Any],
+) -> str:
+    if not usable_events:
+        status = str(readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            return "no_authorized_email_lake_input"
+        if status == "source_policy_filtered_all":
+            return "source_policy_filtered_all"
+        if status == "no_readable_input":
+            return "no_readable_email_lake_input"
+        return "no_usable_email_research_after_filter"
+    surface = email_research_surface_summary(usable_events)
+    if int(surface.get("research_attachment_event_count") or 0) > 0:
+        return "authorized_email_research_with_research_attachment_refs"
+    if int(surface.get("attachment_ref_event_count") or 0) > 0:
+        return "authorized_email_research_with_attachment_refs"
+    if int(surface.get("body_preview_event_count") or 0) > 0:
+        return "authorized_email_research_preview_only"
+    return "authorized_email_research_event_only"
 
 
 def build_wechat_dialogue_boundary_proof(
@@ -1014,6 +1118,8 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
 def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if source_id == "research-documents":
         return research_document_surface_summary(events)
+    if source_id == "email-research":
+        return email_research_surface_summary(events)
     if source_id == "wechat-investment-dialogue":
         return wechat_dialogue_surface_summary(events)
     if source_id == "investment-notes":
@@ -1039,6 +1145,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         summaries["investment-notes"] = investment_note_surface_summary(by_source["investment-notes"])
     if "research-documents" in by_source:
         summaries["research-documents"] = research_document_surface_summary(by_source["research-documents"])
+    if "email-research" in by_source:
+        summaries["email-research"] = email_research_surface_summary(by_source["email-research"])
     if "wechat-investment-dialogue" in by_source:
         summaries["wechat-investment-dialogue"] = wechat_dialogue_surface_summary(by_source["wechat-investment-dialogue"])
     if "task-calendar-investor" in by_source:
@@ -1068,7 +1176,196 @@ def source_boundary_proof_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
                 "source_collection_scope": "partial_authorized_input" if source_events else "none",
             },
         )
+    if "email-research" in by_source:
+        source_events = by_source["email-research"]
+        summaries["email-research"] = build_email_research_boundary_proof(
+            source_events,
+            audit={},
+            collection_readiness={
+                "status": "events_collected" if source_events else "no_investment_evidence_matched",
+                "source_collection_scope": "partial_authorized_input" if source_events else "none",
+            },
+        )
     return summaries
+
+
+def email_research_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface_counts: Counter[str] = Counter()
+    primary_surface_counts: Counter[str] = Counter()
+    sender_domain_counts: Counter[str] = Counter()
+    mailbox_counts: Counter[str] = Counter()
+    folder_counts: Counter[str] = Counter()
+    upstream_collector_counts: Counter[str] = Counter()
+    matched_symbol_event_count = 0
+    body_preview_event_count = 0
+    full_body_event_count = 0
+    attachment_ref_event_count = 0
+    attachment_filename_event_count = 0
+    research_attachment_event_count = 0
+    message_id_event_count = 0
+    events_with_time = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        raw_ref = event.get("raw_ref") or {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        domain = email_sender_domain(event)
+        if domain:
+            sender_domain_counts[domain] += 1
+        mailbox = str(first_payload_value(payload, ("mailbox", "account", "email", "邮箱", "账号")) or "")
+        if mailbox:
+            mailbox_counts[mailbox] += 1
+        folder = str(first_payload_value(payload, ("folder", "mailbox_folder", "文件夹")) or raw_ref.get("folder") or "")
+        if folder:
+            folder_counts[folder] += 1
+        upstream_collector_counts[str(payload.get("upstream_collector") or raw_ref.get("upstream_collector") or "email")] += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        if value_present(first_payload_value(payload, ("body_preview", "preview", "snippet", "摘要"))):
+            body_preview_event_count += 1
+        if value_present(first_payload_value(payload, ("body", "content", "正文", "内容"))):
+            full_body_event_count += 1
+        attachment_count = value_count(first_payload_value(payload, ("attachment_refs", "attachments", "attachment", "附件")))
+        if attachment_count:
+            attachment_ref_event_count += 1
+            attachment_filename_event_count += attachment_count
+        upstream_raw_ref = raw_ref.get("upstream_raw_ref") if isinstance(raw_ref.get("upstream_raw_ref"), dict) else {}
+        if raw_ref.get("message_id") or upstream_raw_ref.get("message_id") or payload.get("message_id"):
+            message_id_event_count += 1
+        if event.get("time") or payload.get("date") or payload.get("time"):
+            events_with_time += 1
+        surfaces = classify_email_research_surfaces(event)
+        if "research_attachment" in surfaces:
+            research_attachment_event_count += 1
+        for surface in surfaces:
+            surface_counts[surface] += 1
+        primary_surface_counts[surfaces[0]] += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_email_research_surfaces": list(EMAIL_RESEARCH_SURFACE_ORDER[:-1]),
+        "email_research_surface_counts": ordered_counts(surface_counts, EMAIL_RESEARCH_SURFACE_ORDER),
+        "primary_email_research_surface_counts": ordered_counts(primary_surface_counts, EMAIL_RESEARCH_SURFACE_ORDER),
+        "missing_expected_email_research_surfaces": [
+            surface for surface in EMAIL_RESEARCH_SURFACE_ORDER[:-1] if surface_counts.get(surface, 0) == 0
+        ],
+        "sender_domain_counts": dict(sorted(sender_domain_counts.items())),
+        "mailbox_counts": dict(sorted(mailbox_counts.items())),
+        "folder_counts": dict(sorted(folder_counts.items())),
+        "upstream_collector_counts": dict(sorted(upstream_collector_counts.items())),
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "body_preview_event_count": body_preview_event_count,
+        "full_body_event_count": full_body_event_count,
+        "attachment_ref_event_count": attachment_ref_event_count,
+        "attachment_filename_event_count": attachment_filename_event_count,
+        "research_attachment_event_count": research_attachment_event_count,
+        "message_id_event_count": message_id_event_count,
+        "events_with_time": events_with_time,
+        "full_body_in_wiki_by_default": False,
+        "attachment_bodies_collected": False,
+        "generic_email_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def classify_email_research_surfaces(event: Dict[str, Any]) -> List[str]:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    attachment_text = " ".join(email_attachment_filenames(event))
+    text = " ".join(
+        str(part)
+        for part in (
+            payload.get("from"),
+            payload.get("sender"),
+            payload.get("subject"),
+            payload.get("title"),
+            payload.get("body_preview"),
+            payload.get("body"),
+            payload.get("content"),
+            attachment_text,
+        )
+        if part not in (None, "")
+    ).lower()
+    surfaces: List[str] = []
+    if any(token in text for token in ("晨会", "早会", "morning meeting", "morning call", "morning note")):
+        surfaces.append("morning_meeting")
+    if any(token in text for token in ("研报", "深度", "研究所", "证券研究", "策略", "行业深度", "公司研究", "research report", "broker research")):
+        surfaces.append("broker_research_report")
+    if any(token in text for token in ("路演", "roadshow", "调研邀请", "路演邀请", "邀请函", "业绩说明会", "交流会", "conference call")):
+        surfaces.append("roadshow_invite")
+    if any(token in text for token in ("投资者关系", "董秘", " ir ", "ir@", "company ir", "investor relations")):
+        surfaces.append("company_ir_thread")
+    if any(token in text for token in ("财报", "年报", "季报", "公告", "业绩", "earnings", "annual report", "quarterly report")):
+        surfaces.append("earnings_announcement")
+    attachment_lower = attachment_text.lower()
+    if any(
+        token in attachment_text or token in attachment_lower
+        for token in (
+            "研报",
+            "研究",
+            "深度报告",
+            "晨会",
+            "策略",
+            "行业",
+            "调研",
+            "路演",
+            "纪要",
+            "财报",
+            "公告",
+            "业绩说明会",
+            "research",
+            "report",
+            "roadshow",
+            "morning",
+        )
+    ):
+        surfaces.append("research_attachment")
+    if any(token in text for token in ("公告提醒", "组合提醒", "持仓提醒", "预警", "alert", "watchlist", "price alert")):
+        surfaces.append("portfolio_alert")
+    ordered: List[str] = []
+    for surface in EMAIL_RESEARCH_SURFACE_ORDER:
+        if surface in surfaces and surface not in ordered:
+            ordered.append(surface)
+    return ordered or ["unclassified_email_research"]
+
+
+def email_attachment_filenames(event: Dict[str, Any]) -> List[str]:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    names: List[str] = []
+    collect_attachment_names(first_payload_value(payload, ("attachment_refs", "attachments", "attachment", "附件")), names)
+    return names
+
+
+def collect_attachment_names(value: Any, names: List[str]) -> None:
+    if value in (None, ""):
+        return
+    if isinstance(value, dict):
+        filename = value.get("filename") or value.get("name") or value.get("file_name") or value.get("文件名")
+        if filename:
+            names.append(str(filename))
+        for nested in value.values():
+            if isinstance(nested, (dict, list, tuple)):
+                collect_attachment_names(nested, names)
+        return
+    if isinstance(value, (list, tuple)):
+        for item in value:
+            collect_attachment_names(item, names)
+        return
+    text = str(value).strip()
+    if text:
+        names.append(text)
+
+
+def email_sender_domain(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    sender = str(first_payload_value(payload, ("from", "sender", "发件人")) or "")
+    if "@" not in sender:
+        return ""
+    after_at = sender.rsplit("@", 1)[-1]
+    domain = after_at.split(">", 1)[0].split()[0].strip().strip("<>,;").lower()
+    return domain
 
 
 def research_document_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
