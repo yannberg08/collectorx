@@ -35,7 +35,7 @@
 | `meeting-minutes` | `investor-source-collectors` | lens：路演、调研、投委会、专家会、业绩会、决策点、风险讨论和后续行动面谱 |
 | `notes` | `notes-collector` | generic：Obsidian、Notion、有道云、印象笔记，含授权 ZIP 导入和平台覆盖 manifest |
 | `investment-notes` | `investor-source-collectors` | lens：投资笔记、规则库、复盘 |
-| `ticktick`/`calendar` | `ticktick-cli`/`calendar-collector` | generic：任务和日历原始通道，含授权 ZIP 导入、平台覆盖、ZIP 跳过审计和逐文件解析 manifest |
+| `ticktick`/`calendar` | `ticktick-cli`/`calendar-collector` | generic：任务和日历原始通道；TickTick 主路径对齐 SoulMirror YAML + AgentRunner + skill，由 `collect_for_soulmirror.py` 输出快照数组并让 daemon 写 lake，离线授权 ZIP/JSON 导入仅作辅助；calendar 仍输出标准事件包 |
 | `task-calendar-investor` | `investor-source-collectors` | lens：交易计划、复盘提醒、研究任务 |
 | `wechat-favorites` | `wechat-favorites` | generic：微信收藏/公众号文章动作，含授权 ZIP 导入和动作覆盖 manifest |
 | `wechat-article-favorites` | `investor-source-collectors` | lens：投资公众号阅读、收藏、保存、转发动作，以及券商研究/基本面/策略/行业/估值/组合/风险/宏观文章面谱 |

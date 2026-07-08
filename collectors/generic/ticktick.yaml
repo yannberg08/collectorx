@@ -1,38 +1,30 @@
-apiVersion: collectorx/v1
+apiVersion: soulmirror/v1
 kind: Collector
 id: ticktick
 display_name: 滴答清单
 refresh_interval: 15m
 mode: snapshot
+time_field: due
 armed: false
-
-# 采集器使用的skill
 skill: ticktick-cli
 
-scope:
-  collects:
-    - task_title
-    - task_content_preview
-    - project_name
-    - due_time
-    - completion_status
-    - tags
-    - source_app
-    - platform_coverage_manifest
-    - field_coverage_manifest
-    - time_status_summary
-    - source_audit_manifest
-    - archive_member_provenance
-    - archive_member_skip_audit
-    - path_level_collection_audit
-  excludes:
-    - oauth_token
-    - application_secret
-    - investment_classification
-    - full_life_tasks_in_investor_wiki
-    - archive_path_traversal_members
-    - windows_drive_path_archive_members
+prompt: |
+  Use the ticktick-cli skill to collect the user's authorized TickTick/Dida tasks.
 
-# 采集逻辑由 skill 定义。
-# ticktick_cli.py 处理 API 认证和任务获取；ticktick_events.py 把用户授权 JSON/ZIP 导出转成 lake/ticktick/events.jsonl，并在 manifest 中记录字段覆盖、时间状态、ZIP 跳过成员原因、逐文件解析结果和来源审计。
-# 投资分身只通过 task-calendar-investor lens 筛交易计划、复盘提醒和研究任务。
+  SoulMirror owns scheduling, diffing, event writing, and lake paths. This skill
+  must only fetch task data and return one JSON array to AgentRunner.
+
+  First check authorization:
+    python <SKILL_DIR>/scripts/auth.py status --json
+
+  If authorization is missing, do not return [] and do not fabricate a task.
+  Fail clearly with error `ticktick_auth_required` so the product can ask the
+  user to connect TickTick first.
+
+  If authorization exists, run:
+    python <SKILL_DIR>/scripts/collect_for_soulmirror.py
+
+  Return exactly the JSON array printed by that command. Each item should keep a
+  stable `id` and a `data` object with the raw task fields. Do not write
+  lake/ticktick/events.jsonl, manifest.json, or SUMMARY.md from the skill; the
+  SoulMirror daemon will diff the snapshot and append events itself.

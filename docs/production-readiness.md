@@ -16,7 +16,29 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-CollectorX now has a package-level FinClaw ingestion gate:
+`ticktick-cli` now has a SoulMirror-aligned live collector path:
+
+- `collectors/generic/ticktick.yaml` is aligned to the SoulMirror
+  YAML + AgentRunner + skill contract.
+- The live collector entrypoint is `collect_for_soulmirror.py`, which returns a
+  JSON array snapshot and leaves Lake writes, diffing, and state to the
+  SoulMirror daemon.
+- Missing auth now fails with `ticktick_auth_required` instead of returning an
+  empty snapshot.
+- `auth.py connect` supports a FinClaw-managed OAuth Broker through
+  `TICKTICK_OAUTH_BROKER_URL`, so ordinary users do not need to create a Dida365
+  developer app.
+- Local validation covers both missing auth and a fake authorized OpenAPI flow
+  for active/completed tasks, project-name mapping, inbox fallback, dedupe, and
+  no token leakage in snapshot output.
+- `ticktick_events.py` remains only an offline authorized export conversion
+  helper and writes `exports/ticktick/events.jsonl` to avoid confusing it with
+  daemon-owned `lake/ticktick/events.jsonl`.
+- This improves P1 task planning ingestion, but it does not claim real
+  TickTick account validation until the managed OAuth Broker is deployed and a
+  real recurring-task/timezone backtest is run.
+
+The prior completed wave: CollectorX now has a package-level FinClaw ingestion gate:
 
 - Added `tools/validate_collector_package.py` to validate an output directory
   before FinClaw adds it to durable Lake or runs Wiki distillation.
@@ -339,7 +361,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- | --- | --- |
 | 飞书/钉钉/腾讯会议/企业微信会议纪要 | `meeting-artifacts` local/platform-export/ZIP collector + `feishu` authorized export package collector + `collaboration-exports` for `dingtalk`/`wecom` + `meeting-minutes` lens classifier | `baseline+audit`; macOS local meeting-file validation passed; HTML/CSV/JSON/ZIP platform-export fixture validation passed; meeting manifest reports platform coverage, field coverage, meeting surface summary, ZIP provenance, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; Feishu now has a CollectorX `collect` package path for messages/documents/files/folders/meetings/recordings with field coverage, surface summary, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; DingTalk/WeCom collaboration exports support ZIP plus equivalent audit fields; meeting-minutes lens now reports roadshow/research/IC/expert/earnings/decision/risk/follow-up surfaces, upstream collectors, source platforms, participants, meeting URLs, attachment refs, recording refs, and time coverage; platform account APIs pending | Build/port real Feishu/DingTalk/WeCom/Tencent Meeting account adapters, validate real authorized exports, participant identity normalization, attachment/recording reference validation, false-positive review |
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + authorized export/ZIP import + `investment-notes` lens classifier | `baseline+audit`; macOS Obsidian-style real validation passed; Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP fixtures pass; generic notes manifest reports platform coverage, field coverage, per-input parse results, skipped reasons, ZIP provenance, path-safety boundary, content policy, and generic-collector evidence policy; investment-notes manifest/evidence now reports review/rules/checklist/valuation/research note-type surface, source-app surface, and preview/full-content surface | Validate real Notion/Youdao/Evernote account exports or APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 日历/任务/滴答清单 | `ticktick-cli` API tool + `ticktick_events.py`; `calendar-collector`; `task-calendar-investor` lens classifier | `baseline+audit`; TickTick/Dida JSON/ZIP export and generic calendar ICS/JSON/CSV/TSV/ZIP paths exist; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, ZIP provenance, ZIP skip counts/reasons, per-input parse audit, source audit, and generic-collector evidence policy; task-calendar lens reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, and reminder/time surface; real TickTick/API calendar validation blocked by missing account tokens/exports | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, backtest investment task classifier |
+| 日历/任务/滴答清单 | `ticktick-cli` SoulMirror YAML + AgentRunner + skill live path; `ticktick_events.py` offline export helper; `calendar-collector`; `task-calendar-investor` lens classifier | `baseline+audit`; TickTick live path now returns a dependency-light JSON snapshot through `collect_for_soulmirror.py`, fails clearly with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; fake OpenAPI validation covers active/completed tasks, project names, inbox fallback, dedupe, and token non-leakage; generic calendar ICS/JSON/CSV/TSV/ZIP paths and task-calendar lens surfaces remain tested | Deploy FinClaw-managed TickTick OAuth Broker, run real account validation, validate real calendar exports/accounts, recurring tasks/timezones, backtest investment task classifier |
 | 公众号/微信收藏文章 | `wechat-favorites` local file/folder/ZIP collector + `wechat-article-favorites` lens classifier | `baseline+audit`; macOS saved-article validation passed; JSON/HTML/ZIP fixtures cover favorite/read/share/saved-file actions; generic manifest reports action coverage, field coverage, article surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, content policy, and generic-collector evidence policy; wechat-article lens reports broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surfaces, action counts, source-account type counts, URL/tag/text/time coverage, and filters non-investment saved articles; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive backtest |
 | 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage/browser-history/ZIP collector | `baseline+audit`; JSON/CSV/HTML/TXT/ZIP fixture validation passed; Chromium browser-history validation passed; manifest reports platform/action/topic coverage, field coverage, usage surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, browser-history source audit, content policy, and evidence policy; usage topics cover macro policy, market strategy, industry themes, company fundamentals, HK/US markets, risk events, trading opportunities, and portfolio alerts; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui app caches, account APIs, real subscription/alert stores, Safari/Windows/Linux browser-history paths, topic false-positive review; do not crawl public news as personal evidence |
 

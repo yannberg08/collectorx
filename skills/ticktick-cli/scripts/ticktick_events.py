@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Convert authorized TickTick/Dida task exports into CollectorX events."""
+"""Convert authorized TickTick/Dida task exports into offline CollectorX events.
+
+SoulMirror's live collector path is YAML + AgentRunner + collect_for_soulmirror.py.
+This helper is only for local export/package tests and must not write the
+SoulMirror lake path directly.
+"""
 
 from __future__ import annotations
 
@@ -396,7 +401,7 @@ def collect(args: argparse.Namespace) -> int:
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if out_dir:
-        write_jsonl(out_dir / "lake" / COLLECTOR / "events.jsonl", events)
+        write_jsonl(out_dir / "exports" / COLLECTOR / "events.jsonl", events)
         manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)

@@ -1793,6 +1793,36 @@ Findings:
 - This wave improves production gating across P0/P1/P2, but does not claim new
   real-account or real-device validation for individual collectors.
 
+### Wave AB: P1 TickTick SoulMirror live collector alignment
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-ticktick-soulmirror-validation-2026-07-08.md`
+
+Findings:
+
+- Aligned `collectors/generic/ticktick.yaml` to the SoulMirror
+  YAML + AgentRunner + skill contract.
+- Added `collect_for_soulmirror.py` as the live collector entrypoint. It
+  returns a dependency-light JSON array snapshot and leaves durable Lake writes,
+  diffing, and snapshot state to the SoulMirror daemon.
+- Missing authorization now fails with `ticktick_auth_required` instead of
+  returning `[]`, so FinClaw does not mistake "not connected" for "no tasks".
+- Added `auth.py connect` support for a FinClaw-managed OAuth Broker through
+  `TICKTICK_OAUTH_BROKER_URL`; the OAuth client secret stays server-side.
+- Added `task collect-all` to the management CLI for stable snapshot export.
+- Kept `ticktick_events.py` as an offline authorized JSON/ZIP conversion helper,
+  writing `exports/ticktick/events.jsonl` instead of daemon-owned
+  `lake/ticktick/events.jsonl`.
+- Fixture validation covers missing auth, a fake authorized OpenAPI server,
+  active/completed tasks, project-name mapping, inbox fallback, dedupe, token
+  non-leakage, and the offline export helper.
+- This improves the P1 task-planning source, but does not claim real TickTick
+  account validation until the managed OAuth Broker is deployed and a real
+  recurring-task/timezone backtest is run.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -1808,7 +1838,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, and preview/full-content surface | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
-| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, source audit, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, and reminder/time coverage; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
+| 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, and reminder/time coverage | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, source audit, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action/topic coverage; manifests now include field coverage, usage topic summary, usage surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps, ZIP provenance, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports, topic false-positive review |

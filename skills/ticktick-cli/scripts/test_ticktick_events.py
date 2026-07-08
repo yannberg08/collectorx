@@ -49,7 +49,7 @@ def test_ticktick_json_to_task_events() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert len(events) == 1
         event = events[0]
         assert event["schema"] == "collectorx.event.v1"
@@ -115,7 +115,7 @@ def test_ticktick_zip_dida_export_and_unsafe_member_skip() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert len(events) == 1
         assert events[0]["data"]["source_app"] == "dida365"
         assert events[0]["data"]["is_completed"] is True
@@ -143,7 +143,7 @@ def test_ticktick_without_input_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
-        events = [json.loads(line) for line in (out / "lake" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert len(events) == 1
         assert events[0]["data"]["gap"] == "ticktick_authorized_input_missing"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))

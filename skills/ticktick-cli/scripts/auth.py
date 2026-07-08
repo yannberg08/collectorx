@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """ticktick-cli OAuth helper.
 
-⚠️ 每个用户必须用自己的 OAuth 应用——不要共用别人的，否则后台数据会混。
+产品内普通用户路径：
+  1. 产品包设置 TICKTICK_OAUTH_BROKER_URL，指向 FinClaw 自有 OAuth 服务
+  2. `auth.py connect` 打开浏览器，用户只需要登录滴答清单并授权
 
-正常用户路径（只用前两个命令）：
-  1. `auth.py register <id> <sec>`  保存用户的 OAuth 应用凭证
-  2. `auth.py authorize`            一条龙：起本地 server + 开浏览器 + 等 callback + 换 token + 落盘
+开发者兜底路径：
+  1. `auth.py register <id> <sec>`  保存自己的 OAuth 应用凭证
+  2. `auth.py authorize`            起本地 server + 开浏览器 + 等 callback + 换 token + 落盘
 
 底层命令（一般不用）：
   - `auth.py url`            只打印授权 URL（不开浏览器、不监听）
@@ -45,6 +47,8 @@ TOKEN_URL = "https://dida365.com/oauth/token"
 
 ENV_CLIENT_ID = "TICKTICK_CLIENT_ID"
 ENV_CLIENT_SECRET = "TICKTICK_CLIENT_SECRET"
+ENV_OAUTH_BROKER_URL = "TICKTICK_OAUTH_BROKER_URL"
+BROKER_CALLBACK_PATH = "/broker-callback"
 
 STATE_DIR = Path.home() / ".covo"
 TOKEN_FILE = STATE_DIR / "ticktick.json"
@@ -76,8 +80,8 @@ def _save_state(state: dict) -> None:
 def load_app_credentials() -> tuple[str, str]:
     """读 OAuth 应用凭证。优先级：环境变量 > ~/.covo/ticktick.json 的 oauth_app 字段。
 
-    没找到就报错，要求用户先到 https://developer.dida365.com/manage 注册自己的应用。
-    每个用户**必须用自己的** OAuth 应用——不要共用，否则数据会混。
+    没找到就报错，要求开发者先到 https://developer.dida365.com/manage 注册自己的应用。
+    普通用户不应该走这个函数；产品路径应使用 cmd_connect 的托管 OAuth。
     """
     cid = os.environ.get(ENV_CLIENT_ID)
     sec = os.environ.get(ENV_CLIENT_SECRET)
@@ -90,8 +94,8 @@ def load_app_credentials() -> tuple[str, str]:
         return cid, sec
     raise SystemExit(
         "ERROR: 没找到你的 OAuth 应用凭证。\n\n"
-        "每个用户必须用自己的 OAuth 应用——不要共用别人的，否则后台和配额会混。\n\n"
-        "操作步骤：\n"
+        "普通用户请回到 FinClaw 页面点击“连接滴答清单”。\n\n"
+        "开发者兜底操作步骤：\n"
         "  1. 浏览器打开 https://developer.dida365.com/manage 登录你的滴答账号\n"
         "  2. 创建一个 OAuth 应用，名字随意（推荐 'ticktick-cli-<your-name>'）\n"
         "     redirect_uri 必须填：http://localhost:18921/callback\n"
@@ -161,6 +165,11 @@ def save_token(token_data: dict) -> Path:
     })
     _save_state(state)
     return TOKEN_FILE
+
+
+def managed_broker_url() -> str:
+    """Return a configured first-party OAuth broker URL, if product packaging provides one."""
+    return os.environ.get(ENV_OAUTH_BROKER_URL, "").strip().rstrip("/")
 
 
 def _ensure_cli_deps() -> None:
@@ -312,6 +321,75 @@ class _CallbackHandler(BaseHTTPRequestHandler):
         self.wfile.write(body_html.encode("utf-8"))
 
 
+class _BrokerCallbackHandler(BaseHTTPRequestHandler):
+    """Receives an access token posted back from a first-party OAuth broker."""
+
+    def log_message(self, format: str, *args: object) -> None:  # noqa: A003
+        return
+
+    def _finish(self, ok: bool, message: str) -> None:
+        cls = "ok" if ok else "err"
+        body_html = (
+            "<!doctype html><meta charset='utf-8'><title>ticktick-cli</title>"
+            "<style>body{font-family:-apple-system,sans-serif;max-width:560px;"
+            "margin:64px auto;padding:0 24px;line-height:1.6}h1{margin-bottom:8px}"
+            ".ok{color:#2a7}.err{color:#c33}</style>"
+            f"<h1 class='{cls}'>{'授权成功' if ok else '授权失败'}</h1><p>{message}</p>"
+        )
+        self.send_response(200 if ok else 400)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body_html.encode("utf-8"))))
+        self.end_headers()
+        self.wfile.write(body_html.encode("utf-8"))
+
+    def _capture(self, params: dict[str, str]) -> None:
+        error = params.get("error")
+        token = params.get("access_token")
+        if error:
+            _callback_state["error"] = error
+            self._finish(False, error)
+            return
+        if not token:
+            _callback_state["error"] = "missing_access_token"
+            self._finish(False, "没有收到 access_token。")
+            return
+        _callback_state["token_data"] = {
+            "access_token": token,
+            "token_type": params.get("token_type") or "Bearer",
+            "scope": params.get("scope") or SCOPE,
+            "expires_in": int(params["expires_in"]) if str(params.get("expires_in") or "").isdigit() else None,
+        }
+        self._finish(True, "已经写入本机，可以关闭这个页面。")
+
+    def do_GET(self) -> None:  # noqa: N802
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path != BROKER_CALLBACK_PATH:
+            self.send_response(404)
+            self.end_headers()
+            return
+        query = urllib.parse.parse_qs(parsed.query)
+        self._capture({key: values[0] for key, values in query.items() if values})
+
+    def do_POST(self) -> None:  # noqa: N802
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path != BROKER_CALLBACK_PATH:
+            self.send_response(404)
+            self.end_headers()
+            return
+        length = int(self.headers.get("Content-Length") or 0)
+        raw = self.rfile.read(length).decode("utf-8") if length else ""
+        content_type = self.headers.get("Content-Type", "")
+        if "application/json" in content_type:
+            try:
+                payload = json.loads(raw or "{}")
+            except json.JSONDecodeError:
+                payload = {"error": "invalid_json_callback"}
+        else:
+            parsed_body = urllib.parse.parse_qs(raw)
+            payload = {key: values[0] for key, values in parsed_body.items() if values}
+        self._capture(payload)
+
+
 def cmd_authorize(argv: list[str]) -> int:
     """一条龙：起本地 18921 server → 开浏览器到授权页 → 等 callback → 换 token → 落盘。"""
     timeout_seconds = 300
@@ -367,19 +445,123 @@ def cmd_authorize(argv: list[str]) -> int:
     return _exchange_and_save(code)
 
 
+def cmd_connect(argv: list[str]) -> int:
+    """First-party managed OAuth: user only signs in and grants access in the browser.
+
+    Product packaging should set TICKTICK_OAUTH_BROKER_URL to a FinClaw-owned broker
+    that holds the OAuth client secret server-side. Without that broker, fall back to
+    `register` + `authorize` for developers.
+    """
+    timeout_seconds = 300
+    broker = managed_broker_url()
+    for i, a in enumerate(argv):
+        if a in ("--timeout", "-t") and i + 1 < len(argv):
+            timeout_seconds = int(argv[i + 1])
+        if a == "--broker-url" and i + 1 < len(argv):
+            broker = argv[i + 1].strip().rstrip("/")
+    if not broker:
+        raise SystemExit(
+            "ERROR: 未配置托管 OAuth 服务。\n\n"
+            "面向普通用户的产品包应设置 TICKTICK_OAUTH_BROKER_URL，"
+            "让用户只需在浏览器里登录滴答并点授权。\n\n"
+            "开发者兜底路径仍可使用：auth.py register <client_id> <client_secret>，"
+            "然后 auth.py authorize。"
+        )
+
+    _callback_state.clear()
+    server = HTTPServer(("127.0.0.1", 18921), _BrokerCallbackHandler)
+    server.timeout = 1.0
+
+    return_to = f"http://127.0.0.1:18921{BROKER_CALLBACK_PATH}"
+    authorize_url = (
+        f"{broker}/authorize?"
+        + urllib.parse.urlencode(
+            {
+                "scope": SCOPE,
+                "state": "ticktick-cli",
+                "return_to": return_to,
+            }
+        )
+    )
+
+    print("=" * 70)
+    print("正在连接滴答清单。浏览器打开后，请登录你的滴答账号并点授权。")
+    print("如果浏览器没自动打开，请复制下面这一整行 URL 到浏览器：")
+    print()
+    print(authorize_url)
+    print()
+    print("=" * 70)
+    print()
+    print(f"监听 {return_to} ... ({timeout_seconds}s 超时)")
+
+    opened = _open_browser(authorize_url)
+    if opened:
+        print("[browser] 已尝试自动打开浏览器。")
+    else:
+        print("[browser] 自动打开失败——请用上面的 URL 在浏览器里手动打开。")
+
+    deadline = time.time() + timeout_seconds
+    try:
+        while time.time() < deadline and "token_data" not in _callback_state and "error" not in _callback_state:
+            server.handle_request()
+    finally:
+        server.server_close()
+
+    if "error" in _callback_state:
+        raise SystemExit(f"ERROR: 托管授权失败：{_callback_state['error']}")
+    token_data = _callback_state.get("token_data")
+    if not isinstance(token_data, dict):
+        raise SystemExit(f"ERROR: {timeout_seconds}s 内没收到授权结果。重新点连接试试。")
+
+    state = _load_state()
+    state["oauth_app"] = {
+        "managed_broker": broker,
+        "client_id": "managed",
+    }
+    _save_state(state)
+    path = save_token(token_data)
+    print(f"OK: token 已保存到 {path}")
+    print("滴答清单已经连接，可以重新采集。")
+    return 0
+
+
 def cmd_status(argv: list[str]) -> int:
+    as_json = "--json" in argv
     state = _load_state()
     app = state.get("oauth_app") or {}
+    token = state.get("access_token")
+    broker = managed_broker_url()
+    payload = {
+        "ok": bool(token),
+        "token_file": str(TOKEN_FILE),
+        "has_token": bool(token),
+        "has_oauth_app": bool(app.get("client_id") or os.environ.get(ENV_CLIENT_ID)),
+        "oauth_app_source": "managed_broker"
+        if app.get("managed_broker")
+        else "file"
+        if app.get("client_id")
+        else "env"
+        if os.environ.get(ENV_CLIENT_ID)
+        else None,
+        "managed_connect_available": bool(broker),
+        "managed_broker_url": broker or None,
+    }
+    if as_json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0 if payload["ok"] else 1
     if app.get("client_id"):
         print(f"OAuth 应用       : {TOKEN_FILE} 的 oauth_app  (client_id: {app['client_id']})")
     elif os.environ.get(ENV_CLIENT_ID):
         print(f"OAuth 应用       : 走环境变量 (client_id: {os.environ[ENV_CLIENT_ID]})")
     else:
-        print("OAuth 应用       : 未注册——跑 auth.py register <id> <secret> 先注册")
+        print("OAuth 应用       : 普通用户请使用 auth.py connect；开发者才需要 register")
     print()
     if not state.get("access_token"):
         print(f"未找到 token：{TOKEN_FILE}")
-        print("先跑 auth.py authorize 完成授权流程")
+        if broker:
+            print("先跑 auth.py connect 完成授权流程")
+        else:
+            print("产品 OAuth 服务未配置；开发者兜底可用 auth.py register + auth.py authorize")
         return 1
     record = state
     obtained = record.get("obtained_at", 0)
@@ -407,6 +589,7 @@ def cmd_status(argv: list[str]) -> int:
 COMMANDS = {
     "register": cmd_register,
     "authorize": cmd_authorize,
+    "connect": cmd_connect,
     "url": cmd_url,
     "callback": cmd_callback,
     "code": cmd_code,

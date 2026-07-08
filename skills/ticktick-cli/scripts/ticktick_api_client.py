@@ -274,19 +274,18 @@ class TicktickApiClient:
         参数：
             completed_time_from: 完成时间下限 ISO8601（可选）
             completed_time_to:   完成时间上限 ISO8601（可选）
-            limit:               最大数量（可选；不传默认 200 条）
+            limit:               最大数量（客户端本地截断；OpenAPI 文档未声明该请求字段）
 
         返回按 completedTime 倒序的已完成任务列表。
         """
         body: dict[str, Any] = {}
         if completed_time_from:
-            body["completedTimeFrom"] = completed_time_from
+            body["startDate"] = completed_time_from
         if completed_time_to:
-            body["completedTimeTo"] = completed_time_to
-        if limit:
-            body["limit"] = limit
+            body["endDate"] = completed_time_to
         payload = self._request_json("POST", "task/completed", payload=body)
-        return self._parse_list(Task, payload)
+        tasks = self._parse_list(Task, payload)
+        return tasks[:limit] if limit else tasks
 
     def filter_tasks(
         self,

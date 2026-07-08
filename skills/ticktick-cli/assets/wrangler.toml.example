@@ -1,0 +1,13 @@
+name = "finclaw-ticktick-oauth"
+main = "ticktick-oauth-worker.js"
+compatibility_date = "2026-07-08"
+
+# Deploy this Worker on a FinClaw-owned domain, then set:
+#   TICKTICK_OAUTH_BROKER_URL=https://<your-worker-domain>
+#
+# Dida365 developer console must use:
+#   https://<your-worker-domain>/callback
+#
+# Secrets:
+#   wrangler secret put TICKTICK_CLIENT_ID
+#   wrangler secret put TICKTICK_CLIENT_SECRET

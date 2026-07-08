@@ -91,6 +91,11 @@ FinClaw should treat a failed package gate as "collection incomplete" and show
 the user the next action from `manifest.json` when available. It should not
 silently distill a failed package into the investor Wiki.
 
+SoulMirror-style snapshot collectors, such as `ticktick`, are one step earlier
+in the pipeline: the skill returns a JSON array to AgentRunner, then the
+SoulMirror daemon diffs the snapshot and writes `lake/<collector-id>/events.jsonl`.
+Run the package gate after the daemon has written that Lake output.
+
 ## Investor Wiki Evidence Contract
 
 If a collector emits `investor_wiki_evidence.v1.json`, FinClaw should validate
@@ -411,15 +416,44 @@ Current status:
 ### 滴答清单 / 任务
 
 ```bash
+python3 skills/ticktick-cli/scripts/auth.py status --json
+python3 skills/ticktick-cli/scripts/collect_for_soulmirror.py
+```
+
+Current status:
+
+- The primary live path follows SoulMirror's original shape:
+  `collectors/generic/ticktick.yaml` + AgentRunner + `ticktick-cli` skill.
+- `collect_for_soulmirror.py` is dependency-light and returns one JSON array
+  snapshot for the daemon to diff.
+- The SoulMirror daemon, not the skill, owns durable
+  `lake/ticktick/events.jsonl` writes and snapshot state.
+- If auth is missing, the collector fails clearly with
+  `ticktick_auth_required`; it must not return `[]` because that would falsely
+  mean the authorized account has no tasks.
+- The snapshot captures active tasks plus recent completed tasks, with stable
+  ids, title, project, project id, status, priority, tags, due/start time, and
+  raw task fields.
+- `auth.py connect` supports a FinClaw-managed OAuth Broker through
+  `TICKTICK_OAUTH_BROKER_URL` so ordinary users do not need to create their own
+  Dida365 developer app.
+- Local tests cover missing-auth behavior and an authorized fake OpenAPI server
+  for active/completed tasks, project-name mapping, inbox handling, dedupe, and
+  no token leakage in snapshot output.
+- `ticktick_events.py collect` remains available only for offline authorized
+  JSON/JSONL/ZIP export conversion and writes `exports/ticktick/events.jsonl`
+  to avoid confusing that helper with SoulMirror daemon-owned Lake writes.
+
+Offline conversion helper:
+
+```bash
 python3 skills/ticktick-cli/scripts/ticktick_events.py collect \
   --input <authorized-ticktick-task-json-or-zip> \
   --out-dir <out-dir>
 ```
 
-Current status:
+Offline helper status:
 
-- Converts authorized TickTick/Dida task JSON/JSONL/ZIP exports into generic
-  `ticktick` task events.
 - Writes `manifest.platform_coverage` with `ticktick`/`dida365` source
   coverage, missing sources, event counts, and `real_account_validation`.
 - Writes `manifest.field_coverage`, `time_status_summary`, `source_audit`, and
@@ -430,9 +464,11 @@ Current status:
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-task status directly.
-- Feed `lake/ticktick/events.jsonl` into `task-calendar-investor` lens for
-  trading plans, research tasks, and review reminders.
-- Live TickTick API collection requires the user's OAuth token.
+- Feed daemon-written `lake/ticktick/events.jsonl` into
+  `task-calendar-investor` lens for trading plans, research tasks, and review
+  reminders.
+- Real account validation still requires deploying the managed OAuth Broker and
+  running against an authorized user account.
 
 ### 日历
 

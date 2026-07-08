@@ -3,8 +3,7 @@
 
 const TICKTICK_AUTH_URL = "https://dida365.com/oauth/authorize";
 const TICKTICK_TOKEN_URL = "https://dida365.com/oauth/token";
-const TICKTICK_REDIRECT_URI =
-  "https://ticktick-oauth.dcjanus.workers.dev/callback";
+const DEFAULT_RETURN_TO = "http://127.0.0.1:18921/broker-callback";
 
 /**
  * 返回 JSON 响应。
@@ -20,6 +19,86 @@ function json(data, status = 200) {
       "cache-control": "no-store",
     },
   });
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function base64UrlEncode(value) {
+  return btoa(value).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+}
+
+function base64UrlDecode(value) {
+  const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  return atob(padded);
+}
+
+function packState({ returnTo, userState }) {
+  return base64UrlEncode(JSON.stringify({ return_to: returnTo, state: userState || "" }));
+}
+
+function unpackState(raw) {
+  if (!raw) return { return_to: DEFAULT_RETURN_TO, state: "" };
+  try {
+    const data = JSON.parse(base64UrlDecode(raw));
+    return {
+      return_to: data.return_to || DEFAULT_RETURN_TO,
+      state: data.state || "",
+    };
+  } catch {
+    return { return_to: DEFAULT_RETURN_TO, state: raw };
+  }
+}
+
+function isAllowedReturnTo(value) {
+  try {
+    const url = new URL(value);
+    return (
+      url.protocol === "http:" &&
+      (url.hostname === "127.0.0.1" || url.hostname === "localhost") &&
+      url.port === "18921"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function postTokenPage(returnTo, tokenData, state) {
+  const fields = {
+    access_token: tokenData.access_token || "",
+    token_type: tokenData.token_type || "Bearer",
+    scope: tokenData.scope || "",
+    expires_in: tokenData.expires_in || "",
+    state: state || "",
+  };
+  const inputs = Object.entries(fields)
+    .map(([key, value]) => `<input type="hidden" name="${escapeHtml(key)}" value="${escapeHtml(value)}">`)
+    .join("");
+  return new Response(
+    `<!doctype html>
+<meta charset="utf-8">
+<title>滴答清单授权完成</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;max-width:560px;margin:64px auto;padding:0 24px;line-height:1.6;color:#17211b}
+.muted{color:#66756b}
+</style>
+<h1>滴答清单授权完成</h1>
+<p class="muted">正在把授权结果写回本机，请稍候...</p>
+<form id="f" method="post" action="${escapeHtml(returnTo)}">${inputs}</form>
+<script>document.getElementById("f").submit();</script>`,
+    {
+      status: 200,
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    },
+  );
 }
 
 /**
@@ -122,8 +201,15 @@ export default {
     if (path === "/authorize") {
       // 启动 OAuth 授权流程：重定向到 TickTick 授权页面。
       const clientId = getEnvVar(env, "TICKTICK_CLIENT_ID");
-      const redirectUri = TICKTICK_REDIRECT_URI;
-      const state = url.searchParams.get("state") || "";
+      const redirectUri = env?.TICKTICK_REDIRECT_URI || `${url.origin}/callback`;
+      const returnTo = url.searchParams.get("return_to") || DEFAULT_RETURN_TO;
+      if (!isAllowedReturnTo(returnTo)) {
+        return json({ ok: false, error: "invalid_return_to" }, 400);
+      }
+      const state = packState({
+        returnTo,
+        userState: url.searchParams.get("state") || "",
+      });
       const scope = url.searchParams.get("scope") || "";
 
       const authorizeUrl = buildAuthorizeUrl({
@@ -144,7 +230,8 @@ export default {
     if (path === "/callback") {
       // 处理 OAuth 回调：使用 code 换取 token。
       const code = url.searchParams.get("code");
-      const state = url.searchParams.get("state");
+      const packedState = url.searchParams.get("state");
+      const state = unpackState(packedState);
       const error = url.searchParams.get("error");
 
       if (error) {
@@ -152,12 +239,12 @@ export default {
       }
 
       if (!code) {
-        return json({ ok: false, error: "missing_code", state }, 400);
+        return json({ ok: false, error: "missing_code", state: state.state }, 400);
       }
 
       const clientId = getEnvVar(env, "TICKTICK_CLIENT_ID");
       const clientSecret = getEnvVar(env, "TICKTICK_CLIENT_SECRET");
-      const redirectUri = TICKTICK_REDIRECT_URI;
+      const redirectUri = env?.TICKTICK_REDIRECT_URI || `${url.origin}/callback`;
 
       const tokenResult = await exchangeCodeForToken({
         code,
@@ -195,7 +282,11 @@ export default {
         );
       }
 
-      return json({ access_token: accessToken });
+      if (isAllowedReturnTo(state.return_to)) {
+        return postTokenPage(state.return_to, tokenResult.data, state.state);
+      }
+
+      return json({ access_token: accessToken, state: state.state });
     }
 
     return json({ ok: false, error: "not_found" }, 404);

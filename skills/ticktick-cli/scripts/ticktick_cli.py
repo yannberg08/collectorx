@@ -24,6 +24,26 @@ try:
 except (AttributeError, OSError):
     pass
 
+MIN_CLI_PYTHON = (3, 10)
+if sys.version_info < MIN_CLI_PYTHON:
+    message = (
+        "ticktick_cli.py requires Python 3.10+ because its Typer/Pydantic "
+        "models use modern type annotations. Use python3.12 when available. "
+        "SoulMirror live collection should use collect_for_soulmirror.py, "
+        "which is dependency-light."
+    )
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        print(
+            "usage: ticktick_cli.py [OPTIONS] COMMAND [ARGS]...\n\n"
+            "滴答清单 OpenAPI CLI。\n\n"
+            "Commands:\n"
+            "  project   项目相关操作\n"
+            "  task      任务相关操作\n\n"
+            f"Note: {message}"
+        )
+        raise SystemExit(0)
+    raise SystemExit(message)
+
 try:
     import typer
     from pydantic import BaseModel
@@ -109,10 +129,10 @@ def get_client(ctx: typer.Context) -> TicktickApiClient:
     token = state.token or _load_token_from_file()
     if not token:
         raise ApiError(
-            "缺少 token。先跑 `python <skill_dir>/scripts/auth.py register <id> <sec>` "
-            "保存 OAuth 应用凭证，再跑 `python <skill_dir>/scripts/auth.py authorize` "
-            "完成授权（一条龙：起本地 server + 开浏览器 + 抓回调 + 落 token 到 "
-            f"{TOKEN_FILE}）。授权后本 CLI 会自动从该文件读 token。"
+            "缺少 token。普通用户请先在产品里点击“连接滴答清单”，或运行 "
+            "`python <skill_dir>/scripts/auth.py connect` 完成托管 OAuth 授权。"
+            "开发者兜底才需要 `auth.py register <id> <sec>` + `auth.py authorize`。"
+            f"授权后本 CLI 会自动从 {TOKEN_FILE} 读取 token。"
         )
     base_url = state.base_url
     timeout_raw = state.timeout
@@ -428,15 +448,18 @@ def project_delete(
 @task_app.command("list", help="列出项目下的未完成任务。")
 def task_list(
     ctx: typer.Context,
-    project_id: str = typer.Option(
-        "inbox1013277052",
+    project_id: str | None = typer.Option(
+        None,
         "--project-id",
-        help="项目 ID，默认为收集箱。",
+        help="项目 ID；不传则列出当前账号全部未完成任务。",
     ),
 ) -> None:
     client = get_client(ctx)
-    data = client.get_project_data(project_id)
-    tasks = data.tasks or []
+    if project_id:
+        data = client.get_project_data(project_id)
+        tasks = data.tasks or []
+    else:
+        tasks = client.filter_tasks(status=[0])
     if ctx.obj.json_output:
         render_payload(tasks)
         return
@@ -473,6 +496,66 @@ def task_list_completed(
         render_payload(tasks)
         return
     render_task_list(tasks)
+
+
+@task_app.command("collect-all", help="导出采集器需要的任务快照。")
+def task_collect_all(
+    ctx: typer.Context,
+    completed_limit: int = typer.Option(500, "--completed-limit", help="最多导出多少条已完成任务。"),
+    include_completed: bool = typer.Option(True, "--include-completed/--no-completed", help="是否包含已完成任务。"),
+) -> None:
+    """Export a stable JSON array for SoulMirror/CollectorX.
+
+    This command avoids user-specific inbox IDs. It uses the filter endpoint for
+    active tasks across the current account, then optionally adds recent
+    completed tasks.
+    """
+    client = get_client(ctx)
+    projects = client.list_projects()
+    project_names = {
+        item.id: item.name
+        for item in projects
+        if getattr(item, "id", None)
+    }
+    records = []
+
+    def add_tasks(tasks: list[Any], bucket: str) -> None:
+        for task in tasks:
+            data = task.model_dump() if hasattr(task, "model_dump") else dict(task)
+            task_id = data.get("id")
+            project_id = data.get("projectId")
+            project_name = project_names.get(project_id) or (
+                "收件箱" if str(project_id or "").startswith("inbox") else project_id
+            )
+            data["projectName"] = project_name
+            data["sourceBucket"] = bucket
+            records.append(
+                {
+                    "id": f"ticktick:{task_id}" if task_id else None,
+                    "title": data.get("title"),
+                    "due": data.get("dueDate") or data.get("startDate"),
+                    "project": project_name,
+                    "projectId": project_id,
+                    "status": data.get("status"),
+                    "priority": data.get("priority"),
+                    "tags": data.get("tags"),
+                    "data": data,
+                }
+            )
+
+    add_tasks(client.filter_tasks(status=[0]), "active")
+    if include_completed:
+        add_tasks(client.list_completed_tasks(limit=completed_limit), "completed")
+
+    deduped = []
+    seen = set()
+    for record in records:
+        key = record.get("id") or json.dumps(record.get("data"), ensure_ascii=False, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(record)
+    render_payload(deduped)
 
 
 @task_app.command("filter", help="高级任务过滤（POST /open/v1/task/filter）。")

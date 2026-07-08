@@ -63,6 +63,7 @@ PARSER_TESTS = [
     "skills/qq-export/tests/test_parser.py",
     "skills/notes-collector/tests/test_notes_collector.py",
     "skills/ticktick-cli/scripts/test_ticktick_events.py",
+    "skills/ticktick-cli/scripts/test_ticktick_api_client.py",
     "skills/ticktick-cli/scripts/test_collect_for_soulmirror.py",
     "skills/calendar-collector/tests/test_calendar_collector.py",
     "skills/collaboration-exports/tests/test_collaboration_exports.py",

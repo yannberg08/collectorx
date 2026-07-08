@@ -256,11 +256,11 @@
       "skill": "ticktick-cli",
       "readiness": "baseline+audit",
       "gate": "G2",
-      "finclaw_action": "authorized-task-export-import-or-oauth-after-token-setup",
-      "cli": "python3 skills/ticktick-cli/scripts/ticktick_events.py collect --input <authorized-ticktick-export> --out-dir <out-dir>",
-      "collects": "TickTick/Dida task titles, projects, status, start/due/completion times, recurrence, reminders, source audit, ZIP skip reasons, and path-level parse results.",
+      "finclaw_action": "soulmirror-yaml-agentrunner-skill-with-managed-oauth",
+      "cli": "SoulMirror loads collectors/generic/ticktick.yaml, AgentRunner invokes python <SKILL_DIR>/scripts/collect_for_soulmirror.py, and the daemon writes lake/ticktick/events.jsonl.",
+      "collects": "TickTick/Dida task titles, projects, status, start/due/completion times, recurrence, reminders, and raw task fields through the SoulMirror snapshot diff path. Offline JSON/ZIP export conversion remains available only as an auxiliary test/import path.",
       "must_not_collect": "OAuth tokens in output or direct investment conclusions.",
-      "production_gap": "Real OAuth validation and recurring task/timezone backtest."
+      "production_gap": "Deploy and validate managed OAuth broker, then run real recurring task/timezone backtest."
     },
     {
       "id": "calendar",
