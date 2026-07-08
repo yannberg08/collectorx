@@ -50,6 +50,20 @@ def collect(args: argparse.Namespace) -> int:
         deny_chats=args.deny_chat,
         allow_senders=args.allow_sender,
         deny_senders=args.deny_sender,
+        allow_email_sender_domains=args.allow_email_sender_domain,
+        deny_email_sender_domains=args.deny_email_sender_domain,
+        allow_email_folders=args.allow_email_folder,
+        deny_email_folders=args.deny_email_folder,
+        allow_email_mailboxes=args.allow_email_mailbox,
+        deny_email_mailboxes=args.deny_email_mailbox,
+        allow_email_subjects=args.allow_email_subject,
+        deny_email_subjects=args.deny_email_subject,
+        allow_email_attachments=args.allow_email_attachment,
+        deny_email_attachments=args.deny_email_attachment,
+        allow_email_surfaces=args.allow_email_surface,
+        deny_email_surfaces=args.deny_email_surface,
+        allow_email_keywords=args.allow_email_keyword,
+        deny_email_keywords=args.deny_email_keyword,
         allow_extensions=args.allow_extension,
         deny_extensions=args.deny_extension,
         allow_paths=args.allow_path,
@@ -120,6 +134,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--deny-chat", action="append", help="Drop records whose chat/source contains this name. Repeat or comma-separate.")
     p_collect.add_argument("--allow-sender", action="append", help="Only keep records whose sender/author contains this name. Repeat or comma-separate.")
     p_collect.add_argument("--deny-sender", action="append", help="Drop records whose sender/author contains this name. Repeat or comma-separate.")
+    p_collect.add_argument("--allow-email-sender-domain", action="append", help="Email research: only keep matching sender domains.")
+    p_collect.add_argument("--deny-email-sender-domain", action="append", help="Email research: exclude matching sender domains.")
+    p_collect.add_argument("--allow-email-folder", action="append", help="Email research: only keep matching mailbox folders.")
+    p_collect.add_argument("--deny-email-folder", action="append", help="Email research: exclude matching mailbox folders.")
+    p_collect.add_argument("--allow-email-mailbox", action="append", help="Email research: only keep matching mailbox/account identifiers.")
+    p_collect.add_argument("--deny-email-mailbox", action="append", help="Email research: exclude matching mailbox/account identifiers.")
+    p_collect.add_argument("--allow-email-subject", action="append", help="Email research: only keep matching subjects.")
+    p_collect.add_argument("--deny-email-subject", action="append", help="Email research: exclude matching subjects.")
+    p_collect.add_argument("--allow-email-attachment", action="append", help="Email research: only keep matching attachment filenames.")
+    p_collect.add_argument("--deny-email-attachment", action="append", help="Email research: exclude matching attachment filenames.")
+    p_collect.add_argument("--allow-email-surface", action="append", help="Email research: only keep matching surfaces such as broker_research_report or roadshow_invite.")
+    p_collect.add_argument("--deny-email-surface", action="append", help="Email research: exclude matching surfaces.")
+    p_collect.add_argument("--allow-email-keyword", action="append", help="Email research: only keep records whose sender/subject/preview/attachment metadata match keyword.")
+    p_collect.add_argument("--deny-email-keyword", action="append", help="Email research: exclude records whose sender/subject/preview/attachment metadata match keyword.")
     p_collect.add_argument("--allow-extension", action="append", help="Research documents: only keep matching file extensions, e.g. pdf, xlsx, md.")
     p_collect.add_argument("--deny-extension", action="append", help="Research documents: exclude matching file extensions.")
     p_collect.add_argument("--allow-path", action="append", help="Research documents: only keep records whose path/source contains this pattern.")

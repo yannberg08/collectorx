@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 from .classifier import classify_record, should_keep_event
-from .events import build_event, build_gap_event, classify_research_document_surfaces
+from .events import build_event, build_gap_event, classify_email_research_surfaces, classify_research_document_surfaces
 from .profiles import get_profile
 
 
@@ -36,6 +36,24 @@ RESEARCH_DOCUMENT_EXTENSIONS = (
     | {".doc", ".ppt", ".key", ".numbers", ".bmp", ".gif", ".heic", ".heif"}
 )
 MAX_EXTRACTED_CHARS = 20000
+EMAIL_RESEARCH_SCOPE_POLICY_KEYS = (
+    "allow_senders",
+    "deny_senders",
+    "allow_email_sender_domains",
+    "deny_email_sender_domains",
+    "allow_email_folders",
+    "deny_email_folders",
+    "allow_email_mailboxes",
+    "deny_email_mailboxes",
+    "allow_email_subjects",
+    "deny_email_subjects",
+    "allow_email_attachments",
+    "deny_email_attachments",
+    "allow_email_surfaces",
+    "deny_email_surfaces",
+    "allow_email_keywords",
+    "deny_email_keywords",
+)
 
 
 class DocumentExtractError(RuntimeError):
@@ -65,6 +83,20 @@ def collect_events(
     deny_chats: Optional[Sequence[str]] = None,
     allow_senders: Optional[Sequence[str]] = None,
     deny_senders: Optional[Sequence[str]] = None,
+    allow_email_sender_domains: Optional[Sequence[str]] = None,
+    deny_email_sender_domains: Optional[Sequence[str]] = None,
+    allow_email_folders: Optional[Sequence[str]] = None,
+    deny_email_folders: Optional[Sequence[str]] = None,
+    allow_email_mailboxes: Optional[Sequence[str]] = None,
+    deny_email_mailboxes: Optional[Sequence[str]] = None,
+    allow_email_subjects: Optional[Sequence[str]] = None,
+    deny_email_subjects: Optional[Sequence[str]] = None,
+    allow_email_attachments: Optional[Sequence[str]] = None,
+    deny_email_attachments: Optional[Sequence[str]] = None,
+    allow_email_surfaces: Optional[Sequence[str]] = None,
+    deny_email_surfaces: Optional[Sequence[str]] = None,
+    allow_email_keywords: Optional[Sequence[str]] = None,
+    deny_email_keywords: Optional[Sequence[str]] = None,
     allow_extensions: Optional[Sequence[str]] = None,
     deny_extensions: Optional[Sequence[str]] = None,
     allow_paths: Optional[Sequence[str]] = None,
@@ -91,6 +123,20 @@ def collect_events(
         deny_chats=deny_chats,
         allow_senders=allow_senders,
         deny_senders=deny_senders,
+        allow_email_sender_domains=allow_email_sender_domains,
+        deny_email_sender_domains=deny_email_sender_domains,
+        allow_email_folders=allow_email_folders,
+        deny_email_folders=deny_email_folders,
+        allow_email_mailboxes=allow_email_mailboxes,
+        deny_email_mailboxes=deny_email_mailboxes,
+        allow_email_subjects=allow_email_subjects,
+        deny_email_subjects=deny_email_subjects,
+        allow_email_attachments=allow_email_attachments,
+        deny_email_attachments=deny_email_attachments,
+        allow_email_surfaces=allow_email_surfaces,
+        deny_email_surfaces=deny_email_surfaces,
+        allow_email_keywords=allow_email_keywords,
+        deny_email_keywords=deny_email_keywords,
         allow_extensions=allow_extensions,
         deny_extensions=deny_extensions,
         allow_paths=allow_paths,
@@ -120,6 +166,20 @@ def collect_events_with_audit(
     deny_chats: Optional[Sequence[str]] = None,
     allow_senders: Optional[Sequence[str]] = None,
     deny_senders: Optional[Sequence[str]] = None,
+    allow_email_sender_domains: Optional[Sequence[str]] = None,
+    deny_email_sender_domains: Optional[Sequence[str]] = None,
+    allow_email_folders: Optional[Sequence[str]] = None,
+    deny_email_folders: Optional[Sequence[str]] = None,
+    allow_email_mailboxes: Optional[Sequence[str]] = None,
+    deny_email_mailboxes: Optional[Sequence[str]] = None,
+    allow_email_subjects: Optional[Sequence[str]] = None,
+    deny_email_subjects: Optional[Sequence[str]] = None,
+    allow_email_attachments: Optional[Sequence[str]] = None,
+    deny_email_attachments: Optional[Sequence[str]] = None,
+    allow_email_surfaces: Optional[Sequence[str]] = None,
+    deny_email_surfaces: Optional[Sequence[str]] = None,
+    allow_email_keywords: Optional[Sequence[str]] = None,
+    deny_email_keywords: Optional[Sequence[str]] = None,
     allow_extensions: Optional[Sequence[str]] = None,
     deny_extensions: Optional[Sequence[str]] = None,
     allow_paths: Optional[Sequence[str]] = None,
@@ -138,10 +198,25 @@ def collect_events_with_audit(
     input_resolution = resolve_input_paths(input_list)
     paths = input_resolution["paths"]
     source_policy = build_source_policy(
+        source_id=source_id,
         allow_chats=allow_chats,
         deny_chats=deny_chats,
         allow_senders=allow_senders,
         deny_senders=deny_senders,
+        allow_email_sender_domains=allow_email_sender_domains,
+        deny_email_sender_domains=deny_email_sender_domains,
+        allow_email_folders=allow_email_folders,
+        deny_email_folders=deny_email_folders,
+        allow_email_mailboxes=allow_email_mailboxes,
+        deny_email_mailboxes=deny_email_mailboxes,
+        allow_email_subjects=allow_email_subjects,
+        deny_email_subjects=deny_email_subjects,
+        allow_email_attachments=allow_email_attachments,
+        deny_email_attachments=deny_email_attachments,
+        allow_email_surfaces=allow_email_surfaces,
+        deny_email_surfaces=deny_email_surfaces,
+        allow_email_keywords=allow_email_keywords,
+        deny_email_keywords=deny_email_keywords,
     )
     document_scope_policy = build_document_scope_policy(
         source_id,
@@ -210,8 +285,11 @@ def collect_events_with_audit(
     if not events:
         source_policy_filtered = int((audit.get("source_policy") or {}).get("filtered_candidate_count") or 0)
         document_scope_filtered = int((audit.get("document_scope_policy") or {}).get("filtered_candidate_count") or 0)
+        email_research_scope_filtered = int((audit.get("email_research_scope_policy") or {}).get("filtered_candidate_count") or 0)
         if parsed_count == 0:
             reason = "no_readable_input"
+        elif source_id == "email-research" and email_research_scope_filtered >= parsed_count:
+            reason = "email_research_scope_policy_filtered_all"
         elif source_policy_filtered + document_scope_filtered >= parsed_count:
             reason = "source_policy_filtered_all"
         else:
@@ -428,14 +506,30 @@ def initial_collection_audit(
         "content_extraction_policy": content_extraction_policy(source_id, include_content, include_image_ocr),
         "source_policy": {
             "enabled": source_policy_enabled(source_policy),
+            "email_research_scope_applies": (source_policy or {}).get("email_research_scope_applies", False),
             "allow_chats": (source_policy or {}).get("allow_chats", []),
             "deny_chats": (source_policy or {}).get("deny_chats", []),
             "allow_senders": (source_policy or {}).get("allow_senders", []),
             "deny_senders": (source_policy or {}).get("deny_senders", []),
+            "allow_email_sender_domains": (source_policy or {}).get("allow_email_sender_domains", []),
+            "deny_email_sender_domains": (source_policy or {}).get("deny_email_sender_domains", []),
+            "allow_email_folders": (source_policy or {}).get("allow_email_folders", []),
+            "deny_email_folders": (source_policy or {}).get("deny_email_folders", []),
+            "allow_email_mailboxes": (source_policy or {}).get("allow_email_mailboxes", []),
+            "deny_email_mailboxes": (source_policy or {}).get("deny_email_mailboxes", []),
+            "allow_email_subjects": (source_policy or {}).get("allow_email_subjects", []),
+            "deny_email_subjects": (source_policy or {}).get("deny_email_subjects", []),
+            "allow_email_attachments": (source_policy or {}).get("allow_email_attachments", []),
+            "deny_email_attachments": (source_policy or {}).get("deny_email_attachments", []),
+            "allow_email_surfaces": (source_policy or {}).get("allow_email_surfaces", []),
+            "deny_email_surfaces": (source_policy or {}).get("deny_email_surfaces", []),
+            "allow_email_keywords": (source_policy or {}).get("allow_email_keywords", []),
+            "deny_email_keywords": (source_policy or {}).get("deny_email_keywords", []),
             "filtered_candidate_count": 0,
             "filter_reason_counts": {},
             "policy_does_not_assert_investment_relevance": True,
         },
+        "email_research_scope_policy": build_email_research_scope_policy_audit(source_id, source_policy),
         "document_scope_policy": {
             **(document_scope_policy or {"enabled": False}),
             "filtered_candidate_count": 0,
@@ -493,6 +587,15 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
     source_policy = audit.get("source_policy") or {}
     if isinstance(source_policy.get("filter_reason_counts"), Counter):
         source_policy["filter_reason_counts"] = dict(sorted(source_policy["filter_reason_counts"].items()))
+    source_filtered_count = int(source_policy.get("filtered_candidate_count") or 0)
+    source_policy["filtered_all"] = parsed_count > 0 and source_filtered_count >= parsed_count
+    audit["source_policy_filtered_all"] = bool(source_policy.get("filtered_all"))
+    email_research_scope_policy = audit.get("email_research_scope_policy") or {}
+    if isinstance(email_research_scope_policy.get("filter_reason_counts"), Counter):
+        email_research_scope_policy["filter_reason_counts"] = dict(sorted(email_research_scope_policy["filter_reason_counts"].items()))
+    email_filtered_count = int(email_research_scope_policy.get("filtered_candidate_count") or 0)
+    email_research_scope_policy["filtered_all"] = parsed_count > 0 and email_filtered_count >= parsed_count
+    audit["email_research_scope_policy_filtered_all"] = bool(email_research_scope_policy.get("filtered_all"))
     document_scope_policy = audit.get("document_scope_policy") or {}
     if isinstance(document_scope_policy.get("filter_reason_counts"), Counter):
         document_scope_policy["filter_reason_counts"] = dict(sorted(document_scope_policy["filter_reason_counts"].items()))
@@ -1233,6 +1336,8 @@ def candidate_to_event(
     )
     if source_policy_enabled(source_policy):
         event["data"]["source_policy"] = policy_match
+    if source_id == "email-research" and email_research_scope_policy_enabled(source_policy):
+        event["data"]["email_research_scope_policy"] = policy_match
     if document_scope_policy_enabled(document_scope_policy):
         event["data"]["document_scope_policy"] = document_policy_match
     return event
@@ -1240,16 +1345,63 @@ def candidate_to_event(
 
 def build_source_policy(
     *,
+    source_id: str,
     allow_chats: Optional[Sequence[str]],
     deny_chats: Optional[Sequence[str]],
     allow_senders: Optional[Sequence[str]],
     deny_senders: Optional[Sequence[str]],
+    allow_email_sender_domains: Optional[Sequence[str]],
+    deny_email_sender_domains: Optional[Sequence[str]],
+    allow_email_folders: Optional[Sequence[str]],
+    deny_email_folders: Optional[Sequence[str]],
+    allow_email_mailboxes: Optional[Sequence[str]],
+    deny_email_mailboxes: Optional[Sequence[str]],
+    allow_email_subjects: Optional[Sequence[str]],
+    deny_email_subjects: Optional[Sequence[str]],
+    allow_email_attachments: Optional[Sequence[str]],
+    deny_email_attachments: Optional[Sequence[str]],
+    allow_email_surfaces: Optional[Sequence[str]],
+    deny_email_surfaces: Optional[Sequence[str]],
+    allow_email_keywords: Optional[Sequence[str]],
+    deny_email_keywords: Optional[Sequence[str]],
 ) -> Dict[str, Any]:
+    email_scope_applies = source_id == "email-research"
     return {
+        "email_research_scope_applies": email_scope_applies,
         "allow_chats": split_patterns(allow_chats),
         "deny_chats": split_patterns(deny_chats),
         "allow_senders": split_patterns(allow_senders),
         "deny_senders": split_patterns(deny_senders),
+        "allow_email_sender_domains": normalize_domain_terms(allow_email_sender_domains) if email_scope_applies else [],
+        "deny_email_sender_domains": normalize_domain_terms(deny_email_sender_domains) if email_scope_applies else [],
+        "allow_email_folders": split_patterns(allow_email_folders) if email_scope_applies else [],
+        "deny_email_folders": split_patterns(deny_email_folders) if email_scope_applies else [],
+        "allow_email_mailboxes": split_patterns(allow_email_mailboxes) if email_scope_applies else [],
+        "deny_email_mailboxes": split_patterns(deny_email_mailboxes) if email_scope_applies else [],
+        "allow_email_subjects": split_patterns(allow_email_subjects) if email_scope_applies else [],
+        "deny_email_subjects": split_patterns(deny_email_subjects) if email_scope_applies else [],
+        "allow_email_attachments": split_patterns(allow_email_attachments) if email_scope_applies else [],
+        "deny_email_attachments": split_patterns(deny_email_attachments) if email_scope_applies else [],
+        "allow_email_surfaces": normalize_surface_terms(allow_email_surfaces) if email_scope_applies else [],
+        "deny_email_surfaces": normalize_surface_terms(deny_email_surfaces) if email_scope_applies else [],
+        "allow_email_keywords": split_patterns(allow_email_keywords) if email_scope_applies else [],
+        "deny_email_keywords": split_patterns(deny_email_keywords) if email_scope_applies else [],
+    }
+
+
+def build_email_research_scope_policy_audit(source_id: str, source_policy: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    policy = source_policy or {}
+    keys = EMAIL_RESEARCH_SCOPE_POLICY_KEYS
+    enabled = source_id == "email-research" and any(policy.get(key) for key in keys)
+    return {
+        "enabled": enabled,
+        "applies_to": "email-research",
+        **{key: policy.get(key, []) for key in keys},
+        "filtered_candidate_count": 0,
+        "filter_reason_counts": {},
+        "filtered_all": False,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
     }
 
 
@@ -1343,6 +1495,17 @@ def normalize_lower_terms(values: Optional[Sequence[str]]) -> List[str]:
     return stable_unique(value.lower().strip() for value in split_patterns(values) if value.strip())
 
 
+def normalize_domain_terms(values: Optional[Sequence[str]]) -> List[str]:
+    out: List[str] = []
+    for value in split_patterns(values):
+        domain = value.lower().strip().strip("<>,;")
+        if "@" in domain:
+            domain = domain.rsplit("@", 1)[-1]
+        if domain:
+            out.append(domain)
+    return stable_unique(out)
+
+
 def normalize_surface_terms(values: Optional[Sequence[str]]) -> List[str]:
     return stable_unique(value.lower().strip().replace("-", "_") for value in split_patterns(values) if value.strip())
 
@@ -1350,11 +1513,23 @@ def normalize_surface_terms(values: Optional[Sequence[str]]) -> List[str]:
 def source_policy_enabled(source_policy: Optional[Dict[str, Any]]) -> bool:
     if not source_policy:
         return False
-    return any(source_policy.get(key) for key in ("allow_chats", "deny_chats", "allow_senders", "deny_senders"))
+    generic_enabled = any(source_policy.get(key) for key in ("allow_chats", "deny_chats", "allow_senders", "deny_senders"))
+    email_enabled = bool(source_policy.get("email_research_scope_applies")) and any(
+        source_policy.get(key) for key in EMAIL_RESEARCH_SCOPE_POLICY_KEYS
+    )
+    return generic_enabled or email_enabled
 
 
 def document_scope_policy_enabled(document_scope_policy: Optional[Dict[str, Any]]) -> bool:
     return bool(document_scope_policy and document_scope_policy.get("enabled"))
+
+
+def email_research_scope_policy_enabled(source_policy: Optional[Dict[str, Any]]) -> bool:
+    if not source_policy:
+        return False
+    return bool(source_policy.get("email_research_scope_applies")) and any(
+        source_policy.get(key) for key in EMAIL_RESEARCH_SCOPE_POLICY_KEYS
+    )
 
 
 def source_policy_match(record: Dict[str, Any], *, source_label: str, source_policy: Optional[Dict[str, Any]]) -> tuple[bool, Dict[str, Any]]:
@@ -1388,11 +1563,112 @@ def source_policy_match(record: Dict[str, Any], *, source_label: str, source_pol
     if allow_sender_patterns and not sender_hit:
         return False, {"enabled": True, "allowed": False, "reason": "allow_sender_not_matched"}
 
-    return True, {
+    email_allowed, email_match = email_research_scope_policy_match(record, source_label=source_label, source_policy=source_policy)
+    if not email_allowed:
+        return False, email_match
+
+    result = {
         "enabled": True,
         "allowed": True,
         "matched_allow_chat": chat_hit,
         "matched_allow_sender": sender_hit,
+        "policy_does_not_assert_investment_relevance": True,
+    }
+    if email_match.get("enabled"):
+        result.update(email_match)
+        result["matched_allow_chat"] = chat_hit
+        result["matched_allow_sender"] = sender_hit
+    return True, result
+
+
+def email_research_scope_policy_match(
+    record: Dict[str, Any],
+    *,
+    source_label: str,
+    source_policy: Optional[Dict[str, Any]],
+) -> tuple[bool, Dict[str, Any]]:
+    if not email_research_scope_policy_enabled(source_policy):
+        return True, {"enabled": False}
+
+    sender_surface = searchable_field_surface(record, source_label, ("from", "sender", "发件人"))
+    sender_domain = email_sender_domain_from_record(record)
+    folder_surface = searchable_field_surface(record, source_label, ("folder", "mailbox_folder", "文件夹"))
+    mailbox_surface = searchable_field_surface(record, source_label, ("mailbox", "account", "email", "邮箱", "账号"))
+    subject_surface = searchable_field_surface(record, source_label, ("subject", "title", "主题", "标题"))
+    attachment_surface = email_attachment_surface(record)
+    keyword_surface = email_research_scope_keyword_surface(record, source_label=source_label)
+    email_surfaces = classify_email_research_surfaces({"data": {"payload": record}, "raw_ref": {}})
+    email_surface_set = set(email_surfaces)
+
+    deny_sender_domain = first_domain_hit(source_policy.get("deny_email_sender_domains", []), sender_domain)
+    if deny_sender_domain:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_sender_domain", "matched_pattern": deny_sender_domain}
+    allow_sender_domains = source_policy.get("allow_email_sender_domains", [])
+    allow_sender_domain = first_domain_hit(allow_sender_domains, sender_domain)
+    if allow_sender_domains and not allow_sender_domain:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_sender_domain_not_matched", "sender_domain": sender_domain}
+
+    deny_folder = first_pattern_hit(source_policy.get("deny_email_folders", []), folder_surface)
+    if deny_folder:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_folder", "matched_pattern": deny_folder}
+    allow_folders = source_policy.get("allow_email_folders", [])
+    allow_folder = first_pattern_hit(allow_folders, folder_surface)
+    if allow_folders and not allow_folder:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_folder_not_matched"}
+
+    deny_mailbox = first_pattern_hit(source_policy.get("deny_email_mailboxes", []), mailbox_surface)
+    if deny_mailbox:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_mailbox", "matched_pattern": deny_mailbox}
+    allow_mailboxes = source_policy.get("allow_email_mailboxes", [])
+    allow_mailbox = first_pattern_hit(allow_mailboxes, mailbox_surface)
+    if allow_mailboxes and not allow_mailbox:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_mailbox_not_matched"}
+
+    deny_subject = first_pattern_hit(source_policy.get("deny_email_subjects", []), subject_surface)
+    if deny_subject:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_subject", "matched_pattern": deny_subject}
+    allow_subjects = source_policy.get("allow_email_subjects", [])
+    allow_subject = first_pattern_hit(allow_subjects, subject_surface)
+    if allow_subjects and not allow_subject:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_subject_not_matched"}
+
+    deny_attachment = first_pattern_hit(source_policy.get("deny_email_attachments", []), attachment_surface)
+    if deny_attachment:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_attachment", "matched_pattern": deny_attachment}
+    allow_attachments = source_policy.get("allow_email_attachments", [])
+    allow_attachment = first_pattern_hit(allow_attachments, attachment_surface)
+    if allow_attachments and not allow_attachment:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_attachment_not_matched"}
+
+    deny_surface = first_surface_hit(source_policy.get("deny_email_surfaces", []), email_surface_set)
+    if deny_surface:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_surface", "matched_email_surface": deny_surface}
+    allow_surfaces = source_policy.get("allow_email_surfaces", [])
+    allow_surface = first_surface_hit(allow_surfaces, email_surface_set)
+    if allow_surfaces and not allow_surface:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_surface_not_matched", "email_surfaces": email_surfaces}
+
+    deny_keyword = first_pattern_hit(source_policy.get("deny_email_keywords", []), keyword_surface)
+    if deny_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_email_keyword", "matched_pattern": deny_keyword}
+    allow_keywords = source_policy.get("allow_email_keywords", [])
+    allow_keyword = first_pattern_hit(allow_keywords, keyword_surface)
+    if allow_keywords and not allow_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_email_keyword_not_matched"}
+
+    return True, {
+        "enabled": True,
+        "allowed": True,
+        "matched_allow_email_sender_domain": allow_sender_domain,
+        "matched_allow_email_folder": allow_folder,
+        "matched_allow_email_mailbox": allow_mailbox,
+        "matched_allow_email_subject": allow_subject,
+        "matched_allow_email_attachment": allow_attachment,
+        "matched_allow_email_surface": allow_surface,
+        "matched_allow_email_keyword": allow_keyword,
+        "sender_domain": sender_domain,
+        "email_surfaces": email_surfaces,
+        "policy_is_user_authorization_scope": True,
         "policy_does_not_assert_investment_relevance": True,
     }
 
@@ -1487,6 +1763,48 @@ def first_surface_hit(patterns: Iterable[str], surfaces: set[str]) -> Optional[s
     return None
 
 
+def first_domain_hit(patterns: Iterable[str], domain: str) -> Optional[str]:
+    normalized_domain = domain.lower().strip()
+    for pattern in patterns:
+        normalized_pattern = pattern.lower().strip()
+        if normalized_pattern and (
+            normalized_domain == normalized_pattern
+            or normalized_domain.endswith(f".{normalized_pattern}")
+            or normalized_pattern in normalized_domain
+        ):
+            return pattern
+    return None
+
+
+def email_sender_domain_from_record(record: Dict[str, Any]) -> str:
+    sender = str(first_record_value(record, ("from", "sender", "发件人")) or "")
+    if "@" not in sender:
+        return ""
+    after_at = sender.rsplit("@", 1)[-1]
+    return after_at.split(">", 1)[0].split()[0].strip().strip("<>,;").lower()
+
+
+def email_attachment_surface(record: Dict[str, Any]) -> str:
+    parts: List[str] = []
+    for key in ("attachment_refs", "attachments", "attachment", "附件"):
+        flatten_policy_surface(record.get(key), parts)
+    return "\n".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def email_research_scope_keyword_surface(record: Dict[str, Any], *, source_label: str) -> str:
+    parts = [source_label]
+    flatten_policy_surface(record, parts)
+    return "\n".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def first_record_value(record: Dict[str, Any], keys: Iterable[str]) -> Any:
+    for key in keys:
+        value = record.get(key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def document_scope_keyword_surface(
     record: Dict[str, Any],
     *,
@@ -1551,6 +1869,14 @@ def record_source_policy_filter(audit: Optional[Dict[str, Any]], reason: str) ->
         counts = Counter(counts or {})
         policy["filter_reason_counts"] = counts
     counts[reason] += 1
+    email_policy = audit.get("email_research_scope_policy")
+    if isinstance(email_policy, dict) and email_policy.get("enabled"):
+        email_policy["filtered_candidate_count"] = int(email_policy.get("filtered_candidate_count") or 0) + 1
+        email_counts = email_policy.get("filter_reason_counts")
+        if not isinstance(email_counts, Counter):
+            email_counts = Counter(email_counts or {})
+            email_policy["filter_reason_counts"] = email_counts
+        email_counts[reason] += 1
 
 
 def record_document_scope_policy_filter(audit: Optional[Dict[str, Any]], reason: str) -> None:

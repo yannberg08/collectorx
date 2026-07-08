@@ -68,6 +68,15 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --out-dir ~/Desktop/email-research-audit \
   --include-non-matches
 
+# 邮件研报产品化入口：先按用户授权的发件域/文件夹/邮件面谱收窄，再做研报 lens
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source email-research \
+  --input ~/Desktop/email-package/lake/email/events.jsonl \
+  --allow-email-sender-domain "broker.example,company.example" \
+  --allow-email-surface "broker_research_report,roadshow_invite,company_ir_thread" \
+  --deny-email-keyword "private" \
+  --out-dir ~/Desktop/email-research-audit
+
 # 采集雪球个人活动导出或浏览器保存的 JSON/CSV/文本
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source xueqiu-investor-activity \
@@ -94,7 +103,7 @@ P0 必做：
 - `research-documents`：lens，读取 `filesystem`/`notes` lake，只筛研报、财报、公告批注、估值表。
 - `xueqiu-investor-activity`：vertical，采雪球个人自选、关注、发帖、评论、收藏、组合活动。
 - `china-wealth-assets`：vertical，采支付宝、天天基金、蛋卷、且慢、银行理财等非股票账户资产。
-- `email-research`：lens，读取 `email` lake，只筛邮件研报、券商晨会、调研邀请，并输出晨会/研报/路演/IR/公告提醒/附件引用面谱与 email_research_boundary_proof。
+- `email-research`：lens，读取 `email` lake，只筛邮件研报、券商晨会、调研邀请；支持 sender、sender-domain、folder、mailbox、subject、attachment、email-surface、keyword 授权范围过滤，并输出晨会/研报/路演/IR/公告提醒/附件引用面谱、`email_research_scope_policy` 与 `email_research_boundary_proof.authorization_scope_boundary`。
 
 P1 必做：
 

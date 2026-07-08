@@ -200,6 +200,7 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
         "no_readable_input": "Authorized input was provided, but no readable records were found.",
         "no_investment_evidence_matched": "Authorized input was scanned, but no investment-related evidence matched the lens rules.",
         "source_policy_filtered_all": "Authorized input was scanned, but every candidate was excluded by the configured authorization scope policy.",
+        "email_research_scope_policy_filtered_all": "Authorized email input was scanned, but every candidate was outside the configured email-research authorization scope policy.",
     }.get(reason, "Collector could not produce source evidence for this run.")
     record = {
         "signal_type": "collector_preflight_gap",
@@ -246,6 +247,7 @@ def build_manifest(
         "no_readable_input": "no_readable_input",
         "no_investment_evidence_matched": "no_investment_evidence_matched",
         "source_policy_filtered_all": "source_policy_filtered_all",
+        "email_research_scope_policy_filtered_all": "scope_policy_filtered_all",
     }.get(str(gap_reason), "events_collected" if not only_gap else "needs_source_authorization_or_input")
     classifications = [
         (event.get("data") or {}).get("classification") or {}
@@ -462,6 +464,7 @@ def build_email_research_boundary_proof(
 ) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
     source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    email_scope_policy = audit.get("email_research_scope_policy") if isinstance(audit.get("email_research_scope_policy"), dict) else {}
     surface = email_research_surface_summary(usable_events)
     return {
         "source_type": "email_lake_research_lens",
@@ -487,6 +490,35 @@ def build_email_research_boundary_proof(
             "filtered_candidate_count": source_policy.get("filtered_candidate_count", 0),
             "filter_reason_counts": source_policy.get("filter_reason_counts", {}),
             "policy_does_not_assert_investment_relevance": source_policy.get("policy_does_not_assert_investment_relevance", True),
+        },
+        "authorization_scope_boundary": {
+            "enabled": email_scope_policy.get("enabled", False),
+            "filters": {
+                key: email_scope_policy.get(key, [])
+                for key in (
+                    "allow_senders",
+                    "deny_senders",
+                    "allow_email_sender_domains",
+                    "deny_email_sender_domains",
+                    "allow_email_folders",
+                    "deny_email_folders",
+                    "allow_email_mailboxes",
+                    "deny_email_mailboxes",
+                    "allow_email_subjects",
+                    "deny_email_subjects",
+                    "allow_email_attachments",
+                    "deny_email_attachments",
+                    "allow_email_surfaces",
+                    "deny_email_surfaces",
+                    "allow_email_keywords",
+                    "deny_email_keywords",
+                )
+            },
+            "filtered_candidate_count": email_scope_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": email_scope_policy.get("filter_reason_counts", {}),
+            "filtered_all": email_scope_policy.get("filtered_all", False),
+            "policy_is_user_authorization_scope": email_scope_policy.get("policy_is_user_authorization_scope", True),
+            "policy_does_not_assert_investment_relevance": email_scope_policy.get("policy_does_not_assert_investment_relevance", True),
         },
         "mailbox_boundary": {
             "sender_domain_counts": surface.get("sender_domain_counts", {}),
@@ -528,6 +560,8 @@ def email_research_proof_level(
             return "no_authorized_email_lake_input"
         if status == "source_policy_filtered_all":
             return "source_policy_filtered_all"
+        if status == "scope_policy_filtered_all" and (audit.get("email_research_scope_policy") or {}).get("filtered_all"):
+            return "email_research_scope_policy_filtered_all"
         if status == "no_readable_input":
             return "no_readable_email_lake_input"
         return "no_usable_email_research_after_filter"
@@ -2455,6 +2489,7 @@ def next_action_for_status(status: str) -> str:
         "no_readable_input": "检查输入路径、文件格式和导出内容后重跑。",
         "no_investment_evidence_matched": "输入已读取，但未命中投资证据；可降低阈值、补充白名单或确认这批数据不属于投资分身。",
         "source_policy_filtered_all": "输入已读取，但全部被授权范围策略排除；请检查本次配置的白名单和黑名单。",
+        "scope_policy_filtered_all": "输入已读取，但全部被 email-research 授权范围策略排除；请检查发件域、文件夹、邮件面谱和关键词范围。",
         "events_collected": "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
     }.get(status, "检查 manifest 后决定下一步。")
 

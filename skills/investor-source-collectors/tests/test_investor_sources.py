@@ -40,6 +40,10 @@ def test_list_sources_contains_all_priorities() -> None:
     assert research_profile["document_scope_policy"]["supports_allow_extension"] is True
     assert research_profile["document_scope_policy"]["supports_allow_keyword"] is True
     assert research_profile["document_scope_policy"]["policy_does_not_assert_investment_relevance"] is True
+    email_profile = next(profile for profile in profiles if profile["id"] == "email-research")
+    assert email_profile["email_research_scope_policy"]["supports_allow_sender_domain"] is True
+    assert email_profile["email_research_scope_policy"]["supports_allow_email_surface"] is True
+    assert email_profile["email_research_scope_policy"]["policy_does_not_assert_investment_relevance"] is True
     priorities = {profile["priority"] for profile in profiles}
     assert {"P0", "P1", "P2"}.issubset(priorities)
     classes = {profile["collector_class"] for profile in profiles}
@@ -72,6 +76,42 @@ def test_collect_xueqiu_csv_outputs_event_and_evidence() -> None:
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["schema"] == "finclaw.investor_wiki_evidence.v1"
         assert evidence["coverage_summary"]["subdimension_count"] == 20
+
+
+def test_email_research_scope_policy_does_not_filter_other_lenses() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        csv_path = root / "xueqiu.csv"
+        out_dir = root / "out"
+        csv_path.write_text("code,name,group,note\n600519,贵州茅台,白酒,长期观察\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "xueqiu-investor-activity",
+            "--input",
+            str(csv_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-email-sender-domain",
+            "broker.example",
+            "--allow-email-keyword",
+            "半导体",
+            "--collected-at",
+            "2026-07-07T15:00:00+08:00",
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["data"]["normalized"]["symbol"] == "600519"
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["source_policy"]["enabled"] is False
+        assert audit["source_policy"]["email_research_scope_applies"] is False
+        assert audit["source_policy"]["allow_email_sender_domains"] == []
+        assert audit["email_research_scope_policy"]["enabled"] is False
 
 
 def test_collect_without_input_writes_gap_event() -> None:
@@ -638,6 +678,186 @@ def test_email_research_reports_surface_and_boundary_proof() -> None:
         assert proof["requires_upstream_email_collector"] is True
         validator = run_package_validator(str(out_dir), "--collector", "email-research", "--require-evidence", "--json")
         assert json.loads(validator.stdout)["valid"] is True
+
+
+def test_email_research_scope_policy_filters_authorized_research_mail() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "email-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:allowed",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-09T08:00:00+08:00",
+                "collected_at": "2026-07-09T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "INBOX",
+                    "from": "Broker Research <morning@broker.example>",
+                    "subject": "晨会纪要：半导体行业跟踪",
+                    "body_preview": "今日晨会讨论半导体行业财报和估值。",
+                    "attachment_refs": [{"filename": "半导体晨会报告.pdf", "content_type": "application/pdf"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"message_id": "<allowed@example.com>", "folder": "INBOX"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:ir",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-09T09:00:00+08:00",
+                "collected_at": "2026-07-09T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "IR",
+                    "from": "Company IR <ir@company.example>",
+                    "subject": "路演邀请：业绩说明会",
+                    "body_preview": "投资者关系团队邀请参加调研交流会。",
+                    "attachment_refs": [{"filename": "roadshow.ics", "content_type": "text/calendar"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"message_id": "<ir@example.com>", "folder": "IR"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "email:private",
+                "collector": "email",
+                "source": "授权邮件导出",
+                "owner_scope": "personal",
+                "kind": "email",
+                "time": "2026-07-09T10:00:00+08:00",
+                "collected_at": "2026-07-09T12:00:00+08:00",
+                "data": {
+                    "mailbox": "owner@example.com",
+                    "folder": "INBOX",
+                    "from": "Broker Research <strategy@broker.example>",
+                    "subject": "私人策略：半导体深度报告",
+                    "body_preview": "私人观察，不进入投资分身。",
+                    "attachment_refs": [{"filename": "半导体深度报告.pdf", "content_type": "application/pdf"}],
+                    "has_attachments": True,
+                },
+                "raw_ref": {"message_id": "<private@example.com>", "folder": "INBOX"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "email-research",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-email-sender-domain",
+            "broker.example",
+            "--allow-email-folder",
+            "INBOX",
+            "--allow-email-surface",
+            "broker_research_report",
+            "--allow-email-keyword",
+            "半导体",
+            "--allow-email-attachment",
+            "报告",
+            "--deny-email-keyword",
+            "私人",
+            "--collected-at",
+            "2026-07-09T12:10:00+08:00",
+        )
+
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "email-research" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        assert lens_events[0]["raw_ref"]["upstream_event_id"] == "email:allowed"
+        assert lens_events[0]["data"]["email_research_scope_policy"]["allowed"] is True
+        assert lens_events[0]["data"]["email_research_scope_policy"]["matched_allow_email_sender_domain"] == "broker.example"
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        email_policy = audit["email_research_scope_policy"]
+        assert email_policy["enabled"] is True
+        assert email_policy["allow_email_sender_domains"] == ["broker.example"]
+        assert email_policy["allow_email_surfaces"] == ["broker_research_report"]
+        assert email_policy["filtered_candidate_count"] == 2
+        assert email_policy["filter_reason_counts"] == {
+            "allow_email_sender_domain_not_matched": 1,
+            "deny_email_keyword": 1,
+        }
+        proof = manifest["email_research_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["enabled"] is True
+        assert proof["authorization_scope_boundary"]["filtered_candidate_count"] == 2
+        assert proof["authorization_scope_boundary"]["filtered_all"] is False
+        assert proof["candidate_record_count"] == 3
+        assert proof["matched_event_count"] == 1
+        assert proof["complete_mailbox_claimed"] is False
+
+
+def test_email_research_scope_policy_filtered_all_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "email-events.jsonl"
+        out_dir = root / "out"
+        event = {
+            "schema": "collectorx.event.v1",
+            "id": "email:broker",
+            "collector": "email",
+            "source": "授权邮件导出",
+            "owner_scope": "personal",
+            "kind": "email",
+            "time": "2026-07-09T08:00:00+08:00",
+            "collected_at": "2026-07-09T12:00:00+08:00",
+            "data": {
+                "mailbox": "owner@example.com",
+                "folder": "INBOX",
+                "from": "Broker Research <morning@broker.example>",
+                "subject": "晨会纪要：半导体行业跟踪",
+                "body_preview": "今日晨会讨论半导体行业财报和估值。",
+            },
+            "raw_ref": {"message_id": "<broker@example.com>", "folder": "INBOX"},
+            "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+        }
+        source_path.write_text(json.dumps(event, ensure_ascii=False) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "email-research",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-email-sender-domain",
+            "other.example",
+            "--collected-at",
+            "2026-07-09T12:10:00+08:00",
+        )
+
+        lake_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "email-research" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lake_events) == 1
+        assert lake_events[0]["data"]["payload"]["gap"] == "email_research_scope_policy_filtered_all"
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["collection_audit"]
+        assert audit["email_research_scope_policy_filtered_all"] is True
+        assert audit["email_research_scope_policy"]["filter_reason_counts"] == {"allow_email_sender_domain_not_matched": 1}
+        proof = manifest["email_research_boundary_proof"]
+        assert proof["proof_level"] == "email_research_scope_policy_filtered_all"
+        assert proof["authorization_scope_boundary"]["filtered_all"] is True
+        assert proof["can_enter_finclaw"] is False
 
 
 def test_research_documents_extracts_office_and_pdf_content_when_authorized() -> None:
@@ -2431,6 +2651,7 @@ def test_investment_notes_lens_reports_note_type_surface_from_notes_events() -> 
 if __name__ == "__main__":
     test_list_sources_contains_all_priorities()
     test_collect_xueqiu_csv_outputs_event_and_evidence()
+    test_email_research_scope_policy_does_not_filter_other_lenses()
     test_collect_without_input_writes_gap_event()
     test_wechat_lens_keeps_only_investment_dialogue()
     test_wechat_lens_source_policy_allows_and_denies_chats_and_senders()
@@ -2439,6 +2660,8 @@ if __name__ == "__main__":
     test_email_research_reads_upstream_collectorx_event()
     test_email_research_matches_research_attachment_filename()
     test_email_research_reports_surface_and_boundary_proof()
+    test_email_research_scope_policy_filters_authorized_research_mail()
+    test_email_research_scope_policy_filtered_all_gap()
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
     test_research_documents_extracts_legacy_xls_and_pptx_when_authorized()
     test_research_documents_binary_xls_without_xlrd_records_explicit_failure()

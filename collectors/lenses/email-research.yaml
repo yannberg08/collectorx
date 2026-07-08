@@ -27,6 +27,9 @@ scope:
     - sender_domain_counts
     - body_preview_boundary
     - attachment_ref_boundary
+    - email_research_scope_policy
+    - scope_policy_filtered_all_readiness
+    - authorization_scope_boundary
   excludes:
     - mailbox_credentials
     - unrelated_private_email
@@ -39,3 +42,8 @@ description: |
   邮件研报证据；附件正文仍不进入事件。manifest 会输出邮件投研面谱
   email_research_surface_summary 和 email_research_boundary_proof，说明晨会、
   研报、路演邀请、IR 往来、公告提醒、附件引用、正文预览和邮箱边界。
+  可通过 --allow-email-sender-domain/--deny-email-sender-domain、
+  --allow-email-folder/--deny-email-folder、--allow-email-mailbox/--deny-email-mailbox、
+  --allow-email-subject/--deny-email-subject、--allow-email-attachment/--deny-email-attachment、
+  --allow-email-surface/--deny-email-surface、--allow-email-keyword/--deny-email-keyword
+  收窄用户授权范围；filtered-all 时不会伪造可用邮件研报证据。

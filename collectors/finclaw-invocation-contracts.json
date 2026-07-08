@@ -121,9 +121,9 @@
       "requires_upstream": [
         "email"
       ],
-      "user_step": "Run after email Lake exists to classify broker research, morning meetings, roadshows, IR mail, earnings alerts, and attachment signals.",
-      "preflight": "Upstream email events.jsonl exists; full-body Wiki inclusion and attachment-body collection remain false by default.",
-      "failure_state": "needs_email_lake"
+      "user_step": "Run after email Lake exists to classify broker research, morning meetings, roadshows, IR mail, earnings alerts, and attachment signals; optionally narrow by sender, sender domain, folder, mailbox, subject, attachment filename, email surface, or keyword.",
+      "preflight": "Upstream email events.jsonl exists; optional email-research scope filters are explicit when used; full-body Wiki inclusion and attachment-body collection remain false by default.",
+      "failure_state": "needs_email_lake_or_scope_policy_retained_records"
     },
     {
       "id": "xueqiu-watchlist",
