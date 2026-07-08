@@ -559,29 +559,32 @@ def collect_from_inputs_with_audit(
         if limit is not None and len(events) >= limit:
             break
 
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     scope_policy_filtered_all = (
         policy["enabled"]
         and candidate_record_count > 0
         and scope_policy_filtered_record_count == candidate_record_count
         and not events
     )
-    if not events and not scope_policy_filtered_all:
-        reason = (
-            "pro_terminal_usage_authorized_input_missing"
-            if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
-            else "pro_terminal_usage_records_empty"
-        )
-        events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["candidate_record_count"] = candidate_record_count
-    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
-    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     audit["pro_terminal_scope_policy_filtered_all"] = scope_policy_filtered_all
     audit["parsed_record_count"] = candidate_record_count
-    audit["emitted_event_count"] = len(events)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+
+    if not events:
+        if scope_policy_filtered_all:
+            reason = "pro_terminal_scope_policy_filtered_all"
+        elif not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0):
+            reason = "pro_terminal_usage_authorized_input_missing"
+        else:
+            reason = "pro_terminal_usage_records_empty"
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
+
+    audit["emitted_event_count"] = len(events)
     audit["archive_member_event_count"] = sum(1 for event in usable_terminal_events(events) if (event.get("raw_ref") or {}).get("archive_member"))
     return events, audit
 
@@ -1108,7 +1111,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         activity_type=activity_type,
         terminal=terminal,
     )
-    event_time = first(record, ["time", "date", "created_at", "updated_at", "used_at", "downloaded_at", "时间", "日期", "使用时间", "下载时间"])
+    event_time_value = first(record, ["time", "date", "created_at", "updated_at", "used_at", "downloaded_at", "时间", "日期", "使用时间", "下载时间"])
+    event_time = str(event_time_value) if event_time_value not in (None, "") else (collected_at or now_iso())
     data = {
         "activity_type": activity_type,
         "terminal": terminal,
@@ -1179,7 +1183,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "owner_scope": "personal",
         "kind": kind_for_activity(activity_type),
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": collected_at or event_time or now_iso(),
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -1191,25 +1195,68 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    status_by_reason = {
+        "pro_terminal_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "pro_terminal_usage_authorized_input_missing": "needs_pro_terminal_usage_input",
+        "pro_terminal_usage_records_empty": "no_terminal_workflow_records",
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "专业终端使用痕迹授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
             "activity_type": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized professional terminal workflow export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "pro_terminal_usage_collection_gap",
+            "message": gap_message(reason),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "workflow_event_count": 0,
+            "retained_event_count": 0,
+            "scope_policy_filtered_record_count": int(audit.get("scope_policy_filtered_record_count") or 0),
+            "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts") or {},
+            "policy_is_user_authorization_scope": bool((audit.get("pro_terminal_scope_policy") or {}).get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "terminal_workflow_fact_claimed": False,
+            "complete_terminal_usage_history_claimed": False,
+            "vendor_database_mirrored": False,
+            "licensed_content_body_mirrored": False,
+            "public_market_data_mirrored": False,
+            "terminal_credentials_collected": False,
+            "license_keys_collected": False,
+            "order_mutation_supported": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool((audit.get("pro_terminal_scope_policy") or {}).get("enabled")),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential", "collection_gap"]},
         "wiki_targets": ["investor.data_quality.collection_gaps"],
     }
+
+
+def gap_message(reason: str) -> str:
+    messages = {
+        "pro_terminal_scope_policy_filtered_all": "All user-authorized professional terminal workflow records were excluded by the authorization scope policy.",
+        "pro_terminal_usage_authorized_input_missing": "No user-authorized professional terminal workflow export was provided.",
+        "pro_terminal_usage_records_empty": "The authorized professional terminal input did not contain usable workflow records.",
+    }
+    return messages.get(reason, "Professional terminal usage collection produced a traceable gap.")
 
 
 def infer_activity_type(record: Dict[str, Any], path_label: str) -> str:
@@ -1282,11 +1329,14 @@ def build_manifest(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = usable_terminal_events(events)
+    workflow_event_count = len(usable_events)
+    gap_event_count = len(events) - workflow_event_count
     kind_counts = Counter(event["kind"] for event in events)
-    activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in events)
-    terminal_counts = Counter((event.get("data") or {}).get("terminal", "unknown") for event in events)
+    activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in usable_events)
+    terminal_counts = Counter((event.get("data") or {}).get("terminal", "unknown") for event in usable_events)
     collection_audit = collection_audit or {}
-    gap_only = bool(events) and set(activity_counts) == {"collector_gap"}
+    gap_only = bool(events) and workflow_event_count == 0 and gap_event_count == len(events)
     scope_policy_filtered_all = bool(collection_audit.get("pro_terminal_scope_policy_filtered_all"))
     no_events = not events
     observed_terminals = sorted(terminal for terminal, count in terminal_counts.items() if count and terminal != "unknown")
@@ -1310,6 +1360,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "workflow_event_count": workflow_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "activity_counts": dict(sorted(activity_counts.items())),
         "terminal_counts": dict(sorted(terminal_counts.items())),
@@ -1599,7 +1651,10 @@ def workflow_boundary_proof(
         gap_reason = None
         if events:
             gap_reason = (events[0].get("data") or {}).get("gap")
-        proof_level = "no_authorized_terminal_input" if gap_reason == "pro_terminal_usage_authorized_input_missing" else "no_usable_terminal_workflow_records"
+        if gap_reason == "pro_terminal_usage_authorized_input_missing" or audit.get("input_missing_count") or not audit.get("input_count"):
+            proof_level = "no_authorized_terminal_input"
+        else:
+            proof_level = "no_usable_terminal_workflow_records"
     elif all_expected_terminals and all_expected_activities and all_recommended_fields and all_expected_topics:
         proof_level = "strong_partial_workflow_boundary"
     elif len(observed_expected_terminals) >= 2 and len(observed_expected_activities) >= 3 and surface["events_with_workflow_topics"] > 0:
@@ -1793,11 +1848,8 @@ def build_evidence(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    usable_events = 0
-    for event in events:
-        if (event.get("data") or {}).get("activity_type") == "collector_gap":
-            continue
-        usable_events += 1
+    usable_event_list = usable_terminal_events(events)
+    for event in usable_event_list:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
     evidence = {
@@ -1806,7 +1858,7 @@ def build_evidence(
         "generated_from": {
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
-            "event_count": usable_events,
+            "event_count": len(usable_event_list),
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1818,13 +1870,13 @@ def build_evidence(
             "personal_workflow_only": True,
             "workflow_metadata_only": True,
             "vendor_database_mirror": False,
-            "workflow_surface_summary": workflow_surface_summary(events),
-            "workflow_intensity_summary": workflow_intensity_summary(events),
-            "workflow_boundary_proof": workflow_boundary_proof(events, collection_audit=collection_audit),
+            "workflow_surface_summary": workflow_surface_summary(usable_event_list),
+            "workflow_intensity_summary": workflow_intensity_summary(usable_event_list),
+            "workflow_boundary_proof": workflow_boundary_proof(usable_event_list, collection_audit=collection_audit),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
-    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
+    return augment_evidence_with_dimensions(evidence, usable_event_list, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def classify_workflow_topics(

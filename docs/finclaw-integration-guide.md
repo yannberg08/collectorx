@@ -1211,8 +1211,10 @@ Current status:
 - Optional scope filters can narrow Lake output by terminal, activity,
   workspace, project, dataset, field, or keyword through allow/deny arguments.
   `manifest.source_audit.pro_terminal_scope_policy` records the policy and
-  filtered counts; if every candidate record is excluded, readiness becomes
-  `scope_policy_filtered_all`.
+  filtered counts; if every candidate record is excluded, the package emits one
+  validator-safe `pro_terminal_scope_policy_filtered_all` profile gap event,
+  readiness becomes `scope_policy_filtered_all`, and
+  `collection_readiness.can_enter_finclaw=false`.
 - Adds per-event `workflow_topics`, `primary_workflow_topic`, and
   `workflow_topic_terms` so FinClaw can map terminal behavior to macro,
   strategy, industry, fundamental, valuation, credit, factor, portfolio,
@@ -1235,6 +1237,10 @@ Current status:
   skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.
 - Outputs workflow evidence for capability circle, research workflow, monitoring
   rules, and information-source dimensions.
+- `manifest.workflow_event_count` and `manifest.gap_event_count` distinguish
+  usable terminal workflow metadata from no-input or filtered-all collection
+  gaps. Pure gap packages keep `generated_from.event_count=0` in Investor Wiki
+  evidence and must not be treated as real workflow facts.
 - Does not copy vendor databases, public market data, reports, or licensed
   content bodies.
 - Real Wind/Choice/iFinD/Bloomberg native exports still require license-safe

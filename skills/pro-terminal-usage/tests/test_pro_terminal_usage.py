@@ -14,7 +14,31 @@ import openpyxl
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "pro_terminal_usage.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def read_events(out: Path) -> list[dict]:
+    event_file = out / "lake" / "pro-terminal-usage" / "events.jsonl"
+    return [json.loads(line) for line in event_file.read_text(encoding="utf-8").splitlines()]
+
+
+def assert_package_valid(out: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "pro-terminal-usage",
+            "--require-evidence",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_terminal_workflow_exports() -> None:
@@ -76,7 +100,8 @@ def test_collect_terminal_workflow_exports() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 5
         assert {event["data"]["activity_type"] for event in events} == {"download", "model_template", "search", "watchlist", "workspace"}
         assert {event["data"]["terminal"] for event in events} == {"choice", "ifind", "wind"}
@@ -88,6 +113,8 @@ def test_collect_terminal_workflow_exports() -> None:
         assert "PE" in model["data"]["factors"]
         assert "valuation_model" in model["data"]["workflow_topics"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["workflow_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_complete_terminal_usage"] is False
         assert manifest["collection_readiness"]["license_boundary"] == "workflow_metadata_only"
         assert manifest["workflow_surface_summary"]["events_with_workflow_topics"] == 5
@@ -213,7 +240,8 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 8
         assert {event["data"]["activity_type"] for event in events} == {
             "download",
@@ -254,6 +282,8 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert all("windows-traversal" not in event["raw_ref"]["path"] for event in events)
         assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["workflow_event_count"] == 8
+        assert manifest["gap_event_count"] == 0
         assert manifest["activity_counts"]["download"] == 2
         assert manifest["terminal_coverage"]["observed_expected_terminals"] == ["wind", "choice", "ifind", "bloomberg"]
         assert manifest["terminal_coverage"]["missing_expected_terminals"] == []
@@ -416,9 +446,12 @@ def test_collect_zip_limit_counts_only_emitted_records() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 1
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["workflow_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         source_audit = manifest["source_audit"]
         assert source_audit["limit_reached"] is True
         assert source_audit["archive_member_event_count"] == 1
@@ -539,7 +572,8 @@ def test_collect_respects_authorization_scope_policy() -> None:
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 1
         assert events[0]["data"]["terminal"] == "wind"
         assert events[0]["data"]["activity_type"] == "download"
@@ -548,6 +582,8 @@ def test_collect_respects_authorization_scope_policy() -> None:
         assert events[0]["data"]["datasets"] == ["FA"]
         assert "Revenue" in events[0]["data"]["fields"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["workflow_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 8
         assert source_audit["parsed_record_count"] == 8
@@ -619,10 +655,40 @@ def test_collect_scope_policy_filtered_all_is_not_success() -> None:
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert events == []
+        assert_package_valid(out)
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == gap["collected_at"]
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["activity_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "pro_terminal_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "pro_terminal_usage_collection_gap"
+        assert gap["data"]["candidate_record_count"] == 1
+        assert gap["data"]["workflow_event_count"] == 0
+        assert gap["data"]["retained_event_count"] == 0
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"terminal_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["policy_does_not_assert_investment_relevance"] is True
+        assert gap["data"]["terminal_workflow_fact_claimed"] is False
+        assert gap["data"]["vendor_database_mirrored"] is False
+        assert gap["data"]["licensed_content_body_mirrored"] is False
+        assert gap["data"]["license_keys_collected"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "pro_terminal_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
+        assert str(export) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["workflow_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
@@ -632,7 +698,7 @@ def test_collect_scope_policy_filtered_all_is_not_success() -> None:
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 1
         assert source_audit["parsed_record_count"] == 1
-        assert source_audit["emitted_event_count"] == 0
+        assert source_audit["emitted_event_count"] == 1
         assert source_audit["scope_policy_filtered_record_count"] == 1
         assert source_audit["scope_policy_filter_reason_counts"] == {"terminal_not_allowed": 1}
         assert source_audit["pro_terminal_scope_policy_filtered_all"] is True
@@ -641,6 +707,7 @@ def test_collect_scope_policy_filtered_all_is_not_success() -> None:
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["can_feed_investor_wiki_evidence"] is False
 
 
 def test_collect_missing_input_writes_gap_audit() -> None:
@@ -664,10 +731,21 @@ def test_collect_missing_input_writes_gap_audit() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T04:30:00+08:00"
         assert events[0]["data"]["gap"] == "pro_terminal_usage_authorized_input_missing"
+        assert events[0]["data"]["status"] == "needs_pro_terminal_usage_input"
+        assert events[0]["data"]["candidate_record_count"] == 0
+        assert events[0]["data"]["workflow_event_count"] == 0
+        assert events[0]["data"]["terminal_workflow_fact_claimed"] is False
+        assert str(missing) not in json.dumps(events[0], ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["workflow_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_pro_terminal_usage_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["workflow_boundary_proof"]["proof_level"] == "no_authorized_terminal_input"
