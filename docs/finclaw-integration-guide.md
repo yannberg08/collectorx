@@ -818,16 +818,19 @@ Current status:
   CSV/TSV, VTT, and SRT.
 - Normalizes Feishu, DingTalk, WeCom, and Tencent Meeting platform evidence
   into stable platform values and captures participants, organizer, meeting
-  links, start/end time, text preview, and attachment refs where present.
+  links, start/end time, text preview, participant-role hints, action items,
+  decision points, risk items, mentioned symbols, attachment refs, and
+  recording refs where present.
 - Writes `manifest.platform_coverage` with expected P1 meeting platforms,
   observed platforms, missing platforms, event counts, and
   `real_account_validation`.
 - Writes `manifest.field_coverage`, `meeting_surface_summary`, `source_audit`,
   and `evidence_policy` so FinClaw can inspect text, participants, organizer,
-  meeting URL, attachments, duration, start/end time, requested inputs, missing
-  paths, unsupported file extensions, ZIP provenance, total/skipped ZIP
-  members, skip reasons, per-input parse results, and the required
-  `meeting-minutes` lens boundary.
+  participant roles, meeting URL, attachments, recording refs, action items,
+  decision points, risk items, mentioned symbols, duration, start/end time,
+  requested inputs, missing paths, unsupported file extensions, ZIP
+  provenance, total/skipped ZIP members, skip reasons, per-input parse
+  results, and the required `meeting-minutes` lens boundary.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-meeting status directly.
@@ -838,8 +841,9 @@ Current status:
 - The `meeting-minutes` lens writes `manifest.meeting_minutes_boundary_proof`
   with authorized input counts, upstream meeting/collaboration source counts,
   candidate/matched/filtered counts, participant coverage, meeting-link
-  coverage, attachment/recording reference coverage, time coverage, and an
-  explicit no-complete-meeting-history/no-complete-workspace boundary.
+  coverage, participant-role coverage, decision/action/risk item coverage,
+  attachment/recording reference coverage, time coverage, and an explicit
+  no-complete-meeting-history/no-complete-workspace boundary.
 - Feishu/DingTalk/WeCom/Tencent Meeting account API adapters still require
   real authorization validation.
 

@@ -1,6 +1,6 @@
 {
   "slug": "investor-source-collectors",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "status": "baseline+audit",
-  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including email research, investment-note, task-calendar checklist/timezone/repeat surfaces, meeting-minutes, WeChat article, and social influence surface/boundary summaries plus path-level source audits."
+  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including email research, investment-note, task-calendar checklist/timezone/repeat surfaces, meeting-minutes decision/action/participant-role surfaces, WeChat article, and social influence surface/boundary summaries plus path-level source audits."
 }

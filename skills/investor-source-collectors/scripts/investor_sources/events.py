@@ -790,11 +790,23 @@ def build_meeting_minutes_boundary_proof(
         "meeting_context_boundary": {
             "participant_event_count": surface.get("participant_event_count", 0),
             "participant_ref_count": surface.get("participant_ref_count", 0),
+            "participant_role_event_count": surface.get("participant_role_event_count", 0),
+            "participant_role_counts": surface.get("participant_role_counts", {}),
             "meeting_url_event_count": surface.get("meeting_url_event_count", 0),
             "attachment_ref_event_count": surface.get("attachment_ref_event_count", 0),
             "recording_ref_event_count": surface.get("recording_ref_event_count", 0),
             "events_with_time": surface.get("events_with_time", 0),
             "matched_symbol_event_count": surface.get("matched_symbol_event_count", 0),
+            "mentioned_symbol_event_count": surface.get("mentioned_symbol_event_count", 0),
+            "mentioned_symbol_count": surface.get("mentioned_symbol_count", 0),
+        },
+        "decision_action_boundary": {
+            "decision_point_event_count": surface.get("decision_point_event_count", 0),
+            "decision_point_count": surface.get("decision_point_count", 0),
+            "action_item_event_count": surface.get("action_item_event_count", 0),
+            "action_item_count": surface.get("action_item_count", 0),
+            "risk_item_event_count": surface.get("risk_item_event_count", 0),
+            "risk_item_count": surface.get("risk_item_count", 0),
         },
         "meeting_minutes_boundary": surface,
         "complete_meeting_history_claimed": False,
@@ -824,6 +836,12 @@ def meeting_minutes_proof_level(
             return "no_readable_meeting_lake_input"
         return "no_usable_investment_meetings_after_filter"
     surface = meeting_minutes_surface_summary(usable_events)
+    if (
+        int(surface.get("decision_point_event_count") or 0) > 0
+        or int(surface.get("action_item_event_count") or 0) > 0
+        or int(surface.get("risk_item_event_count") or 0) > 0
+    ):
+        return "authorized_meeting_minutes_with_decision_action_surface"
     if int(surface.get("recording_ref_event_count") or 0) > 0 or int(surface.get("attachment_ref_event_count") or 0) > 0:
         return "authorized_meeting_minutes_with_artifact_refs"
     if int(surface.get("participant_event_count") or 0) > 0 or int(surface.get("meeting_url_event_count") or 0) > 0:
@@ -1930,6 +1948,16 @@ def meeting_minutes_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, A
     attachment_ref_event_count = 0
     recording_ref_event_count = 0
     events_with_time = 0
+    participant_role_event_count = 0
+    participant_role_counts: Counter[str] = Counter()
+    decision_point_event_count = 0
+    decision_point_count = 0
+    action_item_event_count = 0
+    action_item_count = 0
+    risk_item_event_count = 0
+    risk_item_count = 0
+    mentioned_symbol_event_count = 0
+    mentioned_symbol_count = 0
     for event in usable_events:
         data = event.get("data") or {}
         payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
@@ -1950,6 +1978,10 @@ def meeting_minutes_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, A
         if participant_count:
             participant_event_count += 1
             participant_ref_count += participant_count
+        roles = participant_roles_for_payload(payload)
+        if roles:
+            participant_role_event_count += 1
+            participant_role_counts.update(roles)
         if value_present(first_payload_value(payload, ("meeting_url", "url", "link", "source_url", "会议链接"))):
             meeting_url_event_count += 1
         if value_present(first_payload_value(payload, ("attachment", "attachments", "attachment_refs", "file_refs", "files", "附件"))):
@@ -1958,6 +1990,22 @@ def meeting_minutes_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, A
             recording_ref_event_count += 1
         if event.get("time") or first_payload_value(payload, ("time", "date", "start_time", "timestamp", "upstream_time", "会议时间")):
             events_with_time += 1
+        decision_count = len(meeting_text_items(payload, ("decision_points", "decisions", "conclusions", "结论", "决策点"), ("决策", "决定", "结论", "通过")))
+        if decision_count:
+            decision_point_event_count += 1
+            decision_point_count += decision_count
+        action_count = len(meeting_text_items(payload, ("action_items", "actions", "todos", "follow_ups", "next_steps", "待办", "行动项"), ("行动", "待办", "跟进", "下一步", "action", "todo", "follow", "负责", "会后")))
+        if action_count:
+            action_item_event_count += 1
+            action_item_count += action_count
+        risk_count = len(meeting_text_items(payload, ("risk_items", "risks", "risk_points", "风险", "风险点"), ("风险", "下行", "回撤", "止损", "高估", "不确定", "警惕")))
+        if risk_count:
+            risk_item_event_count += 1
+            risk_item_count += risk_count
+        symbol_count = len(meeting_symbols_for_payload(payload))
+        if symbol_count:
+            mentioned_symbol_event_count += 1
+            mentioned_symbol_count += symbol_count
     return {
         "event_count": len(usable_events),
         "expected_meeting_minutes_surfaces": list(MEETING_MINUTES_SURFACE_ORDER[:-1]),
@@ -1972,10 +2020,20 @@ def meeting_minutes_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, A
         "matched_symbol_event_count": matched_symbol_event_count,
         "participant_event_count": participant_event_count,
         "participant_ref_count": participant_ref_count,
+        "participant_role_event_count": participant_role_event_count,
+        "participant_role_counts": dict(sorted(participant_role_counts.items())),
         "meeting_url_event_count": meeting_url_event_count,
         "attachment_ref_event_count": attachment_ref_event_count,
         "recording_ref_event_count": recording_ref_event_count,
         "events_with_time": events_with_time,
+        "decision_point_event_count": decision_point_event_count,
+        "decision_point_count": decision_point_count,
+        "action_item_event_count": action_item_event_count,
+        "action_item_count": action_item_count,
+        "risk_item_event_count": risk_item_event_count,
+        "risk_item_count": risk_item_count,
+        "mentioned_symbol_event_count": mentioned_symbol_event_count,
+        "mentioned_symbol_count": mentioned_symbol_count,
         "generic_meeting_lens": True,
         "collector_writes_wiki_directly": False,
     }
@@ -1997,6 +2055,146 @@ def meeting_source_platform(event: Dict[str, Any]) -> str:
     if not value and isinstance(upstream_raw_ref, dict):
         value = upstream_raw_ref.get("source_platform") or upstream_raw_ref.get("source_app") or upstream_raw_ref.get("platform")
     return str(value or "unknown")
+
+
+def participant_roles_for_payload(payload: Dict[str, Any]) -> List[str]:
+    explicit_counts = payload.get("participant_role_counts")
+    if isinstance(explicit_counts, dict):
+        roles: List[str] = []
+        for role, count in explicit_counts.items():
+            try:
+                roles.extend([str(role)] * int(count))
+            except (TypeError, ValueError):
+                continue
+        return roles
+    refs = first_payload_value(payload, ("participant_refs", "participants", "attendees", "speakers", "参会人"))
+    names: List[str] = []
+    roles = []
+    if isinstance(refs, list):
+        for item in refs:
+            if isinstance(item, dict):
+                role = item.get("role") or item.get("title") or item.get("position")
+                name = item.get("name") or item.get("display_name") or item.get("username")
+                if role:
+                    roles.append(normalize_meeting_role(str(role)))
+                elif name:
+                    names.append(str(name))
+            elif item not in (None, ""):
+                names.append(str(item))
+    elif isinstance(refs, str):
+        names.extend(part.strip() for part in re_split_people(refs) if part.strip())
+    roles.extend(infer_meeting_role(name) for name in names)
+    return [role for role in roles if role]
+
+
+def normalize_meeting_role(value: str) -> str:
+    text = value.strip().lower()
+    if any(token in text for token in ("portfolio", "fund", "基金", "组合", "投资经理")):
+        return "portfolio_manager"
+    if any(token in text for token in ("research", "analyst", "研究", "分析")):
+        return "analyst"
+    if any(token in text for token in ("expert", "专家")):
+        return "expert"
+    if any(token in text for token in ("ir", "董秘", "公司")):
+        return "company_ir"
+    if any(token in text for token in ("risk", "风控")):
+        return "risk_control"
+    if any(token in text for token in ("committee", "投委")):
+        return "investment_committee"
+    return "unknown"
+
+
+def infer_meeting_role(name: str) -> str:
+    return normalize_meeting_role(name) if name else "unknown"
+
+
+def re_split_people(text: str) -> List[str]:
+    import re
+
+    return re.split(r"[,，、;；|\n]+", text)
+
+
+def meeting_text_items(payload: Dict[str, Any], keys: Iterable[str], tokens: Iterable[str]) -> List[str]:
+    items: List[str] = []
+    for key in keys:
+        items.extend(payload_text_values(payload.get(key)))
+    body = first_payload_value(payload, ("text_preview", "content_preview", "text", "content", "summary", "minutes", "transcript", "正文", "纪要"))
+    if isinstance(body, str):
+        lowered_tokens = tuple(token.lower() for token in tokens)
+        for segment in meeting_text_segments(body):
+            lowered = segment.lower()
+            if any(token in lowered for token in lowered_tokens):
+                items.append(segment)
+    return dedupe_payload_text(items, limit=40)
+
+
+def payload_text_values(value: Any) -> List[str]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, str):
+        return [part.strip() for part in re_split_lines(value) if part.strip()]
+    if isinstance(value, list):
+        items = []
+        for item in value:
+            if isinstance(item, dict):
+                item_value = first_payload_value(item, ("text", "title", "content", "name", "summary", "内容"))
+            else:
+                item_value = item
+            if item_value not in (None, ""):
+                items.append(str(item_value).strip())
+        return items
+    if isinstance(value, dict):
+        item_value = first_payload_value(value, ("text", "title", "content", "name", "summary", "内容"))
+        return [str(item_value).strip()] if item_value not in (None, "") else []
+    return [str(value).strip()]
+
+
+def re_split_lines(text: str) -> List[str]:
+    import re
+
+    return re.split(r"[\n;；]+", text)
+
+
+def meeting_text_segments(text: str) -> List[str]:
+    import re
+
+    parts: List[str] = []
+    for line in str(text or "").splitlines():
+        for segment in re.split(r"[。！？!?；;]", line):
+            cleaned = segment.strip(" -\t\r\n")
+            if cleaned:
+                parts.append(cleaned[:300])
+    return parts
+
+
+def dedupe_payload_text(items: Iterable[str], *, limit: int) -> List[str]:
+    result: List[str] = []
+    seen: set[str] = set()
+    for item in items:
+        cleaned = " ".join(str(item).split()).strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned[:300])
+        if len(result) >= limit:
+            break
+    return result
+
+
+def meeting_symbols_for_payload(payload: Dict[str, Any]) -> List[str]:
+    import re
+
+    explicit = payload_text_values(
+        payload.get("mentioned_symbols")
+        or payload.get("symbols")
+        or payload.get("symbol")
+        or payload.get("tickers")
+        or payload.get("security_code")
+        or payload.get("证券代码")
+    )
+    body = first_payload_value(payload, ("text_preview", "content_preview", "text", "content", "summary", "minutes", "transcript", "title"))
+    found = re.findall(r"(?<!\d)(?:[036]\d{5})(?!\d)", str(body or ""))
+    return dedupe_payload_text([*explicit, *found], limit=50)
 
 
 def first_payload_value(payload: Dict[str, Any], keys: Iterable[str]) -> Any:

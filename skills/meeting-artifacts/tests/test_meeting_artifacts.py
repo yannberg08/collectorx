@@ -23,7 +23,14 @@ def test_collect_minutes_and_transcript_events() -> None:
         unsupported = root / "recording.mp4"
         missing = root / "missing.srt"
         out = root / "out"
-        minutes.write_text("# 半导体公司路演纪要\n参会人：研究员A，基金经理B\n讨论财报、估值和风险点。\n", encoding="utf-8")
+        minutes.write_text(
+            "# 半导体公司路演纪要\n"
+            "参会人：研究员A，基金经理B\n"
+            "决策点：暂缓买入，等待 600519 财报确认。\n"
+            "行动项：研究员A 跟进现金流假设。\n"
+            "风险点：估值偏高和回撤风险。\n",
+            encoding="utf-8",
+        )
         transcript.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n今天讨论买入框架。\n", encoding="utf-8")
         unsupported.write_bytes(b"not-collected")
         subprocess.run(
@@ -57,6 +64,12 @@ def test_collect_minutes_and_transcript_events() -> None:
         assert manifest["field_coverage"]["field_counts"]["artifact_type"] == 2
         assert manifest["meeting_surface_summary"]["events_with_text"] == 2
         assert manifest["meeting_surface_summary"]["events_with_participants"] == 1
+        assert manifest["meeting_surface_summary"]["events_with_participant_roles"] == 1
+        assert manifest["meeting_surface_summary"]["participant_role_counts"] == {"analyst": 1, "portfolio_manager": 1}
+        assert manifest["meeting_surface_summary"]["events_with_action_items"] == 1
+        assert manifest["meeting_surface_summary"]["events_with_decision_points"] == 1
+        assert manifest["meeting_surface_summary"]["events_with_risk_items"] == 1
+        assert manifest["meeting_surface_summary"]["events_with_mentioned_symbols"] == 1
         assert manifest["source_audit"]["input_count"] == 2
         assert manifest["source_audit"]["resolved_input_file_count"] == 2
         assert manifest["source_audit"]["input_missing_count"] == 1
@@ -85,13 +98,14 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
                         {
                             "platform": "钉钉",
                             "title": "投委会讨论",
-                            "summary": "讨论仓位、估值和风险控制。",
+                            "summary": "决策点：加仓半导体；行动项：基金经理B 复核仓位；风险点：回撤扩大。",
                             "start_time": "2026-07-08T09:00:00+08:00",
                             "end_time": "2026-07-08T10:00:00+08:00",
                             "duration": "60m",
                             "participants": [{"name": "研究员A"}, {"name": "基金经理B"}],
                             "meeting_url": "https://dingtalk.example/meeting",
                             "attachments": [{"path": "recording-ref.mp3"}],
+                            "recording_refs": [{"url": "https://dingtalk.example/recording/1"}],
                             "token": "must-not-leak",
                         }
                     ]
@@ -129,6 +143,13 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert any("研究员C" in event["data"].get("participants", []) for event in events)
         assert any("分析师A" in event["data"].get("participants", []) for event in events)
         assert any(event["data"].get("attachment_ref_count") == 1 for event in events)
+        dingtalk_event = next(event for event in events if event["data"]["platform"] == "dingtalk")
+        assert dingtalk_event["data"]["decision_point_count"] == 1
+        assert dingtalk_event["data"]["action_item_count"] == 1
+        assert dingtalk_event["data"]["risk_item_count"] == 1
+        assert dingtalk_event["data"]["recording_ref_count"] == 1
+        assert dingtalk_event["data"]["artifact_ref_summary"]["recording_body_collected"] is False
+        assert dingtalk_event["data"]["participant_role_counts"] == {"analyst": 1, "portfolio_manager": 1}
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -139,6 +160,10 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert manifest["platform_coverage"]["real_account_validation"] is False
         assert manifest["field_coverage"]["field_counts"]["platform"] == 4
         assert manifest["meeting_surface_summary"]["events_with_attachments"] == 1
+        assert manifest["meeting_surface_summary"]["events_with_recording_refs"] == 1
+        assert manifest["meeting_surface_summary"]["decision_point_count"] == 1
+        assert manifest["meeting_surface_summary"]["action_item_count"] == 1
+        assert manifest["meeting_surface_summary"]["risk_item_count"] == 1
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_member_count"] == 4
         assert manifest["source_audit"]["skipped_archive_member_count"] == 3

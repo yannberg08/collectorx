@@ -1445,6 +1445,8 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
                     "participants": ["研究员A", "基金经理B"],
                     "meeting_url": "https://meeting.example/roadshow",
                     "attachments": [{"name": "roadshow-deck.pdf"}],
+                    "action_items": ["下一步跟进现金流假设"],
+                    "risk_items": ["估值风险点"],
                     "source_platform": "meeting-artifacts",
                 },
                 "raw_ref": {"path": "roadshow.md"},
@@ -1465,6 +1467,7 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
                     "text_preview": "专家电话会调研供需拐点、价格弹性和下行风险。",
                     "participants": ["专家C"],
                     "meeting_url": "https://feishu.example/minutes/1",
+                    "risk_items": ["价格弹性和下行风险"],
                     "source_platform": "feishu",
                 },
                 "raw_ref": {"path": "feishu-expert.json"},
@@ -1485,6 +1488,9 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
                     "text_preview": "投资委员会记录决策点：加仓半导体、减仓高波动仓位，风控待办。",
                     "attendees": ["基金经理B", "风控D"],
                     "file_refs": [{"name": "ic-action-items.xlsx"}],
+                    "decision_points": ["加仓半导体、减仓高波动仓位"],
+                    "action_items": ["风控待办"],
+                    "risk_items": ["高波动仓位"],
                     "source_platform": "dingtalk",
                 },
                 "raw_ref": {"path": "dingtalk-ic.json"},
@@ -1505,6 +1511,7 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
                     "text_preview": "业绩说明会复盘财报、现金流、毛利率和纪要结论。",
                     "participants": ["IR", "研究员A"],
                     "recording_refs": [{"url": "https://wecom.example/recording/1"}],
+                    "mentioned_symbols": ["600519"],
                     "source_platform": "wecom",
                 },
                 "raw_ref": {"path": "wecom-earnings.json"},
@@ -1589,14 +1596,30 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
         }
         assert surface["participant_event_count"] == 4
         assert surface["participant_ref_count"] == 7
+        assert surface["participant_role_event_count"] == 4
+        assert surface["participant_role_counts"] == {
+            "analyst": 2,
+            "company_ir": 1,
+            "expert": 1,
+            "portfolio_manager": 2,
+            "risk_control": 1,
+        }
         assert surface["meeting_url_event_count"] == 2
         assert surface["attachment_ref_event_count"] == 2
         assert surface["recording_ref_event_count"] == 1
+        assert surface["decision_point_event_count"] == 2
+        assert surface["decision_point_count"] == 3
+        assert surface["action_item_event_count"] == 2
+        assert surface["action_item_count"] == 4
+        assert surface["risk_item_event_count"] == 3
+        assert surface["risk_item_count"] == 5
+        assert surface["mentioned_symbol_event_count"] == 1
+        assert surface["mentioned_symbol_count"] == 1
         assert surface["matched_symbol_event_count"] == 1
         assert surface["events_with_time"] == 4
         assert surface["collector_writes_wiki_directly"] is False
         proof = manifest["meeting_minutes_boundary_proof"]
-        assert proof["proof_level"] == "authorized_meeting_minutes_with_artifact_refs"
+        assert proof["proof_level"] == "authorized_meeting_minutes_with_decision_action_surface"
         assert proof["event_count"] == 4
         assert proof["candidate_record_count"] == 5
         assert proof["matched_event_count"] == 4
@@ -1609,10 +1632,15 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
         }
         assert proof["meeting_context_boundary"]["participant_event_count"] == 4
         assert proof["meeting_context_boundary"]["participant_ref_count"] == 7
+        assert proof["meeting_context_boundary"]["participant_role_event_count"] == 4
+        assert proof["meeting_context_boundary"]["mentioned_symbol_event_count"] == 1
         assert proof["meeting_context_boundary"]["meeting_url_event_count"] == 2
         assert proof["meeting_context_boundary"]["attachment_ref_event_count"] == 2
         assert proof["meeting_context_boundary"]["recording_ref_event_count"] == 1
         assert proof["meeting_context_boundary"]["events_with_time"] == 4
+        assert proof["decision_action_boundary"]["decision_point_event_count"] == 2
+        assert proof["decision_action_boundary"]["action_item_event_count"] == 2
+        assert proof["decision_action_boundary"]["risk_item_event_count"] == 3
         assert proof["complete_meeting_history_claimed"] is False
         assert proof["complete_workspace_claimed"] is False
         assert proof["complete_meeting_context_claimed"] is False
@@ -1624,6 +1652,8 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["meeting-minutes"]
         assert evidence_surface["meeting_minutes_surface_counts"]["risk_discussion"] == 3
+        assert evidence_surface["action_item_event_count"] == 2
+        assert evidence_surface["decision_point_event_count"] == 2
         assert evidence_surface["generic_meeting_lens"] is True
 
 

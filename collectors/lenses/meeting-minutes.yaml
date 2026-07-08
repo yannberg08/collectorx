@@ -28,9 +28,12 @@ scope:
     - expert_calls
     - earnings_calls
     - participants
+    - participant_roles
     - decision_points
     - risk_discussions
     - follow_up_actions
+    - action_item_surface
+    - decision_action_boundary
     - upstream_collector_surface
     - attachment_recording_refs
     - meeting_minutes_boundary_proof
@@ -41,5 +44,5 @@ scope:
 
 description: |
   会议通道先作为通用证据入 lake；本 lens 只识别投资调研、路演、投委会、
-  专家会、业绩会、风险讨论和后续行动，并输出会议面谱和会议边界证明用于投资分身 Wiki。
+  专家会、业绩会、风险讨论、后续行动和决策/行动/风险结构，并输出会议面谱和会议边界证明用于投资分身 Wiki。
   它不声明完整会议历史、完整工作区、完整会议上下文或默认采集录制正文。
