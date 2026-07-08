@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 from urllib.parse import urlparse
 
 try:
@@ -201,6 +201,44 @@ SECTION_ACTION_TYPES = {
     "shares": "share",
     "reposts": "share",
 }
+ACTION_SCOPE_ALIASES = {
+    "follow": "follow",
+    "follows": "follow",
+    "following": "follow",
+    "关注": "follow",
+    "like": "like",
+    "likes": "like",
+    "liked": "like",
+    "点赞": "like",
+    "favorite": "favorite",
+    "favorites": "favorite",
+    "fav": "favorite",
+    "collect": "favorite",
+    "collections": "favorite",
+    "收藏": "favorite",
+    "watch": "watch",
+    "watches": "watch",
+    "view": "watch",
+    "views": "watch",
+    "history": "watch",
+    "watch_history": "watch",
+    "观看": "watch",
+    "浏览": "watch",
+    "comment": "comment",
+    "comments": "comment",
+    "reply": "comment",
+    "replies": "comment",
+    "评论": "comment",
+    "share": "share",
+    "shares": "share",
+    "repost": "share",
+    "reposts": "share",
+    "转发": "share",
+    "分享": "share",
+    "saved_page": "saved_page",
+    "saved_pages": "saved_page",
+    "activity": "activity",
+}
 PLATFORM_DOMAINS = {
     "weibo": ("weibo.com", "weibo.cn"),
     "bilibili": ("bilibili.com", "b23.tv"),
@@ -213,8 +251,45 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    allow_platforms: Optional[Iterable[str]] = None,
+    deny_platforms: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_source_apps: Optional[Iterable[str]] = None,
+    deny_source_apps: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_creators: Optional[Iterable[str]] = None,
+    deny_creators: Optional[Iterable[str]] = None,
+    allow_topics: Optional[Iterable[str]] = None,
+    deny_topics: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        allow_platforms=allow_platforms,
+        deny_platforms=deny_platforms,
+        allow_actions=allow_actions,
+        deny_actions=deny_actions,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_domains=allow_domains,
+        deny_domains=deny_domains,
+        allow_creators=allow_creators,
+        deny_creators=deny_creators,
+        allow_topics=allow_topics,
+        deny_topics=deny_topics,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -223,6 +298,20 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_platforms: Optional[Iterable[str]] = None,
+    deny_platforms: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_source_apps: Optional[Iterable[str]] = None,
+    deny_source_apps: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_creators: Optional[Iterable[str]] = None,
+    deny_creators: Optional[Iterable[str]] = None,
+    allow_topics: Optional[Iterable[str]] = None,
+    deny_topics: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     events: List[Dict[str, Any]] = []
@@ -230,7 +319,26 @@ def collect_from_inputs_with_audit(
     skipped_extension_counts: Counter[str] = Counter()
     skipped_reason_counts: Counter[str] = Counter()
     skipped_archive_member_reason_counts: Counter[str] = Counter()
+    scope_policy_filter_reason_counts: Counter[str] = Counter()
+    candidate_record_count = 0
+    scope_policy_filtered_record_count = 0
     browser_history_source_apps: set[str] = set()
+    policy = build_social_activity_scope_policy(
+        allow_platforms=allow_platforms,
+        deny_platforms=deny_platforms,
+        allow_actions=allow_actions,
+        deny_actions=deny_actions,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_domains=allow_domains,
+        deny_domains=deny_domains,
+        allow_creators=allow_creators,
+        deny_creators=deny_creators,
+        allow_topics=allow_topics,
+        deny_topics=deny_topics,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     audit: Dict[str, Any] = {
         "source_type": "authorized_social_activity_export_or_browser_history_copy",
         "input_count": len(input_list),
@@ -252,6 +360,11 @@ def collect_from_inputs_with_audit(
         "skipped_archive_member_reason_counts": {},
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
+        "candidate_record_count": 0,
+        "scope_policy_filtered_record_count": 0,
+        "scope_policy_filter_reason_counts": {},
+        "social_activity_scope_policy": policy,
+        "social_activity_scope_policy_filtered_all": False,
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "browser_history_input_count": 0,
@@ -295,7 +408,8 @@ def collect_from_inputs_with_audit(
             result = path_result(path, status="pending")
             try:
                 if path.suffix.lower() == ".zip":
-                    parsed, archive_audit = parse_zip_with_audit(path, limit=remaining_limit(limit, events))
+                    zip_limit = None if policy["enabled"] else remaining_limit(limit, events)
+                    parsed, archive_audit = parse_zip_with_audit(path, limit=zip_limit)
                     merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
                     result.update(
                         {
@@ -326,29 +440,60 @@ def collect_from_inputs_with_audit(
                 result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0})
             audit["path_results"].append(result)
             row = 0
+            path_candidate_count = 0
+            path_filtered_count = 0
+            path_emitted_count = 0
             for record in parsed:
                 if not isinstance(record, dict):
                     continue
                 row += 1
+                candidate_record_count += 1
+                path_candidate_count += 1
                 event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+                filter_reason = social_activity_scope_policy_filter_reason(event, policy)
+                if filter_reason:
+                    scope_policy_filtered_record_count += 1
+                    path_filtered_count += 1
+                    scope_policy_filter_reason_counts[filter_reason] += 1
+                    continue
                 events.append(event)
+                path_emitted_count += 1
                 source_app = str((event.get("data") or {}).get("source_app") or "")
                 if source_app.endswith("_history"):
                     browser_history_source_apps.add(source_app)
                 if limit is not None and len(events) >= limit:
                     audit["limit_reached"] = True
                     break
+            if path_candidate_count:
+                result["candidate_record_count"] = path_candidate_count
+                result["scope_policy_filtered_record_count"] = path_filtered_count
+                result["emitted_record_count"] = path_emitted_count
+                if policy["enabled"] and path_filtered_count == path_candidate_count and path_emitted_count == 0:
+                    result["status"] = "filtered_by_scope_policy"
+                    result["reason"] = "scope_policy_excluded_all_records"
+                elif path_filtered_count:
+                    result["scope_policy_filter_status"] = "partially_filtered"
         if limit is not None and len(events) >= limit:
             break
 
-    if not events:
+    scope_policy_filtered_all = (
+        policy["enabled"]
+        and candidate_record_count > 0
+        and scope_policy_filtered_record_count == candidate_record_count
+        and not events
+    )
+    if not events and not scope_policy_filtered_all:
         reason = (
             "social_activity_authorized_input_missing"
             if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
             else "social_activity_records_empty"
         )
         events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["parsed_record_count"] = len(usable_social_events(events))
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
+    audit["social_activity_scope_policy_filtered_all"] = scope_policy_filtered_all
+    audit["parsed_record_count"] = candidate_record_count
     audit["emitted_event_count"] = len(events)
     audit["browser_history_event_count"] = sum(
         1 for event in usable_social_events(events) if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
@@ -358,7 +503,183 @@ def collect_from_inputs_with_audit(
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+    audit["archive_member_event_count"] = sum(1 for event in usable_social_events(events) if (event.get("raw_ref") or {}).get("archive_member"))
     return events, audit
+
+
+def build_social_activity_scope_policy(
+    *,
+    allow_platforms: Optional[Iterable[str]] = None,
+    deny_platforms: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_source_apps: Optional[Iterable[str]] = None,
+    deny_source_apps: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_creators: Optional[Iterable[str]] = None,
+    deny_creators: Optional[Iterable[str]] = None,
+    allow_topics: Optional[Iterable[str]] = None,
+    deny_topics: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_platforms": normalize_scope_terms(allow_platforms, normalizer=normalize_platform_scope_term),
+        "deny_platforms": normalize_scope_terms(deny_platforms, normalizer=normalize_platform_scope_term),
+        "allow_actions": normalize_scope_terms(allow_actions, normalizer=normalize_action_scope_term),
+        "deny_actions": normalize_scope_terms(deny_actions, normalizer=normalize_action_scope_term),
+        "allow_source_apps": normalize_scope_terms(allow_source_apps),
+        "deny_source_apps": normalize_scope_terms(deny_source_apps),
+        "allow_domains": normalize_scope_terms(allow_domains, normalizer=normalize_domain_scope_term),
+        "deny_domains": normalize_scope_terms(deny_domains, normalizer=normalize_domain_scope_term),
+        "allow_creators": normalize_scope_terms(allow_creators),
+        "deny_creators": normalize_scope_terms(deny_creators),
+        "allow_topics": normalize_scope_terms(allow_topics),
+        "deny_topics": normalize_scope_terms(deny_topics),
+        "allow_keywords": normalize_scope_terms(allow_keywords, keep_case=True),
+        "deny_keywords": normalize_scope_terms(deny_keywords, keep_case=True),
+    }
+    policy["enabled"] = any(bool(values) for values in policy.values())
+    return policy
+
+
+def normalize_scope_terms(
+    values: Optional[Iterable[str]],
+    *,
+    normalizer: Optional[Any] = None,
+    keep_case: bool = False,
+) -> List[str]:
+    cleaned: List[str] = []
+    for term in split_policy_terms(values):
+        normalized = normalizer(term) if normalizer else term.strip()
+        if not normalized:
+            continue
+        cleaned.append(normalized if keep_case else normalized.lower())
+    return sorted(dict.fromkeys(cleaned))
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    terms: List[str] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, (list, tuple, set)):
+            terms.extend(split_policy_terms(value))
+            continue
+        terms.extend(item.strip() for item in re.split(r"[,，、;；|\n]+", str(value)) if item.strip())
+    return terms
+
+
+def normalize_platform_scope_term(term: str) -> str:
+    inferred = infer_platform({"platform": term}, term)
+    return inferred if inferred != "unknown" else term.strip().lower()
+
+
+def normalize_action_scope_term(term: str) -> str:
+    normalized = re.sub(r"[\s\-]+", "_", term.strip().lower())
+    return ACTION_SCOPE_ALIASES.get(normalized, normalized)
+
+
+def normalize_domain_scope_term(term: str) -> str:
+    if "://" in term:
+        return host_for(term) or term.strip().lower()
+    return term.strip().lower().lstrip(".")
+
+
+def social_activity_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    data = event.get("data") or {}
+    platform = normalize_platform_scope_term(str(data.get("platform") or ""))
+    action = normalize_action_scope_term(str(data.get("action_type") or ""))
+    source_app = str(data.get("source_app") or "").strip().lower()
+    domain = normalize_domain_scope_term(str(data.get("domain") or host_for(data.get("url")) or ""))
+    creator = str(data.get("creator") or "").strip().lower()
+    topics = social_activity_event_topics(data)
+    if platform and platform in policy.get("deny_platforms", []):
+        return "platform_denied"
+    if action and action in policy.get("deny_actions", []):
+        return "action_denied"
+    if source_app and source_app in policy.get("deny_source_apps", []):
+        return "source_app_denied"
+    if domain and domain_policy_hit(domain, policy.get("deny_domains", [])):
+        return "domain_denied"
+    if creator and creator in policy.get("deny_creators", []):
+        return "creator_denied"
+    if topics and set(topics).intersection(policy.get("deny_topics", [])):
+        return "topic_denied"
+    if policy_hit(policy.get("deny_keywords", []), flatten_social_policy_surface(data)):
+        return "keyword_denied"
+    if policy.get("allow_platforms") and platform not in policy["allow_platforms"]:
+        return "platform_not_allowed"
+    if policy.get("allow_actions") and action not in policy["allow_actions"]:
+        return "action_not_allowed"
+    if policy.get("allow_source_apps") and source_app not in policy["allow_source_apps"]:
+        return "source_app_not_allowed"
+    if policy.get("allow_domains") and not domain_policy_hit(domain, policy["allow_domains"]):
+        return "domain_not_allowed"
+    if policy.get("allow_creators") and creator not in policy["allow_creators"]:
+        return "creator_not_allowed"
+    if policy.get("allow_topics") and not set(topics).intersection(policy["allow_topics"]):
+        return "topic_not_allowed"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], flatten_social_policy_surface(data)):
+        return "keyword_not_allowed"
+    return None
+
+
+def social_activity_event_topics(data: Dict[str, Any]) -> List[str]:
+    topics = data.get("social_topics") if isinstance(data.get("social_topics"), list) else []
+    if not topics and data.get("primary_social_topic"):
+        topics = [str(data["primary_social_topic"])]
+    return [str(topic).strip().lower() for topic in topics if str(topic).strip()]
+
+
+def domain_policy_hit(domain: str, policy_domains: Sequence[str]) -> bool:
+    if not domain or not policy_domains:
+        return False
+    normalized = normalize_domain_scope_term(domain)
+    return any(normalized == item or normalized.endswith(f".{item}") for item in policy_domains if item)
+
+
+def policy_hit(needles: Sequence[str], values: Iterable[Any]) -> bool:
+    if not needles:
+        return False
+    haystack = "\n".join(str(value) for value in values if value not in (None, "", [], {})).lower()
+    return any(str(needle).lower() in haystack for needle in needles if str(needle).strip())
+
+
+def flatten_social_policy_surface(data: Dict[str, Any]) -> List[Any]:
+    values: List[Any] = []
+    for key in (
+        "platform",
+        "action_type",
+        "source_app",
+        "domain",
+        "creator",
+        "creator_id",
+        "creator_url",
+        "title",
+        "url",
+        "item_id",
+        "tags",
+        "topics",
+        "symbols",
+        "social_topics",
+        "primary_social_topic",
+        "comment_preview",
+        "content_preview",
+    ):
+        value = data.get(key)
+        if isinstance(value, list):
+            values.extend(value)
+        else:
+            values.append(value)
+    return values
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -1029,7 +1350,10 @@ def build_manifest(
     kind_counts = Counter(event["kind"] for event in events)
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
+    collection_audit = collection_audit or {}
     gap_only = bool(events) and set(action_counts) == {"collector_gap"}
+    scope_policy_filtered_all = bool(collection_audit.get("social_activity_scope_policy_filtered_all"))
+    no_events = not events
     observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
     observed_expected_platforms = [platform for platform in EXPECTED_SOCIAL_PLATFORMS if platform_counts.get(platform)]
     missing_expected_platforms = [platform for platform in EXPECTED_SOCIAL_PLATFORMS if not platform_counts.get(platform)]
@@ -1102,19 +1426,55 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_social_activity_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": collection_readiness_status(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_investment_influence": False,
             "evidence_strength": "weak_attention",
             "requires_corroboration": True,
             "collector_claims_investment_conclusion": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": source_collection_scope_for_readiness(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
             "platform_coverage_status": coverage_status(events, missing_expected_platforms, "platform"),
             "action_coverage_status": coverage_status(events, missing_expected_actions, "action"),
             "weak_signal_field_coverage_status": coverage_status(events, missing_recommended_fields, "weak_signal_field"),
-            "next_action": "Provide authorized social activity export." if gap_only else "Feed events into social-investment-influence lens.",
+            "next_action": collection_next_action(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
     }
+
+
+def collection_readiness_status(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only or no_events:
+        return "needs_social_activity_input"
+    return "events_collected"
+
+
+def source_collection_scope_for_readiness(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only or no_events:
+        return "none"
+    return "partial_authorized_input"
+
+
+def collection_next_action(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden the user authorization scope or provide social activity records that match the current policy."
+    if gap_only or no_events:
+        return "Provide authorized social activity export."
+    return "Feed events into social-investment-influence lens."
 
 
 def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], noun: str) -> str:
@@ -1226,7 +1586,9 @@ def social_activity_boundary_proof(
     all_expected_actions = bool(observed_expected_actions) and not missing_expected_actions
     all_recommended_fields = bool(observed_recommended_fields) and not missing_recommended_fields
     all_expected_topics = bool(observed_topics) and not missing_topics
-    if not usable_events:
+    if audit.get("social_activity_scope_policy_filtered_all"):
+        proof_level = "scope_policy_filtered_all"
+    elif not usable_events:
         gap_reason = None
         if events:
             gap_reason = (events[0].get("data") or {}).get("gap")
@@ -1240,6 +1602,8 @@ def social_activity_boundary_proof(
     blockers = []
     if not usable_events:
         blockers.append("authorized_social_activity_export_missing")
+    if audit.get("social_activity_scope_policy_filtered_all"):
+        blockers.append("authorization_scope_excluded_all_records")
     if missing_expected_platforms:
         blockers.append("missing_expected_platforms:" + ",".join(missing_expected_platforms))
     if missing_expected_actions:
@@ -1329,6 +1693,13 @@ def social_activity_boundary_proof(
             "path_level_audit_available": bool(audit.get("path_results")),
             "archive_path_traversal_members_collected": False,
             "windows_drive_archive_members_collected": False,
+        },
+        "authorization_scope_boundary": {
+            "policy": audit.get("social_activity_scope_policy", {}),
+            "candidate_record_count": audit.get("candidate_record_count", audit.get("parsed_record_count", len(usable_events))),
+            "scope_policy_filtered_record_count": audit.get("scope_policy_filtered_record_count", 0),
+            "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts", {}),
+            "social_activity_scope_policy_filtered_all": audit.get("social_activity_scope_policy_filtered_all", False),
         },
         "content_boundary": {
             "full_platform_scrape": False,
@@ -1529,6 +1900,9 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- missing_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
         f"- social_activity_boundary_proof: `{manifest['social_activity_boundary_proof']['proof_level']}`",
         f"- investment_claim_allowed: `{manifest['weak_evidence_policy']['investment_claim_allowed']}`",
+        f"- scope_policy_enabled: {manifest['source_audit']['social_activity_scope_policy'].get('enabled', False)}",
+        f"- scope_policy_filtered: {manifest['source_audit'].get('scope_policy_filtered_record_count', 0)} / "
+        f"{manifest['source_audit'].get('candidate_record_count', manifest['source_audit'].get('parsed_record_count', 0))}",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
         f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         f"- browser_history_events: {manifest['source_audit'].get('browser_history_event_count', 0)}",

@@ -3295,6 +3295,31 @@ Findings:
 - Fixture validation covers partial retention by terminal/activity/workspace/
   project/dataset/field/keyword and filtered-all readiness.
 
+### Wave AQ - P2 Social Activity Scope Policy Audit
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-scope-policy-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.7`.
+- Added platform, action, source-app, domain, creator, social-topic, and
+  keyword allow/deny filters to the weak social activity collector.
+- Added `manifest.source_audit.social_activity_scope_policy` with candidate
+  record count, filtered record count, filter reason counts, and
+  `social_activity_scope_policy_filtered_all`.
+- Added `social_activity_boundary_proof.authorization_scope_boundary` so
+  FinClaw can inspect the exact user authorization scope before using social
+  activity as weak influence evidence.
+- Added filtered-all readiness: when every candidate social activity record is
+  outside the authorization policy, the collector emits no fake success event
+  and marks the package `scope_policy_filtered_all`.
+- Fixture validation covers partial retention by platform/action/source-app/
+  domain/creator/topic/keyword and filtered-all readiness.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -3322,7 +3347,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, broker/account/subtype/symbol/market/currency/keyword scope-policy audit, filtered-all readiness, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, authorization default scopes, and Windows/macOS/Linux path validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, terminal/activity/workspace/project/dataset/field/keyword scope-policy audit, filtered-all readiness, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, authorization default scopes, workflow-topic false-positive review, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP/browser-history social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, domain filtering, and preview-only content policy; strict real-platform saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP/browser-history social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, platform/action/source-app/domain/creator/topic/keyword scope-policy audit, filtered-all readiness, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, domain filtering, and preview-only content policy; strict real-platform saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, platform/domain allowlists, creator/domain default allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 
 ## Git Practice
 

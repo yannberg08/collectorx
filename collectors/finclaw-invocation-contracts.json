@@ -308,8 +308,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "weak-influence",
-      "user_step": "Provide authorized Weibo, Bilibili, or Xiaohongshu activity exports, saved pages, workbooks, ZIP packages, or copied Chromium/Safari browser history files.",
-      "preflight": "Social traces and browser-history copies are domain-filtered weak influence only and cannot become standalone investment conclusions.",
+      "user_step": "Provide authorized Weibo, Bilibili, or Xiaohongshu activity exports, saved pages, workbooks, ZIP packages, or copied Chromium/Safari browser history files; optionally choose platform, action, source-app, domain, creator, topic, or keyword allow/deny filters.",
+      "preflight": "Social traces and browser-history copies are domain-filtered weak influence only and cannot become standalone investment conclusions; optional scope filters are applied before Lake output and can return scope_policy_filtered_all.",
       "failure_state": "needs_authorized_social_activity_export"
     },
     {

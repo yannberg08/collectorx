@@ -1175,7 +1175,10 @@ Current status:
 ```bash
 python3 skills/social-activity/scripts/social_activity.py collect \
   --input <authorized-weibo-bilibili-xiaohongshu-activity-export-or-browser-history-copy> \
-  --out-dir <out-dir>
+  --out-dir <out-dir> \
+  --allow-platform weibo \
+  --allow-domain weibo.com \
+  --allow-creator <authorized-creator-name>
 ```
 
 Current status:
@@ -1192,6 +1195,11 @@ Current status:
   engagement counts, watch progress, and comment/content previews.
 - Captures browser-history source apps, visit counts, typed counts, and browser
   transition types after filtering to Weibo/Bilibili/Xiaohongshu domains.
+- Optional scope filters can narrow Lake output by platform, action, source app,
+  domain, creator, social topic, or keyword through allow/deny arguments.
+  `manifest.source_audit.social_activity_scope_policy` records the policy and
+  filtered counts; if every candidate record is excluded, readiness becomes
+  `scope_policy_filtered_all`.
 - Adds per-event `social_topics`, `primary_social_topic`, and
   `social_topic_terms` so FinClaw can map weak influence signals to macro,
   strategy, industry, fundamental, fund/wealth, trading review, risk control,
@@ -1208,9 +1216,10 @@ Current status:
   truncation, export package provenance, and preview-only content boundaries.
 - Writes `manifest.social_activity_boundary_proof` so FinClaw can inspect the
   authorized social-activity input boundary, platform/action/topic coverage,
-  weak-signal field coverage, source audit, content-preview policy, required
-  `social-investment-influence` lens flow, and explicit no-investment-conclusion
-  / no-platform-wide-scrape / no-full-creator-profile claims.
+  weak-signal field coverage, authorization scope, source audit,
+  content-preview policy, required `social-investment-influence` lens flow, and
+  explicit no-investment-conclusion / no-platform-wide-scrape /
+  no-full-creator-profile claims.
 - Does not claim investment influence directly.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
   lens. The lens mirrors social-topic/platform/action/creator summaries and

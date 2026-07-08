@@ -33,6 +33,8 @@ scope:
     - weak_signal_field_coverage_manifest
     - influence_surface_summary
     - social_activity_boundary_proof
+    - platform_action_source_app_domain_creator_topic_keyword_scope_policy
+    - scope_policy_filtered_all_readiness
     - source_audit_manifest
     - path_level_collection_audit
     - skipped_file_reason_counts
@@ -51,5 +53,6 @@ description: |
   微博、B站、小红书等平台的通用用户活动采集器。它不判断投资含义；
   支持授权 JSON/CSV/Excel/HTML/TXT/ZIP 活动包和 Chromium/Safari 浏览器历史副本，
   并报告平台/动作/弱证据字段覆盖、浏览器历史来源、社交影响主题面谱、影响源可用面、
+  平台/动作/来源应用/域名/创作者/主题/关键词授权范围过滤、filtered-all 状态、
   社交活动边界证明、逐输入来源审计、跳过文件/ZIP 成员原因和内容策略。
   social-investment-influence lens 再筛选投资内容影响源。

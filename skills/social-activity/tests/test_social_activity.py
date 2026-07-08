@@ -417,6 +417,225 @@ def test_collect_browser_history_copy_filters_social_domains() -> None:
         assert manifest["social_activity_boundary_proof"]["false_claims"]["unrelated_browser_history_collected"] is False
 
 
+def test_collect_respects_social_scope_policy() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "social_scope.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "activities": [
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "投资主线策略复盘",
+                            "url": "https://weibo.com/100/strategy",
+                        },
+                        {
+                            "platform": "B站",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "投资主线策略复盘",
+                            "url": "https://www.bilibili.com/video/BVplatform",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "点赞",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "投资主线策略复盘",
+                            "url": "https://weibo.com/100/action",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "safari_history",
+                            "creator": "财经博主A",
+                            "title": "投资主线策略复盘",
+                            "url": "https://weibo.com/100/source-app",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "投资主线策略复盘",
+                            "url": "https://example.com/not-social",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "娱乐博主Z",
+                            "title": "投资主线策略复盘",
+                            "url": "https://weibo.com/100/creator",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "游戏直播剪辑",
+                            "url": "https://weibo.com/100/topic",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "投资主线策略复盘 禁止采集",
+                            "url": "https://weibo.com/100/deny-keyword",
+                        },
+                        {
+                            "platform": "微博",
+                            "action": "收藏",
+                            "source_app": "chromium_history",
+                            "creator": "财经博主A",
+                            "title": "策略复盘",
+                            "url": "https://weibo.com/100/allow-keyword",
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-platform",
+                "weibo",
+                "--allow-action",
+                "favorite",
+                "--allow-source-app",
+                "chromium_history",
+                "--allow-domain",
+                "weibo.com",
+                "--allow-creator",
+                "财经博主A",
+                "--allow-topic",
+                "market_strategy",
+                "--allow-keyword",
+                "投资主线",
+                "--deny-keyword",
+                "禁止采集",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["platform"] == "weibo"
+        assert events[0]["data"]["action_type"] == "favorite"
+        assert events[0]["data"]["source_app"] == "chromium_history"
+        assert events[0]["data"]["domain"] == "weibo.com"
+        assert events[0]["data"]["creator"] == "财经博主A"
+        assert "market_strategy" in events[0]["data"]["social_topics"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        source_audit = manifest["source_audit"]
+        assert source_audit["candidate_record_count"] == 9
+        assert source_audit["parsed_record_count"] == 9
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["scope_policy_filtered_record_count"] == 8
+        assert source_audit["scope_policy_filter_reason_counts"] == {
+            "action_not_allowed": 1,
+            "creator_not_allowed": 1,
+            "domain_not_allowed": 1,
+            "keyword_denied": 1,
+            "keyword_not_allowed": 1,
+            "platform_not_allowed": 1,
+            "source_app_not_allowed": 1,
+            "topic_not_allowed": 1,
+        }
+        assert source_audit["social_activity_scope_policy"]["enabled"] is True
+        assert source_audit["social_activity_scope_policy"]["allow_platforms"] == ["weibo"]
+        assert source_audit["social_activity_scope_policy"]["allow_actions"] == ["favorite"]
+        assert source_audit["social_activity_scope_policy"]["allow_source_apps"] == ["chromium_history"]
+        assert source_audit["social_activity_scope_policy"]["allow_domains"] == ["weibo.com"]
+        assert source_audit["social_activity_scope_policy"]["allow_creators"] == ["财经博主a"]
+        assert source_audit["social_activity_scope_policy"]["allow_topics"] == ["market_strategy"]
+        assert source_audit["path_results"][0]["scope_policy_filter_status"] == "partially_filtered"
+        proof = manifest["social_activity_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["scope_policy_filtered_record_count"] == 8
+        assert proof["authorization_scope_boundary"]["social_activity_scope_policy_filtered_all"] is False
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+
+
+def test_collect_social_scope_policy_filtered_all_is_not_success() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "xhs_scope.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "activities": [
+                        {
+                            "platform": "小红书",
+                            "action": "收藏",
+                            "creator": "投教作者",
+                            "title": "基金定投纪律",
+                            "url": "https://www.xiaohongshu.com/explore/abc",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-platform",
+                "weibo",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert events == []
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["social_activity_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+        assert manifest["social_activity_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert "authorization_scope_excluded_all_records" in manifest["social_activity_boundary_proof"]["completion_blockers"]
+        source_audit = manifest["source_audit"]
+        assert source_audit["candidate_record_count"] == 1
+        assert source_audit["parsed_record_count"] == 1
+        assert source_audit["emitted_event_count"] == 0
+        assert source_audit["scope_policy_filtered_record_count"] == 1
+        assert source_audit["scope_policy_filter_reason_counts"] == {"platform_not_allowed": 1}
+        assert source_audit["social_activity_scope_policy_filtered_all"] is True
+        assert source_audit["path_results"][0]["status"] == "filtered_by_scope_policy"
+        assert source_audit["path_results"][0]["reason"] == "scope_policy_excluded_all_records"
+
+
 def test_collect_missing_input_writes_gap_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -460,5 +679,7 @@ if __name__ == "__main__":
     test_collect_nested_sections_workbook_and_weak_policy()
     test_collect_zip_limit_counts_only_emitted_records()
     test_collect_browser_history_copy_filters_social_domains()
+    test_collect_respects_social_scope_policy()
+    test_collect_social_scope_policy_filtered_all_is_not_success()
     test_collect_missing_input_writes_gap_audit()
     print("social-activity tests passed.")
