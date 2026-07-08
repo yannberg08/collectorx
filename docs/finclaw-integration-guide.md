@@ -301,13 +301,24 @@ Current status:
   packages through `--input`, and local discovery through `--local-scan`.
 - Captures symbol, name, market, group, industry, tags, note/reason, and
   added time when present.
+- Supports optional user authorization scope filters:
+  `--allow-symbol/--deny-symbol`, `--allow-market/--deny-market`,
+  `--allow-group/--deny-group`, `--allow-industry/--deny-industry`,
+  `--allow-tag/--deny-tag`, `--allow-keyword/--deny-keyword`,
+  `--allow-source/--deny-source`, and
+  `--allow-source-platform/--deny-source-platform`.
 - `manifest.collection_audit` records requested inputs, missing inputs,
   resolved files, local-scan platform/root/candidate files, skipped files,
   skipped reasons, path-level parse results, ZIP member provenance, unsafe ZIP
-  member skips, and limit truncation.
+  member skips, scope-policy candidate/retained/filtered counts, filter reason
+  counts, filtered-all status, and limit truncation.
 - `manifest.field_coverage` and `manifest.ths_watchlist_boundary_proof` tell
   FinClaw what watchlist fields are present and explicitly keep holdings,
   executions, orders, fund flows, and complete attention-universe claims false.
+- `manifest.ths_watchlist_boundary_proof.authorization_scope_boundary` records
+  whether the output was narrowed to user-approved symbols, groups, sources, or
+  platforms; `scope_policy_filtered_all` is a gap state, not a successful empty
+  watchlist.
 - Recursively filters credential-like raw keys.
 - Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
   coverage for attention-universe subdimensions.

@@ -26,6 +26,8 @@ scope:
     - path_level_source_audit
     - zip_member_provenance
     - skipped_file_reason_counts
+    - authorization_scope_policy_audit
+    - filtered_all_readiness
     - field_coverage
     - ths_watchlist_boundary_proof
   excludes:
@@ -53,7 +55,12 @@ prompt: |
 
   也可以用 --input <用户授权的同花顺自选股导出文件或目录> 导入现成导出。
   输入支持 CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT、ZIP。
+  可通过 --allow-symbol/--deny-symbol、--allow-market/--deny-market、
+  --allow-group/--deny-group、--allow-industry/--deny-industry、
+  --allow-tag/--deny-tag、--allow-keyword/--deny-keyword、
+  --allow-source/--deny-source、--allow-source-platform/--deny-source-platform
+  收窄用户授权范围；filtered-all 时不会伪造可用事件。
   输出 collectorx.event.v1 到 lake/ths-watchlist/events.jsonl，并写入 manifest.json、
   investor_wiki_evidence.v1.json、本机扫描审计、逐输入 source audit、ZIP 成员 provenance、
-  field_coverage 和 ths_watchlist_boundary_proof。自选股只作为 attention-universe
-  证据，后续必须与交易、持仓、笔记、研报和复盘数据交叉验证。
+  scope-policy audit、field_coverage 和 ths_watchlist_boundary_proof。自选股只作为
+  attention-universe 证据，后续必须与交易、持仓、笔记、研报和复盘数据交叉验证。

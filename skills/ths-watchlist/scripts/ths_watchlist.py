@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 from ths_watchlist.parser import (
+    THS_WATCHLIST_SCOPE_POLICY_KEYS,
     build_evidence,
     build_local_scan_report,
     build_manifest,
@@ -35,6 +36,7 @@ def collect(args: argparse.Namespace) -> int:
         local_scan=args.local_scan,
         platform=args.platform,
         container_root=args.container_root,
+        scope_policy=scope_policy_from_args(args),
     )
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
@@ -62,8 +64,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
+    add_scope_policy_args(p_collect)
     p_collect.set_defaults(func=collect)
     return parser
+
+
+def add_scope_policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--allow-symbol", action="append", help="Only keep matching symbols/codes; repeat or comma-separate.")
+    parser.add_argument("--deny-symbol", action="append", help="Exclude matching symbols/codes; repeat or comma-separate.")
+    parser.add_argument("--allow-market", action="append", help="Only keep matching markets such as SH/SZ/BJ.")
+    parser.add_argument("--deny-market", action="append", help="Exclude matching markets such as SH/SZ/BJ.")
+    parser.add_argument("--allow-group", action="append", help="Only keep matching watchlist groups.")
+    parser.add_argument("--deny-group", action="append", help="Exclude matching watchlist groups.")
+    parser.add_argument("--allow-industry", action="append", help="Only keep matching industries/sectors.")
+    parser.add_argument("--deny-industry", action="append", help="Exclude matching industries/sectors.")
+    parser.add_argument("--allow-tag", action="append", help="Only keep matching tags.")
+    parser.add_argument("--deny-tag", action="append", help="Exclude matching tags.")
+    parser.add_argument("--allow-keyword", action="append", help="Only keep records whose symbol/name/group/industry/reason/tag/raw fields match keyword.")
+    parser.add_argument("--deny-keyword", action="append", help="Exclude records whose symbol/name/group/industry/reason/tag/raw fields match keyword.")
+    parser.add_argument("--allow-source", action="append", help="Only keep matching source paths, archive members, or source labels.")
+    parser.add_argument("--deny-source", action="append", help="Exclude matching source paths, archive members, or source labels.")
+    parser.add_argument("--allow-source-platform", action="append", help="Only keep matching local scan platforms such as mac/windows/linux.")
+    parser.add_argument("--deny-source-platform", action="append", help="Exclude matching local scan platforms such as mac/windows/linux.")
+
+
+def scope_policy_from_args(args: argparse.Namespace) -> dict:
+    return {key: getattr(args, key, None) for key in THS_WATCHLIST_SCOPE_POLICY_KEYS}
 
 
 def main() -> int:

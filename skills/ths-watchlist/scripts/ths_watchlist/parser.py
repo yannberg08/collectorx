@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import fnmatch
 import hashlib
 import json
 import re
@@ -119,6 +120,25 @@ INVESTOR_WIKI_SUBDIMENSION_RULES = {
     },
 }
 
+THS_WATCHLIST_SCOPE_POLICY_KEYS = (
+    "allow_symbol",
+    "deny_symbol",
+    "allow_market",
+    "deny_market",
+    "allow_group",
+    "deny_group",
+    "allow_industry",
+    "deny_industry",
+    "allow_tag",
+    "deny_tag",
+    "allow_keyword",
+    "deny_keyword",
+    "allow_source",
+    "deny_source",
+    "allow_source_platform",
+    "deny_source_platform",
+)
+
 
 def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
@@ -142,8 +162,12 @@ def collect_from_inputs_with_audit(
     local_scan: bool = False,
     platform: str = "auto",
     container_root: Optional[str] = None,
+    scope_policy: Optional[Dict[str, Any]] = None,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
+    normalized_scope_policy = normalize_ths_watchlist_scope_policy(scope_policy)
+    scope_policy_configured = ths_watchlist_scope_policy_configured(normalized_scope_policy)
+    limit_during_parse = limit is not None and not scope_policy_configured
     local_scan_paths = find_local_watchlist_files(container_root=container_root, platform=platform) if local_scan else []
     local_scan_report = build_local_scan_report(
         platform=platform,
@@ -199,11 +223,13 @@ def collect_from_inputs_with_audit(
     if not paths:
         events = [gap_event(collected_at=collected_at, reason="ths_watchlist_authorized_input_missing")]
         audit["emitted_event_count"] = len(events)
+        _unused, scope_audit = apply_ths_watchlist_scope_policy([], normalized_scope_policy)
+        attach_ths_watchlist_scope_policy_audit(audit, scope_audit)
         finalize_audit(audit)
         return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        if limit is not None and len(events) >= limit:
+        if limit_during_parse and len(events) >= limit:
             audit["limit_reached"] = True
             break
         extension = path.suffix.lower() or "<none>"
@@ -239,13 +265,25 @@ def collect_from_inputs_with_audit(
             path_result["emitted_event_count"] += 1
             if source_meta:
                 audit["local_scan_event_count"] += 1
-            if limit is not None and len(events) >= limit:
+            if limit_during_parse and len(events) >= limit:
                 audit["limit_reached"] = True
                 audit["emitted_event_count"] = len(events[:limit])
+                _limited_events, scope_audit = apply_ths_watchlist_scope_policy(events[:limit], normalized_scope_policy)
+                attach_ths_watchlist_scope_policy_audit(audit, scope_audit)
                 finalize_audit(audit)
                 return events[:limit], audit
+    pre_scope_policy_event_count = len(events)
+    events, scope_audit = apply_ths_watchlist_scope_policy(events, normalized_scope_policy)
+    attach_ths_watchlist_scope_policy_audit(audit, scope_audit)
+    audit["pre_scope_policy_event_count"] = pre_scope_policy_event_count
+    audit["pre_scope_policy_local_scan_event_count"] = audit["local_scan_event_count"]
+    if limit is not None and len(events) > limit:
+        audit["limit_reached"] = True
+        events = events[:limit]
+    audit["local_scan_event_count"] = sum(1 for event in events if (event.get("raw_ref") or {}).get("local_scan"))
     if not events:
-        events = [gap_event(collected_at=collected_at, reason="ths_watchlist_records_empty")]
+        reason = "ths_watchlist_scope_policy_filtered_all" if audit.get("ths_watchlist_scope_policy_filtered_all") else "ths_watchlist_records_empty"
+        events = [gap_event(collected_at=collected_at, reason=reason)]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
@@ -661,6 +699,11 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
 
 
 def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+    messages = {
+        "ths_watchlist_authorized_input_missing": "No user-authorized Tonghuashun watchlist input or local-scan candidate was available.",
+        "ths_watchlist_records_empty": "Tonghuashun watchlist inputs were available, but no usable watchlist records were parsed.",
+        "ths_watchlist_scope_policy_filtered_all": "Tonghuashun watchlist records were found, but every candidate was outside the configured authorization scope policy.",
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
@@ -672,7 +715,7 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
         "collected_at": collected_at or now_iso(),
         "data": {
             "gap": reason,
-            "message": "No user-authorized Tonghuashun watchlist input or local-scan candidate was available.",
+            "message": messages.get(reason, "Tonghuashun watchlist collection produced no usable events."),
         },
         "raw_ref": {"preflight": True},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
@@ -696,6 +739,19 @@ def build_manifest(
     source_collection_scope = "none" if gap_only else "partial_authorized_input"
     if local_scan_event_count:
         source_collection_scope = "partial_authorized_input_or_local_scan"
+    if gap_only and audit.get("ths_watchlist_scope_policy_filtered_all"):
+        readiness_status = "scope_policy_filtered_all"
+        can_enter_finclaw = False
+        source_collection_scope = "scope_policy_excluded_all"
+        next_action = "Review or relax Tonghuashun watchlist authorization scope policy, then rerun the collector."
+    elif gap_only:
+        readiness_status = "needs_ths_watchlist_authorized_input"
+        can_enter_finclaw = False
+        next_action = "Provide authorized Tonghuashun watchlist export or run authorized local scan."
+    else:
+        readiness_status = "events_collected"
+        can_enter_finclaw = True
+        next_action = "Use as attention-universe evidence; corroborate with trades and research."
     return {
         "schema": "collectorx.ths_watchlist.manifest.v1",
         "collector": COLLECTOR,
@@ -714,11 +770,11 @@ def build_manifest(
             "requires_corroboration_with": ["ths_portfolio", "eastmoney_portfolio", "research_documents", "investment_notes", "reviews"],
         },
         "collection_readiness": {
-            "status": "needs_ths_watchlist_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": readiness_status,
+            "can_enter_finclaw": can_enter_finclaw,
             "can_claim_complete_ths_attention_universe": False,
             "source_collection_scope": source_collection_scope,
-            "next_action": "Provide authorized Tonghuashun watchlist export or run authorized local scan." if gap_only else "Use as attention-universe evidence; corroborate with trades and research.",
+            "next_action": next_action,
         },
         "collection_audit": audit,
         "ths_watchlist_boundary_proof": build_watchlist_boundary_proof(
@@ -782,6 +838,193 @@ def build_watchlist_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, An
     }
 
 
+def split_scope_values(values: Any) -> List[str]:
+    if values in (None, ""):
+        return []
+    raw_items = values if isinstance(values, (list, tuple, set)) else [values]
+    out: List[str] = []
+    seen = set()
+    for item in raw_items:
+        if isinstance(item, (list, tuple, set)):
+            parts = split_scope_values(item)
+        else:
+            parts = [part.strip() for part in re.split(r"[,，;；]", str(item)) if part.strip()]
+        for part in parts:
+            key = part.lower()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(part)
+    return out
+
+
+def normalize_ths_watchlist_scope_policy(policy: Optional[Dict[str, Any]]) -> Dict[str, List[str]]:
+    policy = policy or {}
+    return {key: split_scope_values(policy.get(key)) for key in THS_WATCHLIST_SCOPE_POLICY_KEYS}
+
+
+def ths_watchlist_scope_policy_configured(policy: Dict[str, List[str]]) -> bool:
+    return any(policy.get(key) for key in THS_WATCHLIST_SCOPE_POLICY_KEYS)
+
+
+def apply_ths_watchlist_scope_policy(
+    events: List[Dict[str, Any]],
+    policy: Optional[Dict[str, Any]],
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    normalized_policy = normalize_ths_watchlist_scope_policy(policy)
+    configured = ths_watchlist_scope_policy_configured(normalized_policy)
+    candidates = [event for event in events if event.get("kind") == "watchlist"]
+    retained: List[Dict[str, Any]] = []
+    reason_counts: Counter = Counter()
+    for event in events:
+        if event.get("kind") != "watchlist":
+            retained.append(event)
+            continue
+        reasons = ths_watchlist_scope_filter_reasons(event, normalized_policy) if configured else []
+        if reasons:
+            for reason in reasons:
+                reason_counts[reason] += 1
+            continue
+        retained.append(event)
+    retained_watchlist_count = sum(1 for event in retained if event.get("kind") == "watchlist")
+    audit = {
+        "configured": configured,
+        "filters": normalized_policy,
+        "candidate_event_count": len(candidates),
+        "retained_event_count": retained_watchlist_count,
+        "filtered_event_count": len(candidates) - retained_watchlist_count,
+        "filter_reason_counts": dict(sorted(reason_counts.items())),
+        "filtered_all": configured and bool(candidates) and retained_watchlist_count == 0,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
+        "watchlist_is_attention_universe_only": True,
+        "deny_rules_win_over_allow_rules": True,
+    }
+    return retained, audit
+
+
+def attach_ths_watchlist_scope_policy_audit(audit: Dict[str, Any], scope_audit: Dict[str, Any]) -> None:
+    audit["ths_watchlist_scope_policy"] = scope_audit
+    audit["scope_policy_candidate_event_count"] = scope_audit.get("candidate_event_count", 0)
+    audit["scope_policy_retained_event_count"] = scope_audit.get("retained_event_count", 0)
+    audit["scope_policy_filtered_event_count"] = scope_audit.get("filtered_event_count", 0)
+    audit["scope_policy_filter_reason_counts"] = scope_audit.get("filter_reason_counts", {})
+    audit["ths_watchlist_scope_policy_filtered_all"] = bool(scope_audit.get("filtered_all"))
+
+
+def ths_watchlist_scope_filter_reasons(event: Dict[str, Any], policy: Dict[str, List[str]]) -> List[str]:
+    data = event.get("data") or {}
+    source_values = ths_watchlist_scope_source_values(event)
+    checks = [
+        ("symbol", policy.get("allow_symbol", []), policy.get("deny_symbol", []), [data.get("symbol"), data.get("code")], scope_identity_match),
+        ("market", policy.get("allow_market", []), policy.get("deny_market", []), [data.get("market")], scope_identity_match),
+        ("group", policy.get("allow_group", []), policy.get("deny_group", []), [data.get("group")], scope_text_match),
+        ("industry", policy.get("allow_industry", []), policy.get("deny_industry", []), [data.get("industry")], scope_text_match),
+        ("tag", policy.get("allow_tag", []), policy.get("deny_tag", []), list(data.get("tags") or []), scope_text_match),
+        ("keyword", policy.get("allow_keyword", []), policy.get("deny_keyword", []), [ths_watchlist_scope_search_text(event)], scope_text_match),
+        ("source", policy.get("allow_source", []), policy.get("deny_source", []), source_values, scope_text_match),
+        (
+            "source_platform",
+            policy.get("allow_source_platform", []),
+            policy.get("deny_source_platform", []),
+            [data.get("source_platform"), (event.get("raw_ref") or {}).get("source_platform")],
+            scope_identity_match,
+        ),
+    ]
+    reasons: List[str] = []
+    for name, allow_patterns, deny_patterns, values, matcher in checks:
+        if deny_patterns and any_scope_match(values, deny_patterns, matcher):
+            reasons.append(f"deny_{name}")
+        if allow_patterns and not any_scope_match(values, allow_patterns, matcher):
+            reasons.append(f"allow_{name}_mismatch")
+    return reasons
+
+
+def any_scope_match(values: Iterable[Any], patterns: Iterable[str], matcher) -> bool:
+    return any(matcher(value, pattern) for value in values if value not in (None, "", [], {}) for pattern in patterns)
+
+
+def scope_identity_match(value: Any, pattern: str) -> bool:
+    value_norm = str(value or "").strip().lower()
+    pattern_norm = str(pattern or "").strip().lower()
+    if not value_norm or not pattern_norm:
+        return False
+    normalized_value_symbol = normalize_symbol(value_norm).lower()
+    normalized_pattern_symbol = normalize_symbol(pattern_norm).lower()
+    if "*" in pattern_norm or "?" in pattern_norm:
+        return fnmatch.fnmatch(value_norm, pattern_norm) or (
+            bool(normalized_value_symbol)
+            and bool(normalized_pattern_symbol)
+            and normalized_pattern_symbol not in {"*", "?"}
+            and fnmatch.fnmatch(normalized_value_symbol, normalized_pattern_symbol)
+        )
+    return value_norm == pattern_norm or (
+        bool(normalized_value_symbol)
+        and bool(normalized_pattern_symbol)
+        and normalized_value_symbol == normalized_pattern_symbol
+    )
+
+
+def scope_text_match(value: Any, pattern: str) -> bool:
+    value_norm = str(value or "").strip().lower()
+    pattern_norm = str(pattern or "").strip().lower()
+    if not value_norm or not pattern_norm:
+        return False
+    if "*" in pattern_norm or "?" in pattern_norm:
+        return fnmatch.fnmatch(value_norm, pattern_norm)
+    return pattern_norm in value_norm
+
+
+def ths_watchlist_scope_source_values(event: Dict[str, Any]) -> List[Any]:
+    raw_ref = event.get("raw_ref") or {}
+    data = event.get("data") or {}
+    return [
+        event.get("source"),
+        raw_ref.get("path"),
+        raw_ref.get("archive"),
+        raw_ref.get("archive_member"),
+        raw_ref.get("source_path_label"),
+        data.get("source_platform"),
+        data.get("source_section"),
+    ]
+
+
+def ths_watchlist_scope_search_text(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    raw = data.get("raw") if isinstance(data.get("raw"), dict) else {}
+    values = [
+        data.get("symbol"),
+        data.get("code"),
+        data.get("market"),
+        data.get("name"),
+        data.get("group"),
+        data.get("industry"),
+        data.get("reason"),
+        data.get("source_platform"),
+        data.get("source_section"),
+        *(data.get("tags") or []),
+        *ths_watchlist_scope_source_values(event),
+        json.dumps(raw, ensure_ascii=False, sort_keys=True) if raw else "",
+    ]
+    return "\n".join(str(value) for value in values if value not in (None, "", [], {}))
+
+
+def ths_watchlist_authorization_scope_boundary(collection_audit: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    audit = collection_audit or {}
+    scope = audit.get("ths_watchlist_scope_policy") or {}
+    return {
+        "policy_configured": bool(scope.get("configured")),
+        "filters": scope.get("filters", normalize_ths_watchlist_scope_policy(None)),
+        "candidate_event_count": scope.get("candidate_event_count", 0),
+        "retained_event_count": scope.get("retained_event_count", 0),
+        "filtered_event_count": scope.get("filtered_event_count", 0),
+        "filter_reason_counts": scope.get("filter_reason_counts", {}),
+        "filtered_all": bool(scope.get("filtered_all")),
+        "policy_is_user_authorization_scope": scope.get("policy_is_user_authorization_scope", True),
+        "policy_does_not_assert_investment_relevance": scope.get("policy_does_not_assert_investment_relevance", True),
+        "deny_rules_win_over_allow_rules": scope.get("deny_rules_win_over_allow_rules", True),
+    }
+
+
 def build_watchlist_boundary_proof(
     events: List[Dict[str, Any]],
     *,
@@ -792,7 +1035,10 @@ def build_watchlist_boundary_proof(
 ) -> Dict[str, Any]:
     usable_events = [event for event in events if event.get("kind") == "watchlist"]
     gap_only = bool(events) and not usable_events
-    if not events or gap_only:
+    scope_policy_filtered_all = bool(collection_audit.get("ths_watchlist_scope_policy_filtered_all"))
+    if scope_policy_filtered_all:
+        proof_level = "scope_policy_filtered_all"
+    elif not events or gap_only:
         proof_level = "no_authorized_ths_watchlist_input"
     elif int(collection_audit.get("local_scan_event_count") or 0) > 0:
         proof_level = "authorized_ths_local_scan_partial"
@@ -807,6 +1053,7 @@ def build_watchlist_boundary_proof(
         "parsed_record_count": collection_audit.get("parsed_record_count", 0),
         "filtered_record_count": collection_audit.get("filtered_record_count", 0),
         "emitted_event_count": collection_audit.get("emitted_event_count", len(events)),
+        "authorization_scope_boundary": ths_watchlist_authorization_scope_boundary(collection_audit),
         "input_boundary": {
             "input_count": collection_audit.get("input_count", 0),
             "requested_inputs": collection_audit.get("requested_inputs", []),
@@ -858,7 +1105,7 @@ def build_watchlist_boundary_proof(
         "direct_tonghuashun_account_reconnect": False,
         "local_scan_without_trade_password": True,
         "collector_writes_wiki_directly": False,
-        "can_enter_finclaw": bool(usable_events),
+        "can_enter_finclaw": bool(usable_events) and not scope_policy_filtered_all,
     }
 
 
@@ -957,6 +1204,7 @@ def finalize_audit(audit: Dict[str, Any]) -> None:
         "archive_member_extension_counts",
         "skipped_archive_member_extension_counts",
         "skipped_archive_member_reason_counts",
+        "scope_policy_filter_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 

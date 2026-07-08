@@ -147,6 +147,119 @@ def test_collect_ths_watchlist_exports() -> None:
         assert industry_circle["evidence_count"] == 7
 
 
+def test_watchlist_scope_policy_filters_authorized_attention_universe() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        csv_path = root / "自选股.csv"
+        out = root / "out"
+        csv_path.write_text(
+            "证券代码,证券名称,分组,行业,备注,标签\n"
+            "600519,贵州茅台,核心观察,白酒,长期跟踪,核心\n"
+            "300750,宁德时代,新能源,电池,高景气,成长\n"
+            "688981,中芯国际,半导体,芯片,私人观察,科技\n",
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(csv_path),
+                "--out-dir",
+                str(out),
+                "--allow-symbol",
+                "SH600519",
+                "--allow-market",
+                "SH",
+                "--allow-group",
+                "核心",
+                "--allow-industry",
+                "白酒",
+                "--allow-tag",
+                "核心",
+                "--allow-keyword",
+                "长期",
+                "--allow-source",
+                "自选股.csv",
+                "--deny-keyword",
+                "私人",
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = read_events(out)
+        assert len(events) == 1
+        assert events[0]["data"]["symbol"] == "600519"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        audit = manifest["collection_audit"]
+        assert audit["ths_watchlist_scope_policy"]["configured"] is True
+        assert audit["scope_policy_candidate_event_count"] == 3
+        assert audit["scope_policy_retained_event_count"] == 1
+        assert audit["scope_policy_filtered_event_count"] == 2
+        assert audit["scope_policy_filter_reason_counts"] == {
+            "allow_group_mismatch": 2,
+            "allow_industry_mismatch": 2,
+            "allow_keyword_mismatch": 2,
+            "allow_market_mismatch": 1,
+            "allow_symbol_mismatch": 2,
+            "allow_tag_mismatch": 2,
+            "deny_keyword": 1,
+        }
+        proof = manifest["ths_watchlist_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["policy_configured"] is True
+        assert proof["authorization_scope_boundary"]["retained_event_count"] == 1
+        assert proof["authorization_scope_boundary"]["filtered_all"] is False
+        assert proof["complete_attention_universe_claimed"] is False
+
+
+def test_watchlist_scope_policy_filtered_all_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        csv_path = root / "自选股.csv"
+        out = root / "out"
+        csv_path.write_text("证券代码,证券名称\n600519,贵州茅台\n", encoding="utf-8")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(csv_path),
+                "--out-dir",
+                str(out),
+                "--allow-symbol",
+                "688981",
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = read_events(out)
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "ths_watchlist_scope_policy_filtered_all"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["collection_audit"]["ths_watchlist_scope_policy_filtered_all"] is True
+        assert manifest["collection_audit"]["scope_policy_filter_reason_counts"] == {"allow_symbol_mismatch": 1}
+        proof = manifest["ths_watchlist_boundary_proof"]
+        assert proof["proof_level"] == "scope_policy_filtered_all"
+        assert proof["authorization_scope_boundary"]["filtered_all"] is True
+        assert proof["can_enter_finclaw"] is False
+
+
 def test_gap_event() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -247,6 +360,8 @@ def test_local_scan_discovers_watchlist_candidates() -> None:
 
 if __name__ == "__main__":
     test_collect_ths_watchlist_exports()
+    test_watchlist_scope_policy_filters_authorized_attention_universe()
+    test_watchlist_scope_policy_filtered_all_gap()
     test_gap_event()
     test_local_scan_discovers_watchlist_candidates()
     print("ths-watchlist tests passed.")
