@@ -429,6 +429,11 @@ Current status:
 - `manifest.field_coverage` and `manifest.asset_value_summary` tell FinClaw
   which key asset fields are present and summarize this run's authorized values
   by platform.
+- `manifest.asset_boundary_proof` tells FinClaw whether each platform/account
+  has named account refs, asset snapshots, holding surfaces, transaction
+  surfaces, and numeric value fields. Levels are `strong_partial`,
+  `medium_partial`, or `weak_partial`; none of them claim complete account
+  coverage without real account/read-only-screen validation.
 - `manifest.collection_audit` records input count, resolved files, extension
   coverage, HAR entry/platform/endpoint/skip-reason coverage, ZIP
   member/skipped-member counts, parsed record count, emitted event count, and

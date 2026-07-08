@@ -455,6 +455,34 @@ Findings:
   adapter. Real platform HAR samples and full account-boundary proof remain
   pending.
 
+### Wave B4f: P0 China wealth asset-boundary proof pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-asset-boundary-proof-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `china-wealth-assets` to `0.4.3`.
+- Added `manifest.asset_boundary_proof` and mirrored it into
+  `investor_wiki_evidence.v1.json`.
+- The proof checks platform identity, named account refs, asset snapshots,
+  holding surfaces, transaction surfaces, and numeric value fields.
+- Account proof levels are conservative:
+  `strong_partial_account_boundary`, `medium_partial_account_boundary`,
+  `weak_partial_account_boundary`, and `no_account_evidence`.
+- Overall proof remains partial. `complete_asset_boundary_claimed` remains
+  false until real account/read-only-screen validation proves platform and
+  account scope.
+- Fixture validation covers no-input gaps, all expected platforms, account-level
+  strong/medium proof classification, missing account requirements, platform
+  proof summaries, package summary output, and Wiki evidence propagation.
+- This improves FinClaw's ability to distinguish useful fund/wealth asset
+  evidence from incomplete input, but it does not claim one-click real
+  Alipay/Tiantian/Danjuan/Qieman/bank account validation.
+
 ### Wave B5: P0 Email IMAP package and audit pass
 
 Status: `completed-baseline+audit`
@@ -2047,7 +2075,7 @@ Findings:
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF/image samples, Chinese OCR quality review, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
-| 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
+| 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
 
 ## P1 Work Queue
 

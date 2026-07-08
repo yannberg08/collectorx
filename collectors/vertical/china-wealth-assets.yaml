@@ -30,6 +30,7 @@ scope:
     - field_coverage
     - asset_value_summary
     - account_boundary_summary
+    - asset_boundary_proof
     - asset_surface_summary
     - currency_summary
     - transaction_surface_summary
@@ -53,5 +54,5 @@ description: |
   只读界面、导出文件、HAR 浏览器网络响应、ZIP 包或官方账单；HAR 只读取
   投资/基金/理财平台域名白名单内的响应体，不写入请求头、Cookie、
   Authorization 或 URL 查询串，也不碰支付和银行凭证。manifest 会报告字段覆盖、
-  平台覆盖、账户边界、资产面、币种、交易方向、HAR/来源审计和本次输入内的资产金额汇总，
-  但不声明完整资产边界。
+  平台覆盖、账户边界、资产边界证明强度、资产面、币种、交易方向、HAR/来源审计
+  和本次输入内的资产金额汇总，但不声明完整资产边界。

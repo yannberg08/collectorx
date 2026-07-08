@@ -112,6 +112,12 @@ VALUE_FIELDS = ("market_value", "total_asset", "transaction_amount", "available_
 EXPECTED_ASSET_SURFACES = ("asset_snapshot", "fund_holding", "wealth_holding", "cash_management", "fund_transaction")
 HOLDING_SUBTYPES = {"fund_holding", "wealth_holding", "cash_management"}
 TRADE_SUBTYPES = {"fund_transaction"}
+ACCOUNT_PROOF_LEVEL_ORDER = (
+    "strong_partial_account_boundary",
+    "medium_partial_account_boundary",
+    "weak_partial_account_boundary",
+    "no_account_evidence",
+)
 INVESTOR_WIKI_SUBDIMENSION_RULES = {
     "inv-risk-view": {
         "support_level": "strong",
@@ -712,6 +718,7 @@ def build_manifest(
         "currency_summary": currency_summary(events),
         "asset_surface_summary": asset_surface_summary(events),
         "account_boundary_summary": account_boundary_summary(events),
+        "asset_boundary_proof": asset_boundary_proof(events),
         "platform_coverage": platform_coverage(platform_counts),
         "evidence_policy": {
             "complete_asset_boundary_claimed": False,
@@ -764,6 +771,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "currency_summary": currency_summary(events),
             "asset_surface_summary": asset_surface_summary(events),
             "account_boundary_summary": account_boundary_summary(events),
+            "asset_boundary_proof": asset_boundary_proof(events),
             "asset_boundary_source": True,
             "complete_asset_boundary_claimed": False,
         },
@@ -935,6 +943,218 @@ def account_boundary_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "requires_real_account_validation": True,
         "read_only_authorized_source": True,
     }
+
+
+def asset_boundary_proof(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = non_gap_events(events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
+    if not usable_events:
+        return {
+            "proof_scope": "none",
+            "overall_proof_level": "no_authorized_asset_evidence",
+            "complete_asset_boundary_claimed": False,
+            "requires_real_account_validation": True,
+            "requirements": asset_boundary_proof_requirements(),
+            "account_proof_level_counts": {},
+            "expected_p0_platforms": list(EXPECTED_P0_PLATFORMS),
+            "missing_expected_platforms": list(EXPECTED_P0_PLATFORMS),
+            "platform_proofs": platform_boundary_proofs({}, platform_counts),
+            "account_proofs": [],
+            "missing_global_requirements": ["authorized_asset_input"],
+        }
+
+    grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    for event in usable_events:
+        data = event.get("data") or {}
+        platform = str(data.get("platform") or "unknown")
+        account = str(data.get("account") or "unknown")
+        grouped[(platform, account)].append(event)
+
+    account_proofs = [
+        build_account_boundary_proof(platform, account, account_events)
+        for (platform, account), account_events in sorted(grouped.items())
+    ]
+    proofs_by_platform: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for proof in account_proofs:
+        proofs_by_platform[str(proof["platform"])].append(proof)
+    level_counts = Counter(str(proof["proof_level"]) for proof in account_proofs)
+    platform_proofs = platform_boundary_proofs(proofs_by_platform, platform_counts)
+    missing_global = []
+    if all(proof["account_ref"] == "unknown" for proof in account_proofs):
+        missing_global.append("named_account_refs")
+    if not any(proof["has_asset_snapshot"] for proof in account_proofs):
+        missing_global.append("asset_snapshot_surface")
+    if not any(proof["has_holding_surface"] for proof in account_proofs):
+        missing_global.append("holding_surface")
+    if not any(proof["has_transaction_surface"] for proof in account_proofs):
+        missing_global.append("transaction_surface")
+    if not any(proof["has_value_fields"] for proof in account_proofs):
+        missing_global.append("numeric_value_fields")
+    if any(proof["platform"] == "unknown" for proof in account_proofs):
+        missing_global.append("known_platform")
+    missing_platforms = [platform for platform in EXPECTED_P0_PLATFORMS if platform_counts.get(platform, 0) == 0]
+    if missing_platforms:
+        missing_global.append("expected_platform_coverage")
+    return {
+        "proof_scope": "partial_authorized_input",
+        "overall_proof_level": overall_boundary_proof_level(level_counts),
+        "complete_asset_boundary_claimed": False,
+        "requires_real_account_validation": True,
+        "requirements": asset_boundary_proof_requirements(),
+        "account_proof_level_counts": dict(sorted(level_counts.items())),
+        "expected_p0_platforms": list(EXPECTED_P0_PLATFORMS),
+        "missing_expected_platforms": missing_platforms,
+        "platform_proofs": platform_proofs,
+        "account_proofs": account_proofs,
+        "missing_global_requirements": missing_global,
+    }
+
+
+def build_account_boundary_proof(platform: str, account: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    subtype_counts = Counter(str((event.get("data") or {}).get("subtype") or "unknown") for event in events)
+    value_field_counts = {
+        field: sum(1 for event in events if isinstance((event.get("data") or {}).get(field), (int, float)))
+        for field in VALUE_FIELDS
+    }
+    surfaces = sorted(surface for surface, count in subtype_counts.items() if count)
+    has_named_account = account != "unknown"
+    has_asset_snapshot = subtype_counts.get("asset_snapshot", 0) > 0
+    has_holding_surface = any(subtype_counts.get(subtype, 0) > 0 for subtype in HOLDING_SUBTYPES)
+    has_transaction_surface = any(subtype_counts.get(subtype, 0) > 0 for subtype in TRADE_SUBTYPES)
+    has_value_fields = any(value_field_counts.values())
+    has_product_identity = any(product_identity(event.get("data") or {}) for event in events)
+    proof_level = account_boundary_proof_level(
+        has_named_account=has_named_account,
+        has_value_fields=has_value_fields,
+        has_asset_snapshot=has_asset_snapshot,
+        has_holding_surface=has_holding_surface,
+        has_transaction_surface=has_transaction_surface,
+    )
+    missing_requirements = []
+    if platform == "unknown":
+        missing_requirements.append("known_platform")
+    if not has_named_account:
+        missing_requirements.append("named_account_ref")
+    if not has_value_fields:
+        missing_requirements.append("numeric_value_fields")
+    if not has_asset_snapshot:
+        missing_requirements.append("asset_snapshot")
+    if not has_holding_surface:
+        missing_requirements.append("holding_surface")
+    if not has_transaction_surface:
+        missing_requirements.append("transaction_surface")
+    return {
+        "platform": platform,
+        "account_ref": account,
+        "event_count": len(events),
+        "proof_level": proof_level,
+        "has_named_account": has_named_account,
+        "has_asset_snapshot": has_asset_snapshot,
+        "has_holding_surface": has_holding_surface,
+        "has_transaction_surface": has_transaction_surface,
+        "has_value_fields": has_value_fields,
+        "has_product_identity": has_product_identity,
+        "asset_surfaces": surfaces,
+        "subtype_counts": dict(sorted(subtype_counts.items())),
+        "value_field_counts": {field: count for field, count in sorted(value_field_counts.items()) if count},
+        "missing_requirements": missing_requirements,
+        "value_summary": account_value_summary(events),
+    }
+
+
+def account_boundary_proof_level(
+    *,
+    has_named_account: bool,
+    has_value_fields: bool,
+    has_asset_snapshot: bool,
+    has_holding_surface: bool,
+    has_transaction_surface: bool,
+) -> str:
+    if has_named_account and has_value_fields and has_asset_snapshot and has_holding_surface:
+        return "strong_partial_account_boundary"
+    if has_named_account and has_value_fields and (has_asset_snapshot or has_holding_surface or has_transaction_surface):
+        return "medium_partial_account_boundary"
+    if has_value_fields or has_asset_snapshot or has_holding_surface or has_transaction_surface:
+        return "weak_partial_account_boundary"
+    return "no_account_evidence"
+
+
+def platform_boundary_proofs(
+    proofs_by_platform: Dict[str, List[Dict[str, Any]]],
+    platform_counts: Counter,
+) -> List[Dict[str, Any]]:
+    platforms = list(EXPECTED_P0_PLATFORMS)
+    for platform in sorted(platform_counts):
+        if platform not in platforms and platform not in {"", "unknown"}:
+            platforms.append(str(platform))
+    if platform_counts.get("unknown"):
+        platforms.append("unknown")
+
+    proofs = []
+    for platform in platforms:
+        account_proofs = proofs_by_platform.get(platform, [])
+        account_level_counts = Counter(str(proof["proof_level"]) for proof in account_proofs)
+        surfaces = sorted(
+            {
+                surface
+                for proof in account_proofs
+                for surface in proof.get("asset_surfaces", [])
+            }
+        )
+        missing_requirements = []
+        if platform_counts.get(platform, 0) == 0:
+            missing_requirements.append("platform_input_missing")
+        if not any(proof.get("has_named_account") for proof in account_proofs):
+            missing_requirements.append("named_account_refs")
+        if not any(proof.get("has_value_fields") for proof in account_proofs):
+            missing_requirements.append("numeric_value_fields")
+        if not any(proof.get("has_asset_snapshot") for proof in account_proofs):
+            missing_requirements.append("asset_snapshot")
+        if not any(proof.get("has_holding_surface") for proof in account_proofs):
+            missing_requirements.append("holding_surface")
+        if not any(proof.get("has_transaction_surface") for proof in account_proofs):
+            missing_requirements.append("transaction_surface")
+        proofs.append(
+            {
+                "platform": platform,
+                "event_count": int(platform_counts.get(platform, 0)),
+                "account_group_count": len(account_proofs),
+                "named_account_group_count": sum(1 for proof in account_proofs if proof.get("has_named_account")),
+                "proof_level": highest_account_proof_level(account_level_counts),
+                "account_proof_level_counts": dict(sorted(account_level_counts.items())),
+                "asset_surfaces": surfaces,
+                "missing_requirements": missing_requirements,
+            }
+        )
+    return proofs
+
+
+def highest_account_proof_level(level_counts: Counter) -> str:
+    for level in ACCOUNT_PROOF_LEVEL_ORDER:
+        if level_counts.get(level):
+            return level
+    return "no_account_evidence"
+
+
+def overall_boundary_proof_level(level_counts: Counter) -> str:
+    highest = highest_account_proof_level(level_counts)
+    return {
+        "strong_partial_account_boundary": "strong_partial_asset_boundary",
+        "medium_partial_account_boundary": "medium_partial_asset_boundary",
+        "weak_partial_account_boundary": "weak_partial_asset_boundary",
+    }.get(highest, "no_authorized_asset_evidence")
+
+
+def asset_boundary_proof_requirements() -> List[str]:
+    return [
+        "known_platform",
+        "named_account_ref",
+        "asset_snapshot",
+        "holding_surface",
+        "transaction_surface",
+        "numeric_value_fields",
+        "real_account_or_readonly_screen_validation_before_complete_boundary_claim",
+    ]
 
 
 def account_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:

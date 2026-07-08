@@ -53,6 +53,11 @@ def test_collect_without_input_gap() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_audit"]["resolved_input_file_count"] == 0
         assert manifest["collection_audit"]["complete_asset_boundary_claimed"] is False
+        proof = manifest["asset_boundary_proof"]
+        assert proof["proof_scope"] == "none"
+        assert proof["overall_proof_level"] == "no_authorized_asset_evidence"
+        assert proof["complete_asset_boundary_claimed"] is False
+        assert proof["missing_global_requirements"] == ["authorized_asset_input"]
 
 
 def test_collects_mixed_platform_json_and_sanitizes_raw() -> None:
@@ -438,10 +443,39 @@ def test_manifest_reports_account_asset_currency_and_transaction_boundaries() ->
         assert manifest["evidence_policy"]["personal_authorized_assets_only"] is True
         assert manifest["evidence_policy"]["does_not_place_orders"] is True
         assert manifest["evidence_policy"]["does_not_move_money"] is True
+        proof = manifest["asset_boundary_proof"]
+        assert proof["proof_scope"] == "partial_authorized_input"
+        assert proof["overall_proof_level"] == "strong_partial_asset_boundary"
+        assert proof["complete_asset_boundary_claimed"] is False
+        assert proof["requires_real_account_validation"] is True
+        assert proof["missing_expected_platforms"] == []
+        assert proof["missing_global_requirements"] == []
+        assert proof["account_proof_level_counts"] == {
+            "medium_partial_account_boundary": 4,
+            "strong_partial_account_boundary": 1,
+        }
+        alipay_proof = next(item for item in proof["account_proofs"] if item["platform"] == "alipay")
+        assert alipay_proof["account_ref"] == "alipay-main"
+        assert alipay_proof["proof_level"] == "strong_partial_account_boundary"
+        assert alipay_proof["has_asset_snapshot"] is True
+        assert alipay_proof["has_holding_surface"] is True
+        assert alipay_proof["has_transaction_surface"] is False
+        assert alipay_proof["missing_requirements"] == ["transaction_surface"]
+        danjuan_proof = next(item for item in proof["account_proofs"] if item["platform"] == "danjuan")
+        assert danjuan_proof["proof_level"] == "medium_partial_account_boundary"
+        assert danjuan_proof["missing_requirements"] == ["asset_snapshot", "holding_surface"]
+        bank_platform = next(item for item in proof["platform_proofs"] if item["platform"] == "bank-wealth")
+        assert bank_platform["proof_level"] == "medium_partial_account_boundary"
+        assert bank_platform["missing_requirements"] == ["asset_snapshot", "transaction_surface"]
+        summary = (out / "SUMMARY.md").read_text(encoding="utf-8")
+        assert "资产边界证明：`strong_partial_asset_boundary`" in summary
+        assert "缺失平台：`none`" in summary
 
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["account_boundary_summary"]["observed_named_account_group_count"] == 5
         assert evidence["coverage_summary"]["asset_surface_summary"]["missing_expected_asset_surfaces"] == []
+        assert evidence["coverage_summary"]["asset_boundary_proof"]["overall_proof_level"] == "strong_partial_asset_boundary"
+        assert evidence["coverage_summary"]["asset_boundary_proof"]["complete_asset_boundary_claimed"] is False
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
         portfolio_preference = next(

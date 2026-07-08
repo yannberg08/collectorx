@@ -38,6 +38,8 @@ def write_package(out: Path, events: list[dict], *, collected_at: str, collectio
                 "# 中国基金理财资产采集包",
                 "",
                 f"- 事件数：{len(events)}",
+                f"- 资产边界证明：`{manifest['asset_boundary_proof']['overall_proof_level']}`",
+                f"- 缺失平台：`{', '.join(manifest['asset_boundary_proof']['missing_expected_platforms']) or 'none'}`",
                 "- 用途：补齐券商账户之外的基金、理财和现金管理资产边界。",
                 "- 边界：不采支付密码、银行密码、消费流水；不声明完整资产边界，除非平台级真实验证完成。",
             ]
