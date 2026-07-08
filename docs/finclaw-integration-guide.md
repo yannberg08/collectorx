@@ -376,15 +376,20 @@ Current status:
 - Parses authorized JSON/JSONL/CSV/TSV/XLSX/XLSM/HTML/TXT/ZIP exports for
   watchlists, follows, posts, comments, favorites, saved pages, and owner
   portfolio/rebalance records.
+- Also accepts user-authorized browser network `.har` exports and only reads
+  `xueqiu.com` response bodies. Request headers, cookies, Authorization values,
+  and URL query strings are stripped before events, manifest, or Wiki evidence
+  are written.
 - Normalizes Snowball-like `statuses/list/data/items/stocks/cubes` payloads,
   preserves ZIP member provenance, strips credential-like keys from retained raw
   metadata, and writes a standard `investor_wiki_evidence.v1.json`.
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
-  counts, parsed records, pagination marker fields, activity field coverage, and
-  source-surface coverage.
+  counts, HAR entry/endpoint/skip-reason coverage, parsed records, pagination
+  marker fields, activity field coverage, and source-surface coverage.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade
   evidence.
-- Not yet a real login/session collector.
+- Not yet a one-click login/session collector; the HAR path is an authorized
+  browser export baseline for real-account responses.
 - Not a broker-confirmed trade source.
 
 ### 中国基金理财资产

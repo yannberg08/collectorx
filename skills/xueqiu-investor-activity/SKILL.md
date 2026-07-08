@@ -32,15 +32,24 @@ python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
 python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
   --input ~/Downloads/雪球自选.csv \
   --event-export ~/Desktop/xueqiu-events.jsonl
+
+python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
+  --input ~/Downloads/xueqiu-network.har \
+  --out-dir ~/Desktop/xueqiu-investor-collect
 ```
 
-支持 JSON/JSONL/CSV/TSV/XLSX/XLSM/HTML/TXT/Markdown/ZIP。解析器会归一化常见雪球/Snowball
+支持 JSON/JSONL/CSV/TSV/XLSX/XLSM/HTML/TXT/Markdown/HAR/ZIP。解析器会归一化常见雪球/Snowball
 结构，如 `statuses`、`list`、`data.items`、`stocks`、`cubes` 和
 `rebalancing_histories`，并剔除 cookie、token、password 等凭据类字段。
+
+HAR 是用户已登录雪球后、明确授权选择的浏览器网络导出文件。采集器只读取
+`xueqiu.com` 域名的响应体，记录接口路径、状态、行号和审计计数；请求头、
+Cookie、Authorization 和 URL 查询串不会写入事件、manifest 或 Wiki evidence。
 
 ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会明确
 标注 `xueqiu_is_broker_trade_source: false`，雪球只作为关注网络、观点表达和
 模拟组合证据，不能替代券商强交易事实。manifest 还会记录输入文件数、扩展名覆盖、
-ZIP 成员/跳过成员、解析记录数、分页标记字段、字段覆盖和来源面覆盖。
+ZIP 成员/跳过成员、HAR 网络包覆盖、跳过原因、解析记录数、分页标记字段、
+字段覆盖和来源面覆盖。
 
 没有授权输入时，采集器只输出缺口状态，不伪造数据。

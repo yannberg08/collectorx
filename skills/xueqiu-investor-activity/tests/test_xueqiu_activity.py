@@ -131,6 +131,111 @@ def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:
         assert manifest["field_coverage"]["fields"]["content_preview"]["present"] >= 1
 
 
+def test_collects_har_network_export_without_leaking_secrets() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        har_path = root / "xueqiu-network.har"
+        out = root / "out"
+        response_payload = {
+            "data": {
+                "items": [
+                    {
+                        "type": "status",
+                        "id": 2001,
+                        "max_id": 2001,
+                        "text": "继续跟踪 $贵州茅台(SH600519)$，等待更好的赔率。",
+                        "created_at": "2026-07-08T09:30:00+08:00",
+                        "user": {"id": 42, "screen_name": "价值研究员"},
+                        "cookie": "must-not-leak",
+                    }
+                ]
+            }
+        }
+        har_path.write_text(
+            json.dumps(
+                {
+                    "log": {
+                        "entries": [
+                            {
+                                "request": {
+                                    "url": "https://xueqiu.com/statuses/user_timeline.json?xq_a_token=must-not-leak&count=20",
+                                    "headers": [
+                                        {"name": "Cookie", "value": "xq_a_token=must-not-leak"},
+                                        {"name": "Authorization", "value": "Bearer must-not-leak"},
+                                    ],
+                                    "cookies": [{"name": "xq_a_token", "value": "must-not-leak"}],
+                                },
+                                "response": {
+                                    "status": 200,
+                                    "headers": [{"name": "Set-Cookie", "value": "xq_r_token=must-not-leak"}],
+                                    "content": {"mimeType": "application/json", "text": json.dumps(response_payload, ensure_ascii=False)},
+                                },
+                            },
+                            {
+                                "request": {"url": "https://example.com/analytics"},
+                                "response": {"status": 200, "content": {"mimeType": "application/json", "text": "{}"}},
+                            },
+                            {
+                                "request": {"url": "https://xueqiu.com/v4/statuses/public_timeline.json"},
+                                "response": {"status": 200, "content": {"mimeType": "text/html", "text": "<html>not json</html>"}},
+                            },
+                        ]
+                    }
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(har_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T13:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        event = events[0]
+        assert event["data"]["activity_type"] == "post"
+        assert event["data"]["symbols"] == ["SH600519"]
+        assert event["data"]["author"] == "价值研究员"
+        assert event["raw_ref"]["parser"] == "har"
+        assert event["raw_ref"]["har_entry"] == 1
+        assert event["raw_ref"]["har_endpoint"] == "/statuses/user_timeline.json"
+        assert "?" not in event["raw_ref"]["har_endpoint"]
+        serialized_events = json.dumps(events, ensure_ascii=False)
+        assert "must-not-leak" not in serialized_events
+        assert "xq_a_token" not in serialized_events
+        assert "Authorization" not in serialized_events
+        assert "Cookie" not in serialized_events
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["extension_counts"] == {".har": 1}
+        assert audit["authorized_browser_network_export_used"] is True
+        assert audit["browser_network_export_file_count"] == 1
+        assert audit["har_entry_count"] == 3
+        assert audit["har_xueqiu_entry_count"] == 2
+        assert audit["har_response_record_count"] == 1
+        assert audit["har_skipped_entry_count"] == 2
+        assert audit["har_skip_reason_counts"] == {"non_json_response": 1, "non_xueqiu_url": 1}
+        assert audit["har_endpoint_counts"] == {
+            "/statuses/user_timeline.json": 1,
+            "/v4/statuses/public_timeline.json": 1,
+        }
+        assert audit["har_secret_material_stripped_count"] >= 4
+        assert audit["har_query_string_stripped_count"] == 1
+
+
 def test_collects_html_saved_page_and_manifest_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -259,6 +364,7 @@ if __name__ == "__main__":
     test_collect_watchlist_csv()
     test_collect_posts_json()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
+    test_collects_har_network_export_without_leaking_secrets()
     test_collects_html_saved_page_and_manifest_audit()
     test_syncs_package_to_soulmirror_lake()
     test_collects_zip_excel_activity_package()
