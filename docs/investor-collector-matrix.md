@@ -46,7 +46,7 @@
 | Collector | Skill | 目标 |
 | --- | --- | --- |
 | `hk-us-brokerage` | `hk-us-brokerage` | vertical：富途、老虎、盈透等港美股资产、持仓、成交、委托、资金流水、分红、换汇，含授权 ZIP、券商/交易表/字段覆盖、账户边界、币种市场和费用税费保证金 manifest |
-| `pro-terminal-usage` | `pro-terminal-usage` | vertical：Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作区、自选、搜索、下载、模板、因子、数据集、字段、函数代码，含授权 ZIP 和终端/活动/字段覆盖 manifest |
+| `pro-terminal-usage` | `pro-terminal-usage` | vertical：Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作区、自选、搜索、下载、模板、因子、数据集、字段、函数代码，含授权 ZIP、终端/活动/字段覆盖和工作流主题面谱 manifest |
 | `social-activity` | `social-activity` | generic：微博、B站、小红书用户关注/点赞/收藏/观看/评论/分享，含授权 ZIP、弱证据策略和平台/动作/字段覆盖 manifest |
 | `social-investment-influence` | `investor-source-collectors` | lens：投资内容影响源、创作者、收藏/点赞/观看，只能作为弱证据 |
 

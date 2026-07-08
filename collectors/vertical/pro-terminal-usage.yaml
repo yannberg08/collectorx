@@ -30,6 +30,8 @@ scope:
     - terminal_coverage_manifest
     - activity_coverage_manifest
     - workflow_field_coverage_manifest
+    - workflow_topics
+    - workflow_topic_summary
     - workflow_surface_summary
     - source_audit_manifest
     - archive_member_provenance
@@ -47,5 +49,5 @@ scope:
 description: |
   专业终端是投资垂直工作流源。只采用户工作台、搜索、自选和模型使用痕迹，
   支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP 工作流包，并报告终端/活动/字段覆盖、
-  工作流可用面、逐输入来源审计、跳过原因和许可边界。
+  工作流主题面谱、工作流可用面、逐输入来源审计、跳过原因和许可边界。
   不复制厂商数据库内容。

@@ -1575,6 +1575,34 @@ Findings:
   members, missing input gap audit, credential/license filtering, ZIP limit
   accounting, workflow field coverage, and license/evidence policy.
 
+### Wave W4: P2 professional terminal workflow topic pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-pro-terminal-workflow-topic-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `pro-terminal-usage` to `0.2.4`.
+- Added per-event `workflow_topics`, `primary_workflow_topic`, and
+  `workflow_topic_terms`.
+- Added workflow topic coverage to `manifest.workflow_surface_summary` and
+  `investor_wiki_evidence.v1.json`, including topic counts, primary topic
+  counts, terminal/topic counts, activity/topic counts, and missing expected
+  workflow topics.
+- Covered macro policy, market strategy, industry themes, company
+  fundamentals, valuation models, credit/fixed income, factor/quant,
+  portfolio monitoring, data export, and HK/US market workflow themes.
+- Kept the license-safe boundary unchanged: topic classification uses the
+  user's authorized workflow metadata and capped previews, not vendor database
+  mirroring or licensed content redistribution.
+- Fixture validation covers Bloomberg credit/search/download/template/factor
+  workflows, Choice/Wind workbook watchlist and macro export workflows, iFinD
+  watchlist ZIP provenance, unsafe ZIP member skipping, evidence summary
+  routing, and all expected workflow topics.
+
 ### Wave X: P2 social activity coverage pass 1
 
 Status: `completed-baseline`
@@ -1680,7 +1708,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
-| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
+| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false-positive review, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
 ## Git Practice

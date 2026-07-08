@@ -50,6 +50,8 @@ SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
 SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 CONTENT_PREVIEW_MAX_CHARS = 800
 RECOMMENDED_WORKFLOW_FIELDS = (
+    "workflow_topics",
+    "primary_workflow_topic",
     "workspace",
     "project",
     "module",
@@ -69,6 +71,143 @@ RECOMMENDED_WORKFLOW_FIELDS = (
     "download_format",
     "file_name",
 )
+TERMINAL_WORKFLOW_TOPIC_ORDER = (
+    "macro_policy",
+    "market_strategy",
+    "industry_theme",
+    "company_fundamental",
+    "valuation_model",
+    "credit_fixed_income",
+    "factor_quant",
+    "portfolio_monitoring",
+    "data_export",
+    "hk_us_market",
+    "unclassified_workflow_topic",
+)
+TERMINAL_WORKFLOW_TOPIC_TERMS = {
+    "macro_policy": {
+        "宏观",
+        "政策",
+        "利率",
+        "汇率",
+        "央行",
+        "货币",
+        "财政",
+        "美联储",
+        "社融",
+        "十年国债",
+        "M2",
+        "CPI",
+        "PPI",
+        "EDB",
+    },
+    "market_strategy": {
+        "策略",
+        "配置",
+        "仓位",
+        "风格",
+        "择时",
+        "红利",
+        "market strategy",
+        "allocation",
+        "style",
+    },
+    "industry_theme": {
+        "行业",
+        "产业链",
+        "景气",
+        "主题",
+        "半导体",
+        "新能源",
+        "医药",
+        "互联网",
+        "设备",
+        "国产化",
+        "AI",
+        "semiconductor",
+    },
+    "company_fundamental": {
+        "财务",
+        "财报",
+        "基本面",
+        "收入",
+        "利润",
+        "现金流",
+        "毛利率",
+        "ROE",
+        "revenue",
+        "EBITDA",
+        "cash flow",
+        "FA",
+    },
+    "valuation_model": {
+        "估值",
+        "估值表",
+        "DCF",
+        "PE",
+        "PB",
+        "PS",
+        "EV/EBITDA",
+        "valuation",
+        "model",
+        "template",
+    },
+    "credit_fixed_income": {
+        "信用",
+        "利差",
+        "债券",
+        "固收",
+        "转债",
+        "违约",
+        "credit",
+        "spread",
+        "bond",
+        "OAS",
+    },
+    "factor_quant": {
+        "因子",
+        "指标",
+        "量化",
+        "alpha",
+        "momentum",
+        "factor",
+    },
+    "portfolio_monitoring": {
+        "自选",
+        "组合",
+        "盯盘",
+        "监控",
+        "提醒",
+        "watchlist",
+        "portfolio",
+        "monitor",
+        "alert",
+    },
+    "data_export": {
+        "下载",
+        "导出",
+        "数据集",
+        "字段",
+        "download",
+        "export",
+        "xlsx",
+        "csv",
+        "dataset",
+        "field",
+    },
+    "hk_us_market": {
+        "港股",
+        "美股",
+        "中概股",
+        "恒生",
+        "纳斯达克",
+        "HK",
+        "US",
+        "NVDA",
+        "00700",
+        "09988",
+    },
+}
 SECTION_ACTIVITY_TYPES = {
     "usage": None,
     "workspaces": "workspace",
@@ -555,10 +694,23 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     title = first(record, ["title", "name", "workspace", "template", "model", "标题", "名称", "工作区", "模板"]) or Path(path_label).stem
     text = first(record, ["text", "content", "description", "note", "summary", "正文", "内容", "备注", "说明"]) or ""
     query = first(record, ["query", "keyword", "search", "搜索词", "关键词"])
+    symbols = symbols_for(record)
+    workflow_topics, workflow_topic_terms = classify_workflow_topics(
+        record,
+        title=title,
+        text=text,
+        query=query,
+        symbols=symbols,
+        activity_type=activity_type,
+        terminal=terminal,
+    )
     event_time = first(record, ["time", "date", "created_at", "updated_at", "used_at", "downloaded_at", "时间", "日期", "使用时间", "下载时间"])
     data = {
         "activity_type": activity_type,
         "terminal": terminal,
+        "workflow_topics": workflow_topics,
+        "primary_workflow_topic": workflow_topics[0] if workflow_topics else "unclassified_workflow_topic",
+        "workflow_topic_terms": workflow_topic_terms,
         "title": title,
         "source_section": first(record, ["source_section", "sheet"]),
         "workspace": first(record, ["workspace", "workspace_name", "工作区", "工作台"]),
@@ -567,7 +719,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "function_code": first(record, ["function_code", "command", "api", "formula", "函数", "命令", "公式"]),
         "menu_path": first(record, ["menu_path", "navigation", "path", "菜单路径", "导航路径"]),
         "query": query,
-        "symbols": symbols_for(record),
+        "symbols": symbols,
         "universe": list_values(record, ["universe", "scope", "stock_pool", "股票池", "样本空间"]),
         "industries": list_values(record, ["industries", "industry", "行业"]),
         "regions": list_values(record, ["regions", "region", "markets", "market", "地区", "市场"]),
@@ -807,10 +959,34 @@ def usable_terminal_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]
     return [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
 
 
-def workflow_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+def workflow_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     usable_events = usable_terminal_events(events)
+    workflow_topic_counts: Counter[str] = Counter()
+    primary_topic_counts: Counter[str] = Counter()
+    terminal_topic_counts: Counter[str] = Counter()
+    activity_topic_counts: Counter[str] = Counter()
+    for event in usable_events:
+        data = event.get("data") or {}
+        topics = data.get("workflow_topics") if isinstance(data.get("workflow_topics"), list) else []
+        if not topics:
+            topics = ["unclassified_workflow_topic"]
+        for topic in topics:
+            topic_value = str(topic)
+            workflow_topic_counts[topic_value] += 1
+            terminal_topic_counts[f"{data.get('terminal', 'unknown')}:{topic_value}"] += 1
+            activity_topic_counts[f"{data.get('activity_type', 'unknown')}:{topic_value}"] += 1
+        primary_topic_counts[str(data.get("primary_workflow_topic") or topics[0])] += 1
     return {
         "workflow_event_count": len(usable_events),
+        "expected_workflow_topics": list(TERMINAL_WORKFLOW_TOPIC_ORDER[:-1]),
+        "workflow_topic_counts": ordered_counts(workflow_topic_counts, TERMINAL_WORKFLOW_TOPIC_ORDER),
+        "primary_workflow_topic_counts": ordered_counts(primary_topic_counts, TERMINAL_WORKFLOW_TOPIC_ORDER),
+        "missing_expected_workflow_topics": [
+            topic for topic in TERMINAL_WORKFLOW_TOPIC_ORDER[:-1] if workflow_topic_counts.get(topic, 0) == 0
+        ],
+        "terminal_topic_counts": dict(sorted(terminal_topic_counts.items())),
+        "activity_topic_counts": dict(sorted(activity_topic_counts.items())),
+        "events_with_workflow_topics": sum(1 for event in usable_events if (event.get("data") or {}).get("workflow_topics")),
         "events_with_workspace": sum(1 for event in usable_events if (event.get("data") or {}).get("workspace")),
         "events_with_project": sum(1 for event in usable_events if (event.get("data") or {}).get("project")),
         "events_with_module": sum(1 for event in usable_events if (event.get("data") or {}).get("module")),
@@ -893,9 +1069,112 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "personal_workflow_only": True,
             "workflow_metadata_only": True,
             "vendor_database_mirror": False,
+            "workflow_surface_summary": workflow_surface_summary(events),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
+
+
+def classify_workflow_topics(
+    record: Dict[str, Any],
+    *,
+    title: str,
+    text: str,
+    query: Optional[str],
+    symbols: List[str],
+    activity_type: str,
+    terminal: str,
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    parts: List[str] = [
+        title,
+        text,
+        query or "",
+        activity_type,
+        terminal,
+        " ".join(symbols),
+        " ".join(list_values(record, ["universe", "scope", "stock_pool", "股票池", "样本空间"])),
+        " ".join(list_values(record, ["industries", "industry", "行业"])),
+        " ".join(list_values(record, ["regions", "region", "markets", "market", "地区", "市场"])),
+        " ".join(list_values(record, ["factors", "factor", "因子", "指标"])),
+        " ".join(list_values(record, ["datasets", "dataset", "database", "table", "数据集", "数据库", "表"])),
+        " ".join(list_values(record, ["fields", "field", "columns", "indicators", "字段", "列", "指标"])),
+    ]
+    for key in (
+        "workspace",
+        "workspace_name",
+        "project",
+        "project_name",
+        "strategy",
+        "portfolio",
+        "module",
+        "function",
+        "page",
+        "screen",
+        "function_code",
+        "command",
+        "api",
+        "formula",
+        "menu_path",
+        "navigation",
+        "template_name",
+        "template",
+        "model_name",
+        "download_format",
+        "format",
+        "file_name",
+        "filename",
+        "工作区",
+        "项目",
+        "策略",
+        "组合",
+        "模块",
+        "函数",
+        "命令",
+        "菜单路径",
+        "模板名称",
+        "文件名",
+    ):
+        value = first(record, [key])
+        if value:
+            parts.append(value)
+    searchable = "\n".join(parts)
+    lowered = searchable.lower()
+    matches: Dict[str, List[str]] = {}
+    for topic in TERMINAL_WORKFLOW_TOPIC_ORDER[:-1]:
+        hits = topic_term_hits(TERMINAL_WORKFLOW_TOPIC_TERMS[topic], searchable, lowered)
+        if hits:
+            matches[topic] = hits
+    if activity_type == "download":
+        matches.setdefault("data_export", []).append("activity:download")
+    if activity_type == "watchlist":
+        matches.setdefault("portfolio_monitoring", []).append("activity:watchlist")
+    if activity_type == "factor_attention":
+        matches.setdefault("factor_quant", []).append("activity:factor_attention")
+    if activity_type == "model_template" and "valuation_model" not in matches:
+        matches.setdefault("valuation_model", []).append("activity:model_template")
+    if any(re.search(r"(\.|\s)(hk|us)\b", symbol.lower()) or " hk " in f" {symbol.lower()} " for symbol in symbols):
+        matches.setdefault("hk_us_market", []).append("symbol_market")
+    topics = [topic for topic in TERMINAL_WORKFLOW_TOPIC_ORDER[:-1] if topic in matches]
+    return topics, {topic: matches[topic][:8] for topic in topics}
+
+
+def topic_term_hits(terms: Iterable[str], text: str, lowered: str) -> List[str]:
+    hits: List[str] = []
+    for term in sorted(terms):
+        if term.isascii():
+            if re.search(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])", lowered):
+                hits.append(term)
+        elif term in text:
+            hits.append(term)
+    return hits
+
+
+def ordered_counts(counts: Counter[str], order: Iterable[str]) -> Dict[str, int]:
+    result = {key: counts[key] for key in order if counts.get(key)}
+    for key, value in sorted(counts.items()):
+        if key not in result:
+            result[key] = value
+    return result
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

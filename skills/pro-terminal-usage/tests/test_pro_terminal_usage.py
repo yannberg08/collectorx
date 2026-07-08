@@ -79,16 +79,22 @@ def test_collect_terminal_workflow_exports() -> None:
         assert len(events) == 5
         assert {event["data"]["activity_type"] for event in events} == {"download", "model_template", "search", "watchlist", "workspace"}
         assert {event["data"]["terminal"] for event in events} == {"choice", "ifind", "wind"}
+        assert all(event["data"].get("workflow_topics") for event in events)
         watchlist = next(event for event in events if event["data"]["activity_type"] == "watchlist")
         assert watchlist["kind"] == "watchlist"
         assert watchlist["data"]["symbols"] == ["00700.HK", "09988.HK"]
         model = next(event for event in events if event["data"]["activity_type"] == "model_template")
         assert "PE" in model["data"]["factors"]
+        assert "valuation_model" in model["data"]["workflow_topics"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_terminal_usage"] is False
         assert manifest["collection_readiness"]["license_boundary"] == "workflow_metadata_only"
+        assert manifest["workflow_surface_summary"]["events_with_workflow_topics"] == 5
+        assert manifest["workflow_surface_summary"]["workflow_topic_counts"]["macro_policy"] == 1
+        assert manifest["workflow_surface_summary"]["workflow_topic_counts"]["valuation_model"] >= 1
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["licensed_content_mirrored"] is False
+        assert evidence["coverage_summary"]["workflow_surface_summary"]["events_with_workflow_topics"] == 5
         assert evidence["generated_from"]["event_count"] == 5
 
 
@@ -205,6 +211,22 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert manifest["activity_coverage"]["missing_expected_activities"] == []
         assert manifest["workflow_field_coverage"]["missing_recommended_fields"] == []
         assert manifest["workflow_surface_summary"]["workflow_event_count"] == 8
+        assert manifest["workflow_surface_summary"]["events_with_workflow_topics"] == 8
+        assert manifest["workflow_surface_summary"]["missing_expected_workflow_topics"] == []
+        assert manifest["workflow_surface_summary"]["workflow_topic_counts"] == {
+            "macro_policy": 1,
+            "market_strategy": 1,
+            "industry_theme": 3,
+            "company_fundamental": 1,
+            "valuation_model": 1,
+            "credit_fixed_income": 4,
+            "factor_quant": 1,
+            "portfolio_monitoring": 3,
+            "data_export": 2,
+            "hk_us_market": 4,
+        }
+        assert manifest["workflow_surface_summary"]["activity_topic_counts"]["download:data_export"] == 2
+        assert manifest["workflow_surface_summary"]["terminal_topic_counts"]["bloomberg:credit_fixed_income"] == 4
         assert manifest["workflow_surface_summary"]["events_with_symbols"] >= 3
         assert manifest["workflow_surface_summary"]["events_with_datasets"] == 2
         assert manifest["workflow_surface_summary"]["events_with_fields"] == 2
@@ -240,6 +262,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert evidence["coverage_summary"]["personal_workflow_only"] is True
         assert evidence["coverage_summary"]["workflow_metadata_only"] is True
         assert evidence["coverage_summary"]["vendor_database_mirror"] is False
+        assert evidence["coverage_summary"]["workflow_surface_summary"]["missing_expected_workflow_topics"] == []
 
 
 def test_collect_zip_limit_counts_only_emitted_records() -> None:

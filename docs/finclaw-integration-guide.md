@@ -622,12 +622,16 @@ Current status:
 - Captures workflow metadata such as function codes, menu paths, projects,
   strategy names, datasets, fields, frequency, date ranges, download formats,
   file names, symbols, industries, markets, and regions.
+- Adds per-event `workflow_topics`, `primary_workflow_topic`, and
+  `workflow_topic_terms` so FinClaw can map terminal behavior to macro,
+  strategy, industry, fundamental, valuation, credit, factor, portfolio,
+  data-export, and HK/US research themes.
 - Writes terminal, activity, and workflow-field coverage manifests so FinClaw
   can see missing platforms, activity types, or research-workflow metadata.
 - Writes `manifest.workflow_surface_summary`, `manifest.source_audit`,
   `manifest.license_policy`, and `manifest.evidence_policy` so Lake can see
-  workflow metadata availability, ZIP/section provenance, and license-safe
-  boundaries before using the evidence.
+  workflow metadata and topic availability, ZIP/section provenance, and
+  license-safe boundaries before using the evidence.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.
