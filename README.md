@@ -116,7 +116,7 @@ Operational docs:
 | `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC/expert/earnings minutes, decision points, risk discussions, follow-up actions, upstream platform surface, and participant/attachment/recording refs; source account adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists, valuation assumptions, source-app surface, and preview/full-content surface; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders, earnings calendar, research meetings, risk checks, upstream source surface, and reminder/time surface |
-| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; upstream saved/read/share action coverage available |
+| `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles, saved/read/share/saved-file action surface, broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surfaces, and source-account type coverage |
 | `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator and social influence signals |
 
 Status legend:

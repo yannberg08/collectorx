@@ -19,6 +19,16 @@ scope:
     - investment_public_account_articles
     - saved_articles
     - shared_articles
+    - read_articles
+    - article_action_surface
+    - broker_research_articles
+    - company_fundamental_articles
+    - market_strategy_articles
+    - industry_theme_articles
+    - valuation_method_articles
+    - portfolio_case_articles
+    - risk_warning_articles
+    - macro_policy_articles
     - source_authors
   excludes:
     - public_account_full_crawl
@@ -26,4 +36,5 @@ scope:
     - non_owner_read_history
 
 description: |
-  微信收藏/公众号通用采集器负责用户动作。本 lens 只筛投资类公众号、炒股文章和收藏来源。
+  微信收藏/公众号通用采集器负责用户动作。本 lens 只筛投资类公众号、炒股文章和收藏来源，
+  并汇总文章面谱、用户动作和公众号来源类型，供投资分身 Wiki 使用。

@@ -377,6 +377,93 @@ MEETING_MINUTES_SURFACE_TERMS = {
         "action item",
     },
 }
+WECHAT_ARTICLE_SURFACE_ORDER = (
+    "broker_research_article",
+    "company_fundamental_article",
+    "market_strategy_article",
+    "industry_theme_article",
+    "valuation_method_article",
+    "portfolio_case_article",
+    "risk_warning_article",
+    "macro_policy_article",
+)
+WECHAT_ARTICLE_SURFACE_TERMS = {
+    "broker_research_article": {
+        "券商",
+        "证券研究",
+        "研究所",
+        "研报",
+        "晨会",
+        "首席",
+        "深度报告",
+        "broker research",
+    },
+    "company_fundamental_article": {
+        "财报",
+        "年报",
+        "季报",
+        "基本面",
+        "现金流",
+        "ROE",
+        "毛利率",
+        "公司研究",
+    },
+    "market_strategy_article": {
+        "策略",
+        "市场策略",
+        "A股策略",
+        "仓位",
+        "风格",
+        "配置",
+        "择时",
+    },
+    "industry_theme_article": {
+        "行业",
+        "赛道",
+        "景气",
+        "产业链",
+        "主题投资",
+        "半导体",
+        "新能源",
+        "医药",
+    },
+    "valuation_method_article": {
+        "估值",
+        "DCF",
+        "PE",
+        "PB",
+        "安全边际",
+        "目标价",
+        "估值模型",
+    },
+    "portfolio_case_article": {
+        "组合",
+        "持仓",
+        "实盘",
+        "复盘",
+        "调仓",
+        "加仓",
+        "减仓",
+    },
+    "risk_warning_article": {
+        "风险",
+        "风险提示",
+        "风险预警",
+        "回撤",
+        "止损",
+        "下行风险",
+        "不确定性",
+    },
+    "macro_policy_article": {
+        "宏观",
+        "政策",
+        "利率",
+        "流动性",
+        "央行",
+        "财政",
+        "地产政策",
+    },
+}
 
 
 def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -446,6 +533,15 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
             for hits in meeting_minutes_surface_matches.values():
                 matched_terms.extend(hits[:4])
 
+    wechat_article_surface_matches: Dict[str, List[str]] = {}
+    if source_id == "wechat-article-favorites":
+        wechat_article_surface_matches = classify_wechat_article_surfaces(text, lowered)
+        if wechat_article_surface_matches:
+            score += min(0.36, len(wechat_article_surface_matches) * 0.08)
+            reasons.append("matched_wechat_article_surface")
+            for hits in wechat_article_surface_matches.values():
+                matched_terms.extend(hits[:4])
+
     score += source_specific_score(source_id, record, text, lowered, reasons, matched_terms)
 
     if collector_class == "vertical":
@@ -486,6 +582,14 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
             surface: hits[:8]
             for surface, hits in sorted(meeting_minutes_surface_matches.items())
         }
+    if source_id == "wechat-article-favorites":
+        surfaces = [surface for surface in WECHAT_ARTICLE_SURFACE_ORDER if surface in wechat_article_surface_matches]
+        result["wechat_article_surfaces"] = surfaces
+        result["primary_wechat_article_surface"] = surfaces[0] if surfaces else "unclassified_wechat_article"
+        result["wechat_article_surface_terms"] = {
+            surface: hits[:8]
+            for surface, hits in sorted(wechat_article_surface_matches.items())
+        }
     return result
 
 
@@ -513,6 +617,16 @@ def classify_meeting_minutes_surfaces(text: str, lowered: str) -> Dict[str, List
     matches: Dict[str, List[str]] = {}
     for surface in MEETING_MINUTES_SURFACE_ORDER:
         terms = MEETING_MINUTES_SURFACE_TERMS[surface]
+        hits = term_hits(terms, text, lowered)
+        if hits:
+            matches[surface] = hits
+    return matches
+
+
+def classify_wechat_article_surfaces(text: str, lowered: str) -> Dict[str, List[str]]:
+    matches: Dict[str, List[str]] = {}
+    for surface in WECHAT_ARTICLE_SURFACE_ORDER:
+        terms = WECHAT_ARTICLE_SURFACE_TERMS[surface]
         hits = term_hits(terms, text, lowered)
         if hits:
             matches[surface] = hits

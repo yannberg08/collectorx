@@ -57,6 +57,24 @@ MEETING_MINUTES_SURFACE_ORDER = (
     "follow_up_action",
     "unclassified_meeting_minutes",
 )
+WECHAT_ARTICLE_SURFACE_ORDER = (
+    "broker_research_article",
+    "company_fundamental_article",
+    "market_strategy_article",
+    "industry_theme_article",
+    "valuation_method_article",
+    "portfolio_case_article",
+    "risk_warning_article",
+    "macro_policy_article",
+    "unclassified_wechat_article",
+)
+WECHAT_SOURCE_ACCOUNT_TYPE_ORDER = (
+    "broker_research_account",
+    "finance_media_account",
+    "investment_creator_account",
+    "company_ir_account",
+    "unknown_account_type",
+)
 
 
 def now_iso() -> str:
@@ -320,6 +338,8 @@ def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[s
         return task_calendar_surface_summary(events)
     if source_id == "meeting-minutes":
         return meeting_minutes_surface_summary(events)
+    if source_id == "wechat-article-favorites":
+        return wechat_article_surface_summary(events)
     return {}
 
 
@@ -335,6 +355,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         summaries["task-calendar-investor"] = task_calendar_surface_summary(by_source["task-calendar-investor"])
     if "meeting-minutes" in by_source:
         summaries["meeting-minutes"] = meeting_minutes_surface_summary(by_source["meeting-minutes"])
+    if "wechat-article-favorites" in by_source:
+        summaries["wechat-article-favorites"] = wechat_article_surface_summary(by_source["wechat-article-favorites"])
     return summaries
 
 
@@ -594,6 +616,92 @@ def value_count(value: Any) -> int:
     if isinstance(value, (list, tuple, set)):
         return sum(1 for item in value if item not in (None, "", [], {}))
     return 1
+
+
+def wechat_article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface_counts: Counter[str] = Counter()
+    primary_surface_counts: Counter[str] = Counter()
+    action_type_counts: Counter[str] = Counter()
+    item_type_counts: Counter[str] = Counter()
+    upstream_collector_counts: Counter[str] = Counter()
+    source_account_type_counts: Counter[str] = Counter()
+    matched_symbol_event_count = 0
+    events_with_url = 0
+    events_with_source_account = 0
+    events_with_tags = 0
+    events_with_text = 0
+    events_with_action_time = 0
+    public_account_article_count = 0
+    source_accounts = set()
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        surfaces = classification.get("wechat_article_surfaces") if isinstance(classification.get("wechat_article_surfaces"), list) else []
+        if not surfaces:
+            surfaces = ["unclassified_wechat_article"]
+        for surface in surfaces:
+            surface_counts[str(surface)] += 1
+        primary_surface_counts[str(classification.get("primary_wechat_article_surface") or surfaces[0])] += 1
+        action_type_counts[str(payload.get("action_type") or "unknown")] += 1
+        item_type = str(payload.get("item_type") or "unknown")
+        item_type_counts[item_type] += 1
+        if item_type == "public_account_article":
+            public_account_article_count += 1
+        upstream = str(payload.get("upstream_collector") or event.get("raw_ref", {}).get("upstream_collector") or "direct_input")
+        upstream_collector_counts[upstream] += 1
+        source_account = str(payload.get("source_account") or "")
+        if source_account:
+            source_accounts.add(source_account)
+            events_with_source_account += 1
+        source_account_type_counts[wechat_source_account_type(source_account)] += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        if payload.get("url") or event.get("raw_ref", {}).get("url"):
+            events_with_url += 1
+        if value_present(payload.get("tags")):
+            events_with_tags += 1
+        if payload.get("has_text") is True or value_present(payload.get("text_preview")) or value_present(payload.get("content")):
+            events_with_text += 1
+        if event.get("time") or first_payload_value(payload, ("action_time", "time", "saved_at", "read_at", "shared_at")):
+            events_with_action_time += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_wechat_article_surfaces": list(WECHAT_ARTICLE_SURFACE_ORDER[:-1]),
+        "wechat_article_surface_counts": ordered_counts(surface_counts, WECHAT_ARTICLE_SURFACE_ORDER),
+        "primary_wechat_article_surface_counts": ordered_counts(primary_surface_counts, WECHAT_ARTICLE_SURFACE_ORDER),
+        "missing_expected_wechat_article_surfaces": [
+            surface for surface in WECHAT_ARTICLE_SURFACE_ORDER[:-1] if surface_counts.get(surface, 0) == 0
+        ],
+        "action_type_counts": dict(sorted(action_type_counts.items())),
+        "item_type_counts": dict(sorted(item_type_counts.items())),
+        "upstream_collector_counts": dict(sorted(upstream_collector_counts.items())),
+        "source_account_type_counts": ordered_counts(source_account_type_counts, WECHAT_SOURCE_ACCOUNT_TYPE_ORDER),
+        "source_account_count": len(source_accounts),
+        "public_account_article_count": public_account_article_count,
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "events_with_url": events_with_url,
+        "events_with_source_account": events_with_source_account,
+        "events_with_tags": events_with_tags,
+        "events_with_text": events_with_text,
+        "events_with_action_time": events_with_action_time,
+        "generic_wechat_article_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def wechat_source_account_type(source_account: str) -> str:
+    text = source_account.lower()
+    if any(token in source_account for token in ("券商", "证券", "研究所", "中信", "中金", "华泰", "国泰君安", "招商", "广发")):
+        return "broker_research_account"
+    if any(token in source_account for token in ("财联社", "华尔街见闻", "格隆汇", "第一财经", "证券时报", "财经")):
+        return "finance_media_account"
+    if any(token in source_account for token in ("投资", "价投", "价值", "复盘", "量化", "炒股", "组合")):
+        return "investment_creator_account"
+    if "ir" in text or any(token in source_account for token in ("投资者关系", "董秘", "公司公告")):
+        return "company_ir_account"
+    return "unknown_account_type"
 
 
 def normalize_record_payload(record: Dict[str, Any]) -> Dict[str, Any]:

@@ -91,7 +91,7 @@ P1 必做：
 - `meeting-minutes`：lens，读取会议/文档/协作通道，只筛路演、调研、投委会、专家会、业绩会、风险讨论和后续行动。
 - `investment-notes`：lens，读取 `notes` lake，只筛投资笔记、规则库、复盘。
 - `task-calendar-investor`：lens，读取 `ticktick`/日历 lake，只筛交易计划、复盘提醒、研究任务。
-- `wechat-article-favorites`：lens，读取微信收藏/公众号通道，只筛用户收藏、阅读、转发的投资文章。
+- `wechat-article-favorites`：lens，读取微信收藏/公众号通道，只筛用户收藏、阅读、转发的投资文章，并标注券商研究、基本面、策略、行业、估值、组合、风险和宏观政策面谱。
 - `financial-news-usage`：vertical，采财联社、华尔街见闻、格隆汇等财经 App 的用户阅读/收藏/订阅/搜索/提醒痕迹，并报告平台/动作覆盖。
 
 P2 必做：
@@ -138,6 +138,7 @@ P2 必做：
 - `investment-notes` 会额外标注投资笔记子类型：复盘、规则库、交易 checklist、估值假设和研究记录；manifest/evidence 会汇总这些面谱。
 - `task-calendar-investor` 会额外标注任务/日历面谱：研究任务、交易计划、复盘提醒、财报日程、调研会议和风险检查。
 - `meeting-minutes` 会额外标注投研会议面谱：路演、调研、投委会、专家会、业绩会、决策点、风险讨论和后续行动，并汇总上游平台、参会人、附件/录制指针和时间覆盖。
+- `wechat-article-favorites` 会额外标注文章信息源面谱：券商研究、公司基本面、市场策略、行业主题、估值方法、组合案例、风险预警和宏观政策，并汇总收藏/阅读/保存/转发动作与公众号来源类型。
 - 默认阈值是 `--min-score 0.30`。
 - `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
 - 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。

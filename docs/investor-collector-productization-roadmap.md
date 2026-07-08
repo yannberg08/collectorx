@@ -1274,6 +1274,28 @@ Findings:
   unsupported input files, unsafe ZIP members, missing input gap audit,
   credential-key filtering, and preview-only content policy.
 
+### Wave T4: P1 WeChat article lens surface pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-wechat-article-surface-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `investor-source-collectors` to `0.1.8`.
+- Added `wechat-article-favorites` surface classification for broker research,
+  company fundamentals, market strategy, industry themes, valuation methods,
+  portfolio cases, risk warnings, and macro policy.
+- Added manifest/evidence `wechat_article_surface_summary` fields for
+  expected/missing surfaces, primary surface counts, saved/read/share/saved-file
+  actions, item types, upstream collectors, source-account type counts,
+  source-account count, public-account article count, URL/tag/text/time
+  coverage, and symbol matches.
+- Added a mixed upstream fixture with four user article actions plus one
+  non-investment saved article that must be filtered out.
+
 ### Wave U: P1 financial news usage coverage pass 1
 
 Status: `completed-baseline`
@@ -1599,7 +1621,7 @@ Findings:
 | 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, and preview/full-content surface | Validate real Notion/Youdao/Evernote exports/APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, source audit, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, and reminder/time coverage; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, source audit, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
-| 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article surface summary, source audit, ZIP provenance, content policy, and generic-collector evidence policy | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |
+| 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
 | 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action coverage; manifests now include field coverage, usage surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps, ZIP provenance, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
 
 ## P2 Work Queue

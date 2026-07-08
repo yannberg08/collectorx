@@ -1181,6 +1181,182 @@ def test_wechat_article_favorites_lens_keeps_investment_articles_only() -> None:
         assert lens_events[0]["raw_ref"]["upstream_event_id"] == "wechat-favorites:1"
 
 
+def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "wechat-favorites-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:research",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T10:00:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "favorite",
+                    "title": "半导体行业景气跟踪",
+                    "source_account": "券商研究公众号",
+                    "url": "https://mp.weixin.qq.com/s/research",
+                    "tags": ["行业", "半导体"],
+                    "text_preview": "证券研究深度报告讨论财报、现金流、估值、ROE、安全边际和风险提示。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/research"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:strategy",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T10:30:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "read",
+                    "title": "市场策略周报：A股仓位与风格 000300",
+                    "source_account": "财经策略号",
+                    "url": "https://mp.weixin.qq.com/s/strategy",
+                    "tags": ["策略"],
+                    "text_preview": "A股策略讨论仓位、风格、配置、宏观政策、利率和流动性。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/strategy"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:valuation",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T11:00:00+08:00",
+                "collected_at": "2026-07-08T11:30:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "saved_file",
+                    "title": "DCF估值模型笔记",
+                    "source_account": "价值投资笔记",
+                    "url": "https://mp.weixin.qq.com/s/valuation",
+                    "tags": ["估值"],
+                    "text_preview": "估值模型拆解 DCF、PE、PB、ROE、目标价和安全边际。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/valuation"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:risk",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T12:00:00+08:00",
+                "collected_at": "2026-07-08T12:30:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "share",
+                    "title": "医药组合复盘：风险预警与调仓",
+                    "source_account": "投资复盘号",
+                    "url": "https://mp.weixin.qq.com/s/risk",
+                    "tags": ["组合", "风险"],
+                    "text_preview": "组合持仓复盘、回撤、止损、下行风险和调仓动作。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/risk"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wechat-favorites:life",
+                "collector": "wechat-favorites",
+                "source": "微信收藏/公众号文章",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-08T13:00:00+08:00",
+                "collected_at": "2026-07-08T13:30:00+08:00",
+                "data": {
+                    "item_type": "public_account_article",
+                    "action_type": "favorite",
+                    "title": "周末做饭清单",
+                    "source_account": "生活号",
+                    "url": "https://mp.weixin.qq.com/s/life",
+                    "text_preview": "采购食材和聚餐安排。",
+                },
+                "raw_ref": {"url": "https://mp.weixin.qq.com/s/life"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "wechat-article-favorites",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T14:00:00+08:00",
+        )
+
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "wechat-article-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        upstream_ids = {event["raw_ref"]["upstream_event_id"] for event in lens_events}
+        assert len(lens_events) == 4
+        assert "wechat-favorites:life" not in upstream_ids
+        all_surfaces = {
+            surface
+            for event in lens_events
+            for surface in event["data"]["classification"]["wechat_article_surfaces"]
+        }
+        assert {
+            "broker_research_article",
+            "company_fundamental_article",
+            "market_strategy_article",
+            "industry_theme_article",
+            "valuation_method_article",
+            "portfolio_case_article",
+            "risk_warning_article",
+            "macro_policy_article",
+        }.issubset(all_surfaces)
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        surface = manifest["lens_surface_summary"]
+        assert surface["event_count"] == 4
+        assert surface["missing_expected_wechat_article_surfaces"] == []
+        assert surface["action_type_counts"] == {
+            "favorite": 1,
+            "read": 1,
+            "saved_file": 1,
+            "share": 1,
+        }
+        assert surface["upstream_collector_counts"] == {"wechat-favorites": 4}
+        assert surface["source_account_type_counts"]["broker_research_account"] == 1
+        assert surface["source_account_type_counts"]["finance_media_account"] == 1
+        assert surface["source_account_type_counts"]["investment_creator_account"] == 2
+        assert surface["source_account_count"] == 4
+        assert surface["public_account_article_count"] == 4
+        assert surface["matched_symbol_event_count"] == 1
+        assert surface["events_with_url"] == 4
+        assert surface["events_with_tags"] == 4
+        assert surface["events_with_text"] == 4
+        assert surface["events_with_action_time"] == 4
+        assert surface["collector_writes_wiki_directly"] is False
+
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["wechat-article-favorites"]
+        assert evidence_surface["wechat_article_surface_counts"]["risk_warning_article"] == 2
+        assert evidence_surface["generic_wechat_article_lens"] is True
+
+
 def test_social_investment_influence_lens_keeps_investment_activity_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)

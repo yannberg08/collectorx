@@ -520,7 +520,9 @@ Current status:
   credential-like raw keys.
 - Does not claim investment-article status directly.
 - Feed `lake/wechat-favorites/events.jsonl` into `wechat-article-favorites`
-  lens for investment public-account articles and saved reading sources.
+  lens for investment public-account articles, saved/read/share/saved-file
+  action surfaces, source-account types, and broker/fundamental/strategy/
+  industry/valuation/portfolio/risk/macro article surfaces.
 - Real WeChat favorites database/public-account read-history adapters still
   require version-specific validation.
 

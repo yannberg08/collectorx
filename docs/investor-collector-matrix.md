@@ -38,7 +38,7 @@
 | `ticktick`/`calendar` | `ticktick-cli`/`calendar-collector` | generic：任务和日历原始通道，含授权 ZIP 导入、平台覆盖、ZIP 跳过审计和逐文件解析 manifest |
 | `task-calendar-investor` | `investor-source-collectors` | lens：交易计划、复盘提醒、研究任务 |
 | `wechat-favorites` | `wechat-favorites` | generic：微信收藏/公众号文章动作，含授权 ZIP 导入和动作覆盖 manifest |
-| `wechat-article-favorites` | `investor-source-collectors` | lens：投资公众号阅读、收藏、转发 |
+| `wechat-article-favorites` | `investor-source-collectors` | lens：投资公众号阅读、收藏、保存、转发动作，以及券商研究/基本面/策略/行业/估值/组合/风险/宏观文章面谱 |
 | `financial-news-usage` | `financial-news-usage` | vertical：财联社、华尔街见闻、格隆汇等用户阅读/收藏/订阅/搜索/提醒痕迹，含授权 ZIP/浏览器历史副本和平台/动作覆盖 manifest |
 
 ## P2
