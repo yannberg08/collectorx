@@ -64,6 +64,12 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --input ~/Downloads/xueqiu \
   --out-dir ~/Desktop/xueqiu-investor-collect
 
+# 从会议/协作 Lake 中筛选投研会议，并输出会议面谱摘要
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source meeting-minutes \
+  --input ~/Desktop/meeting-artifacts/lake/meeting-artifacts/events.jsonl \
+  --out-dir ~/Desktop/meeting-minutes-investor-collect
+
 # 只做授权/输入缺口登记，不伪造业务数据
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source china-wealth-assets \
@@ -82,7 +88,7 @@ P0 必做：
 
 P1 必做：
 
-- `meeting-minutes`：lens，读取会议/文档通道，只筛路演、调研、投委会纪要。
+- `meeting-minutes`：lens，读取会议/文档/协作通道，只筛路演、调研、投委会、专家会、业绩会、风险讨论和后续行动。
 - `investment-notes`：lens，读取 `notes` lake，只筛投资笔记、规则库、复盘。
 - `task-calendar-investor`：lens，读取 `ticktick`/日历 lake，只筛交易计划、复盘提醒、研究任务。
 - `wechat-article-favorites`：lens，读取微信收藏/公众号通道，只筛用户收藏、阅读、转发的投资文章。
@@ -131,6 +137,7 @@ P2 必做：
 - 事件会带 `data.classification`，包含置信度、命中原因、关键词和证券代码。
 - `investment-notes` 会额外标注投资笔记子类型：复盘、规则库、交易 checklist、估值假设和研究记录；manifest/evidence 会汇总这些面谱。
 - `task-calendar-investor` 会额外标注任务/日历面谱：研究任务、交易计划、复盘提醒、财报日程、调研会议和风险检查。
+- `meeting-minutes` 会额外标注投研会议面谱：路演、调研、投委会、专家会、业绩会、决策点、风险讨论和后续行动，并汇总上游平台、参会人、附件/录制指针和时间覆盖。
 - 默认阈值是 `--min-score 0.30`。
 - `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
 - 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。

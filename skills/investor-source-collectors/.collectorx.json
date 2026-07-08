@@ -1,6 +1,6 @@
 {
   "slug": "investor-source-collectors",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "status": "baseline+audit",
-  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including investment-note and task-calendar surface summaries plus path-level source audits."
+  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including investment-note, task-calendar, and meeting-minutes surface summaries plus path-level source audits."
 }

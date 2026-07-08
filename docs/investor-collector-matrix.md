@@ -32,7 +32,7 @@
 | `feishu` | `feishu` | generic：飞书消息、会话、联系人、文档、文件指针、会议/妙记产物，含授权 ZIP 导入、ZIP 跳过审计和逐文件解析 manifest |
 | `meeting-artifacts` | `meeting-artifacts` | generic：飞书、钉钉、企业微信、腾讯会议纪要/逐字稿/字幕原始通道，含授权 ZIP 导入、平台覆盖、ZIP 跳过审计和逐文件解析 manifest |
 | `dingtalk`/`wecom` | `collaboration-exports` | generic：钉钉/企业微信消息、会话、联系人、文件指针和会议指针，含授权 ZIP 导入、ZIP 跳过审计和逐文件解析 manifest |
-| `meeting-minutes` | `investor-source-collectors` | lens：路演、调研、投委会纪要 |
+| `meeting-minutes` | `investor-source-collectors` | lens：路演、调研、投委会、专家会、业绩会、决策点、风险讨论和后续行动面谱 |
 | `notes` | `notes-collector` | generic：Obsidian、Notion、有道云、印象笔记，含授权 ZIP 导入和平台覆盖 manifest |
 | `investment-notes` | `investor-source-collectors` | lens：投资笔记、规则库、复盘 |
 | `ticktick`/`calendar` | `ticktick-cli`/`calendar-collector` | generic：任务和日历原始通道，含授权 ZIP 导入、平台覆盖、ZIP 跳过审计和逐文件解析 manifest |

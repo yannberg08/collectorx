@@ -488,8 +488,10 @@ Current status:
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-meeting status directly.
-- Feed `lake/meeting-artifacts/events.jsonl` into `meeting-minutes` lens for
-  roadshows, research meetings, IC records, and review meetings.
+- Feed `lake/meeting-artifacts/events.jsonl`, `lake/feishu/events.jsonl`,
+  `lake/dingtalk/events.jsonl`, or `lake/wecom/events.jsonl` into the
+  `meeting-minutes` lens for roadshow, research, IC, expert-call,
+  earnings-call, decision-point, risk-discussion, and follow-up surfaces.
 - Feishu/DingTalk/WeCom/Tencent Meeting account API adapters still require
   real authorization validation.
 

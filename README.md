@@ -113,7 +113,7 @@ Operational docs:
 | `wechat-investment-dialogue` | `wechat` | Runnable lens baseline with investment classifier, optional chat/sender source policy, source-policy audit, and explicit filtered-all gap status; real WeChat lake validation pending |
 | `research-documents` | `filesystem`, `notes` | Runnable lens baseline for research files and valuation docs; explicit XLSX/DOCX/PDF content extraction, path-level collection audit, skipped reasons, limit truncation, and screenshot metadata-only/no-OCR policy validation done |
 | `email-research` | `email` | Runnable lens baseline for broker research, roadshow, and IR mail; real mailbox validation pending |
-| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC minutes; source account adapters pending |
+| `meeting-minutes` | `meeting-artifacts`, `feishu`, `dingtalk`, `wecom` | Runnable lens baseline for roadshow/research/IC/expert/earnings minutes, decision points, risk discussions, follow-up actions, upstream platform surface, and participant/attachment/recording refs; source account adapters pending |
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists, valuation assumptions, source-app surface, and preview/full-content surface; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders, earnings calendar, research meetings, risk checks, upstream source surface, and reminder/time surface |
 | `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles; upstream saved/read/share action coverage available |

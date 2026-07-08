@@ -46,6 +46,17 @@ TASK_CALENDAR_SURFACE_ORDER = (
     "risk_check",
     "unclassified_task_calendar",
 )
+MEETING_MINUTES_SURFACE_ORDER = (
+    "roadshow_minutes",
+    "research_meeting",
+    "investment_committee",
+    "expert_call",
+    "earnings_call",
+    "decision_point",
+    "risk_discussion",
+    "follow_up_action",
+    "unclassified_meeting_minutes",
+)
 
 
 def now_iso() -> str:
@@ -307,6 +318,8 @@ def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[s
         return investment_note_surface_summary(events)
     if source_id == "task-calendar-investor":
         return task_calendar_surface_summary(events)
+    if source_id == "meeting-minutes":
+        return meeting_minutes_surface_summary(events)
     return {}
 
 
@@ -320,6 +333,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         summaries["investment-notes"] = investment_note_surface_summary(by_source["investment-notes"])
     if "task-calendar-investor" in by_source:
         summaries["task-calendar-investor"] = task_calendar_surface_summary(by_source["task-calendar-investor"])
+    if "meeting-minutes" in by_source:
+        summaries["meeting-minutes"] = meeting_minutes_surface_summary(by_source["meeting-minutes"])
     return summaries
 
 
@@ -474,6 +489,111 @@ def task_calendar_source_platform(event: Dict[str, Any]) -> str:
     if not value and isinstance(upstream_raw_ref, dict):
         value = upstream_raw_ref.get("source_app") or upstream_raw_ref.get("source_platform")
     return str(value or "unknown")
+
+
+def meeting_minutes_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface_counts: Counter[str] = Counter()
+    primary_surface_counts: Counter[str] = Counter()
+    upstream_collector_counts: Counter[str] = Counter()
+    kind_counts: Counter[str] = Counter()
+    source_platform_counts: Counter[str] = Counter()
+    matched_symbol_event_count = 0
+    participant_event_count = 0
+    participant_ref_count = 0
+    meeting_url_event_count = 0
+    attachment_ref_event_count = 0
+    recording_ref_event_count = 0
+    events_with_time = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        surfaces = classification.get("meeting_minutes_surfaces") if isinstance(classification.get("meeting_minutes_surfaces"), list) else []
+        if not surfaces:
+            surfaces = ["unclassified_meeting_minutes"]
+        for surface in surfaces:
+            surface_counts[str(surface)] += 1
+        primary_surface_counts[str(classification.get("primary_meeting_minutes_surface") or surfaces[0])] += 1
+        upstream = str(payload.get("upstream_collector") or event.get("raw_ref", {}).get("upstream_collector") or "direct_input")
+        upstream_collector_counts[upstream] += 1
+        kind_counts[str(event.get("kind") or "unknown")] += 1
+        source_platform_counts[meeting_source_platform(event)] += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        participant_count = value_count(first_payload_value(payload, ("participants", "attendees", "speakers", "participant_refs", "参会人")))
+        if participant_count:
+            participant_event_count += 1
+            participant_ref_count += participant_count
+        if value_present(first_payload_value(payload, ("meeting_url", "url", "link", "source_url", "会议链接"))):
+            meeting_url_event_count += 1
+        if value_present(first_payload_value(payload, ("attachment", "attachments", "attachment_refs", "file_refs", "files", "附件"))):
+            attachment_ref_event_count += 1
+        if value_present(first_payload_value(payload, ("recording", "recording_ref", "recording_refs", "recording_url", "录制"))):
+            recording_ref_event_count += 1
+        if event.get("time") or first_payload_value(payload, ("time", "date", "start_time", "timestamp", "upstream_time", "会议时间")):
+            events_with_time += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_meeting_minutes_surfaces": list(MEETING_MINUTES_SURFACE_ORDER[:-1]),
+        "meeting_minutes_surface_counts": ordered_counts(surface_counts, MEETING_MINUTES_SURFACE_ORDER),
+        "primary_meeting_minutes_surface_counts": ordered_counts(primary_surface_counts, MEETING_MINUTES_SURFACE_ORDER),
+        "missing_expected_meeting_minutes_surfaces": [
+            surface for surface in MEETING_MINUTES_SURFACE_ORDER[:-1] if surface_counts.get(surface, 0) == 0
+        ],
+        "upstream_collector_counts": dict(sorted(upstream_collector_counts.items())),
+        "kind_counts": dict(sorted(kind_counts.items())),
+        "source_platform_counts": dict(sorted(source_platform_counts.items())),
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "participant_event_count": participant_event_count,
+        "participant_ref_count": participant_ref_count,
+        "meeting_url_event_count": meeting_url_event_count,
+        "attachment_ref_event_count": attachment_ref_event_count,
+        "recording_ref_event_count": recording_ref_event_count,
+        "events_with_time": events_with_time,
+        "generic_meeting_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def meeting_source_platform(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    value = (
+        payload.get("source_platform")
+        or payload.get("source_app")
+        or payload.get("platform")
+        or payload.get("upstream_collector")
+        or raw_ref.get("source_platform")
+        or raw_ref.get("source_app")
+    )
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref")
+    if not value and isinstance(upstream_raw_ref, dict):
+        value = upstream_raw_ref.get("source_platform") or upstream_raw_ref.get("source_app") or upstream_raw_ref.get("platform")
+    return str(value or "unknown")
+
+
+def first_payload_value(payload: Dict[str, Any], keys: Iterable[str]) -> Any:
+    for key in keys:
+        value = payload.get(key)
+        if value not in (None, "", [], {}):
+            return value
+    return None
+
+
+def value_present(value: Any) -> bool:
+    return value_count(value) > 0
+
+
+def value_count(value: Any) -> int:
+    if value in (None, "", [], {}):
+        return 0
+    if isinstance(value, dict):
+        return 1 if value else 0
+    if isinstance(value, (list, tuple, set)):
+        return sum(1 for item in value if item not in (None, "", [], {}))
+    return 1
 
 
 def normalize_record_payload(record: Dict[str, Any]) -> Dict[str, Any]:

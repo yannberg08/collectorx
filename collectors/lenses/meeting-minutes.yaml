@@ -25,12 +25,19 @@ scope:
     - roadshow_minutes
     - research_meetings
     - investment_committee_records
+    - expert_calls
+    - earnings_calls
     - participants
     - decision_points
+    - risk_discussions
+    - follow_up_actions
+    - upstream_collector_surface
+    - attachment_recording_refs
   excludes:
     - all_meetings
     - unauthorized_recordings
     - non_investment_workspace_data
 
 description: |
-  会议通道先作为通用证据入 lake；本 lens 只识别投资调研、路演、投委会和复盘会议。
+  会议通道先作为通用证据入 lake；本 lens 只识别投资调研、路演、投委会、
+  专家会、业绩会、风险讨论和后续行动，并输出会议面谱用于投资分身 Wiki。

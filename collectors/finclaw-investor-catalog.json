@@ -219,9 +219,9 @@
       "gate": "G2",
       "finclaw_action": "run-after-meeting-or-collaboration-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source meeting-minutes --input <meeting-events-jsonl> --out-dir <out-dir>",
-      "collects": "Roadshows, research meetings, investment committee records, review meetings, and meeting-derived decision context.",
+      "collects": "Roadshows, research meetings, investment committee records, expert calls, earnings calls, decision points, risk discussions, follow-up actions, upstream platform surface, participants, meeting URLs, attachment refs, and recording refs.",
       "must_not_collect": "Unrelated operational meetings as investor facts.",
-      "production_gap": "Real platform artifacts, participant identity normalization, and false-positive review."
+      "production_gap": "Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant identity normalization, attachment/recording reference validation, and false-positive review."
     },
     {
       "id": "notes",

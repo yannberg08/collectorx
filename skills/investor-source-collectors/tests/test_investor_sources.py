@@ -936,6 +936,185 @@ def test_meeting_minutes_lens_keeps_investment_minutes_only() -> None:
         assert "matched_source_profile_terms" in lens_events[0]["data"]["classification"]["reasons"]
 
 
+def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "meeting-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "meeting-artifacts:roadshow",
+                "collector": "meeting-artifacts",
+                "source": "用户授权会议文件",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T09:00:00+08:00",
+                "collected_at": "2026-07-08T11:00:00+08:00",
+                "data": {
+                    "artifact_type": "minutes",
+                    "title": "半导体公司路演纪要",
+                    "text_preview": "业绩路演讨论财报、估值、风险点和下一步跟进现金流假设。",
+                    "participants": ["研究员A", "基金经理B"],
+                    "meeting_url": "https://meeting.example/roadshow",
+                    "attachments": [{"name": "roadshow-deck.pdf"}],
+                    "source_platform": "meeting-artifacts",
+                },
+                "raw_ref": {"path": "roadshow.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "feishu:expert-call",
+                "collector": "feishu",
+                "source": "飞书会议纪要",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T10:00:00+08:00",
+                "collected_at": "2026-07-08T11:00:00+08:00",
+                "data": {
+                    "artifact_type": "transcript",
+                    "title": "新能源专家电话会调研纪要",
+                    "text_preview": "专家电话会调研供需拐点、价格弹性和下行风险。",
+                    "participants": ["专家C"],
+                    "meeting_url": "https://feishu.example/minutes/1",
+                    "source_platform": "feishu",
+                },
+                "raw_ref": {"path": "feishu-expert.json"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "dingtalk:ic",
+                "collector": "dingtalk",
+                "source": "钉钉协作导出",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T11:00:00+08:00",
+                "collected_at": "2026-07-08T11:30:00+08:00",
+                "data": {
+                    "artifact_type": "meeting_ref",
+                    "title": "投委会：组合调仓决策会",
+                    "text_preview": "投资委员会记录决策点：加仓半导体、减仓高波动仓位，风控待办。",
+                    "attendees": ["基金经理B", "风控D"],
+                    "file_refs": [{"name": "ic-action-items.xlsx"}],
+                    "source_platform": "dingtalk",
+                },
+                "raw_ref": {"path": "dingtalk-ic.json"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "wecom:earnings",
+                "collector": "wecom",
+                "source": "企业微信会议导出",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T12:00:00+08:00",
+                "collected_at": "2026-07-08T12:30:00+08:00",
+                "data": {
+                    "artifact_type": "recording_ref",
+                    "title": "贵州茅台财报电话会 600519",
+                    "text_preview": "业绩说明会复盘财报、现金流、毛利率和纪要结论。",
+                    "participants": ["IR", "研究员A"],
+                    "recording_refs": [{"url": "https://wecom.example/recording/1"}],
+                    "source_platform": "wecom",
+                },
+                "raw_ref": {"path": "wecom-earnings.json"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "meeting-artifacts:life",
+                "collector": "meeting-artifacts",
+                "source": "用户授权会议文件",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-08T13:00:00+08:00",
+                "collected_at": "2026-07-08T14:00:00+08:00",
+                "data": {
+                    "artifact_type": "minutes",
+                    "title": "周五团建安排",
+                    "text_preview": "讨论聚餐地点和出发时间。",
+                    "participants": ["同事E"],
+                    "source_platform": "meeting-artifacts",
+                },
+                "raw_ref": {"path": "team.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "meeting-minutes",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T15:00:00+08:00",
+        )
+
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "meeting-minutes" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        upstream_ids = {event["raw_ref"]["upstream_event_id"] for event in lens_events}
+        assert len(lens_events) == 4
+        assert "meeting-artifacts:life" not in upstream_ids
+        all_surfaces = {
+            surface
+            for event in lens_events
+            for surface in event["data"]["classification"]["meeting_minutes_surfaces"]
+        }
+        assert {
+            "roadshow_minutes",
+            "research_meeting",
+            "investment_committee",
+            "expert_call",
+            "earnings_call",
+            "decision_point",
+            "risk_discussion",
+            "follow_up_action",
+        }.issubset(all_surfaces)
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        surface = manifest["lens_surface_summary"]
+        assert surface["event_count"] == 4
+        assert surface["missing_expected_meeting_minutes_surfaces"] == []
+        assert surface["meeting_minutes_surface_counts"]["roadshow_minutes"] == 1
+        assert surface["meeting_minutes_surface_counts"]["investment_committee"] == 1
+        assert surface["meeting_minutes_surface_counts"]["expert_call"] == 1
+        assert surface["meeting_minutes_surface_counts"]["earnings_call"] == 1
+        assert surface["upstream_collector_counts"] == {
+            "dingtalk": 1,
+            "feishu": 1,
+            "meeting-artifacts": 1,
+            "wecom": 1,
+        }
+        assert surface["kind_counts"] == {"note": 4}
+        assert surface["source_platform_counts"] == {
+            "dingtalk": 1,
+            "feishu": 1,
+            "meeting-artifacts": 1,
+            "wecom": 1,
+        }
+        assert surface["participant_event_count"] == 4
+        assert surface["participant_ref_count"] == 7
+        assert surface["meeting_url_event_count"] == 2
+        assert surface["attachment_ref_event_count"] == 2
+        assert surface["recording_ref_event_count"] == 1
+        assert surface["matched_symbol_event_count"] == 1
+        assert surface["events_with_time"] == 4
+        assert surface["collector_writes_wiki_directly"] is False
+
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["meeting-minutes"]
+        assert evidence_surface["meeting_minutes_surface_counts"]["risk_discussion"] == 3
+        assert evidence_surface["generic_meeting_lens"] is True
+
+
 def test_wechat_article_favorites_lens_keeps_investment_articles_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)

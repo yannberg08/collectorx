@@ -60,7 +60,7 @@ FinClaw 应按下面顺序调用：
 | --- | --- | --- | --- |
 | `notes` + `investment-notes` | Obsidian、Notion、有道云、印象笔记和投资笔记 lens | `baseline+audit`；generic notes manifest 记录平台覆盖、字段覆盖、逐输入解析结果、跳过文件/ZIP 成员原因、内容策略和 generic-to-lens 边界；investment-notes lens 记录复盘/规则库/checklist/估值假设/研究记录子类型面谱 | Notion/有道/印象真实账号、Windows/Linux vault、真实笔记语料误判回测 |
 | `ticktick` + `calendar` + `task-calendar-investor` | 任务、日历、交易计划、复盘提醒，含 ZIP 跳过成员审计和逐文件解析结果；lens 汇总研究任务、交易计划、复盘提醒、财报日程、调研会议和风险检查面谱 | `baseline+audit` | 滴答 OAuth、Apple/Google/Outlook/飞书等真实日历 |
-| `feishu` + `meeting-artifacts` + `dingtalk` + `wecom` + `meeting-minutes` | 飞书/会议纪要、协作导出、投研会议 lens，含 ZIP 跳过成员审计和逐文件解析结果 | `baseline+audit` | 飞书/钉钉/企业微信/腾讯会议真实账号 API 和导出 |
+| `feishu` + `meeting-artifacts` + `dingtalk` + `wecom` + `meeting-minutes` | 飞书/会议纪要、协作导出、投研会议 lens，含 ZIP 跳过成员审计、逐文件解析结果、路演/调研/投委会/专家会/业绩会/风险/后续行动面谱 | `baseline+audit` | 飞书/钉钉/企业微信/腾讯会议真实账号 API 和导出、参会人归一化、附件/录制指针验证 |
 | `wechat-favorites` + `wechat-article-favorites` | 微信收藏、公众号文章动作和投资文章 lens | `baseline+audit`；manifest 记录动作覆盖、字段覆盖、逐输入解析结果、跳过文件/ZIP 成员原因、内容策略和 generic-to-lens 边界 | 真实微信收藏库、公众号阅读动作、标签 allowlist |
 | `financial-news-usage` | 华尔街见闻、财联社、格隆汇阅读/收藏/订阅/搜索/提醒 | `baseline+audit`；manifest 记录平台/动作覆盖、字段覆盖、逐输入解析结果、跳过文件/ZIP 成员原因、浏览器历史来源和个人使用痕迹边界 | App 缓存、账号 API、订阅提醒和多浏览器历史 |
 

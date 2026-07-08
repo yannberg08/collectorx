@@ -301,6 +301,82 @@ TASK_CALENDAR_SURFACE_TERMS = {
         "纪律",
     },
 }
+MEETING_MINUTES_SURFACE_ORDER = (
+    "roadshow_minutes",
+    "research_meeting",
+    "investment_committee",
+    "expert_call",
+    "earnings_call",
+    "decision_point",
+    "risk_discussion",
+    "follow_up_action",
+)
+MEETING_MINUTES_SURFACE_TERMS = {
+    "roadshow_minutes": {
+        "路演",
+        "业绩路演",
+        "反路演",
+        "roadshow",
+        "IR roadshow",
+    },
+    "research_meeting": {
+        "调研",
+        "调研纪要",
+        "交流会",
+        "机构交流",
+        "公司交流",
+        "投研会议",
+        "research meeting",
+    },
+    "investment_committee": {
+        "投委会",
+        "投资委员会",
+        "决策会",
+        "组合会",
+        "IC",
+        "investment committee",
+    },
+    "expert_call": {
+        "专家会",
+        "专家电话会",
+        "专家访谈",
+        "expert call",
+        "expert meeting",
+    },
+    "earnings_call": {
+        "业绩说明会",
+        "财报电话会",
+        "业绩电话会",
+        "业绩会",
+        "earnings call",
+    },
+    "decision_point": {
+        "决议",
+        "决策",
+        "决策点",
+        "结论",
+        "纪要结论",
+        "action item",
+    },
+    "risk_discussion": {
+        "风险",
+        "风险点",
+        "下行风险",
+        "不确定性",
+        "回撤",
+        "止损",
+        "风控",
+    },
+    "follow_up_action": {
+        "待办",
+        "跟进",
+        "下一步",
+        "后续跟踪",
+        "follow-up",
+        "next step",
+        "action item",
+    },
+}
 
 
 def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
@@ -361,6 +437,15 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
             for hits in task_calendar_surface_matches.values():
                 matched_terms.extend(hits[:4])
 
+    meeting_minutes_surface_matches: Dict[str, List[str]] = {}
+    if source_id == "meeting-minutes":
+        meeting_minutes_surface_matches = classify_meeting_minutes_surfaces(text, lowered)
+        if meeting_minutes_surface_matches:
+            score += min(0.36, len(meeting_minutes_surface_matches) * 0.08)
+            reasons.append("matched_meeting_minutes_surface")
+            for hits in meeting_minutes_surface_matches.values():
+                matched_terms.extend(hits[:4])
+
     score += source_specific_score(source_id, record, text, lowered, reasons, matched_terms)
 
     if collector_class == "vertical":
@@ -393,6 +478,14 @@ def classify_record(source_id: str, record: Dict[str, Any]) -> Dict[str, Any]:
             surface: hits[:8]
             for surface, hits in sorted(task_calendar_surface_matches.items())
         }
+    if source_id == "meeting-minutes":
+        surfaces = [surface for surface in MEETING_MINUTES_SURFACE_ORDER if surface in meeting_minutes_surface_matches]
+        result["meeting_minutes_surfaces"] = surfaces
+        result["primary_meeting_minutes_surface"] = surfaces[0] if surfaces else "unclassified_meeting_minutes"
+        result["meeting_minutes_surface_terms"] = {
+            surface: hits[:8]
+            for surface, hits in sorted(meeting_minutes_surface_matches.items())
+        }
     return result
 
 
@@ -410,6 +503,16 @@ def classify_task_calendar_surfaces(text: str, lowered: str) -> Dict[str, List[s
     matches: Dict[str, List[str]] = {}
     for surface in TASK_CALENDAR_SURFACE_ORDER:
         terms = TASK_CALENDAR_SURFACE_TERMS[surface]
+        hits = term_hits(terms, text, lowered)
+        if hits:
+            matches[surface] = hits
+    return matches
+
+
+def classify_meeting_minutes_surfaces(text: str, lowered: str) -> Dict[str, List[str]]:
+    matches: Dict[str, List[str]] = {}
+    for surface in MEETING_MINUTES_SURFACE_ORDER:
+        terms = MEETING_MINUTES_SURFACE_TERMS[surface]
         hits = term_hits(terms, text, lowered)
         if hits:
             matches[surface] = hits
