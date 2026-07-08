@@ -11,7 +11,7 @@ from financial_news_usage.parser import (
     COLLECTOR,
     build_evidence,
     build_manifest,
-    collect_from_inputs,
+    collect_from_inputs_with_audit,
     now_iso,
 )
 
@@ -31,11 +31,11 @@ def write_jsonl(path: Path, events: list[dict]) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
     if args.out_dir:
         out = Path(args.out_dir).expanduser()
         write_jsonl(out / "lake" / COLLECTOR / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out / "manifest.json", manifest)
         write_json(out / "investor_wiki_evidence.v1.json", build_evidence(events, generated_at=collected_at))
         (out / "SUMMARY.md").write_text(
@@ -52,6 +52,7 @@ def collect(args: argparse.Namespace) -> int:
                     f"- missing_expected_actions：`{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
                     f"- field_coverage_missing：`{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
+                    f"- skipped_archive_members：{manifest['source_audit'].get('skipped_archive_member_count', 0)}",
                     f"- browser_history_events：{manifest['source_audit']['browser_history_event_count']}",
                     "- 边界：只采用户动作，不采公共新闻库。",
                 ]

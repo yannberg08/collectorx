@@ -28,6 +28,7 @@ def test_collect_usage_exports() -> None:
         export = root / "usage.json"
         html = root / "wallstreetcn.html"
         alert_zip = root / "financial-news-alerts.zip"
+        unsupported = root / "ignore.bin"
         out = root / "out"
         export.write_text(
             json.dumps(
@@ -88,6 +89,7 @@ def test_collect_usage_exports() -> None:
             archive.writestr("../unsafe.json", json.dumps([{"title": "不应读取"}], ensure_ascii=False))
             archive.writestr("..\\windows-traversal.json", json.dumps([{"title": "不应读取 Windows traversal"}], ensure_ascii=False))
             archive.writestr("C:\\unsafe.json", json.dumps([{"title": "不应读取 Windows drive"}], ensure_ascii=False))
+        unsupported.write_bytes(b"not a supported usage export")
         subprocess.run(
             [
                 sys.executable,
@@ -132,7 +134,17 @@ def test_collect_usage_exports() -> None:
         assert manifest["usage_surface_summary"]["events_with_query"] == 1
         assert manifest["usage_surface_summary"]["alert_event_count"] == 1
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
         assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 3
+        assert manifest["source_audit"]["parsed_record_count"] == 5
+        assert manifest["source_audit"]["emitted_event_count"] == 5
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
         assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["content_policy"]["full_public_news_crawl"] is False
@@ -188,11 +200,107 @@ def test_collect_chromium_browser_history() -> None:
         assert manifest["platform_counts"] == {"cls": 1, "wallstreetcn": 1}
         assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"gelonghui"}
         assert manifest["source_audit"]["browser_history_event_count"] == 2
+        assert manifest["source_audit"]["browser_history_input_count"] == 1
         assert manifest["source_audit"]["browser_history_source_apps"] == ["chromium_history"]
+        assert manifest["source_audit"]["resolved_input_file_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 2
+        assert manifest["source_audit"]["extension_counts"] == {"<browser_history>": 1}
+        assert manifest["source_audit"]["path_results"][0]["parser"] == "browser_history"
         assert manifest["usage_surface_summary"]["browser_history_event_count"] == 2
+
+
+def test_collect_zip_limit_counts_only_emitted_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        usage_zip = root / "usage.zip"
+        out = root / "out"
+        with zipfile.ZipFile(usage_zip, "w") as archive:
+            archive.writestr(
+                "usage.json",
+                json.dumps(
+                    [
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "第一条",
+                            "url": "https://www.cls.cn/detail/1",
+                        },
+                        {
+                            "platform": "财联社",
+                            "action": "收藏",
+                            "title": "第二条",
+                            "url": "https://www.cls.cn/detail/2",
+                        },
+                    ],
+                    ensure_ascii=False,
+                ),
+            )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(usage_zip),
+                "--out-dir",
+                str(out),
+                "--limit",
+                "1",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        source_audit = manifest["source_audit"]
+        assert source_audit["limit_reached"] is True
+        assert source_audit["archive_member_event_count"] == 1
+        assert source_audit["parsed_record_count"] == 1
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["path_results"][0]["parsed_record_count"] == 1
+
+
+def test_collect_missing_input_writes_gap_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        missing = root / "missing-export"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(missing),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T03:20:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "financial_news_usage_authorized_input_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_financial_news_usage_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["input_missing_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
 
 
 if __name__ == "__main__":
     test_collect_usage_exports()
     test_collect_chromium_browser_history()
+    test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_missing_input_writes_gap_audit()
     print("financial-news-usage tests passed.")
