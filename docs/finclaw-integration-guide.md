@@ -424,7 +424,11 @@ Current status:
 
 - Reads content only when `--include-content` is explicitly supplied.
 - Supports Markdown/TXT/HTML, CSV/TSV, XLSX/XLSM, legacy XML/HTML/text `.xls`,
-  PPTX, DOCX, and PDF extraction.
+  renamed OOXML `.xls`, binary BIFF `.xls` through optional `xlrd`, PPTX,
+  DOCX, and PDF extraction.
+- Binary BIFF `.xls` without `xlrd` emits `content_extract.status:
+  extract_failed`, parser `xlrd-biff`, and an explicit error instead of
+  fabricating content.
 - Extracted text is capped and carries parser/status metadata.
 - `manifest.collection_audit` records requested inputs, missing inputs, per-file
   parse results, candidate counts, filtered counts, skipped reasons, extension

@@ -797,18 +797,79 @@ def test_research_documents_extracts_legacy_xls_and_pptx_when_authorized() -> No
         audit = manifest["collection_audit"]
         assert audit["content_read_event_count"] == 3
         assert audit["content_extract_status_counts"] == {"extracted": 3}
-        assert audit["parser_counts"] == {"legacy-xls": 2, "pptx-xml": 1}
-        assert {item["parser"] for item in audit["path_results"]} == {"legacy-xls", "pptx-xml"}
+        assert audit["parser_counts"] == {"legacy-xls-text": 1, "legacy-xls-xml": 1, "pptx-xml": 1}
+        assert {item["parser"] for item in audit["path_results"]} == {"legacy-xls-text", "legacy-xls-xml", "pptx-xml"}
         assert ".xls" in audit["content_extraction_policy"]["binary_content_extract_extensions"]
         assert ".pptx" in audit["content_extraction_policy"]["binary_content_extract_extensions"]
+        assert audit["content_extraction_policy"]["binary_xls_biff_requires_xlrd"] is True
+        assert audit["content_extraction_policy"]["binary_xls_without_xlrd_records_extract_failed"] is True
         proof = manifest["research_corpus_boundary_proof"]
         assert proof["proof_level"] == "authorized_research_corpus_with_content"
-        assert proof["format_boundary"]["parser_counts"] == {"legacy-xls": 2, "pptx-xml": 1}
+        assert proof["format_boundary"]["parser_counts"] == {"legacy-xls-text": 1, "legacy-xls-xml": 1, "pptx-xml": 1}
         surface = manifest["lens_surface_summary"]
         assert surface["extension_counts"] == {".pptx": 1, ".xls": 2}
         assert surface["research_document_surface_counts"]["valuation_model"] >= 2
         assert surface["research_document_surface_counts"]["research_report"] >= 1
         assert surface["research_document_surface_counts"]["table_model"] >= 1
+        validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
+
+
+def test_research_documents_binary_xls_without_xlrd_records_explicit_failure() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out_dir = root / "out"
+        binary_xls_path = root / "binary-估值模型.xls"
+        binary_xls_path.write_bytes(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + (b"\x00" * 2048))
+        env = {
+            **os.environ,
+            "COLLECTORX_DISABLE_XLRD": "1",
+        }
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(binary_xls_path),
+            "--include-content",
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-09T09:00:00+08:00",
+            env=env,
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        event = events[0]
+        assert event["kind"] == "file"
+        assert event["raw_ref"]["parser"] == "xlrd-biff"
+        assert event["raw_ref"]["content_read"] is False
+        payload = event["data"]["payload"]
+        assert payload["extension"] == ".xls"
+        assert payload["content_read"] is False
+        assert payload["content_extract"]["status"] == "extract_failed"
+        assert payload["content_extract"]["parser"] == "xlrd-biff"
+        assert payload["content_extract"]["error"] == "xlrd_unavailable_for_binary_xls"
+        assert "content" not in payload
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["content_read_event_count"] == 0
+        assert audit["content_extract_status_counts"] == {"extract_failed": 1}
+        assert audit["parser_counts"] == {"xlrd-biff": 1}
+        assert audit["content_extraction_policy"]["binary_xls_biff_parser_available"] is False
+        assert audit["content_extraction_policy"]["binary_xls_without_xlrd_records_extract_failed"] is True
+        assert audit["path_results"][0]["parser"] == "xlrd-biff"
+        assert audit["path_results"][0]["candidate_record_count"] == 1
+        assert audit["path_results"][0]["emitted_event_count"] == 1
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["complete_research_corpus_claimed"] is False
+        assert proof["format_boundary"]["parser_counts"] == {"xlrd-biff": 1}
         validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
         assert json.loads(validator.stdout)["valid"] is True
 
@@ -2235,6 +2296,7 @@ if __name__ == "__main__":
     test_email_research_reports_surface_and_boundary_proof()
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
     test_research_documents_extracts_legacy_xls_and_pptx_when_authorized()
+    test_research_documents_binary_xls_without_xlrd_records_explicit_failure()
     test_research_documents_without_include_content_keeps_binary_metadata_only()
     test_research_documents_filters_broad_titles_and_skips_unsupported_files()
     test_research_documents_image_ocr_requires_explicit_adapter_authorization()

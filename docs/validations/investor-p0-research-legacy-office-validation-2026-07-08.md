@@ -59,7 +59,8 @@ git diff --check
 - Plain-text `.xls` export fixture produced a content-read file event.
 - Minimal PPTX fixture produced a content-read file event.
 - Manifest audit reported three content-read events, extracted statuses, parser
-  counts for `legacy-xls` and `pptx-xml`, and per-path parser results.
+  counts for `legacy-xls-xml`, `legacy-xls-text`, and `pptx-xml`, and per-path
+  parser results.
 - Research corpus boundary proof stayed partial and did not claim complete
   research-corpus coverage.
 - The generated package passed `tools/validate_collector_package.py` with

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 from html.parser import HTMLParser
 import json
 import os
@@ -35,6 +36,13 @@ RESEARCH_DOCUMENT_EXTENSIONS = (
     | {".doc", ".ppt", ".key", ".numbers", ".bmp", ".gif", ".heic", ".heif"}
 )
 MAX_EXTRACTED_CHARS = 20000
+
+
+class DocumentExtractError(RuntimeError):
+    def __init__(self, code: str, *, parser: str) -> None:
+        super().__init__(code)
+        self.code = code
+        self.parser = parser
 
 
 class CollectionResult:
@@ -448,6 +456,17 @@ def content_extraction_policy(source_id: str, include_content: bool, include_ima
         "unsupported_extensions_are_skipped": True,
         "preview_char_limit": 1200,
         "extracted_text_char_limit": MAX_EXTRACTED_CHARS,
+        "legacy_xls_parser_variants": [
+            "openpyxl-renamed-xls",
+            "legacy-xls-html",
+            "legacy-xls-xml",
+            "legacy-xls-delimited",
+            "legacy-xls-text",
+            "xlrd-biff",
+        ],
+        "binary_xls_biff_requires_xlrd": True,
+        "binary_xls_biff_parser_available": xlrd_available(),
+        "binary_xls_without_xlrd_records_extract_failed": True,
         "collector_writes_wiki_directly": False,
     }
 
@@ -778,13 +797,21 @@ def extract_document_text(path: Path) -> Dict[str, Any]:
             text = extract_xlsx_text(path)
             parser = "openpyxl"
         elif suffix == ".xls":
-            text = extract_xls_text(path)
-            parser = "legacy-xls"
+            text, parser = extract_xls_text_with_parser(path)
         elif suffix == ".pptx":
             text = extract_pptx_text(path)
             parser = "pptx-xml"
         else:
             text = ""
+    except DocumentExtractError as exc:
+        return {
+            "status": "extract_failed",
+            "parser": exc.parser,
+            "text": "",
+            "text_length": 0,
+            "truncated": False,
+            "error": exc.code,
+        }
     except Exception as exc:  # pragma: no cover - dependency/runtime specific
         return {
             "status": "extract_failed",
@@ -792,7 +819,7 @@ def extract_document_text(path: Path) -> Dict[str, Any]:
             "text": "",
             "text_length": 0,
             "truncated": False,
-            "error": type(exc).__name__,
+            "error": str(exc) or type(exc).__name__,
         }
     normalized = "\n".join(line.strip() for line in text.splitlines() if line.strip())
     truncated = len(normalized) > MAX_EXTRACTED_CHARS
@@ -909,28 +936,32 @@ def extract_xlsx_text(path: Path) -> str:
 
 
 def extract_xls_text(path: Path) -> str:
+    text, _parser = extract_xls_text_with_parser(path)
+    return text
+
+
+def extract_xls_text_with_parser(path: Path) -> tuple[str, str]:
     raw = path.read_bytes()
     if raw.startswith(b"PK"):
-        return extract_xlsx_text(path)
+        return extract_xlsx_text(path), "openpyxl-renamed-xls"
 
     text = decode_legacy_text(raw)
     if text:
         lowered = text[:500].lower()
-        if "<html" in lowered or "<table" in lowered:
-            return extract_html_text(text)
         if "<workbook" in lowered or "urn:schemas-microsoft-com:office:spreadsheet" in lowered:
-            return extract_xml_spreadsheet_text(text)
+            return extract_xml_spreadsheet_text(text), "legacy-xls-xml"
+        if "<html" in lowered or "<table" in lowered:
+            return extract_html_text(text), "legacy-xls-html"
         first_line = text.splitlines()[0] if text.splitlines() else ""
         if "\t" in text or "," in first_line:
-            return normalize_tabular_text(text)
+            return normalize_tabular_text(text), "legacy-xls-delimited"
         if is_probably_plain_text(text):
-            return text.strip()
+            return text.strip(), "legacy-xls-text"
 
-    try:
-        import xlrd  # type: ignore
-    except ModuleNotFoundError as exc:
-        raise RuntimeError("xlrd_unavailable_for_binary_xls") from exc
+    if not xlrd_available():
+        raise DocumentExtractError("xlrd_unavailable_for_binary_xls", parser="xlrd-biff")
 
+    import xlrd  # type: ignore
     workbook = xlrd.open_workbook(str(path), on_demand=True)
     parts: List[str] = []
     try:
@@ -944,7 +975,13 @@ def extract_xls_text(path: Path) -> str:
                     break
     finally:
         workbook.release_resources()
-    return "\n".join(parts)
+    return "\n".join(parts), "xlrd-biff"
+
+
+def xlrd_available() -> bool:
+    if os.environ.get("COLLECTORX_DISABLE_XLRD"):
+        return False
+    return importlib.util.find_spec("xlrd") is not None
 
 
 def decode_legacy_text(raw: bytes) -> str:
