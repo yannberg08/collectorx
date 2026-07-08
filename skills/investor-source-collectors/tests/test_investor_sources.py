@@ -1061,6 +1061,25 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
         assert surface["multi_day_event_count"] == 0
         assert surface["invalid_time_range_count"] == 0
         assert surface["collector_writes_wiki_directly"] is False
+        proof = manifest["task_calendar_boundary_proof"]
+        assert proof["proof_level"] == "authorized_task_calendar_with_time_quality"
+        assert proof["event_count"] == 4
+        assert proof["candidate_record_count"] == 5
+        assert proof["matched_event_count"] == 4
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["upstream_boundary"]["upstream_collector_counts"] == {"calendar": 1, "ticktick": 3}
+        assert proof["upstream_boundary"]["source_platform_counts"] == {"feishu_calendar": 1, "ticktick": 3}
+        assert proof["time_boundary"]["events_with_time"] == 4
+        assert proof["time_boundary"]["events_with_due_or_start"] == 4
+        assert proof["time_boundary"]["events_with_reminders"] == 1
+        assert proof["time_boundary"]["events_with_meeting_url"] == 1
+        assert proof["time_boundary"]["events_with_duration_minutes"] == 1
+        assert proof["complete_task_list_claimed"] is False
+        assert proof["complete_calendar_claimed"] is False
+        assert proof["complete_task_calendar_context_claimed"] is False
+        assert proof["direct_task_or_calendar_reconnect"] is False
+        assert proof["requires_upstream_task_calendar_collector"] is True
+        assert proof["task_calendar_boundary"]["task_calendar_surface_counts"]["risk_check"] == 3
 
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["task-calendar-investor"]

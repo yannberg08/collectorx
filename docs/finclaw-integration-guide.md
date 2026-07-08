@@ -585,6 +585,11 @@ Current status:
 - Does not claim investment-calendar status directly.
 - Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
   trading plans, earnings events, research meetings, and review reminders.
+- The `task-calendar-investor` lens writes
+  `manifest.task_calendar_boundary_proof` with authorized input counts,
+  upstream task/calendar source counts, candidate/matched/filtered counts,
+  time/reminder/meeting-link coverage, calendar time-quality fields, and an
+  explicit no-complete-task-list/no-complete-calendar boundary.
 
 ### 飞书通用授权导入
 
