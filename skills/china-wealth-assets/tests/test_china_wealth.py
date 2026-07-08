@@ -634,6 +634,140 @@ def test_manifest_reports_account_asset_currency_and_transaction_boundaries() ->
         assert portfolio_preference["evidence_count"] == 4
 
 
+def test_scope_policy_filters_authorized_asset_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "scoped-wealth.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {"平台": "支付宝", "账户名称": "ali-main", "类型": "货币基金", "基金代码": "000001", "基金名称": "余额宝货币", "持有金额": "1000", "币种": "CNY"},
+                        {"平台": "天天基金", "账户名称": "ali-main", "类型": "货币基金", "基金代码": "000001", "基金名称": "余额宝货币", "持有金额": "2000", "币种": "CNY"},
+                        {"平台": "支付宝", "账户名称": "ali-other", "类型": "货币基金", "基金代码": "000001", "基金名称": "余额宝货币", "持有金额": "3000", "币种": "CNY"},
+                        {"平台": "支付宝", "账户名称": "ali-main", "类型": "持仓", "基金代码": "000001", "基金名称": "余额宝货币", "持有金额": "4000", "币种": "CNY"},
+                        {"平台": "支付宝", "账户名称": "ali-main", "类型": "货币基金", "基金代码": "000002", "基金名称": "余额宝货币", "持有金额": "5000", "币种": "CNY"},
+                        {"平台": "支付宝", "账户名称": "ali-main", "类型": "货币基金", "基金代码": "000001", "基金名称": "普通货币", "持有金额": "6000", "币种": "CNY"},
+                        {"平台": "支付宝", "账户名称": "ali-main", "类型": "货币基金", "基金代码": "000001", "基金名称": "余额宝货币", "持有金额": "7000", "币种": "USD"},
+                        {"平台": "支付宝", "账户名称": "ali-main", "类型": "货币基金", "基金代码": "000001", "基金名称": "余额宝私人货币", "持有金额": "8000", "币种": "CNY"},
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--allow-platform",
+                "alipay",
+                "--allow-account",
+                "ali-main",
+                "--allow-subtype",
+                "cash_management",
+                "--allow-product-code",
+                "000001",
+                "--allow-product-name",
+                "余额宝",
+                "--allow-currency",
+                "CNY",
+                "--deny-keyword",
+                "私人",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["platform"] == "alipay"
+        assert events[0]["data"]["account"] == "ali-main"
+        assert events[0]["data"]["subtype"] == "cash_management"
+        assert events[0]["data"]["product_code"] == "000001"
+        assert events[0]["data"]["product_name"] == "余额宝货币"
+        assert events[0]["data"]["market_value"] == 1000.0
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        audit = manifest["collection_audit"]
+        assert audit["candidate_record_count"] == 8
+        assert audit["parsed_record_count"] == 8
+        assert audit["emitted_event_count"] == 1
+        assert audit["scope_policy_filtered_record_count"] == 7
+        assert audit["china_wealth_scope_policy"]["enabled"] is True
+        assert audit["china_wealth_scope_policy"]["allow_platforms"] == ["alipay"]
+        assert audit["china_wealth_scope_policy"]["allow_subtypes"] == ["cash_management"]
+        assert audit["scope_policy_filter_reason_counts"] == {
+            "account_not_allowed": 1,
+            "currency_not_allowed": 1,
+            "keyword_denied": 1,
+            "platform_not_allowed": 1,
+            "product_code_not_allowed": 1,
+            "product_name_not_allowed": 1,
+            "subtype_not_allowed": 1,
+        }
+        assert audit["path_results"][0]["scope_policy_filter_status"] == "partially_filtered"
+        boundary = manifest["asset_boundary_proof"]["authorization_scope_boundary"]
+        assert boundary["candidate_record_count"] == 8
+        assert boundary["scope_policy_filtered_record_count"] == 7
+        assert boundary["china_wealth_scope_policy_filtered_all"] is False
+
+
+def test_scope_policy_filtered_all_readiness() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "filtered-all.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                {"records": [{"平台": "天天基金", "账户名称": "tt-main", "类型": "持仓", "基金代码": "000001", "基金名称": "测试基金", "持仓金额": "100"}]},
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--allow-platform",
+                "alipay",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        event_lines = (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        assert event_lines == []
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["asset_boundary_scope"] == "scope_policy_excluded_all"
+        audit = manifest["collection_audit"]
+        assert audit["candidate_record_count"] == 1
+        assert audit["scope_policy_filtered_record_count"] == 1
+        assert audit["china_wealth_scope_policy_filtered_all"] is True
+        assert audit["scope_policy_filter_reason_counts"] == {"platform_not_allowed": 1}
+        assert audit["path_results"][0]["status"] == "filtered_by_scope_policy"
+        proof = manifest["asset_boundary_proof"]
+        assert proof["overall_proof_level"] == "scope_policy_filtered_all"
+        assert proof["proof_scope"] == "scope_policy_excluded_all"
+        assert proof["authorization_scope_boundary"]["china_wealth_scope_policy_filtered_all"] is True
+        assert proof["missing_global_requirements"] == ["scope_policy_retained_records"]
+
+
 if __name__ == "__main__":
     test_collect_fund_holding_and_transaction()
     test_collect_without_input_gap()
@@ -646,4 +780,6 @@ if __name__ == "__main__":
     test_manifest_reports_expected_platform_coverage()
     test_collects_zip_package_with_value_summary()
     test_manifest_reports_account_asset_currency_and_transaction_boundaries()
+    test_scope_policy_filters_authorized_asset_records()
+    test_scope_policy_filtered_all_readiness()
     print("china-wealth-assets tests passed.")

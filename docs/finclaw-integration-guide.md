@@ -618,6 +618,9 @@ Current status:
 python3 skills/china-wealth-assets/scripts/china_wealth.py collect \
   --input <authorized-fund-or-wealth-export> \
   --out-dir <out-dir> \
+  --allow-platform alipay \
+  --allow-product-code 000001 \
+  --deny-keyword 私人 \
   --sync-soulmirror
 ```
 
@@ -655,8 +658,12 @@ Current status:
   coverage without real account/read-only-screen validation.
 - `manifest.collection_audit` records input count, resolved files, extension
   coverage, HAR entry/platform/endpoint/skip-reason coverage, ZIP
-  member/skipped-member counts, parsed record count, emitted event count, and
-  path-level parse results.
+  member/skipped-member counts, parsed record count, emitted event count,
+  platform/account/subtype/product-code/product-name/currency/side/keyword
+  scope-policy audit, filtered-all readiness, and path-level parse results.
+- `manifest.asset_boundary_proof.authorization_scope_boundary` lets FinClaw
+  inspect the user-authorized asset scope before using fund/wealth records as
+  partial asset facts.
 
 ### 笔记
 

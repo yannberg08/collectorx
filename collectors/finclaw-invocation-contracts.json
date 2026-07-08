@@ -148,9 +148,9 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "partial-asset-facts",
-      "user_step": "Provide authorized fund, wealth, cash-management, bank wealth, workbook, ZIP, or HAR exports.",
-      "preflight": "Input is read-only and user-owned; passwords and account mutation are out of scope.",
-      "failure_state": "needs_authorized_wealth_export"
+      "user_step": "Provide authorized fund, wealth, cash-management, bank wealth, workbook, PDF, ZIP, or HAR exports; optionally choose platform, account, subtype, product code/name, currency, side, and keyword allow/deny scope filters.",
+      "preflight": "Input is read-only and user-owned; optional scope filters are applied before Lake output; filtered-all results are reported explicitly; passwords and account mutation are out of scope.",
+      "failure_state": "needs_authorized_wealth_export_or_scope_policy_retained_records"
     },
     {
       "id": "meeting-artifacts",

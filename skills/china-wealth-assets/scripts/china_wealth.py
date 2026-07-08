@@ -40,6 +40,9 @@ def write_package(out: Path, events: list[dict], *, collected_at: str, collectio
                 f"- 事件数：{len(events)}",
                 f"- 资产边界证明：`{manifest['asset_boundary_proof']['overall_proof_level']}`",
                 f"- 缺失平台：`{', '.join(manifest['asset_boundary_proof']['missing_expected_platforms']) or 'none'}`",
+                f"- scope_policy_enabled：{(manifest['collection_audit'].get('china_wealth_scope_policy') or {}).get('enabled', False)}",
+                f"- scope_policy_filtered：{manifest['collection_audit'].get('scope_policy_filtered_record_count', 0)} / "
+                f"{manifest['collection_audit'].get('candidate_record_count', manifest['collection_audit'].get('parsed_record_count', 0))}",
                 "- 用途：补齐券商账户之外的基金、理财和现金管理资产边界。",
                 "- 边界：不采支付密码、银行密码、消费流水；不声明完整资产边界，除非平台级真实验证完成。",
             ]
@@ -100,7 +103,12 @@ def sync_package_to_soulmirror(output_dir: Path, *, soulmirror_home: Path | None
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        scope_policy=scope_policy_from_args(args),
+    )
     package_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.sync_soulmirror and package_dir is None:
         run_id = re.sub(r"[^0-9A-Za-z_.-]+", "-", collected_at).strip("-")
@@ -127,8 +135,45 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--soulmirror-home", help="SoulMirror 根目录，默认 ~/.soulmirror")
     p.add_argument("--limit", type=int)
     p.add_argument("--collected-at")
+    p.add_argument("--allow-platform", action="append", help="Only collect matching platforms, e.g. alipay, tiantian-fund, danjuan, qieman, bank-wealth.")
+    p.add_argument("--deny-platform", action="append", help="Exclude matching platforms.")
+    p.add_argument("--allow-account", action="append", help="Only collect matching account refs.")
+    p.add_argument("--deny-account", action="append", help="Exclude matching account refs.")
+    p.add_argument("--allow-subtype", action="append", help="Only collect matching asset subtypes, e.g. asset_snapshot, fund_holding, wealth_holding, cash_management, fund_transaction.")
+    p.add_argument("--deny-subtype", action="append", help="Exclude matching asset subtypes.")
+    p.add_argument("--allow-product-code", action="append", help="Only collect matching fund or wealth product codes.")
+    p.add_argument("--deny-product-code", action="append", help="Exclude matching fund or wealth product codes.")
+    p.add_argument("--allow-product-name", action="append", help="Only collect product names containing the given text or wildcard.")
+    p.add_argument("--deny-product-name", action="append", help="Exclude product names containing the given text or wildcard.")
+    p.add_argument("--allow-currency", action="append", help="Only collect matching currencies.")
+    p.add_argument("--deny-currency", action="append", help="Exclude matching currencies.")
+    p.add_argument("--allow-side", action="append", help="Only collect matching transaction sides, e.g. buy, sell, dividend, convert.")
+    p.add_argument("--deny-side", action="append", help="Exclude matching transaction sides.")
+    p.add_argument("--allow-keyword", action="append", help="Only collect records whose platform/account/product/source fields contain a keyword.")
+    p.add_argument("--deny-keyword", action="append", help="Exclude records whose platform/account/product/source fields contain a keyword.")
     p.set_defaults(func=collect)
     return parser
+
+
+def scope_policy_from_args(args: argparse.Namespace) -> dict:
+    return {
+        "allow_platforms": args.allow_platform,
+        "deny_platforms": args.deny_platform,
+        "allow_accounts": args.allow_account,
+        "deny_accounts": args.deny_account,
+        "allow_subtypes": args.allow_subtype,
+        "deny_subtypes": args.deny_subtype,
+        "allow_product_codes": args.allow_product_code,
+        "deny_product_codes": args.deny_product_code,
+        "allow_product_names": args.allow_product_name,
+        "deny_product_names": args.deny_product_name,
+        "allow_currencies": args.allow_currency,
+        "deny_currencies": args.deny_currency,
+        "allow_sides": args.allow_side,
+        "deny_sides": args.deny_side,
+        "allow_keywords": args.allow_keyword,
+        "deny_keywords": args.deny_keyword,
+    }
 
 
 def main() -> int:

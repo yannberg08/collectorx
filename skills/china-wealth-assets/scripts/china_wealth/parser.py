@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import csv
+import fnmatch
 import hashlib
 import json
 import re
@@ -181,8 +182,19 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    scope_policy: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        scope_policy=scope_policy,
+    )
     return events
 
 
@@ -191,9 +203,11 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    scope_policy: Optional[Dict[str, Any]] = None,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     paths = list(iter_paths(input_list))
+    policy = normalize_china_wealth_scope_policy(scope_policy)
     audit = {
         "source_type": "authorized_local_china_wealth_export",
         "input_count": len(input_list),
@@ -229,9 +243,15 @@ def collect_from_inputs_with_audit(
         "pdf_text_record_count": 0,
         "pdf_parse_error_count": 0,
         "limit": limit,
+        "limit_reached": False,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
         "complete_asset_boundary_claimed": False,
+        "candidate_record_count": 0,
+        "scope_policy_filtered_record_count": 0,
+        "scope_policy_filter_reason_counts": {},
+        "china_wealth_scope_policy": policy,
+        "china_wealth_scope_policy_filtered_all": False,
         "path_results": [],
     }
     if not paths:
@@ -245,6 +265,8 @@ def collect_from_inputs_with_audit(
             "path": str(path),
             "extension": path.suffix.lower() or "<none>",
             "parsed_record_count": 0,
+            "candidate_record_count": 0,
+            "scope_policy_filtered_record_count": 0,
             "emitted_event_count": 0,
             "status": "parsed",
         }
@@ -254,17 +276,202 @@ def collect_from_inputs_with_audit(
         path_result["parsed_record_count"] = len(records)
         audit["parsed_record_count"] += len(records)
         for row, record in enumerate(records, start=1):
-            events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+            audit["candidate_record_count"] += 1
+            path_result["candidate_record_count"] += 1
+            filter_reason = china_wealth_scope_policy_filter_reason(event, policy)
+            if filter_reason:
+                audit["scope_policy_filtered_record_count"] += 1
+                path_result["scope_policy_filtered_record_count"] += 1
+                increment_counter(audit, "scope_policy_filter_reason_counts", filter_reason)
+                continue
+            events.append(event)
             path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                audit["emitted_event_count"] = len(events[:limit])
-                finalize_audit(audit)
-                return events[:limit], audit
-    if not events:
+                audit["limit_reached"] = True
+                break
+        if path_result["candidate_record_count"]:
+            if policy["enabled"] and path_result["scope_policy_filtered_record_count"] == path_result["candidate_record_count"] and path_result["emitted_event_count"] == 0:
+                path_result["status"] = "filtered_by_scope_policy"
+                path_result["reason"] = "scope_policy_excluded_all_records"
+            elif path_result["scope_policy_filtered_record_count"]:
+                path_result["scope_policy_filter_status"] = "partially_filtered"
+        if audit["limit_reached"]:
+            break
+    scope_policy_filtered_all = (
+        policy["enabled"]
+        and audit["candidate_record_count"] > 0
+        and audit["scope_policy_filtered_record_count"] == audit["candidate_record_count"]
+        and not events
+    )
+    audit["china_wealth_scope_policy_filtered_all"] = scope_policy_filtered_all
+    if not events and not scope_policy_filtered_all:
         events = [gap_event(collected_at=collected_at, reason="china_wealth_records_empty")]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
+
+
+CHINA_WEALTH_SCOPE_POLICY_KEYS = (
+    "platforms",
+    "accounts",
+    "subtypes",
+    "product_codes",
+    "product_names",
+    "currencies",
+    "sides",
+    "keywords",
+)
+
+
+def split_scope_values(values: Any) -> List[str]:
+    if values in (None, ""):
+        return []
+    if isinstance(values, str):
+        raw_values: Iterable[Any] = [values]
+    elif isinstance(values, (list, tuple, set)):
+        raw_values = values
+    else:
+        raw_values = [values]
+    items: List[str] = []
+    for value in raw_values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, (list, tuple, set)):
+            items.extend(split_scope_values(value))
+            continue
+        items.extend(part.strip() for part in re.split(r"[,，、;；|\n]+", str(value)) if part.strip())
+    return items
+
+
+def normalize_china_wealth_scope_policy(scope_policy: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    raw = scope_policy or {}
+    policy: Dict[str, Any] = {}
+    for key in CHINA_WEALTH_SCOPE_POLICY_KEYS:
+        allow_key = f"allow_{key}"
+        deny_key = f"deny_{key}"
+        policy[allow_key] = normalize_scope_terms(split_scope_values(raw.get(allow_key)), key=key)
+        policy[deny_key] = normalize_scope_terms(split_scope_values(raw.get(deny_key)), key=key)
+    policy["enabled"] = any(policy[f"{prefix}_{key}"] for key in CHINA_WEALTH_SCOPE_POLICY_KEYS for prefix in ("allow", "deny"))
+    return policy
+
+
+def normalize_scope_terms(values: Iterable[str], *, key: str) -> List[str]:
+    normalized: List[str] = []
+    for value in values:
+        text = value.strip()
+        if not text:
+            continue
+        if key == "platforms":
+            text = normalize_scope_platform(text)
+        elif key == "subtypes":
+            text = normalize_scope_subtype(text)
+        elif key == "sides":
+            text = normalize_side(text) or text
+        elif key in {"product_codes", "currencies"}:
+            text = re.sub(r"\s+", "", text)
+        normalized.append(text.lower())
+    return sorted(dict.fromkeys(normalized))
+
+
+def normalize_scope_platform(value: str) -> str:
+    return infer_platform({"platform": value}, Path(value))
+
+
+def normalize_scope_subtype(value: str) -> str:
+    return infer_subtype({"type": value, "类型": value})
+
+
+def china_wealth_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    data = event.get("data") or {}
+    platform = normalize_scope_platform(str(data.get("platform") or ""))
+    account = str(data.get("account") or "").strip().lower()
+    subtype = normalize_scope_subtype(str(data.get("subtype") or ""))
+    product_code = re.sub(r"\s+", "", str(data.get("product_code") or "")).lower()
+    product_name = str(data.get("product_name") or "").strip().lower()
+    currency = re.sub(r"\s+", "", str(data.get("currency") or "")).lower()
+    side = str(data.get("side") or "").strip().lower()
+    search_text = china_wealth_scope_search_text(event)
+
+    if scope_identity_match(platform, policy.get("deny_platforms", [])):
+        return "platform_denied"
+    if scope_identity_match(account, policy.get("deny_accounts", [])):
+        return "account_denied"
+    if scope_identity_match(subtype, policy.get("deny_subtypes", [])):
+        return "subtype_denied"
+    if scope_identity_match(product_code, policy.get("deny_product_codes", [])):
+        return "product_code_denied"
+    if scope_text_match(product_name, policy.get("deny_product_names", [])):
+        return "product_name_denied"
+    if scope_identity_match(currency, policy.get("deny_currencies", [])):
+        return "currency_denied"
+    if scope_identity_match(side, policy.get("deny_sides", [])):
+        return "side_denied"
+    if scope_text_match(search_text, policy.get("deny_keywords", [])):
+        return "keyword_denied"
+
+    if policy.get("allow_platforms") and not scope_identity_match(platform, policy["allow_platforms"]):
+        return "platform_not_allowed"
+    if policy.get("allow_accounts") and not scope_identity_match(account, policy["allow_accounts"]):
+        return "account_not_allowed"
+    if policy.get("allow_subtypes") and not scope_identity_match(subtype, policy["allow_subtypes"]):
+        return "subtype_not_allowed"
+    if policy.get("allow_product_codes") and not scope_identity_match(product_code, policy["allow_product_codes"]):
+        return "product_code_not_allowed"
+    if policy.get("allow_product_names") and not scope_text_match(product_name, policy["allow_product_names"]):
+        return "product_name_not_allowed"
+    if policy.get("allow_currencies") and not scope_identity_match(currency, policy["allow_currencies"]):
+        return "currency_not_allowed"
+    if policy.get("allow_sides") and not scope_identity_match(side, policy["allow_sides"]):
+        return "side_not_allowed"
+    if policy.get("allow_keywords") and not scope_text_match(search_text, policy["allow_keywords"]):
+        return "keyword_not_allowed"
+    return None
+
+
+def scope_identity_match(value: str, patterns: Iterable[str]) -> bool:
+    if not value:
+        return False
+    normalized = value.lower()
+    return any(fnmatch.fnmatchcase(normalized, str(pattern).lower()) for pattern in patterns)
+
+
+def scope_text_match(value: str, patterns: Iterable[str]) -> bool:
+    if not value:
+        return False
+    haystack = value.lower()
+    for pattern in patterns:
+        needle = str(pattern).lower().strip()
+        if not needle:
+            continue
+        if any(char in needle for char in "*?[]"):
+            if fnmatch.fnmatchcase(haystack, needle):
+                return True
+        elif needle in haystack:
+            return True
+    return False
+
+
+def china_wealth_scope_search_text(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    values = [
+        data.get("platform"),
+        data.get("account"),
+        data.get("subtype"),
+        data.get("product_code"),
+        data.get("product_name"),
+        data.get("product_type"),
+        data.get("currency"),
+        data.get("side"),
+        raw_ref.get("path"),
+        raw_ref.get("sheet"),
+        raw_ref.get("archive_member"),
+        raw_ref.get("har_endpoint"),
+    ]
+    return "\n".join(str(value) for value in values if value not in (None, "", [], {}))
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -917,7 +1124,10 @@ def build_manifest(
     kind_counts = Counter(event["kind"] for event in events)
     subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
+    collection_audit = collection_audit or {}
     gap_only = bool(events) and set(subtype_counts) == {"collector_gap"}
+    no_events = not events
+    scope_policy_filtered_all = bool(collection_audit.get("china_wealth_scope_policy_filtered_all"))
     value_events = [
         event for event in events
         if any((event.get("data") or {}).get(key) is not None for key in ("market_value", "total_asset", "transaction_amount", "pnl"))
@@ -941,7 +1151,7 @@ def build_manifest(
         "currency_summary": currency_summary(events),
         "asset_surface_summary": asset_surface_summary(events),
         "account_boundary_summary": account_boundary_summary(events),
-        "asset_boundary_proof": asset_boundary_proof(events),
+        "asset_boundary_proof": asset_boundary_proof(events, collection_audit=collection_audit),
         "platform_coverage": platform_coverage(platform_counts),
         "evidence_policy": {
             "complete_asset_boundary_claimed": False,
@@ -954,14 +1164,50 @@ def build_manifest(
             "requires_corroboration_with": ["brokerage_accounts", "bank_statements", "fund_platform_exports", "investment_notes"],
         },
         "collection_readiness": {
-            "status": "needs_china_wealth_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events),
+            "status": china_wealth_readiness_status(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_complete_asset_boundary": False,
-            "asset_boundary_scope": "none" if gap_only else "partial_authorized_input",
-            "next_action": "提供支付宝/基金/理财授权导出后重跑。" if gap_only else "可进入投资分身蒸馏；后续按平台做只读真机验证后，才能声明完整资产边界。",
+            "asset_boundary_scope": china_wealth_asset_boundary_scope(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "next_action": china_wealth_next_action(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
-        "collection_audit": collection_audit or {},
+        "collection_audit": collection_audit,
     }
+
+
+def china_wealth_readiness_status(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only or no_events:
+        return "needs_china_wealth_authorized_input"
+    return "events_collected"
+
+
+def china_wealth_asset_boundary_scope(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only or no_events:
+        return "none"
+    return "partial_authorized_input"
+
+
+def china_wealth_next_action(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "放宽用户授权范围，或提供与当前平台/账户/产品/币种策略匹配的基金理财记录。"
+    if gap_only or no_events:
+        return "提供支付宝/基金/理财授权导出后重跑。"
+    return "可进入投资分身蒸馏；后续按平台做只读真机验证后，才能声明完整资产边界。"
 
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -1168,13 +1414,19 @@ def account_boundary_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def asset_boundary_proof(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def asset_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     usable_events = non_gap_events(events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
+    audit = collection_audit or {}
     if not usable_events:
+        scope_policy_filtered_all = bool(audit.get("china_wealth_scope_policy_filtered_all"))
         return {
-            "proof_scope": "none",
-            "overall_proof_level": "no_authorized_asset_evidence",
+            "proof_scope": "scope_policy_excluded_all" if scope_policy_filtered_all else "none",
+            "overall_proof_level": "scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_asset_evidence",
             "complete_asset_boundary_claimed": False,
             "requires_real_account_validation": True,
             "requirements": asset_boundary_proof_requirements(),
@@ -1183,7 +1435,8 @@ def asset_boundary_proof(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             "missing_expected_platforms": list(EXPECTED_P0_PLATFORMS),
             "platform_proofs": platform_boundary_proofs({}, platform_counts),
             "account_proofs": [],
-            "missing_global_requirements": ["authorized_asset_input"],
+            "authorization_scope_boundary": china_wealth_authorization_scope_boundary(audit),
+            "missing_global_requirements": ["scope_policy_retained_records"] if scope_policy_filtered_all else ["authorized_asset_input"],
         }
 
     grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
@@ -1229,7 +1482,19 @@ def asset_boundary_proof(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "missing_expected_platforms": missing_platforms,
         "platform_proofs": platform_proofs,
         "account_proofs": account_proofs,
+        "authorization_scope_boundary": china_wealth_authorization_scope_boundary(audit),
         "missing_global_requirements": missing_global,
+    }
+
+
+def china_wealth_authorization_scope_boundary(collection_audit: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    audit = collection_audit or {}
+    return {
+        "policy": audit.get("china_wealth_scope_policy", normalize_china_wealth_scope_policy(None)),
+        "candidate_record_count": audit.get("candidate_record_count", audit.get("parsed_record_count", 0)),
+        "scope_policy_filtered_record_count": audit.get("scope_policy_filtered_record_count", 0),
+        "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts", {}),
+        "china_wealth_scope_policy_filtered_all": audit.get("china_wealth_scope_policy_filtered_all", False),
     }
 
 
@@ -1520,6 +1785,7 @@ def finalize_audit(audit: Dict[str, Any]) -> None:
         "har_skip_reason_counts",
         "har_endpoint_counts",
         "har_platform_entry_counts",
+        "scope_policy_filter_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
