@@ -23,6 +23,10 @@ scope:
     - announcement_annotations
     - valuation_models
     - screenshots
+    - path_level_collection_audit
+    - missing_input_audit
+    - skipped_reason_counts
+    - screenshot_metadata_only_policy
   excludes:
     - whole_disk_scan
     - unrelated_private_files
@@ -48,6 +52,8 @@ content_policy:
     - .webp
     - .heic
   screenshots_are_metadata_only_no_ocr: true
+  ocr_performed: false
+  ocr_requires_separate_user_consent_and_adapter: true
   unsupported_extensions_are_skipped: true
   writes_final_wiki_directly: false
 
@@ -56,3 +62,5 @@ description: |
   筛选投研文档并把 raw_ref 路由到投资分身。若用户显式授权
   --include-content，可读取 DOCX/PDF/XLSX/XLSM 的正文或表格文本，
   但仍只写 CollectorX lake 与 investor_wiki_evidence.v1 证据包。
+  manifest 会记录缺失输入、逐文件解析结果、跳过原因、limit 截断和截图
+  metadata-only/no-OCR 边界。

@@ -17,7 +17,8 @@ TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".eml", ".ics"}
 TABLE_EXTENSIONS = {".csv", ".tsv"}
 JSON_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
 CONTENT_EXTRACT_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".xlsm"}
-METADATA_ONLY_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".pptx", ".png", ".jpg", ".jpeg", ".webp"}
+IMAGE_METADATA_ONLY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".heic", ".heif"}
+METADATA_ONLY_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".pptx"} | IMAGE_METADATA_ONLY_EXTENSIONS
 RESEARCH_DOCUMENT_EXTENSIONS = (
     TEXT_EXTENSIONS
     | TABLE_EXTENSIONS
@@ -80,7 +81,8 @@ def collect_events_with_audit(
 ) -> CollectionResult:
     get_profile(source_id)
     input_list = list(inputs)
-    paths = list(iter_input_paths(input_list))
+    input_resolution = resolve_input_paths(input_list)
+    paths = input_resolution["paths"]
     source_policy = build_source_policy(
         allow_chats=allow_chats,
         deny_chats=deny_chats,
@@ -96,6 +98,7 @@ def collect_events_with_audit(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        input_resolution=input_resolution,
     )
     if not paths:
         events = [build_gap_event(source_id, collected_at=collected_at)]
@@ -105,6 +108,9 @@ def collect_events_with_audit(
     events: List[Dict[str, Any]] = []
     parsed_count = 0
     for path in paths:
+        if limit is not None and len(events) >= limit:
+            audit["limit_reached"] = True
+            break
         parsed = parse_path(
             source_id,
             path,
@@ -116,9 +122,16 @@ def collect_events_with_audit(
             audit=audit,
         )
         parsed_count += len(parsed.candidates)
-        events.extend(parsed.events)
+        events_to_add = parsed.events
+        if limit is not None:
+            remaining = max(limit - len(events), 0)
+            if len(events_to_add) > remaining:
+                audit["limit_reached"] = True
+                events_to_add = events_to_add[:remaining]
+                mark_last_path_result_limit(audit, path, emitted_event_count=len(events_to_add))
+        events.extend(events_to_add)
         if limit is not None and len(events) >= limit:
-            events = events[:limit]
+            audit["limit_reached"] = True
             finalize_collection_audit(audit, events, parsed_count=parsed_count)
             return CollectionResult(events=events, audit=audit)
     if not events:
@@ -134,17 +147,48 @@ def collect_events_with_audit(
     return CollectionResult(events=events, audit=audit)
 
 
-def iter_input_paths(inputs: Iterable[str]) -> Iterator[Path]:
+def resolve_input_paths(inputs: Iterable[str]) -> Dict[str, Any]:
+    paths: List[Path] = []
+    path_results: List[Dict[str, Any]] = []
+    skipped_reason_counts: Counter[str] = Counter()
+    skipped_file_count = 0
+    input_missing_count = 0
+    requested_inputs: List[str] = []
     for raw in inputs:
         path = Path(raw).expanduser()
+        requested_inputs.append(str(path))
         if not path.exists():
+            input_missing_count += 1
+            skipped_reason_counts["input_missing"] += 1
+            path_results.append(path_result(path, status="missing", reason="input_missing"))
             continue
         if path.is_dir():
             for child in sorted(path.rglob("*")):
-                if child.is_file() and not child.name.startswith("."):
-                    yield child
+                if not child.is_file():
+                    continue
+                if child.name.startswith("."):
+                    skipped_file_count += 1
+                    skipped_reason_counts["hidden_file"] += 1
+                    path_results.append(path_result(child, status="skipped", reason="hidden_file"))
+                    continue
+                paths.append(child)
         elif path.is_file():
-            yield path
+            paths.append(path)
+        else:
+            skipped_reason_counts["unsupported_input_kind"] += 1
+            path_results.append(path_result(path, status="skipped", reason="unsupported_input_kind"))
+    return {
+        "paths": paths,
+        "requested_inputs": requested_inputs,
+        "input_missing_count": input_missing_count,
+        "skipped_file_count": skipped_file_count,
+        "skipped_reason_counts": skipped_reason_counts,
+        "path_results": path_results,
+    }
+
+
+def iter_input_paths(inputs: Iterable[str]) -> Iterator[Path]:
+    yield from resolve_input_paths(inputs)["paths"]
 
 
 def parse_path(
@@ -165,9 +209,11 @@ def parse_path(
         if audit is not None:
             audit["skipped_file_count"] += 1
             audit_counter(audit, "skipped_extension_counts")[suffix or "<none>"] += 1
+            audit_counter(audit, "skipped_reason_counts")["unsupported_extension"] += 1
+            audit.setdefault("path_results", []).append(path_result(path, status="skipped", reason="unsupported_extension"))
         return ParseResult(candidates=[], events=[])
     if suffix in TABLE_EXTENSIONS:
-        return parse_table(
+        parsed = parse_table(
             source_id,
             path,
             collected_at=collected_at,
@@ -176,8 +222,10 @@ def parse_path(
             source_policy=source_policy,
             audit=audit,
         )
+        record_path_parse_result(audit, path, parsed, parser="csv")
+        return parsed
     if suffix in JSON_EXTENSIONS:
-        return parse_json_like(
+        parsed = parse_json_like(
             source_id,
             path,
             collected_at=collected_at,
@@ -186,6 +234,8 @@ def parse_path(
             source_policy=source_policy,
             audit=audit,
         )
+        record_path_parse_result(audit, path, parsed, parser="json")
+        return parsed
     if suffix in TEXT_EXTENSIONS:
         event = parse_text_file(
             source_id,
@@ -197,7 +247,9 @@ def parse_path(
             source_policy=source_policy,
             audit=audit,
         )
-        return ParseResult(candidates=[path], events=[event] if event else [])
+        parsed = ParseResult(candidates=[path], events=[event] if event else [])
+        record_path_parse_result(audit, path, parsed, parser="text")
+        return parsed
     if include_content and suffix in CONTENT_EXTRACT_EXTENSIONS:
         event = parse_content_file(
             source_id,
@@ -208,7 +260,10 @@ def parse_path(
             source_policy=source_policy,
             audit=audit,
         )
-        return ParseResult(candidates=[path], events=[event] if event else [])
+        parsed = ParseResult(candidates=[path], events=[event] if event else [])
+        parser = (event.get("raw_ref") or {}).get("parser") if event else "content_extract"
+        record_path_parse_result(audit, path, parsed, parser=str(parser or "content_extract"))
+        return parsed
     event = parse_metadata_file(
         source_id,
         path,
@@ -218,7 +273,9 @@ def parse_path(
         source_policy=source_policy,
         audit=audit,
     )
-    return ParseResult(candidates=[path], events=[event] if event else [])
+    parsed = ParseResult(candidates=[path], events=[event] if event else [])
+    record_path_parse_result(audit, path, parsed, parser="metadata")
+    return parsed
 
 
 class ParseResult:
@@ -237,25 +294,36 @@ def initial_collection_audit(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    input_resolution: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    input_resolution = input_resolution or {}
+    skipped_reason_counts = input_resolution.get("skipped_reason_counts") or Counter()
     return {
         "source_id": source_id,
         "input_count": len(inputs),
+        "requested_inputs": input_resolution.get("requested_inputs", [str(Path(raw).expanduser()) for raw in inputs]),
         "resolved_input_file_count": len(paths),
+        "input_missing_count": int(input_resolution.get("input_missing_count") or 0),
         "candidate_record_count": 0,
         "matched_event_count": 0,
         "non_matched_event_count": 0,
         "filtered_candidate_count": 0,
-        "skipped_file_count": 0,
+        "skipped_file_count": int(input_resolution.get("skipped_file_count") or 0),
+        "skipped_reason_counts": skipped_reason_counts,
         "extension_counts": {},
         "skipped_extension_counts": {},
         "parser_counts": {},
+        "metadata_only_file_count": 0,
+        "screenshot_metadata_only_file_count": 0,
+        "ocr_performed": False,
         "content_read_event_count": 0,
         "content_extract_status_counts": {},
         "include_content": include_content,
         "include_non_matches": include_non_matches,
         "min_score": min_score,
         "limit": limit,
+        "limit_reached": False,
+        "path_results": list(input_resolution.get("path_results") or []),
         "content_extraction_policy": content_extraction_policy(source_id, include_content),
         "source_policy": {
             "enabled": source_policy_enabled(source_policy),
@@ -305,6 +373,7 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
     audit["content_extract_status_counts"] = dict(sorted(content_status_counts.items()))
     audit["extension_counts"] = dict(sorted(audit_counter(audit, "extension_counts").items()))
     audit["skipped_extension_counts"] = dict(sorted(audit_counter(audit, "skipped_extension_counts").items()))
+    audit["skipped_reason_counts"] = dict(sorted(audit_counter(audit, "skipped_reason_counts").items()))
     source_policy = audit.get("source_policy") or {}
     if isinstance(source_policy.get("filter_reason_counts"), Counter):
         source_policy["filter_reason_counts"] = dict(sorted(source_policy["filter_reason_counts"].items()))
@@ -326,7 +395,10 @@ def content_extraction_policy(source_id: str, include_content: bool) -> Dict[str
         "table_files_read_as_rows_extensions": sorted(TABLE_EXTENSIONS),
         "binary_content_extract_extensions": sorted(CONTENT_EXTRACT_EXTENSIONS),
         "binary_metadata_only_extensions_without_include_content": sorted(METADATA_ONLY_EXTENSIONS),
+        "screenshot_metadata_only_extensions": sorted(IMAGE_METADATA_ONLY_EXTENSIONS),
         "screenshots_are_metadata_only_no_ocr": True,
+        "ocr_performed": False,
+        "ocr_requires_separate_user_consent_and_adapter": True,
         "unsupported_extensions_are_skipped": True,
         "preview_char_limit": 1200,
         "extracted_text_char_limit": MAX_EXTRACTED_CHARS,
@@ -341,6 +413,46 @@ def audit_counter(audit: Dict[str, Any], key: str) -> Counter[str]:
     counter: Counter[str] = Counter(value or {})
     audit[key] = counter
     return counter
+
+
+def path_result(path: Path, *, status: str, reason: Optional[str] = None) -> Dict[str, Any]:
+    result = {
+        "path": str(path),
+        "extension": path.suffix.lower() or "<none>",
+        "status": status,
+    }
+    if reason:
+        result["reason"] = reason
+    return result
+
+
+def record_path_parse_result(audit: Optional[Dict[str, Any]], path: Path, parsed: ParseResult, *, parser: str) -> None:
+    if audit is None:
+        return
+    suffix = path.suffix.lower()
+    result = path_result(path, status="parsed" if parsed.candidates else "no_candidates")
+    result.update(
+        {
+            "parser": parser,
+            "candidate_record_count": len(parsed.candidates),
+            "emitted_event_count": len(parsed.events),
+        }
+    )
+    if parser == "metadata":
+        audit["metadata_only_file_count"] = int(audit.get("metadata_only_file_count") or 0) + 1
+    if suffix in IMAGE_METADATA_ONLY_EXTENSIONS:
+        audit["screenshot_metadata_only_file_count"] = int(audit.get("screenshot_metadata_only_file_count") or 0) + 1
+        result["content_policy"] = "screenshot_metadata_only_no_ocr"
+        result["ocr_performed"] = False
+    audit.setdefault("path_results", []).append(result)
+
+
+def mark_last_path_result_limit(audit: Dict[str, Any], path: Path, *, emitted_event_count: int) -> None:
+    for result in reversed(audit.get("path_results") or []):
+        if result.get("path") == str(path):
+            result["emitted_event_count"] = emitted_event_count
+            result["limit_truncated"] = True
+            return
 
 
 def parse_table(

@@ -187,8 +187,12 @@ Current status:
 - Reads content only when `--include-content` is explicitly supplied.
 - Supports Markdown/TXT/HTML, CSV/TSV, XLSX/XLSM, DOCX, and PDF extraction.
 - Extracted text is capped and carries parser/status metadata.
-- `manifest.collection_audit` records candidate counts, filtered counts, skipped
-  extensions, parser counts, content-read counts, and the active content policy.
+- `manifest.collection_audit` records requested inputs, missing inputs, per-file
+  parse results, candidate counts, filtered counts, skipped reasons, extension
+  coverage, parser counts, content-read counts, limit truncation, and the active
+  content policy.
+- Screenshots/images are metadata-only in this lens. OCR is not performed unless
+  a separate OCR adapter and user authorization are added later.
 - Broad file-title hints such as a lone "股票" or "基金" do not enter Wiki
   evidence without stronger research context.
 - Generic `filesystem` remains metadata-only; investment routing stays in the

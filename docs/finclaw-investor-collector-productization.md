@@ -49,7 +49,7 @@ FinClaw 应按下面顺序调用：
 | `eastmoney-portfolio` | 东方财富资产、持仓、成交、委托、资金流水和本地投资行为 | `production-candidate` on current macOS | Windows/Linux 真机、更多账户样本 |
 | `ths-portfolio` | 同花顺交易、持仓、元数据和只读 GUI 快照 | `deep-beta` | 多账户、多系统真机验证 |
 | `wechat` + `wechat-investment-dialogue` | 微信原始对话和投资讨论 lens | `baseline+audit` | WeChat 4.x key/平台路径、真实 lake、联系人/群/发送者 allowlist 和交易前后回测 |
-| `filesystem` + `research-documents` | 文件元数据、研报/财报/估值表内容 lens | `baseline+audit`；filesystem 标准包记录授权根、扩展名覆盖、跳过原因和逐根目录结果，research-documents 负责内容授权和 Wiki 证据路由 | Windows/Linux 真机、本地真实样本、截图 OCR 决策 |
+| `filesystem` + `research-documents` | 文件元数据、研报/财报/估值表内容 lens | `baseline+audit`；filesystem 标准包记录授权根、扩展名覆盖、跳过原因和逐根目录结果，research-documents 负责内容授权、逐输入审计、截图 metadata-only/no-OCR 边界和 Wiki 证据路由 | Windows/Linux 真机、本地真实样本、可选截图 OCR adapter 评审 |
 | `email` + `email-research` | 邮箱原始通道和券商/IR/研报邮件 lens | `baseline+audit`；IMAP 和本地导入都能输出标准包，manifest 记录账户/文件夹审计、逐输入导入审计、跳过文件/ZIP 成员原因、字段覆盖、正文/附件策略和 generic-to-lens 边界 | 注册真实邮箱、附件/正文泄漏评审、真实发件人回测 |
 | `xueqiu-watchlist` + `xueqiu-investor-activity` | 雪球自选、关注、发帖、评论、收藏、保存页、组合活动 | `baseline+audit`；manifest 记录来源、ZIP、字段覆盖和分页标记审计，不当作强交易事实 | 真实账号导出或只读 adapter、真实分页和频率边界 |
 | `china-wealth-assets` | 支付宝、天天基金、蛋卷、且慢、银行理财资产 | `baseline+audit`；manifest 记录平台覆盖、字段覆盖、来源审计和资产金额汇总 | 各平台真实导出/只读屏幕、完整资产边界证明 |

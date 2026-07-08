@@ -492,6 +492,13 @@ def test_research_documents_extracts_office_and_pdf_content_when_authorized() ->
         assert audit["content_extract_status_counts"] == {"extracted": 3}
         assert audit["parser_counts"] == {"openpyxl": 1, "pdfplumber": 1, "python-docx": 1}
         assert audit["filtered_candidate_count"] == 0
+        assert audit["requested_inputs"] == [str(root)]
+        assert audit["input_missing_count"] == 0
+        assert audit["limit_reached"] is False
+        assert len(audit["path_results"]) == 3
+        assert {item["parser"] for item in audit["path_results"]} == {"openpyxl", "pdfplumber", "python-docx"}
+        assert all(item["candidate_record_count"] == 1 for item in audit["path_results"])
+        assert all(item["emitted_event_count"] == 1 for item in audit["path_results"])
 
 
 def test_research_documents_without_include_content_keeps_binary_metadata_only() -> None:
@@ -526,12 +533,16 @@ def test_research_documents_without_include_content_keeps_binary_metadata_only()
         audit = manifest["collection_audit"]
         assert audit["content_extraction_policy"]["include_content_enabled"] is False
         assert audit["content_read_event_count"] == 0
+        assert audit["metadata_only_file_count"] == 1
+        assert audit["path_results"][0]["parser"] == "metadata"
+        assert audit["path_results"][0]["emitted_event_count"] == 1
 
 
 def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         out_dir = root / "out"
+        missing = root / "missing-research-folder"
         (root / "股票计划.png").write_bytes(b"not-an-image-but-metadata-only")
         (root / "研报工具.py").write_text("print('internal helper')\n", encoding="utf-8")
 
@@ -541,6 +552,8 @@ def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -
             "research-documents",
             "--input",
             str(root),
+            "--input",
+            str(missing),
             "--out-dir",
             str(out_dir),
             "--collected-at",
@@ -553,9 +566,63 @@ def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -
         assert audit["filtered_candidate_count"] == 1
         assert audit["skipped_file_count"] == 1
         assert audit["skipped_extension_counts"] == {".py": 1}
+        assert audit["input_count"] == 2
+        assert audit["input_missing_count"] == 1
+        assert audit["skipped_reason_counts"] == {"input_missing": 1, "unsupported_extension": 1}
+        assert audit["screenshot_metadata_only_file_count"] == 1
+        assert audit["ocr_performed"] is False
+        assert audit["content_extraction_policy"]["screenshots_are_metadata_only_no_ocr"] is True
+        assert audit["content_extraction_policy"]["ocr_performed"] is False
+        assert audit["content_extraction_policy"]["ocr_requires_separate_user_consent_and_adapter"] is True
         assert audit["content_extraction_policy"]["unsupported_extensions_are_skipped"] is True
+        statuses = {(item["extension"], item["status"], item.get("reason")) for item in audit["path_results"]}
+        assert (".png", "parsed", None) in statuses
+        assert (".py", "skipped", "unsupported_extension") in statuses
+        assert ("<none>", "missing", "input_missing") in statuses
+        png_result = next(item for item in audit["path_results"] if item["extension"] == ".png")
+        assert png_result["content_policy"] == "screenshot_metadata_only_no_ocr"
+        assert png_result["ocr_performed"] is False
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+
+
+def test_research_documents_limit_records_path_truncation() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out_dir = root / "out"
+        (root / "research-records.csv").write_text(
+            "title,content\n"
+            "半导体深度报告,半导体 DCF 估值 买入理由 风险提示\n"
+            "新能源财报复盘,新能源 财报 现金流 估值 安全边际\n",
+            encoding="utf-8",
+        )
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--limit",
+            "1",
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:40:00+08:00",
+        )
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert len(events) == 1
+        assert audit["limit"] == 1
+        assert audit["limit_reached"] is True
+        assert audit["candidate_record_count"] == 2
+        assert audit["matched_event_count"] == 1
+        assert audit["path_results"][-1]["limit_truncated"] is True
+        assert audit["path_results"][-1]["emitted_event_count"] == 1
 
 
 def test_task_calendar_lens_keeps_investment_task_and_calendar_only() -> None:
@@ -850,6 +917,9 @@ if __name__ == "__main__":
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
+    test_research_documents_without_include_content_keeps_binary_metadata_only()
+    test_research_documents_filters_broad_titles_and_skips_unsupported_files()
+    test_research_documents_limit_records_path_truncation()
     test_task_calendar_lens_keeps_investment_task_and_calendar_only()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()

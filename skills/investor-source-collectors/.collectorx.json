@@ -1,5 +1,6 @@
 {
   "slug": "investor-source-collectors",
-  "version": "0.1.0",
-  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources."
+  "version": "0.1.4",
+  "status": "baseline+audit",
+  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including path-level research-document collection audit and explicit screenshot metadata-only policy."
 }

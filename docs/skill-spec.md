@@ -79,7 +79,7 @@ skill-name/
 | email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、账户/文件夹审计、逐输入导入审计、跳过文件/ZIP 成员原因和字段覆盖已补齐，仍需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
 | notes-collector | 8+ | 笔记通用采集器 baseline；支持 Obsidian/Notion、有道/印象/Markdown/HTML/JSON/ENEX/ZIP 授权导入、平台覆盖、逐输入来源审计、跳过原因和内容策略 manifest，仍需真实 Notion/有道/印象账号验证 |
-| investor-source-collectors | 7+ | 投资分身分类、路由和 lens 证据包工具，不替代通用/垂直源采集器 |
+| investor-source-collectors | 8+ | 投资分身分类、路由和 lens 证据包工具；research-documents 已补逐输入审计、缺失输入、跳过原因、limit 截断和截图 metadata-only/no-OCR 边界，不替代通用/垂直源采集器 |
 
 ## 输出契约
 

@@ -118,9 +118,9 @@ P2 必做：
 
 `manifest.json` 会带 `collection_audit`：
 
-- 记录输入文件数、候选记录数、命中/过滤数量、扩展名分布和跳过数量。
+- 记录请求输入、缺失输入、逐文件解析结果、候选记录数、命中/过滤数量、扩展名分布、跳过原因和 limit 截断状态。
 - 记录 `source_policy`：`--allow-chat`、`--deny-chat`、`--allow-sender`、`--deny-sender` 的配置和过滤数量。这个策略只收窄来源范围，不把普通聊天强行变成投资证据。
-- 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM 正文/表格读取必须显式传入 `--include-content`；截图目前只保留元数据，不做 OCR。
+- 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM 正文/表格读取必须显式传入 `--include-content`；截图只保留元数据，不做 OCR；如未来需要 OCR，必须单独授权并接入明确适配器。
 - 不支持的研究文档扩展名会被跳过，不会因为文件名里有弱投资词就污染 Wiki 覆盖率。
 
 ## Lens 分类器
