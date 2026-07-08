@@ -8,9 +8,11 @@ content are committed.
 ## Scope
 
 - Collector: `xueqiu-watchlist`
-- Version: `0.3.1`
+- Version: `0.3.1`; gap package ingestion was later hardened in version
+  `0.3.2`.
 - Collector: `xueqiu-investor-activity`
-- Version: `0.3.4`
+- Version: `0.3.4`; gap package ingestion was later hardened in version
+  `0.3.5`.
 - FinClaw route: vertical attention-universe evidence for the Investor Wiki,
   never broker-confirmed trade facts.
 
@@ -29,6 +31,9 @@ content are committed.
   `authorization_scope_boundary` for FinClaw gating.
 - When every candidate record is filtered, readiness reports
   `scope_policy_filtered_all`.
+- As of `xueqiu-watchlist` `0.3.2` and `xueqiu-investor-activity` `0.3.5`,
+  no-input and filtered-all states also emit validator-safe profile gap events
+  with non-empty `time`, event-count summaries, and non-trade boundary flags.
 
 ## Fixture Coverage
 

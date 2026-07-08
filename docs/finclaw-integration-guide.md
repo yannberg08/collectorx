@@ -587,8 +587,8 @@ Current status for `xueqiu-watchlist`:
   provenance and skip path-traversal members.
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
   counts, parsed/filtered record counts, symbol/market/group/industry/tag/
-  keyword scope-policy audit, filtered-all readiness, authorization scope
-  boundary, and watchlist field coverage.
+  keyword scope-policy audit, filtered-all/no-input gap packages,
+  authorization scope boundary, and watchlist field coverage.
 - Recursively filters credential-like raw keys.
 - Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
   coverage for attention-universe subdimensions.
@@ -625,7 +625,7 @@ Current status:
   counts, HAR entry/endpoint/skip-reason coverage, browser-history boundary
   proof, parsed records, pagination marker fields, activity field coverage,
   source-surface coverage, activity/source-surface/source-app/domain/symbol/
-  author/keyword scope-policy audit, filtered-all readiness,
+  author/keyword scope-policy audit, filtered-all/no-input gap packages,
   `activity_boundary_proof.authorization_scope_boundary`, and pagination
   completeness.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade

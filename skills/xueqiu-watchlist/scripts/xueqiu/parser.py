@@ -134,10 +134,16 @@ def collect_from_inputs_with_audit(
         "path_results": [],
     }
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="xueqiu_watchlist_authorized_input_missing")]
-        audit["emitted_event_count"] = len(events)
         _unused, scope_audit = apply_watchlist_scope_policy([], scope_policy)
         attach_watchlist_scope_policy_audit(audit, scope_audit)
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason="xueqiu_watchlist_authorized_input_missing",
+                collection_audit=audit,
+            )
+        ]
+        audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
         return events, audit
     events: List[Dict[str, Any]] = []
@@ -171,7 +177,7 @@ def collect_from_inputs_with_audit(
         events = events[:limit]
     if not events:
         reason = "xueqiu_watchlist_scope_policy_filtered_all" if audit.get("xueqiu_watchlist_scope_policy_filtered_all") else "xueqiu_watchlist_records_empty"
-        events = [gap_event(collected_at=collected_at, reason=reason)]
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
@@ -387,6 +393,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     raw_symbol = watchlist_symbol(record) or ""
     symbol = normalize_symbol(raw_symbol)
     followed_at = first(record, ["followed_at", "added_at", "created_at", "time", "date", "加入时间", "关注时间", "日期"])
+    event_time = followed_at or collected_at or now_iso()
     group = first(record, ["group", "group_name", "folder", "watchlist", "分组", "自选分组"]) or first(record, ["sheet", "source_section"])
     data = {
         "symbol": symbol,
@@ -415,8 +422,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source": "雪球关注列表用户授权导出",
         "owner_scope": "personal",
         "kind": "watchlist",
-        "time": followed_at,
-        "collected_at": collected_at or now_iso(),
+        "time": event_time,
+        "collected_at": collected_at or event_time,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
@@ -427,27 +434,56 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     messages = {
         "xueqiu_watchlist_authorized_input_missing": "No user-authorized Xueqiu watchlist export was provided.",
         "xueqiu_watchlist_records_empty": "Authorized Xueqiu watchlist input did not contain usable watchlist records.",
         "xueqiu_watchlist_scope_policy_filtered_all": "Xueqiu watchlist records were found, but every candidate was outside the configured authorization scope policy.",
     }
+    statuses = {
+        "xueqiu_watchlist_authorized_input_missing": "needs_xueqiu_watchlist_authorized_input",
+        "xueqiu_watchlist_records_empty": "no_usable_xueqiu_watchlist_records",
+        "xueqiu_watchlist_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    audit = collection_audit or {}
+    scope_audit = audit.get("xueqiu_watchlist_scope_policy") or {}
+    timestamp = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "雪球关注列表授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
         "data": {
             "gap": reason,
+            "status": statuses.get(reason, "no_usable_xueqiu_watchlist_records"),
+            "profile_type": reason,
             "message": messages.get(reason, "No user-authorized Xueqiu watchlist evidence was collected."),
+            "candidate_event_count": scope_audit.get("candidate_event_count", audit.get("scope_policy_candidate_event_count", 0)),
+            "retained_event_count": scope_audit.get("retained_event_count", audit.get("scope_policy_retained_event_count", 0)),
+            "filtered_event_count": scope_audit.get("filtered_event_count", audit.get("scope_policy_filtered_event_count", 0)),
+            "filter_reason_counts": scope_audit.get("filter_reason_counts", audit.get("scope_policy_filter_reason_counts", {})),
+            "policy_is_user_authorization_scope": scope_audit.get("policy_is_user_authorization_scope", True),
+            "policy_does_not_assert_investment_relevance": scope_audit.get("policy_does_not_assert_investment_relevance", True),
+            "watchlist_is_attention_universe_only": True,
+            "broker_trade_fact_claimed": False,
+            "holding_fact_claimed": False,
+            "order_or_fund_flow_claimed": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(scope_audit.get("configured", False)),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
@@ -462,21 +498,28 @@ def build_manifest(
     market_counts = Counter((event.get("data") or {}).get("market", "unknown") for event in events if event["kind"] == "watchlist")
     group_counts = Counter((event.get("data") or {}).get("group", "unknown") for event in events if event["kind"] == "watchlist")
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    watchlist_event_count = sum(1 for event in events if event.get("kind") == "watchlist")
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     audit = collection_audit or {}
     if gap_only and audit.get("xueqiu_watchlist_scope_policy_filtered_all"):
         readiness_status = "scope_policy_filtered_all"
+        source_collection_scope = "scope_policy_excluded_all"
         next_action = "Review or relax Xueqiu watchlist scope policy, then rerun the collector."
     elif gap_only:
         readiness_status = "needs_xueqiu_watchlist_authorized_input"
+        source_collection_scope = "none"
         next_action = "Provide authorized Xueqiu watchlist export."
     else:
         readiness_status = "events_collected"
+        source_collection_scope = "partial_authorized_input"
         next_action = "Use as attention-universe evidence; corroborate with Xueqiu activity and broker trades."
     return {
         "schema": "collectorx.xueqiu_watchlist.manifest.v1",
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "watchlist_event_count": watchlist_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "market_counts": dict(sorted(market_counts.items())),
         "group_counts": dict(sorted(group_counts.items())),
@@ -493,7 +536,7 @@ def build_manifest(
             "status": readiness_status,
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_complete_xueqiu_watchlist_boundary": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": source_collection_scope,
             "next_action": next_action,
         },
         "collection_audit": audit,
@@ -721,11 +764,19 @@ def watchlist_authorization_scope_boundary(collection_audit: Optional[Dict[str, 
 
 def build_watchlist_boundary_proof(events: List[Dict[str, Any]], collection_audit: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     watchlist_events = [event for event in events if event.get("kind") == "watchlist"]
+    audit = collection_audit or {}
+    scope_policy_filtered_all = bool(audit.get("xueqiu_watchlist_scope_policy_filtered_all"))
     market_counts = Counter((event.get("data") or {}).get("market", "unknown") for event in watchlist_events)
     group_counts = Counter((event.get("data") or {}).get("group", "unknown") for event in watchlist_events)
+    if scope_policy_filtered_all:
+        proof_scope = "scope_policy_excluded_all"
+        proof_level = "scope_policy_filtered_all"
+    else:
+        proof_scope = "none" if not watchlist_events else "partial_authorized_input"
+        proof_level = "no_authorized_watchlist_evidence" if not watchlist_events else "partial_attention_universe_boundary"
     return {
-        "proof_scope": "none" if not watchlist_events else "partial_authorized_input",
-        "proof_level": "no_authorized_watchlist_evidence" if not watchlist_events else "partial_attention_universe_boundary",
+        "proof_scope": proof_scope,
+        "proof_level": proof_level,
         "watchlist_event_count": len(watchlist_events),
         "complete_xueqiu_watchlist_boundary_claimed": False,
         "xueqiu_watchlist_is_strong_trade_source": False,

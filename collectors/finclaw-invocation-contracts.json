@@ -131,7 +131,7 @@
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
       "user_step": "Provide an authorized Xueqiu watchlist export or package; optionally choose symbol, market, group, industry, tag, and keyword allow/deny scope filters.",
-      "preflight": "Input is a user-owned Xueqiu watchlist export; optional scope filters are applied before Lake output; filtered-all results are reported explicitly and are not treated as broker holdings.",
+      "preflight": "Input is a user-owned Xueqiu watchlist export; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages with can_enter_finclaw=false and are not treated as broker holdings.",
       "failure_state": "needs_authorized_xueqiu_watchlist_export_or_scope_policy_retained_records"
     },
     {
@@ -140,7 +140,7 @@
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
       "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, browser-network HAR, or copied Chromium/Safari browser history file; optionally choose activity, source surface, source app, domain, symbol, author, and keyword allow/deny scope filters.",
-      "preflight": "Input belongs to the user; optional scope filters are applied before Lake output; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com, filtered-all results are reported explicitly, and neither path is treated as broker trade evidence.",
+      "preflight": "Input belongs to the user; optional scope filters are applied before Lake output; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com; no-input and filtered-all runs emit validator-safe profile gap packages with can_enter_finclaw=false, and neither path is treated as broker trade evidence.",
       "failure_state": "needs_authorized_xueqiu_activity_export_har_browser_history_or_scope_policy_retained_records"
     },
     {

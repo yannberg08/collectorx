@@ -15,7 +15,32 @@ import openpyxl
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "xueqiu_activity.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def read_events(out: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def assert_package_valid(out: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "xueqiu-investor-activity",
+            "--require-evidence",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def chromium_time(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> int:
@@ -110,7 +135,8 @@ def test_collect_watchlist_csv() -> None:
             text=True,
             capture_output=True,
         )
-        event = json.loads((out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert_package_valid(out)
+        event = read_events(out)[0]
         assert event["schema"] == "collectorx.event.v1"
         assert event["kind"] == "watchlist"
         assert event["data"]["symbol"] == "SH600519"
@@ -145,7 +171,8 @@ def test_collect_posts_json() -> None:
             encoding="utf-8",
         )
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--input", str(json_path), "--out-dir", str(out)], check=True, text=True, capture_output=True)
-        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert [event["kind"] for event in events] == ["note", "profile"]
 
 
@@ -249,19 +276,92 @@ def test_activity_scope_policy_filtered_all_gap() -> None:
                 str(out),
                 "--allow-activity",
                 "comment",
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
             ],
             check=True,
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 1
-        assert events[0]["data"]["gap"] == "xueqiu_scope_policy_filtered_all"
+        assert_package_valid(out)
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T12:00:00+08:00"
+        assert gap["collected_at"] == "2026-07-08T12:00:00+08:00"
+        assert gap["data"]["activity_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "xueqiu_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "xueqiu_scope_policy_filtered_all"
+        assert gap["data"]["candidate_event_count"] == 1
+        assert gap["data"]["retained_event_count"] == 0
+        assert gap["data"]["filtered_event_count"] == 1
+        assert gap["data"]["filter_reason_counts"] == {"allow_activity_mismatch": 1}
+        assert gap["data"]["broker_trade_fact_claimed"] is False
+        assert gap["data"]["holding_fact_claimed"] is False
+        assert gap["data"]["order_or_fund_flow_claimed"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "xueqiu_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert str(json_path) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["activity_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["activity_boundary_scope"] == "scope_policy_excluded_all"
         assert manifest["collection_audit"]["xueqiu_activity_scope_policy_filtered_all"] is True
+        assert manifest["activity_boundary_proof"]["overall_proof_level"] == "scope_policy_filtered_all"
         assert manifest["activity_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+
+
+def test_activity_gap_event() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = read_events(out)
+        assert len(events) == 1
+        assert_package_valid(out)
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T12:00:00+08:00"
+        assert events[0]["data"]["activity_type"] == "collector_gap"
+        assert events[0]["data"]["gap"] == "xueqiu_authorized_input_missing"
+        assert events[0]["data"]["status"] == "needs_xueqiu_authorized_input"
+        assert events[0]["data"]["candidate_event_count"] == 0
+        assert events[0]["data"]["retained_event_count"] == 0
+        assert events[0]["data"]["filtered_event_count"] == 0
+        assert events[0]["data"]["broker_trade_fact_claimed"] is False
+        assert events[0]["raw_ref"] == {
+            "preflight": True,
+            "reason": "xueqiu_authorized_input_missing",
+            "scope_policy_enabled": False,
+        }
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["activity_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
 
 
 def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:
@@ -792,6 +892,7 @@ if __name__ == "__main__":
     test_collect_posts_json()
     test_activity_scope_policy_filters_authorized_records()
     test_activity_scope_policy_filtered_all_gap()
+    test_activity_gap_event()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
     test_collects_har_network_export_without_leaking_secrets()
     test_collects_browser_history_copy_filters_xueqiu_domains()

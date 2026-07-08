@@ -193,10 +193,16 @@ def collect_from_inputs_with_audit(
         "path_results": [],
     }
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="xueqiu_authorized_input_missing")]
-        audit["emitted_event_count"] = len(events)
         _unused, scope_audit = apply_activity_scope_policy([], scope_policy)
         attach_activity_scope_policy_audit(audit, scope_audit)
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason="xueqiu_authorized_input_missing",
+                collection_audit=audit,
+            )
+        ]
+        audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
         return events, audit
     events: List[Dict[str, Any]] = []
@@ -235,7 +241,7 @@ def collect_from_inputs_with_audit(
         )
     if not events:
         reason = "xueqiu_scope_policy_filtered_all" if audit.get("xueqiu_activity_scope_policy_filtered_all") else "xueqiu_records_empty"
-        events = [gap_event(collected_at=collected_at, reason=reason)]
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
@@ -817,6 +823,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
             "时间",
         ],
     )
+    event_time = event_time or collected_at or now_iso()
     data = {
         "activity_type": activity_type,
         "source_surface": infer_source_surface(record, path),
@@ -857,7 +864,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "owner_scope": "personal",
         "kind": kind,
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": collected_at or event_time,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "personal_message", "contact"]},
@@ -865,28 +872,57 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     messages = {
         "xueqiu_authorized_input_missing": "No user-authorized Xueqiu export or local input was provided.",
         "xueqiu_records_empty": "Authorized Xueqiu input did not contain usable activity records.",
         "xueqiu_scope_policy_filtered_all": "Xueqiu activity records were found, but every candidate was outside the configured authorization scope policy.",
     }
+    statuses = {
+        "xueqiu_authorized_input_missing": "needs_xueqiu_authorized_input",
+        "xueqiu_records_empty": "no_usable_xueqiu_activity_records",
+        "xueqiu_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    audit = collection_audit or {}
+    scope_audit = audit.get("xueqiu_activity_scope_policy") or {}
+    timestamp = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "雪球投资活动授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
         "data": {
             "activity_type": "collector_gap",
             "gap": reason,
+            "status": statuses.get(reason, "no_usable_xueqiu_activity_records"),
+            "profile_type": reason,
             "message": messages.get(reason, "No user-authorized Xueqiu activity evidence was collected."),
+            "candidate_event_count": scope_audit.get("candidate_event_count", audit.get("scope_policy_candidate_event_count", 0)),
+            "retained_event_count": scope_audit.get("retained_event_count", audit.get("scope_policy_retained_event_count", 0)),
+            "filtered_event_count": scope_audit.get("filtered_event_count", audit.get("scope_policy_filtered_event_count", 0)),
+            "filter_reason_counts": scope_audit.get("filter_reason_counts", audit.get("scope_policy_filter_reason_counts", {})),
+            "policy_is_user_authorization_scope": scope_audit.get("policy_is_user_authorization_scope", True),
+            "policy_does_not_assert_investment_relevance": scope_audit.get("policy_does_not_assert_investment_relevance", True),
+            "xueqiu_is_broker_trade_source": False,
+            "broker_trade_fact_claimed": False,
+            "holding_fact_claimed": False,
+            "order_or_fund_flow_claimed": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(scope_audit.get("configured", False)),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "collection_gap"]},
         "wiki_targets": ["investor.data_quality.collection_gaps"],
     }
 
@@ -993,23 +1029,30 @@ def build_manifest(
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in events)
     surface_counts = Counter((event.get("data") or {}).get("source_surface", "unknown") for event in events)
     gap_only = bool(events) and set(activity_counts) == {"collector_gap"}
+    activity_event_count = sum(1 for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap")
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     observed = sorted(activity for activity in activity_counts if activity != "collector_gap")
     missing = [activity for activity in EXPECTED_ACTIVITY_TYPES if activity not in activity_counts]
     audit = collection_audit or {}
     if gap_only and audit.get("xueqiu_activity_scope_policy_filtered_all"):
         readiness_status = "scope_policy_filtered_all"
+        activity_boundary_scope = "scope_policy_excluded_all"
         next_action = "Review or relax Xueqiu activity scope policy, then rerun the collector."
     elif gap_only:
         readiness_status = "needs_xueqiu_authorized_input"
+        activity_boundary_scope = "none"
         next_action = "提供雪球个人活动导出或授权输入后重跑。"
     else:
         readiness_status = "events_collected"
+        activity_boundary_scope = "partial_authorized_input"
         next_action = "可进入投资分身蒸馏；后续补真实账号分页/关注/收藏/组合覆盖验证。"
     return {
         "schema": "xueqiu.investor_activity.manifest.v1",
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "activity_event_count": activity_event_count,
+        "gap_event_count": gap_event_count,
         "source_file_count": len({(event.get("raw_ref") or {}).get("path") for event in events if (event.get("raw_ref") or {}).get("path")}),
         "kind_counts": dict(sorted(counts.items())),
         "activity_counts": dict(sorted(activity_counts.items())),
@@ -1030,7 +1073,7 @@ def build_manifest(
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_broker_trade_collection": False,
             "can_claim_complete_xueqiu_activity_boundary": False,
-            "activity_boundary_scope": "none" if gap_only else "partial_authorized_input",
+            "activity_boundary_scope": activity_boundary_scope,
             "next_action": next_action,
         },
         "collection_audit": audit,
@@ -1291,9 +1334,10 @@ def build_evidence(
     generated_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in events)
-    for event in events:
+    activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in usable_events)
+    for event in usable_events:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
     evidence = {
@@ -1302,7 +1346,7 @@ def build_evidence(
         "generated_from": {
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
-            "event_count": len(events),
+            "event_count": len(usable_events),
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1317,7 +1361,7 @@ def build_evidence(
             "evidence_role": "attention_network_opinion_and_model_portfolio_only",
         },
     }
-    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
+    return augment_evidence_with_dimensions(evidence, usable_events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def activity_boundary_proof(
@@ -1328,9 +1372,10 @@ def activity_boundary_proof(
     activity_events = [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
     audit = collection_audit or {}
     if not activity_events:
+        scope_policy_filtered_all = bool(audit.get("xueqiu_activity_scope_policy_filtered_all"))
         return {
-            "proof_scope": "none",
-            "overall_proof_level": "no_authorized_activity_evidence",
+            "proof_scope": "scope_policy_excluded_all" if scope_policy_filtered_all else "none",
+            "overall_proof_level": "scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_activity_evidence",
             "complete_xueqiu_activity_boundary_claimed": False,
             "xueqiu_is_broker_trade_source": False,
             "expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
@@ -1339,7 +1384,7 @@ def activity_boundary_proof(
             "activity_proofs": [],
             "authorization_scope_boundary": activity_authorization_scope_boundary(audit),
             "pagination_completeness": pagination_completeness_summary(activity_events, audit),
-            "missing_global_requirements": ["authorized_xueqiu_activity_input"],
+            "missing_global_requirements": ["scope_policy_retained_records"] if scope_policy_filtered_all else ["authorized_xueqiu_activity_input"],
         }
 
     activity_counts = Counter(str((event.get("data") or {}).get("activity_type") or "unknown") for event in activity_events)

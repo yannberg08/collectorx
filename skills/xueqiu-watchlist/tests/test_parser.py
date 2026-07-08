@@ -18,7 +18,9 @@ from xueqiu.parser import parse_watchlist_csv
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "xueqiu_query.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 
 
 def read_events(out: Path) -> list[dict]:
@@ -26,6 +28,22 @@ def read_events(out: Path) -> list[dict]:
         json.loads(line)
         for line in (out / "lake" / "xueqiu-watchlist" / "events.jsonl").read_text(encoding="utf-8").splitlines()
     ]
+
+
+def assert_package_valid(out: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "xueqiu-watchlist",
+            "--require-evidence",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_parse_csv() -> None:
@@ -107,6 +125,7 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         assert {event["collector"] for event in events} == {"xueqiu-watchlist"}
         assert {event["kind"] for event in events} == {"watchlist"}
         assert all("investor.opportunity_watchlist.watchlist" in event["wiki_targets"] for event in events)
+        assert_package_valid(out)
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         maotai = next(event for event in events if event["data"]["symbol"] == "SH600519")
@@ -226,6 +245,8 @@ def test_watchlist_scope_policy_filtered_all_gap() -> None:
                 str(out),
                 "--allow-symbol",
                 "SH688981",
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
             ],
             check=True,
             text=True,
@@ -234,11 +255,37 @@ def test_watchlist_scope_policy_filtered_all_gap() -> None:
 
         events = read_events(out)
         assert len(events) == 1
-        assert events[0]["data"]["gap"] == "xueqiu_watchlist_scope_policy_filtered_all"
+        assert_package_valid(out)
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T12:00:00+08:00"
+        assert gap["collected_at"] == "2026-07-08T12:00:00+08:00"
+        assert gap["data"]["gap"] == "xueqiu_watchlist_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "xueqiu_watchlist_scope_policy_filtered_all"
+        assert gap["data"]["candidate_event_count"] == 1
+        assert gap["data"]["retained_event_count"] == 0
+        assert gap["data"]["filtered_event_count"] == 1
+        assert gap["data"]["filter_reason_counts"] == {"allow_symbol_mismatch": 1}
+        assert gap["data"]["broker_trade_fact_claimed"] is False
+        assert gap["data"]["holding_fact_claimed"] is False
+        assert gap["data"]["order_or_fund_flow_claimed"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "xueqiu_watchlist_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert str(csv_path) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["watchlist_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["collection_audit"]["xueqiu_watchlist_scope_policy_filtered_all"] is True
+        assert manifest["xueqiu_watchlist_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
         assert manifest["xueqiu_watchlist_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
 
 
@@ -246,15 +293,40 @@ def test_gap_event() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
         subprocess.run(
-            [sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)],
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
             check=True,
             text=True,
             capture_output=True,
         )
         events = read_events(out)
         assert len(events) == 1
+        assert_package_valid(out)
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T12:00:00+08:00"
         assert events[0]["data"]["gap"] == "xueqiu_watchlist_authorized_input_missing"
+        assert events[0]["data"]["status"] == "needs_xueqiu_watchlist_authorized_input"
+        assert events[0]["data"]["candidate_event_count"] == 0
+        assert events[0]["data"]["retained_event_count"] == 0
+        assert events[0]["data"]["filtered_event_count"] == 0
+        assert events[0]["data"]["broker_trade_fact_claimed"] is False
+        assert events[0]["raw_ref"] == {
+            "preflight": True,
+            "reason": "xueqiu_watchlist_authorized_input_missing",
+            "scope_policy_enabled": False,
+        }
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["watchlist_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
 
 
