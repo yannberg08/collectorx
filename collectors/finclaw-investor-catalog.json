@@ -271,7 +271,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-calendar-export-import",
       "cli": "python3 skills/calendar-collector/scripts/calendar_query.py collect --input <authorized-calendar-export> --out-dir <out-dir>",
-      "collects": "Calendar events, start/end time, all-day flag, location, meeting links, organizer, attendees, recurrence, reminders, platform coverage, source audit, ZIP skip reasons, and path-level parse results.",
+      "collects": "Calendar events, start/end time, all-day flag, duration, multi-day status, invalid time ranges, same-calendar conflict summary, location, meeting links, organizer, attendees, recurrence, reminders, platform coverage, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "Calendar account credentials or direct investment conclusions.",
       "production_gap": "Real Apple/Google/Outlook/Feishu/DingTalk/WeCom/Tencent Meeting calendar validation."
     },
@@ -284,7 +284,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-task-or-calendar-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source task-calendar-investor --input <task-or-calendar-events-jsonl> --out-dir <out-dir>",
-      "collects": "Trading plans, research tasks, review reminders, earnings/event follow-ups, research meetings, risk checks, upstream source surface, reminder/time surface, and execution discipline signals.",
+      "collects": "Trading plans, research tasks, review reminders, earnings/event follow-ups, research meetings, risk checks, upstream source surface, reminder/time surface, calendar time-quality surface, and execution discipline signals.",
       "must_not_collect": "Unrelated personal tasks as investor facts.",
       "production_gap": "Real task/calendar backtest and threshold tuning."
     },

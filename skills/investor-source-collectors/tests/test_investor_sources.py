@@ -895,6 +895,10 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
                     "description_preview": "业绩说明会、调研会议，关注现金流和风险。",
                     "calendar_name": "投资日历",
                     "start": "2026-07-10T09:30:00+08:00",
+                    "end": "2026-07-10T10:30:00+08:00",
+                    "duration_minutes": 60,
+                    "is_multi_day": False,
+                    "time_order_valid": True,
                     "meeting_url": "https://example.com/meeting",
                 },
                 "raw_ref": {"source_platform": "feishu_calendar", "event_id": "earnings"},
@@ -963,11 +967,15 @@ def test_task_calendar_lens_reports_planning_surface_from_upstream_events() -> N
         assert surface["events_with_reminders"] == 1
         assert surface["events_with_meeting_url"] == 1
         assert surface["events_with_project_or_calendar"] == 4
+        assert surface["events_with_duration_minutes"] == 1
+        assert surface["multi_day_event_count"] == 0
+        assert surface["invalid_time_range_count"] == 0
         assert surface["collector_writes_wiki_directly"] is False
 
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["task-calendar-investor"]
         assert evidence_surface["task_calendar_surface_counts"]["trade_plan"] == 1
+        assert evidence_surface["events_with_duration_minutes"] == 1
         assert evidence_surface["generic_task_calendar_lens"] is True
 
 

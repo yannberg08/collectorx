@@ -550,14 +550,17 @@ Current status:
 - Converts authorized ICS, JSON/JSONL, CSV, TSV, and ZIP exports into generic
   `calendar` events.
 - Captures title, start/end time, all-day status, location, meeting links,
-  organizer, attendees, recurrence, and reminders.
+  organizer, attendees, recurrence, reminders, duration, multi-day status, and
+  invalid time ranges.
 - Writes `manifest.platform_coverage` with expected P1 calendar platforms
   (Apple, Google, Outlook, Feishu, DingTalk, WeCom, Tencent Meeting), observed
   platforms, missing platforms, event counts, and `real_account_validation`.
 - Writes `manifest.field_coverage`, `time_surface_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect start/end, meeting URL, attendees,
-  recurrence, reminders, ZIP provenance, total/skipped ZIP members, skip
-  reasons, per-input parse results, and the required lens boundary.
+  recurrence, reminders, duration coverage, all-day/multi-day events, invalid
+  time ranges, same-calendar conflict pairs, ZIP provenance, total/skipped ZIP
+  members, skip reasons, per-input parse results, and the required lens
+  boundary.
 - Does not claim investment-calendar status directly.
 - Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
   trading plans, earnings events, research meetings, and review reminders.

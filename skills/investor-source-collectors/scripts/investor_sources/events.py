@@ -463,6 +463,9 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
     events_with_reminders = 0
     events_with_meeting_url = 0
     events_with_project_or_calendar = 0
+    events_with_duration_minutes = 0
+    multi_day_event_count = 0
+    invalid_time_range_count = 0
     completed_task_count = 0
     overdue_task_count = 0
     for event in usable_events:
@@ -491,6 +494,12 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
             events_with_meeting_url += 1
         if payload.get("project_name") or payload.get("calendar_name"):
             events_with_project_or_calendar += 1
+        if isinstance(payload.get("duration_minutes"), int):
+            events_with_duration_minutes += 1
+        if payload.get("is_multi_day") is True:
+            multi_day_event_count += 1
+        if payload.get("time_order_valid") is False:
+            invalid_time_range_count += 1
         if payload.get("is_completed") is True:
             completed_task_count += 1
         if payload.get("is_overdue") is True:
@@ -512,6 +521,9 @@ def task_calendar_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
         "events_with_reminders": events_with_reminders,
         "events_with_meeting_url": events_with_meeting_url,
         "events_with_project_or_calendar": events_with_project_or_calendar,
+        "events_with_duration_minutes": events_with_duration_minutes,
+        "multi_day_event_count": multi_day_event_count,
+        "invalid_time_range_count": invalid_time_range_count,
         "completed_task_count": completed_task_count,
         "overdue_task_count": overdue_task_count,
         "generic_task_calendar_lens": True,

@@ -56,6 +56,11 @@ def test_collect_ics_event() -> None:
         assert event["data"]["title"] == "财报电话会"
         assert event["data"]["source_platform"] == "ics_export"
         assert event["data"]["start"] == "2026-07-08T09:30:00+08:00"
+        assert event["data"]["end"] == "2026-07-08T10:30:00+08:00"
+        assert event["data"]["has_time_range"] is True
+        assert event["data"]["time_order_valid"] is True
+        assert event["data"]["duration_minutes"] == 60
+        assert event["data"]["is_multi_day"] is False
         assert event["data"]["meeting_url"] == "https://meeting.tencent.com/test"
         assert event["data"]["attendees"][0]["name"] == "研究员"
         assert event["data"]["has_description"] is True
@@ -69,6 +74,10 @@ def test_collect_ics_event() -> None:
         assert manifest["field_coverage"]["field_counts"]["attendees"] == 1
         assert manifest["time_surface_summary"]["events_with_recurrence"] == 1
         assert manifest["time_surface_summary"]["events_with_reminders"] == 1
+        assert manifest["time_surface_summary"]["events_with_time_range"] == 1
+        assert manifest["time_surface_summary"]["events_with_duration_minutes"] == 1
+        assert manifest["time_surface_summary"]["average_duration_minutes"] == 60
+        assert manifest["time_surface_summary"]["time_conflict_summary"]["conflict_pair_count"] == 0
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["resolved_input_file_count"] == 1
         assert manifest["source_audit"]["extension_counts"] == {".ics": 1}
@@ -205,6 +214,53 @@ def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
 
 
+def test_collect_calendar_time_quality_and_conflict_summary() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        csv_path = root / "investment-calendar.csv"
+        out = root / "out"
+        csv_path.write_text(
+            "\n".join(
+                [
+                    "title,calendar_name,start,end,reminders,meeting_url",
+                    "上午调研,投资日历,2026-07-08T09:00:00+08:00,2026-07-08T10:00:00+08:00,提前30分钟,https://meeting.example/a",
+                    "并行投委会,投资日历,2026-07-08T09:30:00+08:00,2026-07-08T10:30:00+08:00,,",
+                    "无效结束,投资日历,2026-07-08T11:00:00+08:00,2026-07-08T10:00:00+08:00,,",
+                    "跨夜复盘,投资日历,2026-07-08T23:00:00+08:00,2026-07-09T00:30:00+08:00,,",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(csv_path), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        by_title = {event["data"]["title"]: event for event in events}
+        assert by_title["上午调研"]["data"]["duration_minutes"] == 60
+        assert by_title["并行投委会"]["data"]["duration_minutes"] == 60
+        assert by_title["无效结束"]["data"]["time_order_valid"] is False
+        assert "duration_minutes" not in by_title["无效结束"]["data"]
+        assert by_title["跨夜复盘"]["data"]["duration_minutes"] == 90
+        assert by_title["跨夜复盘"]["data"]["is_multi_day"] is True
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        time_surface = manifest["time_surface_summary"]
+        assert time_surface["events_with_time_range"] == 4
+        assert time_surface["events_with_duration_minutes"] == 3
+        assert time_surface["events_with_invalid_time_range"] == 1
+        assert time_surface["multi_day_event_count"] == 1
+        assert time_surface["min_duration_minutes"] == 60
+        assert time_surface["max_duration_minutes"] == 90
+        assert time_surface["average_duration_minutes"] == 70
+        conflict = time_surface["time_conflict_summary"]
+        assert conflict["checked_timed_event_count"] == 3
+        assert conflict["conflict_pair_count"] == 1
+        assert conflict["events_with_conflicts"] == 2
+        assert len(conflict["sample_conflict_pairs"]) == 1
+
+
 def test_collect_without_input_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -222,5 +278,6 @@ if __name__ == "__main__":
     test_collect_ics_event()
     test_collect_json_and_csv_events()
     test_collect_all_expected_calendar_platforms_and_zip_safety()
+    test_collect_calendar_time_quality_and_conflict_summary()
     test_collect_without_input_gap()
     print("calendar-collector tests passed.")

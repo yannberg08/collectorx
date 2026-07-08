@@ -340,6 +340,10 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     end = first(record, ["end", "end_time", "ended_at", "dtend", "结束时间", "结束"])
     path_label = first(record, [SOURCE_PATH_KEY]) or str(path)
     source_platform = first(record, [SOURCE_PLATFORM_KEY]) or infer_source_platform(record, path_label)
+    start_time = normalize_time(start)
+    end_time = normalize_time(end)
+    is_all_day = bool_value(first(record, ["is_all_day", "all_day", "全天"])) or bool(record.get("is_all_day"))
+    time_quality = event_time_quality(start_time, end_time, is_all_day=is_all_day)
     data = {
         "source_platform": source_platform,
         "title": title,
@@ -348,10 +352,11 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "has_description": bool(description),
         "calendar_name": first(record, ["calendar", "calendar_name", "日历", "日历名称"]),
         "event_id": first(record, ["id", "uid", "event_id"]),
-        "start": normalize_time(start),
-        "end": normalize_time(end),
+        "start": start_time,
+        "end": end_time,
         "timezone": first(record, ["timezone", "tz", "start_timezone", "时区"]),
-        "is_all_day": bool_value(first(record, ["is_all_day", "all_day", "全天"])) or bool(record.get("is_all_day")),
+        "is_all_day": is_all_day,
+        **time_quality,
         "location": first(record, ["location", "地点"]),
         "meeting_url": first(record, ["meeting_url", "url", "link", "会议链接", "链接"]),
         "organizer": normalize_person(first(record, ["organizer", "组织者"])),
@@ -497,18 +502,36 @@ def calendar_field_present(event: Dict[str, Any], field: str) -> bool:
     return value not in (None, "", [], {})
 
 
-def time_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+def time_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     calendar_events = [event for event in events if event.get("kind") == "calendar"]
+    durations = [
+        int((event.get("data") or {}).get("duration_minutes"))
+        for event in calendar_events
+        if isinstance((event.get("data") or {}).get("duration_minutes"), int)
+    ]
     return {
         "calendar_event_count": len(calendar_events),
         "events_with_start": sum(1 for event in calendar_events if (event.get("data") or {}).get("start")),
         "events_with_end": sum(1 for event in calendar_events if (event.get("data") or {}).get("end")),
+        "events_with_time_range": sum(1 for event in calendar_events if (event.get("data") or {}).get("has_time_range") is True),
+        "events_without_start": sum(1 for event in calendar_events if not (event.get("data") or {}).get("start")),
+        "events_without_end": sum(1 for event in calendar_events if not (event.get("data") or {}).get("end")),
         "all_day_event_count": sum(1 for event in calendar_events if (event.get("data") or {}).get("is_all_day") is True),
+        "timed_event_count": sum(1 for event in calendar_events if (event.get("data") or {}).get("is_all_day") is not True),
+        "multi_day_event_count": sum(1 for event in calendar_events if (event.get("data") or {}).get("is_multi_day") is True),
+        "events_with_invalid_time_range": sum(1 for event in calendar_events if (event.get("data") or {}).get("time_order_valid") is False),
+        "events_with_duration_minutes": len(durations),
+        "min_duration_minutes": min(durations) if durations else 0,
+        "max_duration_minutes": max(durations) if durations else 0,
+        "average_duration_minutes": round(sum(durations) / len(durations), 1) if durations else 0,
         "events_with_meeting_url": sum(1 for event in calendar_events if (event.get("data") or {}).get("meeting_url")),
+        "events_without_meeting_url": sum(1 for event in calendar_events if not (event.get("data") or {}).get("meeting_url")),
         "events_with_location": sum(1 for event in calendar_events if (event.get("data") or {}).get("location")),
         "events_with_attendees": sum(1 for event in calendar_events if (event.get("data") or {}).get("attendees")),
         "events_with_recurrence": sum(1 for event in calendar_events if (event.get("data") or {}).get("recurrence")),
         "events_with_reminders": sum(1 for event in calendar_events if (event.get("data") or {}).get("reminders")),
+        "events_without_reminders": sum(1 for event in calendar_events if not (event.get("data") or {}).get("reminders")),
+        "time_conflict_summary": calendar_time_conflict_summary(calendar_events),
     }
 
 
@@ -623,6 +646,88 @@ def normalize_time(value: Optional[str]) -> Optional[str]:
         dt = datetime.strptime(text, "%Y%m%dT%H%M%S").replace(tzinfo=CN_TZ)
         return dt.isoformat(timespec="seconds")
     return text
+
+
+def parse_calendar_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    text = str(value).strip()
+    try:
+        if text.endswith("Z"):
+            return datetime.fromisoformat(text[:-1] + "+00:00")
+        if re.fullmatch(r"\d{8}", text):
+            return datetime.strptime(text, "%Y%m%d").replace(tzinfo=CN_TZ)
+        if re.fullmatch(r"\d{8}T\d{6}Z", text):
+            return datetime.strptime(text, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+        if re.fullmatch(r"\d{8}T\d{6}", text):
+            return datetime.strptime(text, "%Y%m%dT%H%M%S").replace(tzinfo=CN_TZ)
+        if len(text) == 10 and text[4] == "-" and text[7] == "-":
+            return datetime.fromisoformat(text + "T00:00:00+08:00")
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=CN_TZ)
+        return parsed
+    except ValueError:
+        return None
+
+
+def event_time_quality(start: Optional[str], end: Optional[str], *, is_all_day: bool) -> Dict[str, Any]:
+    start_dt = parse_calendar_datetime(start)
+    end_dt = parse_calendar_datetime(end)
+    metadata: Dict[str, Any] = {
+        "has_time_range": bool(start and end),
+    }
+    if start_dt is None or end_dt is None:
+        return metadata
+    order_valid = end_dt >= start_dt
+    metadata["time_order_valid"] = order_valid
+    if not order_valid:
+        metadata["is_multi_day"] = False
+        return metadata
+    duration_minutes = int((end_dt - start_dt).total_seconds() // 60)
+    metadata["duration_minutes"] = duration_minutes
+    if is_all_day:
+        metadata["is_multi_day"] = (end_dt.date() - start_dt.date()).days > 1
+    else:
+        metadata["is_multi_day"] = start_dt.date() != end_dt.date()
+    return metadata
+
+
+def calendar_time_conflict_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    grouped: Dict[str, List[Tuple[datetime, datetime, str]]] = {}
+    for event in events:
+        data = event.get("data") or {}
+        if data.get("is_all_day") is True:
+            continue
+        start_dt = parse_calendar_datetime(data.get("start"))
+        end_dt = parse_calendar_datetime(data.get("end"))
+        if start_dt is None or end_dt is None or end_dt <= start_dt:
+            continue
+        group = str(data.get("calendar_name") or data.get("source_platform") or "calendar")
+        grouped.setdefault(group, []).append((start_dt, end_dt, str(event.get("id"))))
+
+    checked_event_count = sum(len(items) for items in grouped.values())
+    conflict_pair_count = 0
+    conflict_event_ids: set[str] = set()
+    sample_pairs: List[List[str]] = []
+    for items in grouped.values():
+        active: List[Tuple[datetime, str]] = []
+        for start_dt, end_dt, event_id in sorted(items, key=lambda item: item[0]):
+            active = [(active_end, active_id) for active_end, active_id in active if active_end > start_dt]
+            for _active_end, active_id in active:
+                conflict_pair_count += 1
+                conflict_event_ids.update({active_id, event_id})
+                if len(sample_pairs) < 10:
+                    sample_pairs.append([active_id, event_id])
+            active.append((end_dt, event_id))
+
+    return {
+        "checked_timed_event_count": checked_event_count,
+        "conflict_pair_count": conflict_pair_count,
+        "events_with_conflicts": len(conflict_event_ids),
+        "sample_conflicting_event_ids": sorted(conflict_event_ids)[:20],
+        "sample_conflict_pairs": sample_pairs,
+    }
 
 
 def parse_ics_time(value: str, params: Dict[str, str]) -> str:

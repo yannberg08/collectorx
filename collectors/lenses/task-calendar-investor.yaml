@@ -27,6 +27,7 @@ scope:
     - task_calendar_surface
     - upstream_collector_surface
     - time_and_reminder_surface
+    - calendar_time_quality_surface
   excludes:
     - full_life_calendar
     - unrelated_tasks
@@ -34,4 +35,5 @@ scope:
 
 description: |
   滴答清单和日历作为通用任务通道。本 lens 只筛投资研究、交易计划和复盘提醒，
-  并在 manifest/evidence 中汇总研究任务、交易计划、复盘提醒、财报日程、调研会议和风险检查面谱。
+  并在 manifest/evidence 中汇总研究任务、交易计划、复盘提醒、财报日程、调研会议、
+  风险检查、日程时长、跨天和异常时间段面谱。

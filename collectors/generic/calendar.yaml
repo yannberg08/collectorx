@@ -20,6 +20,8 @@ scope:
     - platform_coverage_manifest
     - field_coverage_manifest
     - time_surface_summary
+    - time_quality_summary
+    - calendar_conflict_summary
     - source_audit_manifest
     - archive_member_provenance
     - archive_member_skip_audit
@@ -35,6 +37,7 @@ description: |
   通用日历采集器。它只采用户授权的日历事件原始证据，不判断是否投资相关。
   支持 ICS/JSON/CSV/TSV/ZIP 授权导出，并在 manifest 中记录 Apple、Google、
   Outlook、飞书、钉钉、企业微信、腾讯会议等来源平台覆盖情况，以及字段覆盖、
-  会议/提醒/循环时间面、ZIP 来源审计、跳过成员原因和逐文件解析结果。
+  会议/提醒/循环时间面、时长/跨天/异常时间段/同日历冲突质量审计、ZIP 来源审计、
+  跳过成员原因和逐文件解析结果。
   投资分身需要的交易计划、财报日程、复盘提醒由 task-calendar-investor lens
   从 calendar/ticktick lake 中筛选。
