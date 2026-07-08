@@ -134,6 +134,26 @@ def test_wechat_lens_keeps_only_investment_dialogue() -> None:
         assert events[0]["data"]["payload"]["text"].startswith("准备买入")
         assert events[0]["data"]["classification"]["is_investment_evidence"] is True
         assert "matched_trade_action_terms" in events[0]["data"]["classification"]["reasons"]
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        proof = manifest["wechat_dialogue_boundary_proof"]
+        assert proof["proof_level"] == "authorized_wechat_dialogue_partial"
+        assert proof["event_count"] == 1
+        assert proof["candidate_record_count"] == 2
+        assert proof["matched_event_count"] == 1
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["complete_wechat_history_claimed"] is False
+        assert proof["complete_dialogue_context_claimed"] is False
+        assert proof["raw_wechat_database_access"] is False
+        surface = manifest["lens_surface_summary"]
+        assert surface["chat_counts"] == {"投研朋友": 1}
+        assert surface["sender_counts"] == {"我": 1}
+        assert surface["wechat_dialogue_surface_counts"]["trade_intention"] == 1
+        assert surface["wechat_dialogue_surface_counts"]["position_sizing"] == 1
+        assert surface["wechat_dialogue_surface_counts"]["research_discussion"] == 1
+        assert surface["wechat_dialogue_surface_counts"]["review_reflection"] == 1
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["wechat-investment-dialogue"]
+        assert evidence_surface["wechat_dialogue_surface_counts"]["trade_intention"] == 1
 
 
 def test_wechat_lens_source_policy_allows_and_denies_chats_and_senders() -> None:
@@ -233,6 +253,22 @@ def test_wechat_lens_source_policy_allows_and_denies_chats_and_senders() -> None
             "allow_chat_not_matched": 1,
             "deny_sender": 1,
         }
+        proof = manifest["wechat_dialogue_boundary_proof"]
+        assert proof["proof_level"] == "authorized_wechat_dialogue_with_source_policy"
+        assert proof["source_policy_boundary"]["enabled"] is True
+        assert proof["source_policy_boundary"]["allow_chats"] == ["投资讨论群"]
+        assert proof["source_policy_boundary"]["deny_senders"] == ["营销号"]
+        assert proof["source_policy_boundary"]["filtered_candidate_count"] == 2
+        dialogue = proof["dialogue_boundary"]
+        assert dialogue["chat_count"] == 1
+        assert dialogue["sender_count"] == 1
+        assert dialogue["owner_message_count"] == 1
+        assert dialogue["group_chat_event_count"] == 1
+        assert dialogue["events_with_source_policy"] == 1
+        assert dialogue["wechat_dialogue_surface_counts"]["trade_intention"] == 1
+        assert dialogue["wechat_dialogue_surface_counts"]["buy_sell_reason"] == 1
+        assert dialogue["wechat_dialogue_surface_counts"]["position_sizing"] == 1
+        assert dialogue["wechat_dialogue_surface_counts"]["research_discussion"] == 1
 
 
 def test_wechat_lens_source_policy_filtered_all_has_explicit_gap() -> None:
@@ -274,6 +310,13 @@ def test_wechat_lens_source_policy_filtered_all_has_explicit_gap() -> None:
         )
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "source_policy_filtered_all"
+        proof = manifest["wechat_dialogue_boundary_proof"]
+        assert proof["proof_level"] == "source_policy_filtered_all"
+        assert proof["can_enter_finclaw"] is False
+        assert proof["event_count"] == 0
+        assert proof["candidate_record_count"] == 1
+        assert proof["source_policy_boundary"]["filtered_candidate_count"] == 1
+        assert proof["dialogue_boundary"]["event_count"] == 0
         event = json.loads((out_dir / "lake" / "wechat-investment-dialogue" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
         assert event["data"]["payload"]["gap"] == "source_policy_filtered_all"
         assert event["wiki_targets"] == []
@@ -316,6 +359,11 @@ def test_lens_without_investment_match_does_not_fill_wiki_coverage() -> None:
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "no_investment_evidence_matched"
         assert manifest["collection_readiness"]["can_claim_complete_source_collection"] is False
+        proof = manifest["wechat_dialogue_boundary_proof"]
+        assert proof["proof_level"] == "no_usable_investment_dialogue_after_filter"
+        assert proof["event_count"] == 0
+        assert proof["candidate_record_count"] == 1
+        assert proof["can_enter_finclaw"] is False
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []

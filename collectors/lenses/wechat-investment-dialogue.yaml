@@ -23,6 +23,8 @@ scope:
     - source_policy_audit
     - contact_group_sender_allowlist
     - source_policy_filtered_gap
+    - wechat_dialogue_surface_summary
+    - wechat_dialogue_boundary_proof
   excludes:
     - raw_wechat_database_access
     - non_investment_private_chats
@@ -34,3 +36,5 @@ description: |
   本 lens 只从 lake 中筛选投资相关对话并路由到 investor Wiki 证据包。
   FinClaw 可传入 --allow-chat/--deny-chat/--allow-sender/--deny-sender 收窄
   联系人、群和发送者范围；范围策略只做过滤，不自动证明投资相关。
+  manifest 会输出 wechat_dialogue_boundary_proof 与对话面谱，记录聊天/发送者范围、
+  本人/他人发言、交易意图、买卖理由、仓位、风险情绪、咨询网络、研究讨论和复盘线索。

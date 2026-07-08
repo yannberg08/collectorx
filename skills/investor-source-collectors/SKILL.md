@@ -126,6 +126,7 @@ P2 必做：
 
 - 记录请求输入、缺失输入、逐文件解析结果、候选记录数、命中/过滤数量、扩展名分布、跳过原因和 limit 截断状态。
 - 记录 `source_policy`：`--allow-chat`、`--deny-chat`、`--allow-sender`、`--deny-sender` 的配置和过滤数量。这个策略只收窄来源范围，不把普通聊天强行变成投资证据。
+- 对 `wechat-investment-dialogue` 输出 `wechat_dialogue_boundary_proof` 与对话面谱：汇总聊天/发送者范围、来源策略、本人/他人发言、群聊/私聊、交易意图、买卖理由、仓位、风险情绪、咨询网络、研究讨论和复盘线索；不声明完整微信历史或完整上下文。
 - 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM 正文/表格读取必须显式传入 `--include-content`；截图/图片默认只保留元数据；若用户显式传入 `--include-image-ocr` 且本机有 tesseract，才读取图片文字；OCR 不可用时必须在 manifest/path_results 中写明降级原因。
 - 对 `research-documents` 额外输出 `research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描。
 - 不支持的研究文档扩展名会被跳过，不会因为文件名里有弱投资词就污染 Wiki 覆盖率。
@@ -136,6 +137,7 @@ P2 必做：
 
 - 命中证券/基金代码、交易动作、仓位、估值、研报、财报、调研、复盘等特征才会进入投资证据。
 - 事件会带 `data.classification`，包含置信度、命中原因、关键词和证券代码。
+- `wechat-investment-dialogue` 会额外标注微信投资对话面谱：交易意图、买卖理由、仓位、风险情绪、咨询网络、研究讨论和复盘线索。
 - `investment-notes` 会额外标注投资笔记子类型：复盘、规则库、交易 checklist、估值假设和研究记录；manifest/evidence 会汇总这些面谱。
 - `task-calendar-investor` 会额外标注任务/日历面谱：研究任务、交易计划、复盘提醒、财报日程、调研会议和风险检查。
 - `meeting-minutes` 会额外标注投研会议面谱：路演、调研、投委会、专家会、业绩会、决策点、风险讨论和后续行动，并汇总上游平台、参会人、附件/录制指针和时间覆盖。

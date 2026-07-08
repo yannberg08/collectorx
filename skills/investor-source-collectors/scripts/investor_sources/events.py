@@ -68,6 +68,16 @@ WECHAT_ARTICLE_SURFACE_ORDER = (
     "macro_policy_article",
     "unclassified_wechat_article",
 )
+WECHAT_DIALOGUE_SURFACE_ORDER = (
+    "trade_intention",
+    "buy_sell_reason",
+    "position_sizing",
+    "risk_emotion",
+    "consultation_network",
+    "research_discussion",
+    "review_reflection",
+    "unclassified_wechat_dialogue",
+)
 WECHAT_SOURCE_ACCOUNT_TYPE_ORDER = (
     "broker_research_account",
     "finance_media_account",
@@ -243,6 +253,11 @@ def build_manifest(
         if source_id == "research-documents"
         else None
     )
+    wechat_proof = (
+        build_wechat_dialogue_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "wechat-investment-dialogue"
+        else None
+    )
     manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -274,6 +289,8 @@ def build_manifest(
     }
     if research_proof is not None:
         manifest["research_corpus_boundary_proof"] = research_proof
+    if wechat_proof is not None:
+        manifest["wechat_dialogue_boundary_proof"] = wechat_proof
     return manifest
 
 
@@ -352,6 +369,64 @@ def research_corpus_proof_level(
     if int(audit.get("metadata_only_file_count") or 0) > 0:
         return "authorized_research_corpus_metadata_only"
     return "authorized_research_corpus_event_only"
+
+
+def build_wechat_dialogue_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    surface = wechat_dialogue_surface_summary(usable_events)
+    return {
+        "source_type": "wechat_lake_investment_dialogue_lens",
+        "proof_level": wechat_dialogue_proof_level(usable_events, audit=audit, readiness=collection_readiness),
+        "event_count": len(usable_events),
+        "candidate_record_count": audit.get("candidate_record_count", 0),
+        "matched_event_count": audit.get("matched_event_count", 0),
+        "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
+        "source_policy_boundary": {
+            "enabled": source_policy.get("enabled", False),
+            "allow_chats": source_policy.get("allow_chats", []),
+            "deny_chats": source_policy.get("deny_chats", []),
+            "allow_senders": source_policy.get("allow_senders", []),
+            "deny_senders": source_policy.get("deny_senders", []),
+            "filtered_candidate_count": source_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": source_policy.get("filter_reason_counts", {}),
+            "policy_does_not_assert_investment_relevance": source_policy.get("policy_does_not_assert_investment_relevance", True),
+        },
+        "dialogue_boundary": surface,
+        "complete_wechat_history_claimed": False,
+        "complete_dialogue_context_claimed": False,
+        "raw_wechat_database_access": False,
+        "direct_wechat_reconnect": False,
+        "requires_upstream_wechat_collector": True,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness.get("can_enter_finclaw", False),
+    }
+
+
+def wechat_dialogue_proof_level(
+    usable_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    readiness: Dict[str, Any],
+) -> str:
+    if not usable_events:
+        status = str(readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            return "no_authorized_wechat_lake_input"
+        if status == "source_policy_filtered_all":
+            return "source_policy_filtered_all"
+        if status == "no_readable_input":
+            return "no_readable_wechat_lake_input"
+        return "no_usable_investment_dialogue_after_filter"
+    source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    if source_policy.get("enabled"):
+        return "authorized_wechat_dialogue_with_source_policy"
+    return "authorized_wechat_dialogue_partial"
 
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -444,6 +519,8 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
 def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if source_id == "research-documents":
         return research_document_surface_summary(events)
+    if source_id == "wechat-investment-dialogue":
+        return wechat_dialogue_surface_summary(events)
     if source_id == "investment-notes":
         return investment_note_surface_summary(events)
     if source_id == "task-calendar-investor":
@@ -467,6 +544,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         summaries["investment-notes"] = investment_note_surface_summary(by_source["investment-notes"])
     if "research-documents" in by_source:
         summaries["research-documents"] = research_document_surface_summary(by_source["research-documents"])
+    if "wechat-investment-dialogue" in by_source:
+        summaries["wechat-investment-dialogue"] = wechat_dialogue_surface_summary(by_source["wechat-investment-dialogue"])
     if "task-calendar-investor" in by_source:
         summaries["task-calendar-investor"] = task_calendar_surface_summary(by_source["task-calendar-investor"])
     if "meeting-minutes" in by_source:
@@ -592,6 +671,142 @@ def research_document_extension(event: Dict[str, Any]) -> str:
     if path:
         return Path(str(path)).suffix.lower()
     return ""
+
+
+def wechat_dialogue_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface_counts: Counter[str] = Counter()
+    primary_surface_counts: Counter[str] = Counter()
+    chat_counts: Counter[str] = Counter()
+    sender_counts: Counter[str] = Counter()
+    upstream_collector_counts: Counter[str] = Counter()
+    owner_message_count = 0
+    non_owner_message_count = 0
+    group_chat_event_count = 0
+    private_chat_event_count = 0
+    events_with_time = 0
+    events_with_text = 0
+    events_with_source_policy = 0
+    matched_symbol_event_count = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        raw_ref = event.get("raw_ref") or {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        chat = wechat_chat_name(event)
+        sender = wechat_sender_name(event)
+        if chat:
+            chat_counts[chat] += 1
+        if sender:
+            sender_counts[sender] += 1
+        if payload.get("sender_is_owner") is True:
+            owner_message_count += 1
+        elif sender:
+            non_owner_message_count += 1
+        if wechat_is_group_chat(event):
+            group_chat_event_count += 1
+        else:
+            private_chat_event_count += 1
+        if event.get("time") or payload.get("time") or payload.get("upstream_time"):
+            events_with_time += 1
+        if value_present(payload.get("text")) or value_present(payload.get("content")) or value_present(payload.get("body")):
+            events_with_text += 1
+        if data.get("source_policy"):
+            events_with_source_policy += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        upstream_collector_counts[str(payload.get("upstream_collector") or raw_ref.get("upstream_collector") or "wechat")] += 1
+        surfaces = classify_wechat_dialogue_surfaces(event)
+        for surface in surfaces:
+            surface_counts[surface] += 1
+        primary_surface_counts[surfaces[0]] += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_wechat_dialogue_surfaces": list(WECHAT_DIALOGUE_SURFACE_ORDER[:-1]),
+        "wechat_dialogue_surface_counts": ordered_counts(surface_counts, WECHAT_DIALOGUE_SURFACE_ORDER),
+        "primary_wechat_dialogue_surface_counts": ordered_counts(primary_surface_counts, WECHAT_DIALOGUE_SURFACE_ORDER),
+        "missing_expected_wechat_dialogue_surfaces": [
+            surface for surface in WECHAT_DIALOGUE_SURFACE_ORDER[:-1] if surface_counts.get(surface, 0) == 0
+        ],
+        "chat_counts": dict(sorted(chat_counts.items())),
+        "chat_count": len(chat_counts),
+        "sender_counts": dict(sorted(sender_counts.items())),
+        "sender_count": len(sender_counts),
+        "owner_message_count": owner_message_count,
+        "non_owner_message_count": non_owner_message_count,
+        "group_chat_event_count": group_chat_event_count,
+        "private_chat_event_count": private_chat_event_count,
+        "events_with_time": events_with_time,
+        "events_with_text": events_with_text,
+        "events_with_source_policy": events_with_source_policy,
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "upstream_collector_counts": dict(sorted(upstream_collector_counts.items())),
+        "generic_wechat_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def classify_wechat_dialogue_surfaces(event: Dict[str, Any]) -> List[str]:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    text = " ".join(
+        str(part)
+        for part in (
+            payload.get("text"),
+            payload.get("content"),
+            payload.get("body"),
+            payload.get("summary"),
+            payload.get("chat"),
+            payload.get("sender"),
+        )
+        if part not in (None, "")
+    ).lower()
+    surfaces: List[str] = []
+    if any(token in text for token in ("买入", "卖出", "加仓", "减仓", "建仓", "清仓", "调仓", "止损", "止盈", "定投", "申购", "赎回")):
+        surfaces.append("trade_intention")
+    if any(token in text for token in ("买入理由", "卖出理由", "投资逻辑", "逻辑", "估值", "低估", "高估", "安全边际", "催化", "风险点")):
+        surfaces.append("buy_sell_reason")
+    if any(token in text for token in ("仓位", "几成仓", "半仓", "满仓", "轻仓", "重仓", "组合", "持仓", "配比")):
+        surfaces.append("position_sizing")
+    if any(token in text for token in ("焦虑", "恐慌", "贪婪", "怕", "担心", "回撤", "亏损", "风险", "止损", "情绪", "睡不着")):
+        surfaces.append("risk_emotion")
+    if any(token in text for token in ("老师", "怎么看", "请教", "建议", "帮我看看", "投顾", "券商", "私募", "公募", "群里")):
+        surfaces.append("consultation_network")
+    if any(token in text for token in ("财报", "研报", "调研", "路演", "纪要", "行业", "基本面", "现金流", "roe", "pe", "pb", "dcf")):
+        surfaces.append("research_discussion")
+    if any(token in text for token in ("复盘", "回顾", "错了", "错因", "总结", "纪律", "执行", "交易计划")):
+        surfaces.append("review_reflection")
+    ordered: List[str] = []
+    for surface in WECHAT_DIALOGUE_SURFACE_ORDER:
+        if surface in surfaces and surface not in ordered:
+            ordered.append(surface)
+    return ordered or ["unclassified_wechat_dialogue"]
+
+
+def wechat_chat_name(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref") if isinstance(raw_ref.get("upstream_raw_ref"), dict) else {}
+    value = payload.get("chat") or payload.get("chat_name") or payload.get("conversation") or raw_ref.get("chat") or upstream_raw_ref.get("chat")
+    return str(value or "")
+
+
+def wechat_sender_name(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref") if isinstance(raw_ref.get("upstream_raw_ref"), dict) else {}
+    value = payload.get("sender") or payload.get("from") or payload.get("author") or raw_ref.get("sender") or upstream_raw_ref.get("sender")
+    return str(value or "")
+
+
+def wechat_is_group_chat(event: Dict[str, Any]) -> bool:
+    chat = wechat_chat_name(event)
+    source = str(event.get("source") or "")
+    if any(token in chat for token in ("群", "@chatroom")):
+        return True
+    return "群" in source or "@chatroom" in source
 
 
 def investment_note_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:

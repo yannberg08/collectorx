@@ -900,6 +900,11 @@ Default behavior:
   restrict WeChat investment-dialogue runs to user-approved contacts, groups,
   and senders. These filters narrow scope only; they do not make a normal chat
   investment evidence by themselves.
+- `manifest.wechat_dialogue_boundary_proof` and `manifest.lens_surface_summary`
+  report the actual dialogue boundary: chats, senders, owner/non-owner message
+  counts, group/private chat coverage, source-policy filtering, and dialogue
+  surfaces such as trade intention, buy/sell reasons, position sizing, risk
+  emotion, consultation network, research discussion, and review reflection.
 - If input is readable but not investment-related, the manifest status is
   `no_investment_evidence_matched` and Wiki coverage stays empty.
 - If all candidates are excluded by source policy, the manifest status is
