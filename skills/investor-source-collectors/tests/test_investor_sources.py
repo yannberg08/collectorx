@@ -500,6 +500,26 @@ def test_research_documents_extracts_office_and_pdf_content_when_authorized() ->
         assert {item["parser"] for item in audit["path_results"]} == {"openpyxl", "pdfplumber", "python-docx"}
         assert all(item["candidate_record_count"] == 1 for item in audit["path_results"])
         assert all(item["emitted_event_count"] == 1 for item in audit["path_results"])
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "authorized_research_corpus_with_content"
+        assert proof["candidate_record_count"] == 3
+        assert proof["matched_event_count"] == 3
+        assert proof["complete_research_corpus_claimed"] is False
+        assert proof["whole_disk_scan_claimed"] is False
+        assert proof["public_report_database_crawl_claimed"] is False
+        assert proof["content_boundary"]["content_read_event_count"] == 3
+        assert proof["content_boundary"]["metadata_only_file_count"] == 0
+        assert proof["format_boundary"]["parser_counts"] == {"openpyxl": 1, "pdfplumber": 1, "python-docx": 1}
+        surface = manifest["lens_surface_summary"]
+        assert surface["extension_counts"] == {".docx": 1, ".pdf": 1, ".xlsx": 1}
+        assert surface["content_read_event_count"] == 3
+        assert surface["research_document_surface_counts"]["valuation_model"] == 3
+        assert surface["research_document_surface_counts"]["research_report"] == 2
+        assert surface["research_document_surface_counts"]["table_model"] == 1
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["research-documents"]
+        assert evidence_surface["content_read_event_count"] == 3
+        assert evidence_surface["research_document_surface_counts"]["valuation_model"] == 3
 
 
 def test_research_documents_without_include_content_keeps_binary_metadata_only() -> None:
@@ -537,6 +557,12 @@ def test_research_documents_without_include_content_keeps_binary_metadata_only()
         assert audit["metadata_only_file_count"] == 1
         assert audit["path_results"][0]["parser"] == "metadata"
         assert audit["path_results"][0]["emitted_event_count"] == 1
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "authorized_research_corpus_metadata_only"
+        assert proof["content_boundary"]["include_content_enabled"] is False
+        assert proof["content_boundary"]["content_read_event_count"] == 0
+        assert proof["content_boundary"]["metadata_only_file_count"] == 1
+        assert manifest["lens_surface_summary"]["metadata_only_event_count"] == 1
 
 
 def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -> None:
@@ -583,6 +609,13 @@ def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -
         png_result = next(item for item in audit["path_results"] if item["extension"] == ".png")
         assert png_result["content_policy"] == "screenshot_metadata_only_no_ocr"
         assert png_result["ocr_performed"] is False
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "no_usable_research_evidence_after_filter"
+        assert proof["can_enter_finclaw"] is False
+        assert proof["candidate_record_count"] == 1
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["content_boundary"]["screenshot_metadata_only_file_count"] == 1
+        assert manifest["lens_surface_summary"]["event_count"] == 0
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
 
@@ -682,6 +715,15 @@ def test_research_documents_image_ocr_extracts_when_explicitly_authorized() -> N
         assert png_result["content_policy"] == "image_ocr_explicit_authorized"
         assert png_result["ocr_requested"] is True
         assert png_result["ocr_performed"] is True
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "authorized_research_corpus_with_image_ocr"
+        assert proof["content_boundary"]["include_image_ocr_enabled"] is True
+        assert proof["content_boundary"]["image_ocr_event_count"] == 1
+        assert proof["content_boundary"]["ocr_performed"] is True
+        surface = manifest["lens_surface_summary"]
+        assert surface["image_ocr_event_count"] == 1
+        assert surface["screenshot_or_image_event_count"] == 1
+        assert surface["research_document_surface_counts"]["screenshot_or_image"] == 1
 
 
 def test_research_documents_limit_records_path_truncation() -> None:

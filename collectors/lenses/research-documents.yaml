@@ -28,6 +28,8 @@ scope:
     - skipped_reason_counts
     - screenshot_metadata_only_policy
     - optional_image_ocr_policy
+    - research_document_surface_summary
+    - research_corpus_boundary_proof
   excludes:
     - whole_disk_scan
     - unrelated_private_files
@@ -67,5 +69,5 @@ description: |
   截图/图片里的文字；没有 OCR 引擎时会保留 metadata-only 事件并在
   manifest 中记录降级原因。
   但仍只写 CollectorX lake 与 investor_wiki_evidence.v1 证据包。
-  manifest 会记录缺失输入、逐文件解析结果、跳过原因、limit 截断和截图
-  OCR/metadata-only 边界。
+  manifest 会记录缺失输入、逐文件解析结果、跳过原因、limit 截断、研究语料面谱、
+  research_corpus_boundary_proof 和截图 OCR/metadata-only 边界。

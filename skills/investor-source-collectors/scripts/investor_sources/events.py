@@ -75,6 +75,16 @@ WECHAT_SOURCE_ACCOUNT_TYPE_ORDER = (
     "company_ir_account",
     "unknown_account_type",
 )
+RESEARCH_DOCUMENT_SURFACE_ORDER = (
+    "research_report",
+    "financial_statement",
+    "valuation_model",
+    "announcement_note",
+    "review_note",
+    "screenshot_or_image",
+    "table_model",
+    "unclassified_research_document",
+)
 SOCIAL_INFLUENCE_TOPIC_ORDER = (
     "macro_policy",
     "market_strategy",
@@ -220,7 +230,20 @@ def build_manifest(
         for event in events
         if not is_gap_event(event)
     ]
-    return {
+    collection_readiness = {
+        "status": status,
+        "can_enter_finclaw": bool(events) and not only_gap,
+        "can_claim_complete_source_collection": False,
+        "source_collection_scope": "none" if only_gap else "partial_authorized_input",
+        "next_action": next_action_for_status(status),
+    }
+    lens_surface = lens_surface_summary(source_id, events)
+    research_proof = (
+        build_research_corpus_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "research-documents"
+        else None
+    )
+    manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
         "skill": "investor-source-collectors",
@@ -240,14 +263,8 @@ def build_manifest(
             if classifications
             else 0,
         },
-        "lens_surface_summary": lens_surface_summary(source_id, events),
-        "collection_readiness": {
-            "status": status,
-            "can_enter_finclaw": bool(events) and not only_gap,
-            "can_claim_complete_source_collection": False,
-            "source_collection_scope": "none" if only_gap else "partial_authorized_input",
-            "next_action": next_action_for_status(status),
-        },
+        "lens_surface_summary": lens_surface,
+        "collection_readiness": collection_readiness,
         "privacy": {
             "local_only": True,
             "sensitive": True,
@@ -255,6 +272,86 @@ def build_manifest(
         },
         "collection_audit": collection_audit or {},
     }
+    if research_proof is not None:
+        manifest["research_corpus_boundary_proof"] = research_proof
+    return manifest
+
+
+def build_research_corpus_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    policy = audit.get("content_extraction_policy") if isinstance(audit.get("content_extraction_policy"), dict) else {}
+    surface = research_document_surface_summary(usable_events)
+    return {
+        "source_type": "user_selected_research_files_or_upstream_file_events",
+        "proof_level": research_corpus_proof_level(usable_events, audit=audit, readiness=collection_readiness),
+        "event_count": len(usable_events),
+        "candidate_record_count": audit.get("candidate_record_count", 0),
+        "matched_event_count": audit.get("matched_event_count", 0),
+        "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
+        "input_boundary": {
+            "input_count": audit.get("input_count", 0),
+            "requested_inputs": audit.get("requested_inputs", []),
+            "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+            "input_missing_count": audit.get("input_missing_count", 0),
+            "skipped_file_count": audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+            "limit": audit.get("limit"),
+            "limit_reached": audit.get("limit_reached", False),
+        },
+        "format_boundary": {
+            "extension_counts": audit.get("extension_counts", {}),
+            "skipped_extension_counts": audit.get("skipped_extension_counts", {}),
+            "parser_counts": audit.get("parser_counts", {}),
+        },
+        "content_boundary": {
+            "include_content_enabled": policy.get("include_content_enabled", False),
+            "include_image_ocr_enabled": policy.get("include_image_ocr_enabled", False),
+            "content_read_event_count": audit.get("content_read_event_count", 0),
+            "metadata_only_file_count": audit.get("metadata_only_file_count", 0),
+            "screenshot_metadata_only_file_count": audit.get("screenshot_metadata_only_file_count", 0),
+            "image_ocr_event_count": audit.get("image_ocr_event_count", 0),
+            "ocr_performed": audit.get("ocr_performed", False),
+            "content_extract_status_counts": audit.get("content_extract_status_counts", {}),
+            "image_ocr_status_counts": audit.get("image_ocr_status_counts", {}),
+            "preview_char_limit": policy.get("preview_char_limit"),
+            "extracted_text_char_limit": policy.get("extracted_text_char_limit"),
+        },
+        "research_document_surface_summary": surface,
+        "complete_research_corpus_claimed": False,
+        "whole_disk_scan_claimed": False,
+        "public_report_database_crawl_claimed": False,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness.get("can_enter_finclaw", False),
+    }
+
+
+def research_corpus_proof_level(
+    usable_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    readiness: Dict[str, Any],
+) -> str:
+    if not usable_events:
+        status = str(readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            return "no_authorized_research_input"
+        if status == "no_readable_input":
+            return "no_readable_research_input"
+        if status == "source_policy_filtered_all":
+            return "source_policy_filtered_all"
+        return "no_usable_research_evidence_after_filter"
+    if int(audit.get("image_ocr_event_count") or 0) > 0:
+        return "authorized_research_corpus_with_image_ocr"
+    if int(audit.get("content_read_event_count") or 0) > 0:
+        return "authorized_research_corpus_with_content"
+    if int(audit.get("metadata_only_file_count") or 0) > 0:
+        return "authorized_research_corpus_metadata_only"
+    return "authorized_research_corpus_event_only"
 
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
@@ -345,6 +442,8 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
 
 
 def lens_surface_summary(source_id: str, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    if source_id == "research-documents":
+        return research_document_surface_summary(events)
     if source_id == "investment-notes":
         return investment_note_surface_summary(events)
     if source_id == "task-calendar-investor":
@@ -366,6 +465,8 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         by_source[source_id].append(event)
     if "investment-notes" in by_source:
         summaries["investment-notes"] = investment_note_surface_summary(by_source["investment-notes"])
+    if "research-documents" in by_source:
+        summaries["research-documents"] = research_document_surface_summary(by_source["research-documents"])
     if "task-calendar-investor" in by_source:
         summaries["task-calendar-investor"] = task_calendar_surface_summary(by_source["task-calendar-investor"])
     if "meeting-minutes" in by_source:
@@ -375,6 +476,122 @@ def source_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     if "social-investment-influence" in by_source:
         summaries["social-investment-influence"] = social_influence_surface_summary(by_source["social-investment-influence"])
     return summaries
+
+
+def research_document_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    surface_counts: Counter[str] = Counter()
+    primary_surface_counts: Counter[str] = Counter()
+    extension_counts: Counter[str] = Counter()
+    parser_counts: Counter[str] = Counter()
+    content_status_counts: Counter[str] = Counter()
+    content_read_event_count = 0
+    metadata_only_event_count = 0
+    image_ocr_event_count = 0
+    screenshot_or_image_event_count = 0
+    matched_symbol_event_count = 0
+    path_event_count = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+        raw_ref = event.get("raw_ref") or {}
+        classification = data.get("classification") if isinstance(data.get("classification"), dict) else {}
+        extension = research_document_extension(event)
+        if extension:
+            extension_counts[extension] += 1
+        parser = raw_ref.get("parser")
+        if parser:
+            parser_counts[str(parser)] += 1
+        extract = payload.get("content_extract")
+        if isinstance(extract, dict):
+            content_status_counts[str(extract.get("status") or "unknown")] += 1
+        if raw_ref.get("content_read") or payload.get("content_read") is True:
+            content_read_event_count += 1
+        if payload.get("metadata_only") is True:
+            metadata_only_event_count += 1
+        if raw_ref.get("image_ocr_performed") or payload.get("image_ocr_performed") is True:
+            image_ocr_event_count += 1
+        if extension in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".heic", ".heif"}:
+            screenshot_or_image_event_count += 1
+        if classification.get("matched_symbols"):
+            matched_symbol_event_count += 1
+        if payload.get("path") or raw_ref.get("path"):
+            path_event_count += 1
+        surfaces = classify_research_document_surfaces(event)
+        for surface in surfaces:
+            surface_counts[surface] += 1
+        primary_surface_counts[surfaces[0]] += 1
+    return {
+        "event_count": len(usable_events),
+        "expected_research_document_surfaces": list(RESEARCH_DOCUMENT_SURFACE_ORDER[:-1]),
+        "research_document_surface_counts": ordered_counts(surface_counts, RESEARCH_DOCUMENT_SURFACE_ORDER),
+        "primary_research_document_surface_counts": ordered_counts(primary_surface_counts, RESEARCH_DOCUMENT_SURFACE_ORDER),
+        "missing_expected_research_document_surfaces": [
+            surface for surface in RESEARCH_DOCUMENT_SURFACE_ORDER[:-1] if surface_counts.get(surface, 0) == 0
+        ],
+        "extension_counts": dict(sorted(extension_counts.items())),
+        "parser_counts": dict(sorted(parser_counts.items())),
+        "content_extract_status_counts": dict(sorted(content_status_counts.items())),
+        "content_read_event_count": content_read_event_count,
+        "metadata_only_event_count": metadata_only_event_count,
+        "image_ocr_event_count": image_ocr_event_count,
+        "screenshot_or_image_event_count": screenshot_or_image_event_count,
+        "matched_symbol_event_count": matched_symbol_event_count,
+        "path_event_count": path_event_count,
+        "generic_filesystem_lens": True,
+        "collector_writes_wiki_directly": False,
+    }
+
+
+def classify_research_document_surfaces(event: Dict[str, Any]) -> List[str]:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    extension = research_document_extension(event)
+    text = " ".join(
+        str(part)
+        for part in (
+            payload.get("title"),
+            payload.get("name"),
+            payload.get("path"),
+            payload.get("content_preview"),
+            payload.get("content"),
+            payload.get("extension"),
+        )
+        if part not in (None, "")
+    ).lower()
+    surfaces: List[str] = []
+    if extension in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".heic", ".heif"}:
+        surfaces.append("screenshot_or_image")
+    if extension in {".xlsx", ".xlsm", ".xls", ".csv", ".tsv", ".numbers"}:
+        surfaces.append("table_model")
+    if any(token in text for token in ("估值", "dcf", "model", "模型", "roe", "pe", "pb", "安全边际")):
+        surfaces.append("valuation_model")
+    if any(token in text for token in ("财报", "年报", "季报", "现金流", "利润表", "资产负债", "业绩")):
+        surfaces.append("financial_statement")
+    if any(token in text for token in ("公告", "董秘", "投资者关系", "ir ")) or " ir" in text:
+        surfaces.append("announcement_note")
+    if any(token in text for token in ("复盘", "review", "交易总结", "买入理由", "卖出理由")):
+        surfaces.append("review_note")
+    if any(token in text for token in ("研报", "深度", "策略", "行业", "路演", "调研", "报告", "research report")):
+        surfaces.append("research_report")
+    ordered: List[str] = []
+    for surface in RESEARCH_DOCUMENT_SURFACE_ORDER:
+        if surface in surfaces and surface not in ordered:
+            ordered.append(surface)
+    return ordered or ["unclassified_research_document"]
+
+
+def research_document_extension(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    extension = payload.get("extension")
+    if extension:
+        return str(extension).lower()
+    path = payload.get("path") or raw_ref.get("path")
+    if path:
+        return Path(str(path)).suffix.lower()
+    return ""
 
 
 def investment_note_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -294,6 +294,10 @@ Current status:
   parse results, candidate counts, filtered counts, skipped reasons, extension
   coverage, parser counts, content-read counts, limit truncation, and the active
   content policy.
+- `manifest.research_corpus_boundary_proof` and `manifest.lens_surface_summary`
+  summarize which authorized research corpus was actually covered, including
+  report/financial-statement/valuation/announcement/review/screenshot/table
+  surfaces, parser coverage, metadata-only files, content reads, and OCR reads.
 - Screenshots/images stay metadata-only by default. OCR is performed only when
   `--include-image-ocr` is explicitly supplied and a local `tesseract` engine is
   available through `PATH` or `COLLECTORX_TESSERACT_CMD`.
