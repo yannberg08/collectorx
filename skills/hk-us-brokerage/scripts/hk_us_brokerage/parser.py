@@ -654,6 +654,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source_section": first(record, ["source_section", "sheet"]),
         "raw": sanitized(record),
     }
+    if data.get("order_quantity") not in (None, 0) and data.get("filled_quantity") is not None:
+        data["fill_ratio"] = round(float(data["filled_quantity"]) / float(data["order_quantity"]), 6)
     data = {key: value for key, value in data.items() if value not in (None, "")}
     event_time = first(record, ["time", "date", "trade_time", "order_time", "settled_at", "交易时间", "成交时间", "委托时间", "日期"])
     raw_ref = {
@@ -824,6 +826,9 @@ def build_manifest(
         "currency_market_summary": currency_market_summary(events),
         "fee_tax_margin_summary": fee_tax_margin_summary(events),
         "asset_value_summary": asset_value_summary(events),
+        "cashflow_activity_summary": cashflow_activity_summary(events),
+        "income_return_summary": income_return_summary(events),
+        "order_execution_summary": order_execution_summary(events),
         "brokerage_boundary_proof": brokerage_boundary_proof(events, collection_audit=collection_audit),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
@@ -1076,6 +1081,151 @@ def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def cashflow_activity_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    flow_counts: Counter[str] = Counter()
+    net_cashflow_by_currency: Dict[str, float] = defaultdict(float)
+    deposits_by_currency: Dict[str, float] = defaultdict(float)
+    withdrawals_by_currency: Dict[str, float] = defaultdict(float)
+    dividend_gross_by_currency: Dict[str, float] = defaultdict(float)
+    dividend_net_by_currency: Dict[str, float] = defaultdict(float)
+    dividend_tax_by_currency: Dict[str, float] = defaultdict(float)
+    fx_from_amount_by_currency: Dict[str, float] = defaultdict(float)
+    fx_to_amount_by_currency: Dict[str, float] = defaultdict(float)
+    fx_pair_counts: Counter[str] = Counter()
+    for event in usable_events:
+        data = event.get("data") or {}
+        subtype = str(data.get("subtype") or "unknown")
+        flow_type = str(data.get("flow_type") or subtype)
+        if subtype in {"cashflow", "dividend", "fx"}:
+            flow_counts[flow_type] += 1
+        currency = primary_currency(data)
+        if subtype == "cashflow":
+            amount = money_value(data, "net_amount", "amount", "gross_amount")
+            if amount is not None:
+                net_cashflow_by_currency[currency] += amount
+                if flow_type == "deposit" or amount > 0:
+                    deposits_by_currency[currency] += abs(amount)
+                elif flow_type == "withdraw" or amount < 0:
+                    withdrawals_by_currency[currency] += abs(amount)
+        elif subtype == "dividend":
+            gross = money_value(data, "gross_amount", "amount")
+            net = money_value(data, "net_amount")
+            tax = money_value(data, "tax")
+            if gross is not None:
+                dividend_gross_by_currency[currency] += gross
+            if net is not None:
+                dividend_net_by_currency[currency] += net
+                net_cashflow_by_currency[currency] += net
+            if tax is not None:
+                dividend_tax_by_currency[currency] += abs(tax)
+        elif subtype == "fx":
+            from_currency = str(data.get("from_currency") or "unknown")
+            to_currency = str(data.get("to_currency") or "unknown")
+            if data.get("from_currency") and data.get("to_currency"):
+                fx_pair_counts[f"{from_currency}->{to_currency}"] += 1
+            if isinstance(data.get("from_amount"), (int, float)):
+                fx_from_amount_by_currency[from_currency] += float(data["from_amount"])
+            if isinstance(data.get("to_amount"), (int, float)):
+                fx_to_amount_by_currency[to_currency] += float(data["to_amount"])
+    return {
+        "cashflow_event_count": subtype_event_count(usable_events, "cashflow"),
+        "dividend_event_count": subtype_event_count(usable_events, "dividend"),
+        "fx_event_count": subtype_event_count(usable_events, "fx"),
+        "flow_type_counts": dict(sorted(flow_counts.items())),
+        "deposits_by_currency": dict(sorted(deposits_by_currency.items())),
+        "withdrawals_by_currency": dict(sorted(withdrawals_by_currency.items())),
+        "net_cashflow_by_currency": dict(sorted(net_cashflow_by_currency.items())),
+        "dividend_gross_by_currency": dict(sorted(dividend_gross_by_currency.items())),
+        "dividend_net_by_currency": dict(sorted(dividend_net_by_currency.items())),
+        "dividend_tax_by_currency": dict(sorted(dividend_tax_by_currency.items())),
+        "fx_from_amount_by_currency": dict(sorted(fx_from_amount_by_currency.items())),
+        "fx_to_amount_by_currency": dict(sorted(fx_to_amount_by_currency.items())),
+        "fx_pair_counts": dict(sorted(fx_pair_counts.items())),
+        "events_with_settlement_date": sum(1 for event in usable_events if (event.get("data") or {}).get("settlement_date")),
+        "events_with_ex_date": sum(1 for event in usable_events if (event.get("data") or {}).get("ex_date")),
+        "events_with_pay_date": sum(1 for event in usable_events if (event.get("data") or {}).get("pay_date")),
+    }
+
+
+def income_return_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    dividend_net_by_symbol: Dict[str, float] = defaultdict(float)
+    dividend_tax_by_symbol: Dict[str, float] = defaultdict(float)
+    realized_pnl_by_currency: Dict[str, float] = defaultdict(float)
+    unrealized_pnl_by_currency: Dict[str, float] = defaultdict(float)
+    total_pnl_by_currency: Dict[str, float] = defaultdict(float)
+    fee_drag_by_currency: Dict[str, float] = defaultdict(float)
+    tax_drag_by_currency: Dict[str, float] = defaultdict(float)
+    for event in usable_events:
+        data = event.get("data") or {}
+        currency = primary_currency(data)
+        symbol = str(data.get("symbol") or "unknown_symbol")
+        if data.get("subtype") == "dividend":
+            net = money_value(data, "net_amount")
+            tax = money_value(data, "tax")
+            if net is not None:
+                dividend_net_by_symbol[symbol] += net
+            if tax is not None:
+                dividend_tax_by_symbol[symbol] += abs(tax)
+        if isinstance(data.get("realized_pnl"), (int, float)):
+            realized_pnl_by_currency[currency] += float(data["realized_pnl"])
+        if isinstance(data.get("unrealized_pnl"), (int, float)):
+            unrealized_pnl_by_currency[currency] += float(data["unrealized_pnl"])
+        if isinstance(data.get("pnl"), (int, float)):
+            total_pnl_by_currency[currency] += float(data["pnl"])
+        if isinstance(data.get("fees"), (int, float)):
+            fee_drag_by_currency[currency] += abs(float(data["fees"]))
+        if isinstance(data.get("tax"), (int, float)):
+            tax_drag_by_currency[currency] += abs(float(data["tax"]))
+    return {
+        "dividend_symbol_count": len(dividend_net_by_symbol),
+        "dividend_net_by_symbol": dict(sorted(dividend_net_by_symbol.items())),
+        "dividend_tax_by_symbol": dict(sorted(dividend_tax_by_symbol.items())),
+        "realized_pnl_by_currency": dict(sorted(realized_pnl_by_currency.items())),
+        "unrealized_pnl_by_currency": dict(sorted(unrealized_pnl_by_currency.items())),
+        "total_pnl_by_currency": dict(sorted(total_pnl_by_currency.items())),
+        "fee_drag_by_currency": dict(sorted(fee_drag_by_currency.items())),
+        "tax_drag_by_currency": dict(sorted(tax_drag_by_currency.items())),
+    }
+
+
+def order_execution_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_brokerage_events(events)
+    order_events = [event for event in usable_events if (event.get("data") or {}).get("subtype") == "order"]
+    execution_events = [event for event in usable_events if (event.get("data") or {}).get("subtype") == "execution"]
+    status_counts: Counter[str] = Counter()
+    side_counts: Counter[str] = Counter()
+    order_type_counts: Counter[str] = Counter()
+    time_in_force_counts: Counter[str] = Counter()
+    fill_ratios: List[float] = []
+    for event in [*order_events, *execution_events]:
+        data = event.get("data") or {}
+        if data.get("status"):
+            status_counts[str(data["status"])] += 1
+        if data.get("side"):
+            side_counts[str(data["side"])] += 1
+        if data.get("order_type"):
+            order_type_counts[str(data["order_type"])] += 1
+        if data.get("time_in_force"):
+            time_in_force_counts[str(data["time_in_force"])] += 1
+        if isinstance(data.get("fill_ratio"), (int, float)):
+            fill_ratios.append(float(data["fill_ratio"]))
+    return {
+        "order_event_count": len(order_events),
+        "execution_event_count": len(execution_events),
+        "status_counts": dict(sorted(status_counts.items())),
+        "side_counts": dict(sorted(side_counts.items())),
+        "order_type_counts": dict(sorted(order_type_counts.items())),
+        "time_in_force_counts": dict(sorted(time_in_force_counts.items())),
+        "events_with_order_id": sum(1 for event in [*order_events, *execution_events] if (event.get("data") or {}).get("order_id")),
+        "events_with_trade_id": sum(1 for event in execution_events if (event.get("data") or {}).get("trade_id")),
+        "events_with_settlement_date": sum(1 for event in execution_events if (event.get("data") or {}).get("settlement_date")),
+        "events_with_fill_ratio": len(fill_ratios),
+        "average_fill_ratio": round(sum(fill_ratios) / len(fill_ratios), 6) if fill_ratios else None,
+    }
+
+
 def brokerage_boundary_proof(
     events: List[Dict[str, Any]],
     *,
@@ -1101,6 +1251,9 @@ def brokerage_boundary_proof(
     currency_summary = currency_market_summary(events)
     fee_summary = fee_tax_margin_summary(events)
     asset_summary = asset_value_summary(events)
+    cashflow_summary = cashflow_activity_summary(events)
+    income_summary = income_return_summary(events)
+    order_summary = order_execution_summary(events)
     audit = source_audit(events, collection_audit=collection_audit)
     has_account_ids = account_summary["account_id_count"] > 0
     has_asset_values = bool(
@@ -1201,6 +1354,9 @@ def brokerage_boundary_proof(
             "margin_requirement_by_currency": fee_summary["margin_requirement_by_currency"],
             "maintenance_margin_by_currency": fee_summary["maintenance_margin_by_currency"],
         },
+        "cashflow_activity_boundary": cashflow_summary,
+        "income_return_boundary": income_summary,
+        "order_execution_boundary": order_summary,
         "source_boundary": {
             "requested_input_count": int(audit.get("input_count") or 0),
             "resolved_input_file_count": int(audit.get("resolved_input_file_count") or 0),
@@ -1257,6 +1413,14 @@ def primary_currency(data: Dict[str, Any]) -> str:
         if value not in (None, ""):
             return str(value)
     return "unknown"
+
+
+def money_value(data: Dict[str, Any], *keys: str) -> Optional[float]:
+    for key in keys:
+        value = data.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return None
 
 
 def sorted_dict_of_lists(mapping: Dict[str, set[str]]) -> Dict[str, List[str]]:
@@ -1329,6 +1493,9 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "currency_market_summary": currency_market_summary(events),
             "fee_tax_margin_summary": fee_tax_margin_summary(events),
             "asset_value_summary": asset_value_summary(events),
+            "cashflow_activity_summary": cashflow_activity_summary(events),
+            "income_return_summary": income_return_summary(events),
+            "order_execution_summary": order_execution_summary(events),
             "brokerage_boundary_proof": brokerage_boundary_proof(events),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },

@@ -127,6 +127,7 @@ def test_collect_nested_sections_and_workbook() -> None:
                 {
                     "broker": "Tiger",
                     "account_id": "T-888",
+                    "base_currency": "USD",
                     "assets": [
                         {
                             "currency": "USD",
@@ -139,8 +140,8 @@ def test_collect_nested_sections_and_workbook() -> None:
                         }
                     ],
                     "positions": [{"symbol": "NVDA", "quantity": "3", "avg_cost": "800", "market_value": "2700"}],
-                    "executions": [{"symbol": "MSFT", "side": "BOT", "filled_qty": "2", "avg_price": "400", "amount": "800", "fees": "1.1", "settlement_date": "2026-07-10"}],
-                    "orders": [{"symbol": "TSLA", "side": "SELL", "order_qty": "4", "status": "Cancelled"}],
+                    "executions": [{"symbol": "MSFT", "side": "BOT", "filled_qty": "2", "avg_price": "400", "amount": "800", "fees": "1.1", "settlement_date": "2026-07-10", "order_id": "O-1", "trade_id": "E-1"}],
+                    "orders": [{"symbol": "TSLA", "side": "SELL", "order_qty": "4", "filled_qty": "0", "status": "Cancelled", "order_type": "LMT", "time_in_force": "DAY", "order_id": "O-2"}],
                     "cashflows": [{"type": "入金", "amount": "5000", "profile": {"token": "must-not-leak"}}],
                     "dividends": [{"symbol": "AAPL", "gross_amount": "12.3", "withholding_tax": "(1.23)", "net_amount": "11.07", "ex_date": "2026-06-20", "pay_date": "2026-07-08"}],
                     "fx": [{"from_currency": "USD", "to_currency": "HKD", "from_amount": "100", "to_amount": "780", "exchange_rate": "7.8"}],
@@ -254,7 +255,7 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert account_boundary["complete_account_boundary_claimed"] is False
         currency_market = manifest["currency_market_summary"]
         assert currency_market["currency_count"] == 2
-        assert currency_market["currency_counts"] == {"HKD": 2, "USD": 2}
+        assert currency_market["currency_counts"] == {"HKD": 2, "USD": 7}
         assert currency_market["fx_pair_counts"] == {"USD->HKD": 1}
         assert currency_market["multi_currency_observed"] is True
         fee_tax_margin = manifest["fee_tax_margin_summary"]
@@ -268,6 +269,41 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert manifest["asset_value_summary"]["reported_total_assets_by_currency"]["HKD"] == 25000.0
         assert manifest["asset_value_summary"]["reported_cash_by_currency"]["USD"] == 12000.0
         assert manifest["asset_value_summary"]["reported_cash_by_currency"]["HKD"] == 5000.0
+        cashflow_activity = manifest["cashflow_activity_summary"]
+        assert cashflow_activity["cashflow_event_count"] == 1
+        assert cashflow_activity["dividend_event_count"] == 2
+        assert cashflow_activity["fx_event_count"] == 1
+        assert cashflow_activity["flow_type_counts"] == {"deposit": 1, "dividend": 2, "fx": 1}
+        assert cashflow_activity["deposits_by_currency"]["USD"] == 5000.0
+        assert cashflow_activity["net_cashflow_by_currency"]["USD"] == 5011.07
+        assert cashflow_activity["net_cashflow_by_currency"]["unknown"] == 90.0
+        assert cashflow_activity["dividend_gross_by_currency"]["USD"] == 12.3
+        assert cashflow_activity["dividend_net_by_currency"]["USD"] == 11.07
+        assert cashflow_activity["dividend_tax_by_currency"]["USD"] == 1.23
+        assert cashflow_activity["fx_from_amount_by_currency"]["USD"] == 100.0
+        assert cashflow_activity["fx_to_amount_by_currency"]["HKD"] == 780.0
+        assert cashflow_activity["events_with_settlement_date"] == 1
+        assert cashflow_activity["events_with_ex_date"] == 1
+        assert cashflow_activity["events_with_pay_date"] == 2
+        income_return = manifest["income_return_summary"]
+        assert income_return["dividend_symbol_count"] == 2
+        assert income_return["dividend_net_by_symbol"] == {"00700": 90.0, "AAPL": 11.07}
+        assert income_return["dividend_tax_by_symbol"] == {"00700": 10.0, "AAPL": 1.23}
+        assert income_return["unrealized_pnl_by_currency"]["unknown"] == 3050.0
+        assert income_return["fee_drag_by_currency"]["USD"] == 1.1
+        assert income_return["tax_drag_by_currency"]["USD"] == 1.23
+        order_execution = manifest["order_execution_summary"]
+        assert order_execution["order_event_count"] == 1
+        assert order_execution["execution_event_count"] == 1
+        assert order_execution["status_counts"] == {"cancelled": 1}
+        assert order_execution["side_counts"] == {"buy": 1, "sell": 1}
+        assert order_execution["order_type_counts"] == {"LMT": 1}
+        assert order_execution["time_in_force_counts"] == {"DAY": 1}
+        assert order_execution["events_with_order_id"] == 2
+        assert order_execution["events_with_trade_id"] == 1
+        assert order_execution["events_with_settlement_date"] == 1
+        assert order_execution["events_with_fill_ratio"] == 1
+        assert order_execution["average_fill_ratio"] == 0.0
         boundary_proof = manifest["brokerage_boundary_proof"]
         assert boundary_proof["proof_level"] == "strong_partial_brokerage_boundary"
         assert boundary_proof["authorized_input_observed"] is True
@@ -279,6 +315,9 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert boundary_proof["asset_value_boundary"]["reported_total_assets_by_currency"]["USD"] == 100000.5
         assert boundary_proof["currency_market_boundary"]["multi_currency_observed"] is True
         assert boundary_proof["fee_tax_margin_boundary"]["margin_requirement_by_currency"]["USD"] == 3000.0
+        assert boundary_proof["cashflow_activity_boundary"]["deposits_by_currency"]["USD"] == 5000.0
+        assert boundary_proof["income_return_boundary"]["dividend_net_by_symbol"]["AAPL"] == 11.07
+        assert boundary_proof["order_execution_boundary"]["status_counts"] == {"cancelled": 1}
         assert boundary_proof["source_boundary"]["requested_input_count"] == 1
         assert boundary_proof["source_boundary"]["resolved_input_file_count"] == 3
         assert boundary_proof["source_boundary"]["archive_member_count"] == 4
@@ -317,6 +356,9 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert evidence["coverage_summary"]["order_side_effects_allowed"] is False
         assert evidence["coverage_summary"]["account_boundary_summary"]["full_surface_account_candidates"] == ["tiger:T-888"]
         assert evidence["coverage_summary"]["currency_market_summary"]["multi_currency_observed"] is True
+        assert evidence["coverage_summary"]["cashflow_activity_summary"]["fx_pair_counts"] == {"USD->HKD": 1}
+        assert evidence["coverage_summary"]["income_return_summary"]["dividend_symbol_count"] == 2
+        assert evidence["coverage_summary"]["order_execution_summary"]["average_fill_ratio"] == 0.0
         assert evidence["coverage_summary"]["brokerage_boundary_proof"]["proof_level"] == "strong_partial_brokerage_boundary"
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20

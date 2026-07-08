@@ -416,10 +416,15 @@ proof for authorized read-only Futu, Tiger, and IBKR export packages:
 - `manifest.brokerage_boundary_proof` gives FinClaw one gate for authorized
   input presence, broker coverage, strong trade surfaces, recommended numeric
   fields, account IDs, asset values, multi-currency evidence, fee/tax/margin
-  evidence, source audit counts, and Investor Wiki flow.
+  evidence, cashflow activity, income return, order execution, source audit
+  counts, and Investor Wiki flow.
 - The proof keeps exact user business numbers intact for assets, cash, buying
   power, fees, tax, margin, FX, orders, executions, positions, dividends, and
   cashflows when the user authorized those inputs.
+- `manifest.cashflow_activity_summary`, `manifest.income_return_summary`, and
+  `manifest.order_execution_summary` expose deposits/withdrawals, dividend
+  gross/net/tax, FX amounts, net cashflow, dividend symbols, P/L, fee/tax drag,
+  order statuses, order type/TIF, trade IDs, settlement dates, and fill ratios.
 - False claims remain explicit: no complete account boundary, no complete
   brokerage history, no native broker API validation, no trading password, no
   order mutation, no community crawl, and no direct Wiki write.
@@ -653,7 +658,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
+| 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false positives, and license-safe boundaries |
 | B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, social activity boundary proof, social influence boundary proof, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
 

@@ -356,7 +356,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-readonly-brokerage-export-import",
       "cli": "python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect --input <authorized-futu-tiger-ibkr-export> --out-dir <out-dir>",
-      "collects": "Futu, Tiger, and IBKR assets, positions, executions, orders, cashflows, dividends, FX, margin, tax, settlement, multi-currency amount fields, account-boundary summary, currency/market summary, fee/tax/margin summary, unified brokerage-boundary proof, broker/trade-surface coverage, per-input source audit, skipped reasons, and ZIP member audit.",
+      "collects": "Futu, Tiger, and IBKR assets, positions, executions, orders, cashflows, dividends, FX, margin, tax, settlement, multi-currency amount fields, account-boundary summary, currency/market summary, fee/tax/margin summary, cashflow activity summary, income return summary, order execution summary, unified brokerage-boundary proof, broker/trade-surface coverage, per-input source audit, skipped reasons, and ZIP member audit.",
       "must_not_collect": "Trading passwords, order mutation, community discussions, or complete brokerage-boundary claims without real validation.",
       "production_gap": "Real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, and multi-currency margin/tax validation."
     },

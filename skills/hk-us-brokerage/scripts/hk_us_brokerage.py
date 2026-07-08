@@ -51,6 +51,10 @@ def collect(args: argparse.Namespace) -> int:
                     f"- observed_trade_surfaces：`{', '.join(manifest['trade_surface_coverage']['observed_subtypes']) or 'none'}`",
                     f"- missing_trade_surfaces：`{', '.join(manifest['trade_surface_coverage']['missing_expected_subtypes']) or 'none'}`",
                     f"- asset_currencies：`{', '.join(manifest['asset_value_summary']['currencies_observed']) or 'none'}`",
+                    f"- cashflow_events：{manifest['cashflow_activity_summary']['cashflow_event_count']}, "
+                    f"dividend_events：{manifest['cashflow_activity_summary']['dividend_event_count']}, "
+                    f"fx_events：{manifest['cashflow_activity_summary']['fx_event_count']}",
+                    f"- order_statuses：`{', '.join(manifest['order_execution_summary']['status_counts'].keys()) or 'none'}`",
                     f"- brokerage_boundary_proof：`{manifest['brokerage_boundary_proof']['proof_level']}`",
                     f"- complete_boundary_claimed：`{manifest['brokerage_boundary_proof']['false_claims']['complete_hk_us_trade_boundary_claimed']}`",
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
