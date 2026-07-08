@@ -2367,6 +2367,28 @@ Findings:
 - This improves FinClaw catalog consumption and user-precondition handling. It
   does not claim new real-account validation for any collector.
 
+### Wave AH - FinClaw Catalog Plan Readiness Gate
+
+Validation record:
+
+- `docs/validations/finclaw-catalog-plan-readiness-validation-2026-07-08.md`
+
+Findings:
+
+- Added `plan --require-ready` to `tools/finclaw_catalog.py`.
+- Invocation plans now include `next_action` and `blocked_reason`.
+- Ready command plans return `next_action=run_command`.
+- Plans with unresolved placeholders return `next_action=fill_placeholders` and
+  exit with status `2` when `--require-ready` is used.
+- SoulMirror-owned plans return `next_action=use_soulmirror_runner` and
+  `blocked_reason=soulmirror_runner_required` when they are not ordinary shell
+  commands.
+- Added tests for ready commands, missing placeholders, and SoulMirror runner
+  rejection.
+- This improves FinClaw product-side gating and prevents accidental execution of
+  incomplete collector commands. It does not claim new real-account validation
+  for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

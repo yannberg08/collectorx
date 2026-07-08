@@ -99,18 +99,29 @@ def parse_set_values(values: list[str]) -> dict[str, str]:
     return replacements
 
 
+def plan_status(runner: str, placeholders: list[str]) -> tuple[str, str | None]:
+    if runner == "soulmirror":
+        return "use_soulmirror_runner", "soulmirror_runner_required"
+    if placeholders:
+        return "fill_placeholders", f"missing_placeholders:{','.join(placeholders)}"
+    return "run_command", None
+
+
 def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[str, Any]:
     command = str(entry["cli"])
     for key, value in replacements.items():
         command = command.replace(f"<{key}>", shlex.quote(value))
     placeholders = sorted(set(re.findall(r"<([^<>]+)>", command)))
     runner = "soulmirror" if command.startswith("SoulMirror") else "command"
+    next_action, blocked_reason = plan_status(runner, placeholders)
     contract = entry.get("invocation_contract") or {}
     return {
         "id": entry["id"],
         "runner": runner,
         "command": command,
         "ready_to_run": runner == "command" and not placeholders,
+        "next_action": next_action,
+        "blocked_reason": blocked_reason,
         "missing_placeholders": placeholders,
         "authorization_mode": contract.get("authorization_mode"),
         "product_surface": contract.get("product_surface"),
@@ -175,12 +186,17 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"id: {plan['id']}")
         print(f"runner: {plan['runner']}")
         print(f"ready_to_run: {str(plan['ready_to_run']).lower()}")
+        print(f"next action: {plan['next_action']}")
+        if plan["blocked_reason"]:
+            print(f"blocked reason: {plan['blocked_reason']}")
         if plan["missing_placeholders"]:
             print(f"missing placeholders: {', '.join(plan['missing_placeholders'])}")
         print(f"user step: {plan['user_step']}")
         print(f"preflight: {plan['preflight']}")
         print(f"failure state: {plan['failure_state']}")
         print(f"command: {plan['command']}")
+    if args.require_ready and not plan["ready_to_run"]:
+        return 2
     return 0
 
 
@@ -212,6 +228,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replace an arbitrary command placeholder, e.g. --set authorized-email-export=/tmp/mail.",
     )
     plan_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    plan_parser.add_argument(
+        "--require-ready",
+        action="store_true",
+        help="Exit with status 2 unless the rendered plan is ready for ordinary command execution.",
+    )
     plan_parser.set_defaults(func=cmd_plan)
     return parser
 

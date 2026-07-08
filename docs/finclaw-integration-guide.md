@@ -79,14 +79,26 @@ python3 tools/finclaw_catalog.py show ths-watchlist --json
 python3 tools/finclaw_catalog.py plan ths-watchlist \
   --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
   --out-dir /path/to/out \
-  --json
+  --json \
+  --require-ready
 ```
 
 The `plan` output includes `ready_to_run`, unresolved placeholders, the
-rendered command, `user_step`, `preflight`, `failure_state`, product surface,
-and evidence role. SoulMirror-owned collectors such as TickTick report
-`runner=soulmirror` so the product does not treat them as ordinary shell
-commands.
+rendered command, `next_action`, `blocked_reason`, `user_step`, `preflight`,
+`failure_state`, product surface, and evidence role. Product runners should use
+`--require-ready` before ordinary shell execution. If the helper exits with
+status `2`, FinClaw should parse the same JSON response and follow
+`next_action` instead of running the command:
+
+- `run_command`: execute the rendered command, then run the package gate.
+- `fill_placeholders`: ask the user for the missing authorized file, folder,
+  account precondition, or output path shown in `missing_placeholders`.
+- `use_soulmirror_runner`: hand the request to the SoulMirror-managed runner
+  instead of treating the catalog command as a shell command.
+
+SoulMirror-owned collectors such as TickTick report `runner=soulmirror` and
+`blocked_reason=soulmirror_runner_required`, so the product does not treat them
+as ordinary shell commands.
 
 ## Package Gate
 

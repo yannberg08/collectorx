@@ -16,19 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw now has a catalog helper CLI for product-side discovery and invocation planning:
+FinClaw now has a catalog helper readiness gate for product-side discovery and invocation planning:
 
 - `tools/finclaw_catalog.py list/show/plan` merges
   `collectors/finclaw-investor-catalog.json` with
   `collectors/finclaw-invocation-contracts.json`.
 - Product runners can list collectors, inspect authorization/preflight details,
   and render a collector command with placeholder replacement before execution.
+- `plan --require-ready` exits with status `2` when a command is not ready for
+  ordinary execution, while still returning JSON the product can inspect.
+- Plan JSON now reports `next_action` and `blocked_reason`, so FinClaw can route
+  to ordinary command execution, missing-precondition collection, or the
+  SoulMirror runner.
 - The plan output reports unresolved placeholders and `runner=soulmirror` for
   SoulMirror-owned collectors such as TickTick, preventing accidental treatment
   as a normal shell command.
 - `tools/test_finclaw_catalog.py` and project validation now cover catalog
   listing, lens upstream contracts, command placeholder replacement, and
-  SoulMirror runner handling.
+  ready-to-run gate handling.
 - This improves FinClaw product-call ergonomics, but it does not claim new
   real-account validation for any collector.
 
