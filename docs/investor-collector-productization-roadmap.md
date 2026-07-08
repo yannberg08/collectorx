@@ -183,7 +183,7 @@ Findings:
   content-read counts, and content extraction status counts.
 - Added a machine-readable content policy that keeps the generic `filesystem`
   collector metadata-only and requires explicit `--include-content` before
-  DOCX/PDF/XLSX/XLSM body/table extraction.
+  XLS/XLSX/PPTX/DOCX/PDF body/table/slide extraction.
 - Registered the same policy in `collectors/lenses/research-documents.yaml`.
 - Tightened file-title classification so a lone broad title hint such as
   `股票` or `基金` does not enter Wiki evidence without stronger research
@@ -210,9 +210,9 @@ Findings:
   `screenshot_metadata_only_file_count`, `ocr_performed=false`, and per-path
   `content_policy=screenshot_metadata_only_no_ocr`.
 - Preserved the content boundary: generic `filesystem` remains metadata-only;
-  DOCX/PDF/XLSX/XLSM extraction still requires `--include-content`; OCR is not
+  XLS/XLSX/PPTX/DOCX/PDF extraction still requires `--include-content`; OCR is not
   claimed without a future separate adapter and user authorization.
-- Fixture validation covers PDF/DOCX/XLSX content extraction, binary
+- Fixture validation covers PDF/DOCX/XLSX/XLS/PPTX content extraction, binary
   metadata-only mode, missing inputs, unsupported extensions, broad-title
   false-positive filtering, screenshot metadata-only/no-OCR policy, and limit
   truncation.
@@ -243,6 +243,38 @@ Findings:
 - This improves the P0 local research-material channel, but it still needs real
   private screenshot samples, Chinese OCR quality review, Windows/Linux engine
   path validation, and Wiki backtesting against real trades/reviews.
+
+### Wave B2e: P0 research legacy Office extraction pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-research-legacy-office-validation-2026-07-08.md`
+
+Findings:
+
+- Added explicit `--include-content` extraction for additional high-value
+  research-material formats:
+  - legacy `.xls` XML Spreadsheet / HTML table / text-style exports, with
+    optional `xlrd` fallback for binary BIFF when installed;
+  - `.pptx` slide text through OOXML slide XML parsing.
+- Updated `research-documents` content policy, profile accepted inputs, lens
+  YAML, and FinClaw docs so `.xls` and `.pptx` are no longer described as
+  metadata-only when the user explicitly authorizes content reading.
+- Fixture validation covers XML Spreadsheet `.xls` valuation material and PPTX
+  roadshow text, including event payloads, `raw_ref.content_read`,
+  `content_extract.status`, parser counts, path results, research surface
+  summary, and research corpus boundary proof.
+- Fixed investor-source event/evidence contract gaps found by the package gate:
+  file events without source timestamps now fall back to `collected_at`, and
+  Investor Wiki evidence children include `evidence_kinds`.
+- Hooked previously defined investor-source tests into the script entry point,
+  so source-policy, attachment, meeting-surface, and WeChat article-surface
+  tests run under project validation.
+- This improves the P0 local research-material channel. It does not claim real
+  binary `.xls` coverage without `xlrd`, real private PPT decks, Windows/Linux
+  validation, or Wiki backtesting against actual trades.
 
 ### Wave B3: P0 Xueqiu activity productization pass 2
 
@@ -2563,7 +2595,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
-| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF/image samples, Chinese OCR quality review, Wiki backtest against real trades/reviews |
+| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text `.xls` extraction, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, binary `.xls`/`xlrd` validation where needed, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, mailbox boundary proof, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist import path with standard Lake output, manifest, source audit, field coverage, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun watchlist export/local-store validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
 | 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |

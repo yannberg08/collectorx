@@ -40,7 +40,7 @@ research-document surface summaries to the `research-documents` investor lens.
 
 ## Verified behavior
 
-- DOCX/PDF/XLSX content extraction with `--include-content` emits
+- XLS/XLSX/PPTX/DOCX/PDF content extraction with `--include-content` emits
   `authorized_research_corpus_with_content` proof and counts parser coverage.
 - Binary research files without `--include-content` remain metadata-only and
   emit `authorized_research_corpus_metadata_only` proof.

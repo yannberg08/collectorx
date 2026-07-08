@@ -8,15 +8,22 @@ import os
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "investor_sources.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 
 
 def run_cli(*args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run([sys.executable, str(SCRIPT), *args], text=True, capture_output=True, check=True, env=env)
+
+
+def run_package_validator(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run([sys.executable, str(PACKAGE_VALIDATOR), *args], text=True, capture_output=True, check=True)
 
 
 def test_list_sources_contains_all_priorities() -> None:
@@ -568,6 +575,95 @@ def test_research_documents_extracts_office_and_pdf_content_when_authorized() ->
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["research-documents"]
         assert evidence_surface["content_read_event_count"] == 3
         assert evidence_surface["research_document_surface_counts"]["valuation_model"] == 3
+
+
+def test_research_documents_extracts_legacy_xls_and_pptx_when_authorized() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out_dir = root / "out"
+
+        xls_path = root / "legacy-valuation.xls"
+        xls_path.write_text(
+            """<?xml version="1.0"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="估值表" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+    <Table>
+      <Row>
+        <Cell><Data ss:Type="String">公司</Data></Cell>
+        <Cell><Data ss:Type="String">半导体旧模型</Data></Cell>
+      </Row>
+      <Row>
+        <Cell><Data ss:Type="String">DCF 估值</Data></Cell>
+        <Cell><Data ss:Type="String">买入理由 安全边际 风险提示</Data></Cell>
+      </Row>
+    </Table>
+  </Worksheet>
+</Workbook>
+""",
+            encoding="utf-8",
+        )
+        text_xls_path = root / "plain-text-export.xls"
+        text_xls_path.write_text(
+            "股票研究\n半导体投资计划\n估值 DCF 买入理由 安全边际 风险提示\n",
+            encoding="utf-8",
+        )
+
+        pptx_path = root / "roadshow-deck.pptx"
+        with zipfile.ZipFile(pptx_path, "w") as archive:
+            archive.writestr(
+                "ppt/slides/slide1.xml",
+                """<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+    xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+  <p:cSld><p:spTree><p:sp><p:txBody>
+    <a:p><a:r><a:t>路演纪要 财报 估值 DCF 买入理由 风险提示</a:t></a:r></a:p>
+  </p:txBody></p:sp></p:spTree></p:cSld>
+</p:sld>""",
+            )
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--include-content",
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-08T06:10:00+08:00",
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 3
+        assert {event["data"]["payload"]["extension"] for event in events} == {".xls", ".pptx"}
+        assert all(event["time"] == "2026-07-08T06:10:00+08:00" for event in events)
+        assert all(event["raw_ref"]["content_read"] is True for event in events)
+        assert all(event["data"]["payload"]["content_extract"]["status"] == "extracted" for event in events)
+        assert any("半导体旧模型" in event["data"]["payload"]["content"] for event in events)
+        assert any("半导体投资计划" in event["data"]["payload"]["content"] for event in events)
+        assert any("路演纪要" in event["data"]["payload"]["content"] for event in events)
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["content_read_event_count"] == 3
+        assert audit["content_extract_status_counts"] == {"extracted": 3}
+        assert audit["parser_counts"] == {"legacy-xls": 2, "pptx-xml": 1}
+        assert {item["parser"] for item in audit["path_results"]} == {"legacy-xls", "pptx-xml"}
+        assert ".xls" in audit["content_extraction_policy"]["binary_content_extract_extensions"]
+        assert ".pptx" in audit["content_extraction_policy"]["binary_content_extract_extensions"]
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "authorized_research_corpus_with_content"
+        assert proof["format_boundary"]["parser_counts"] == {"legacy-xls": 2, "pptx-xml": 1}
+        surface = manifest["lens_surface_summary"]
+        assert surface["extension_counts"] == {".pptx": 1, ".xls": 2}
+        assert surface["research_document_surface_counts"]["valuation_model"] >= 2
+        assert surface["research_document_surface_counts"]["research_report"] >= 1
+        assert surface["research_document_surface_counts"]["table_model"] >= 1
+        validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
 
 
 def test_research_documents_without_include_content_keeps_binary_metadata_only() -> None:
@@ -1883,9 +1979,13 @@ if __name__ == "__main__":
     test_collect_xueqiu_csv_outputs_event_and_evidence()
     test_collect_without_input_writes_gap_event()
     test_wechat_lens_keeps_only_investment_dialogue()
+    test_wechat_lens_source_policy_allows_and_denies_chats_and_senders()
+    test_wechat_lens_source_policy_filtered_all_has_explicit_gap()
     test_lens_without_investment_match_does_not_fill_wiki_coverage()
     test_email_research_reads_upstream_collectorx_event()
+    test_email_research_matches_research_attachment_filename()
     test_research_documents_extracts_office_and_pdf_content_when_authorized()
+    test_research_documents_extracts_legacy_xls_and_pptx_when_authorized()
     test_research_documents_without_include_content_keeps_binary_metadata_only()
     test_research_documents_filters_broad_titles_and_skips_unsupported_files()
     test_research_documents_image_ocr_requires_explicit_adapter_authorization()
@@ -1894,7 +1994,9 @@ if __name__ == "__main__":
     test_task_calendar_lens_keeps_investment_task_and_calendar_only()
     test_task_calendar_lens_reports_planning_surface_from_upstream_events()
     test_meeting_minutes_lens_keeps_investment_minutes_only()
+    test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events()
     test_wechat_article_favorites_lens_keeps_investment_articles_only()
+    test_wechat_article_favorites_lens_reports_article_surface_and_actions()
     test_social_investment_influence_lens_keeps_investment_activity_only()
     test_investment_notes_lens_reports_note_type_surface_from_notes_events()
     print("investor-source-collectors tests passed.")

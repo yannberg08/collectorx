@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import csv
+from html.parser import HTMLParser
 import json
 import os
+import re
 import shutil
 import subprocess
+import xml.etree.ElementTree as ET
+import zipfile
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
@@ -19,7 +23,7 @@ from .profiles import get_profile
 TEXT_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".eml", ".ics"}
 TABLE_EXTENSIONS = {".csv", ".tsv"}
 JSON_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
-CONTENT_EXTRACT_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".xlsm"}
+CONTENT_EXTRACT_EXTENSIONS = {".docx", ".pdf", ".xlsx", ".xlsm", ".xls", ".pptx"}
 IMAGE_METADATA_ONLY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".heic", ".heif"}
 METADATA_ONLY_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".xls", ".pptx"} | IMAGE_METADATA_ONLY_EXTENSIONS
 RESEARCH_DOCUMENT_EXTENSIONS = (
@@ -773,6 +777,12 @@ def extract_document_text(path: Path) -> Dict[str, Any]:
         elif suffix in {".xlsx", ".xlsm"}:
             text = extract_xlsx_text(path)
             parser = "openpyxl"
+        elif suffix == ".xls":
+            text = extract_xls_text(path)
+            parser = "legacy-xls"
+        elif suffix == ".pptx":
+            text = extract_pptx_text(path)
+            parser = "pptx-xml"
         else:
             text = ""
     except Exception as exc:  # pragma: no cover - dependency/runtime specific
@@ -896,6 +906,127 @@ def extract_xlsx_text(path: Path) -> str:
     finally:
         workbook.close()
     return "\n".join(parts)
+
+
+def extract_xls_text(path: Path) -> str:
+    raw = path.read_bytes()
+    if raw.startswith(b"PK"):
+        return extract_xlsx_text(path)
+
+    text = decode_legacy_text(raw)
+    if text:
+        lowered = text[:500].lower()
+        if "<html" in lowered or "<table" in lowered:
+            return extract_html_text(text)
+        if "<workbook" in lowered or "urn:schemas-microsoft-com:office:spreadsheet" in lowered:
+            return extract_xml_spreadsheet_text(text)
+        first_line = text.splitlines()[0] if text.splitlines() else ""
+        if "\t" in text or "," in first_line:
+            return normalize_tabular_text(text)
+        if is_probably_plain_text(text):
+            return text.strip()
+
+    try:
+        import xlrd  # type: ignore
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("xlrd_unavailable_for_binary_xls") from exc
+
+    workbook = xlrd.open_workbook(str(path), on_demand=True)
+    parts: List[str] = []
+    try:
+        for sheet in workbook.sheets()[:10]:
+            parts.append(f"# {sheet.name}")
+            for row_index in range(min(sheet.nrows, 200)):
+                values = [str(value) for value in sheet.row_values(row_index) if value not in (None, "")]
+                if values:
+                    parts.append(" | ".join(values))
+                if sum(len(part) for part in parts) > MAX_EXTRACTED_CHARS:
+                    break
+    finally:
+        workbook.release_resources()
+    return "\n".join(parts)
+
+
+def decode_legacy_text(raw: bytes) -> str:
+    for encoding in ("utf-8-sig", "gb18030", "utf-16"):
+        try:
+            text = raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        if text.strip():
+            return text
+    return ""
+
+
+def is_probably_plain_text(text: str) -> bool:
+    sample = text[:4096]
+    if not sample.strip():
+        return False
+    control_chars = sum(1 for char in sample if ord(char) < 32 and char not in "\r\n\t")
+    return (control_chars / max(len(sample), 1)) < 0.02
+
+
+def extract_xml_spreadsheet_text(text: str) -> str:
+    root = ET.fromstring(text)
+    parts: List[str] = []
+    for node in root.iter():
+        local_name = node.tag.rsplit("}", 1)[-1].lower()
+        if local_name == "data" and node.text and node.text.strip():
+            parts.append(node.text.strip())
+        if len("\n".join(parts)) > MAX_EXTRACTED_CHARS:
+            break
+    return "\n".join(parts)
+
+
+class _HTMLTextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: List[str] = []
+
+    def handle_data(self, data: str) -> None:
+        value = data.strip()
+        if value:
+            self.parts.append(value)
+
+
+def extract_html_text(text: str) -> str:
+    parser = _HTMLTextParser()
+    parser.feed(text)
+    return "\n".join(parser.parts)
+
+
+def normalize_tabular_text(text: str) -> str:
+    parts: List[str] = []
+    for row in csv.reader(text.splitlines(), delimiter="\t" if "\t" in text else ","):
+        values = [value.strip() for value in row if value.strip()]
+        if values:
+            parts.append(" | ".join(values))
+        if sum(len(part) for part in parts) > MAX_EXTRACTED_CHARS:
+            break
+    return "\n".join(parts)
+
+
+def extract_pptx_text(path: Path) -> str:
+    parts: List[str] = []
+    with zipfile.ZipFile(path) as archive:
+        slide_names = sorted(
+            (name for name in archive.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", name)),
+            key=slide_sort_key,
+        )
+        for slide_name in slide_names[:80]:
+            root = ET.fromstring(archive.read(slide_name))
+            for node in root.iter():
+                local_name = node.tag.rsplit("}", 1)[-1]
+                if local_name == "t" and node.text and node.text.strip():
+                    parts.append(node.text.strip())
+            if sum(len(part) for part in parts) > MAX_EXTRACTED_CHARS:
+                break
+    return "\n".join(parts)
+
+
+def slide_sort_key(name: str) -> int:
+    match = re.search(r"slide(\d+)\.xml$", name)
+    return int(match.group(1)) if match else 0
 
 
 def normalize_json_candidate(item: Any, path: Path, index: int) -> tuple[Dict[str, Any], str, Dict[str, Any], Optional[str], Optional[str]]:

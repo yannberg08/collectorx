@@ -26,7 +26,7 @@ committed.
   - content extraction applies to the `research-documents` lens
   - user-selected files/folders are the only input boundary
   - `filesystem` is metadata-only
-  - DOCX/PDF/XLSX/XLSM body or table extraction requires explicit
+  - DOCX/PDF/XLSX/XLSM/XLS/PPTX body, table, or slide extraction requires explicit
     `--include-content`
   - screenshots are metadata-only in this pass; OCR is not claimed
   - unsupported extensions are skipped
@@ -43,9 +43,11 @@ Validated by `skills/investor-source-collectors/tests/test_investor_sources.py`:
 
 - Authorized `--include-content` extraction:
   - XLSX via `openpyxl`
+  - legacy XML Spreadsheet `.xls`
+  - PPTX via OOXML slide XML
   - DOCX via `python-docx`
   - PDF via `pdfplumber`
-  - manifest reports three content-read events and three extracted statuses
+  - manifest reports content-read events and extracted statuses
 - No `--include-content`:
   - DOCX with a research title is kept as metadata-only
   - no `content` or `content_extract` payload is emitted

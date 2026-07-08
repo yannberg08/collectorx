@@ -20,6 +20,8 @@ Result:
   - Markdown/TXT/HTML text files
   - CSV/TSV tables
   - XLSX/XLSM via `openpyxl`
+  - XML/HTML/text-style `.xls` exports and optional binary `.xls` fallback
+  - PPTX slide text via OOXML slide XML
   - DOCX via `python-docx`
   - PDF via `pdfplumber`
 - Extracted text is capped and recorded with parser/status metadata.
@@ -28,9 +30,9 @@ Result:
 
 Fixture validation:
 
-- XLSX valuation table, DOCX roadshow note, and PDF factor report fixtures are
-  converted into `collectorx.event.v1` file events when `--include-content` is
-  supplied.
+- XLSX valuation table, legacy XML Spreadsheet `.xls`, PPTX roadshow deck,
+  DOCX roadshow note, and PDF factor report fixtures are converted into
+  `collectorx.event.v1` file events when `--include-content` is supplied.
 - Each fixture event records `raw_ref.content_read: true`.
 - Each fixture event records `payload.content_extract.status: extracted`.
 
@@ -54,7 +56,7 @@ Current gate:
 Remaining before production:
 
 - Add Windows/Linux path and encoding validation.
-- Add more real XLSX/DOCX/PDF samples under private validation.
+- Add more real XLS/XLSX/PPTX/DOCX/PDF samples under private validation.
 - Add user-facing controls for content extraction scope, file size, and folder
   allowlists.
 - Backtest extracted research evidence against real decisions/trades.

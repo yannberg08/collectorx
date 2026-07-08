@@ -137,6 +137,7 @@ def build_event(
 ) -> Dict[str, Any]:
     profile = get_profile(source_id)
     kind = normalize_kind(event_kind or profile["default_kind"])
+    resolved_collected_at = collected_at or now_iso()
     event_time = event_time or first_value(
         record,
         [
@@ -150,7 +151,7 @@ def build_event(
             "日期",
             "时间",
         ],
-    )
+    ) or resolved_collected_at
     normalized = normalize_record_payload(record)
     data = {
         "source_profile": source_id,
@@ -169,7 +170,7 @@ def build_event(
         "owner_scope": "personal",
         "kind": kind,
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -950,6 +951,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
                     "support_level": support_level,
                     "suggested_maturity": maturity_for_support(support_level),
                     "evidence_count": len(sub_events),
+                    "evidence_kinds": sorted({str(event.get("kind") or "unknown") for event in sub_events}),
                     "source_profiles": source_ids,
                     "route_targets": sorted({target for event in sub_events for target in event.get("wiki_targets", [])}),
                     "signals": signals_for(sub_id, source_ids),

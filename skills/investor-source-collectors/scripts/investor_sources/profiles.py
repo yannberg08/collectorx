@@ -109,7 +109,7 @@ SOURCE_PROFILES: Dict[str, Dict[str, Any]] = {
         "priority": "P0",
         "default_kind": "file",
         "evidence_level": "strong_reason",
-        "accepted_inputs": ["folder", "pdf", "md", "txt", "html", "csv", "xlsx", "docx"],
+        "accepted_inputs": ["folder", "pdf", "md", "txt", "html", "csv", "xlsx", "xls", "docx", "pptx"],
         "authorization": "User-selected local files and folders only.",
         "contains": ["work_confidential", "portfolio"],
         "wiki_targets": [

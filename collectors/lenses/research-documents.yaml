@@ -44,11 +44,11 @@ content_policy:
     - .pdf
     - .xlsx
     - .xlsm
+    - .xls
+    - .pptx
   supported_metadata_only_extensions:
     - .doc
-    - .xls
     - .ppt
-    - .pptx
     - .png
     - .jpg
     - .jpeg
@@ -64,7 +64,7 @@ content_policy:
 description: |
   本 lens 不重新扫描硬盘。它消费 filesystem/notes 的已授权文件元数据，
   筛选投研文档并把 raw_ref 路由到投资分身。若用户显式授权
-  --include-content，可读取 DOCX/PDF/XLSX/XLSM 的正文或表格文本，
+  --include-content，可读取 DOCX/PDF/XLSX/XLSM/XLS/PPTX 的正文、表格或幻灯片文本，
   若用户另行显式传入 --include-image-ocr 且本机有 tesseract，可读取
   截图/图片里的文字；没有 OCR 引擎时会保留 metadata-only 事件并在
   manifest 中记录降级原因。

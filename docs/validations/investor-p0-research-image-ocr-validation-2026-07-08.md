@@ -19,7 +19,7 @@ python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
 ```
 
 `--include-image-ocr` is intentionally separate from `--include-content`.
-Reading DOCX/PDF/XLSX/XLSM bodies and reading screenshot text are two different
+Reading XLS/XLSX/PPTX/DOCX/PDF bodies and reading screenshot text are two different
 user authorization decisions.
 
 ## Behavior

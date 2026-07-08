@@ -30,9 +30,9 @@ perform screenshot OCR.
   - `screenshot_metadata_only_file_count`
   - `ocr_performed=false`
   - per-path `content_policy=screenshot_metadata_only_no_ocr`
-- Kept content extraction policy unchanged:
+- Kept content extraction policy explicit:
   - Generic `filesystem` is metadata-only.
-  - DOCX/PDF/XLSX/XLSM content extraction requires explicit
+  - XLS/XLSX/PPTX/DOCX/PDF content extraction requires explicit
     `--include-content`.
   - OCR requires a future separate adapter and user authorization.
 
@@ -40,7 +40,8 @@ perform screenshot OCR.
 
 Validated scenarios:
 
-- DOCX, PDF, and XLSX content extraction with explicit `--include-content`.
+- XLS, XLSX, PPTX, DOCX, and PDF content extraction with explicit
+  `--include-content`.
 - Binary DOCX metadata-only mode without `--include-content`.
 - Missing input path audit.
 - Unsupported extension skip audit.
@@ -64,7 +65,7 @@ Result:
 ## Current Gate
 
 - Research document lens path: G1/G2 baseline+audit.
-- Explicit content extraction: fixture validated for DOCX/PDF/XLSX.
+- Explicit content extraction: fixture validated for XLS/XLSX/PPTX/DOCX/PDF.
 - Screenshot/image handling: metadata-only/no-OCR policy fixture validated.
 - Real Windows/Linux device validation: not done in this pass.
 - Real private research corpus backtest: not done in this pass.

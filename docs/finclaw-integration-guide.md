@@ -414,7 +414,8 @@ python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
 Current status:
 
 - Reads content only when `--include-content` is explicitly supplied.
-- Supports Markdown/TXT/HTML, CSV/TSV, XLSX/XLSM, DOCX, and PDF extraction.
+- Supports Markdown/TXT/HTML, CSV/TSV, XLSX/XLSM, legacy XML/HTML/text `.xls`,
+  PPTX, DOCX, and PDF extraction.
 - Extracted text is capped and carries parser/status metadata.
 - `manifest.collection_audit` records requested inputs, missing inputs, per-file
   parse results, candidate counts, filtered counts, skipped reasons, extension
