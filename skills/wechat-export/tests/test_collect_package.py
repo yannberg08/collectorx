@@ -4,12 +4,16 @@
 import argparse
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 import wechat_query  # noqa: E402
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "wechat_query.py"
+PACKAGE_VALIDATOR = Path(__file__).resolve().parents[3] / "tools" / "validate_collector_package.py"
 
 
 def _args():
@@ -88,6 +92,69 @@ def main():
 
         summary = summary_path.read_text(encoding="utf-8")
         assert "wechat-investment-dialogue" in summary
+
+    with tempfile.TemporaryDirectory(prefix="wechat_empty_package_test_") as tmp:
+        manifest = wechat_query._write_collect_package(
+            [],
+            tmp,
+            args=_args(),
+            platform="fixture",
+            collected_at="2026-07-08T12:00:00+08:00",
+        )
+        out_dir = Path(tmp)
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "wechat" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["data"]["gap"] == "no_wechat_messages_collected"
+        assert events[0]["data"]["message_text_collected"] is False
+        assert manifest["collection_readiness"]["status"] == "no_wechat_messages_collected"
+        assert manifest["collection_readiness"]["can_enter_investor_lens"] is False
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out_dir), "--collector", "wechat"],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+    with tempfile.TemporaryDirectory(prefix="wechat_preflight_gap_test_") as tmp:
+        out_dir = Path(tmp) / "out"
+        missing_db = Path(tmp) / "missing-db-storage"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--collect",
+                "--db-dir",
+                str(missing_db),
+                "--out-dir",
+                str(out_dir),
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        cli_summary = json.loads(result.stdout)
+        assert cli_summary["status"] == "needs_readable_wechat_db_dir"
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_readable_wechat_db_dir"
+        assert manifest["collection_readiness"]["can_enter_investor_lens"] is False
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "wechat" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "needs_readable_wechat_db_dir"
+        assert events[0]["data"]["raw_database_access_performed"] is False
+        assert str(missing_db) not in json.dumps(events[0], ensure_ascii=False)
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out_dir), "--collector", "wechat"],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
 
     print("wechat collect package tests passed.")
 

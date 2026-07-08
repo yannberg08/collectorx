@@ -1740,10 +1740,13 @@ def _write_jsonl(path: Path, rows) -> None:
             f.write(_json.dumps(row, ensure_ascii=False, sort_keys=True) + '\n')
 
 
-def _build_collect_manifest(records, events, *, collected_at: str, args, platform: str) -> dict:
+def _build_collect_manifest(records, events, *, collected_at: str, args, platform: str, gap: dict = None) -> dict:
     chats = sorted({(r.get('data') or {}).get('chat') for r in records if (r.get('data') or {}).get('chat')})
-    owner_sent = sum(1 for event in events if event.get('data', {}).get('sender_is_owner'))
-    text_lengths = [event.get('data', {}).get('text_length', 0) for event in events]
+    message_events = [event for event in events if event.get('kind') == 'message']
+    owner_sent = sum(1 for event in message_events if event.get('data', {}).get('sender_is_owner'))
+    text_lengths = [event.get('data', {}).get('text_length', 0) for event in message_events]
+    readiness_status = (gap or {}).get('status') or ('baseline+audit' if message_events else 'gap')
+    readiness_reason = (gap or {}).get('reason') or ('wechat_collect_standard_package_written' if message_events else 'no_wechat_messages_collected')
     return {
         'schema': 'collectorx.collection_manifest.v1',
         'collector': 'wechat',
@@ -1751,10 +1754,15 @@ def _build_collect_manifest(records, events, *, collected_at: str, args, platfor
         'event_count': len(events),
         'source_record_count': len(records),
         'collection_readiness': {
-            'status': 'baseline+audit' if events else 'gap',
+            'status': readiness_status,
             'real_account_validation': False,
             'standard_package': True,
-            'reason': 'wechat_collect_standard_package_written' if events else 'no_wechat_messages_collected',
+            'reason': readiness_reason,
+            'gap_event': bool(gap),
+            'can_enter_finclaw_lake': bool(events),
+            'can_enter_investor_lens': bool(message_events),
+            'can_enter_investor_wiki': False,
+            'next_action': (gap or {}).get('next_action'),
         },
         'platform_status': {
             'platform': platform,
@@ -1802,7 +1810,7 @@ def _build_collect_manifest(records, events, *, collected_at: str, args, platfor
         'message_surface_summary': {
             'chat_count': len(chats),
             'owner_sent_events': owner_sent,
-            'received_events': max(0, len(events) - owner_sent),
+            'received_events': max(0, len(message_events) - owner_sent),
             'max_text_length': max(text_lengths) if text_lengths else 0,
         },
         'source_audit': {
@@ -1810,6 +1818,7 @@ def _build_collect_manifest(records, events, *, collected_at: str, args, platfor
             'legacy_json_array_compatible': True,
             'writes_final_wiki_directly': False,
             'requires_downstream_lens': 'wechat-investment-dialogue',
+            'gap_status': (gap or {}).get('status'),
         },
         'evidence_policy': {
             'generic_collector': True,
@@ -1817,6 +1826,44 @@ def _build_collect_manifest(records, events, *, collected_at: str, args, platfor
             'routes_to_lens': 'wechat-investment-dialogue',
             'writes_investor_wiki_evidence_directly': False,
         },
+    }
+
+
+def _collect_gap_event(*, status: str, reason: str, collected_at: str, platform: str = 'unknown', next_action: str = None) -> dict:
+    digest = hashlib.sha1(f"{status}|{reason}|{platform}".encode('utf-8')).hexdigest()[:20]
+    return {
+        'schema': 'collectorx.event.v1',
+        'id': f'wechat:gap:{digest}',
+        'collector': 'wechat',
+        'source': '微信采集前置条件',
+        'owner_scope': 'personal',
+        'kind': 'profile',
+        'time': collected_at,
+        'collected_at': collected_at,
+        'data': {
+            'profile_type': 'wechat_collect_preflight_gap',
+            'gap': status,
+            'status': status,
+            'reason': reason,
+            'platform': platform,
+            'next_action': next_action,
+            'standard_package': True,
+            'generic_collector': True,
+            'investment_claim_allowed': False,
+            'writes_investor_wiki_evidence_directly': False,
+            'raw_database_access_performed': False,
+            'credentials_collected': False,
+            'message_text_collected': False,
+        },
+        'raw_ref': {'derived_from': 'wechat_collect_preflight'},
+        'privacy': {
+            'sensitive': True,
+            'local_only': True,
+            'contains': ['collection_gap'],
+        },
+        'wiki_targets': [
+            'internal.communication.wechat',
+        ],
     }
 
 
@@ -1841,11 +1888,84 @@ def _write_collect_package(records, out_dir: str, *, args, platform: str, collec
     out_path = Path(out_dir).expanduser()
     collected_at = collected_at or _now_iso()
     events = [_collect_record_to_event(record, collected_at) for record in records]
-    manifest = _build_collect_manifest(records, events, collected_at=collected_at, args=args, platform=platform)
+    gap = None
+    if not events:
+        gap = {
+            'status': 'no_wechat_messages_collected',
+            'reason': 'wechat_query_returned_no_owner_relevant_text_messages',
+            'next_action': '检查联系人/群聊授权范围、时间范围、活跃群策略和 --exclude/--include-groups 过滤条件。',
+        }
+        events = [
+            _collect_gap_event(
+                status=gap['status'],
+                reason=gap['reason'],
+                collected_at=collected_at,
+                platform=platform,
+                next_action=gap['next_action'],
+            )
+        ]
+    manifest = _build_collect_manifest(records, events, collected_at=collected_at, args=args, platform=platform, gap=gap)
     _write_jsonl(out_path / 'lake' / 'wechat' / 'events.jsonl', events)
     _write_json(out_path / 'manifest.json', manifest)
     _write_collect_summary(out_path / 'SUMMARY.md', manifest)
     return manifest
+
+
+def _write_collect_gap_package(
+    out_dir: str,
+    *,
+    args,
+    platform: str,
+    status: str,
+    reason: str,
+    next_action: str,
+    collected_at: str = None,
+) -> dict:
+    out_path = Path(out_dir).expanduser()
+    collected_at = collected_at or _now_iso()
+    gap = {
+        'status': status,
+        'reason': reason,
+        'next_action': next_action,
+    }
+    events = [
+        _collect_gap_event(
+            status=status,
+            reason=reason,
+            collected_at=collected_at,
+            platform=platform,
+            next_action=next_action,
+        )
+    ]
+    manifest = _build_collect_manifest([], events, collected_at=collected_at, args=args, platform=platform, gap=gap)
+    _write_jsonl(out_path / 'lake' / 'wechat' / 'events.jsonl', events)
+    _write_json(out_path / 'manifest.json', manifest)
+    _write_collect_summary(out_path / 'SUMMARY.md', manifest)
+    return manifest
+
+
+def _collect_out_dir_requested(args) -> bool:
+    return bool(getattr(args, 'collect', False) and getattr(args, 'out_dir', None))
+
+
+def _finish_collect_gap(args, *, platform: str, status: str, reason: str, next_action: str) -> bool:
+    if not _collect_out_dir_requested(args):
+        return False
+    manifest = _write_collect_gap_package(
+        args.out_dir,
+        args=args,
+        platform=platform,
+        status=status,
+        reason=reason,
+        next_action=next_action,
+    )
+    print(_json.dumps({
+        'collector': 'wechat',
+        'event_count': manifest['event_count'],
+        'out_dir': str(Path(args.out_dir).expanduser()),
+        'status': manifest['collection_readiness']['status'],
+    }, ensure_ascii=False, sort_keys=True))
+    return True
 
 
 def _format_collect_source(chat: str, is_group: bool, time_str: str) -> str:
@@ -2150,10 +2270,26 @@ def main():
                 print(f"Auto-detected db_dir: {db_dir}")
                 logger.info(f"Auto-detected db_dir: {db_dir}")
             else:
+                if _finish_collect_gap(
+                    args,
+                    platform='windows' if sys.platform in ('win32', 'cygwin') else 'generic-db-dir',
+                    status='needs_readable_wechat_db_dir',
+                    reason='wechat_db_dir_not_detected',
+                    next_action='请授权并指定微信 4.x db_storage 目录，或先完成平台提取器准备。',
+                ):
+                    return
                 print("Error: 未找到微信数据目录，请用 --db-dir 指定")
                 logger.error("Auto-detect failed: no db_dir found")
                 sys.exit(1)
         elif not os.path.isdir(db_dir):
+            if _finish_collect_gap(
+                args,
+                platform='windows' if sys.platform in ('win32', 'cygwin') else 'generic-db-dir',
+                status='needs_readable_wechat_db_dir',
+                reason='wechat_db_dir_path_not_found',
+                next_action='请确认用户授权的微信 4.x db_storage 目录存在且当前进程可读。',
+            ):
+                return
             print(f"Error: {db_dir} not found")
             sys.exit(1)
 
@@ -2175,7 +2311,18 @@ def main():
         else:
             collector_platform = 'generic-db-dir'
         _t_init = time.time()
-        exporter = WindowsV4Query(db_dir, key=args.key, keys_file=keys_file)
+        try:
+            exporter = WindowsV4Query(db_dir, key=args.key, keys_file=keys_file)
+        except SystemExit:
+            if _finish_collect_gap(
+                args,
+                platform=collector_platform,
+                status='needs_wechat_decryption_or_plaintext_db',
+                reason='wechat_windows_or_linux_query_preflight_failed',
+                next_action='请确认已运行对应平台的微信 key 提取器，或提供已授权可读的明文/已解密数据库目录。',
+            ):
+                return
+            raise
         logger.info(f"Exporter init took {time.time()-_t_init:.3f}s")
     else:
         mac_key = args.key or os.environ.get('WECHAT_KEY')
@@ -2191,11 +2338,30 @@ def main():
         if mac_ver == 'mac4':
             # 4.x 走 per-DB keys（data/all_keys.json，由 wechat_extract_mac.py 提取）；
             # 不再强制要 WECHAT_KEY。MacV4 内部若既无 keys 文件又无单 key 才报错。
-            exporter = MacV4Query(mac_key, args.user, keys_file=args.keys)
             collector_platform = 'macos'
+            try:
+                exporter = MacV4Query(mac_key, args.user, keys_file=args.keys)
+            except SystemExit:
+                if _finish_collect_gap(
+                    args,
+                    platform=collector_platform,
+                    status='needs_wechat_4_keys_or_dependencies',
+                    reason='wechat_macos_4_query_preflight_failed',
+                    next_action='请确认微信 4.x 已登录、SIP/lldb 提取前置条件满足，并运行 wechat_extract_mac.py 生成 data/all_keys.json；如缺少 sqlcipher3，请安装后重试。',
+                ):
+                    return
+                raise
             logger.info("Mac mode: WeChat 4.x (SQLCipher4, page 4096 / kdf 256000 / HMAC-SHA512)")
         else:
             # 灵镜自 v0.9.1 起仅支持微信 4.x（3.x SQLCipher3 已下线）。
+            if _finish_collect_gap(
+                args,
+                platform='macos',
+                status='needs_wechat_4_data',
+                reason='wechat_4_data_not_detected_or_legacy_3x_detected',
+                next_action='请把微信升级到 4.x，并完成用户授权的本机数据与 per-DB key 提取流程后重试。',
+            ):
+                return
             print("Error: 未检测到微信 4.x 数据（或检测到已停止支持的 3.x 数据）。")
             print("  请把微信升级到 4.x，再运行 sudo python3 wechat_extract_mac.py 提取 per-DB key 后重试。")
             print("  Windows：先运行 python wechat_extract_windows.py，再 --db-dir 查询。")

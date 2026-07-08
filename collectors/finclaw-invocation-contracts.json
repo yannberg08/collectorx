@@ -67,8 +67,8 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Authorize local WeChat collection and provide required readable database/key preconditions.",
-      "preflight": "WeChat local store is readable for the supported platform; no decrypted keys are written to output.",
-      "failure_state": "needs_readable_wechat_store"
+      "preflight": "WeChat local store is readable for the supported platform; no decrypted keys are written to output. In --collect --out-dir mode, missing db/key preconditions or zero retained messages produce a standard gap package.",
+      "failure_state": "needs_readable_wechat_store_or_gap_package"
     },
     {
       "id": "wechat-investment-dialogue",

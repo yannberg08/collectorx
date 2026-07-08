@@ -1016,6 +1016,22 @@ boundary proof for investor Wiki gating:
   personal mail, validates the generated package with `--require-evidence`, and
   confirms the lens remains dependent on the generic `email` collector.
 
+The latest completed wave: `wechat` now has standard preflight/no-message gap
+packages for FinClaw:
+
+- `wechat-export` is upgraded to `0.11.2`.
+- `wechat_query.py --collect --out-dir <dir>` now writes a validator-safe
+  profile gap package when `db_storage` is missing, Mac 4.x key/dependency
+  preflight fails, or no owner-relevant text messages remain after filters.
+- Gap events record `raw_database_access_performed=false`,
+  `credentials_collected=false`, `message_text_collected=false`, and
+  `investment_claim_allowed=false`.
+- Manifest readiness sets `can_enter_investor_lens=false` for those gap
+  packages, so FinClaw can distinguish "not authorized/not ready/no retained
+  messages" from a successful WeChat conversation source.
+- This improves product gating while real-source validation remains blocked on
+  this Mac by WeChat 4.x key/SIP preconditions.
+
 The prior completed wave: `wechat` and `wechat-investment-dialogue` now have a
 standard source-to-lens path for FinClaw:
 

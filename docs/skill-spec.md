@@ -62,7 +62,7 @@ skill-name/
 
 | 采集器 | 文件数 | 状态 |
 |--------|--------|------|
-| wechat-export | 15+ | 迁移 skill，需确认上游许可与真实环境 |
+| wechat-export | 15+ | 微信 4.x 通用聊天采集器 baseline；`--collect --out-dir` 输出标准包，已补前置条件/空消息 gap 包、字段/过滤/来源审计和 generic-to-lens 边界，仍需授权 key/真实环境验证 |
 | feishu | 8+ | 飞书 OAuth/API 工具 + 通用采集器 baseline；支持授权 JSON/CSV/HTML/Markdown/TXT/ZIP 本地导入、字段覆盖、飞书数据面、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤，仍需真实飞书账号/API 验证 |
 | ticktick-cli | 12+ | 滴答清单 API 工具 + SoulMirror YAML/AgentRunner 主采集路径；`collect_for_soulmirror.py` 输出任务快照数组，未授权以 `ticktick_auth_required` 失败，离线 JSON/ZIP 转换 helper 保留到 `exports/ticktick/events.jsonl`，已补任务时区/重复/提醒/checklist 完成度面谱和来源应用/项目/标签/关键词 scope-policy 审计，仍需托管 OAuth Broker 和真实账号验证 |
 | calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖、来源平台/日历/参与人/关键词 scope-policy 审计、ZIP 跳过审计、逐文件解析 manifest、时长/跨天/异常时间段/同日历冲突质量审计，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |

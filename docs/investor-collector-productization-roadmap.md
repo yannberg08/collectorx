@@ -3567,11 +3567,34 @@ Findings:
   execution, cashflow, metadata sidecar, GUI snapshot sidecar, credential, or
   mutation fact is written when authorization scope retains no business events.
 
+### Wave AY - P0 WeChat Preflight Gap Package Hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-wechat-preflight-gap-package-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `wechat-export` to `0.11.2`.
+- Added standard gap package behavior for `wechat_query.py --collect --out-dir`
+  when WeChat `db_storage` is missing, Mac 4.x key/dependency preflight fails,
+  or no owner-relevant text messages remain after filters.
+- Gap packages emit one `wechat_collect_preflight_gap` profile event so
+  `tools/validate_collector_package.py --collector wechat` can validate the
+  package instead of seeing an empty `events.jsonl`.
+- Manifest readiness sets `can_enter_investor_lens=false` for preflight and
+  no-message gaps, keeping `wechat-investment-dialogue` from treating those
+  packages as usable upstream conversation evidence.
+- The gap event carries no message text, no raw missing path, no key, no
+  database page, no credential, and no investment claim.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
+| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, generic-to-lens evidence policy, preflight/no-message gap packages, and validator-safe gap events; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; filesystem metadata scope-policy audit with extension/path/file-name/directory/keyword filters, filtered-all readiness, and filesystem boundary proof; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all readiness, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, email-research sender-domain/folder/mailbox/subject/attachment/email-surface/keyword authorization scope-policy audit, filtered-all readiness, authorization scope boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-portfolio` | G2/G3 partial on current macOS/local paths; CSV/Xcs historical executions, estimated holdings, personal metadata, GUI read-only snapshots, standard package, SoulMirror sync, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, sidecar policy filtering, exact-number preservation, and `ths_portfolio_boundary_proof.authorization_scope_boundary` are fixture-tested | G3/G4: more real Tonghuashun accounts, Windows/macOS path validation, GUI current asset/holding/order/execution/cashflow coverage review, and Wiki backtest against research/review records |

@@ -356,6 +356,10 @@ Current status:
   owner-active groups, with chat name, sender, time, text, sender ownership,
   field coverage, filter policy, source audit, and generic-to-lens evidence
   policy.
+- In `--collect --out-dir` mode, missing `db_storage`/key preconditions or zero
+  retained messages write one profile gap event such as
+  `needs_readable_wechat_db_dir` or `no_wechat_messages_collected`; these gap
+  packages validate as CollectorX packages but cannot enter the investor lens.
 - Does not output WeChat encryption keys, passwords, cookies, tokens, raw
   database pages, or direct investment conclusions.
 - This is a generic communication collector. Feed `lake/wechat/events.jsonl`
