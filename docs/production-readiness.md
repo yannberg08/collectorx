@@ -497,21 +497,24 @@ The prior completed wave: FinClaw catalog validation now checks runnable invocat
 - This improves product-entry safety; QQ's full standard package path is now
   covered by the later QQ package wave above.
 
-The latest completed wave: `ths-portfolio` now has event-level user
-authorization scope-policy audit for strong Tonghuashun trading evidence:
+The latest completed wave: `ths-portfolio` now has explicit filtered-all gap
+events for authorization-scope package ingestion:
 
-- `ths_query.py` accepts event-kind, symbol, account, source, and keyword
-  allow/deny filters before events enter Lake.
-- `manifest.collection_audit.ths_scope_policy` records candidate events,
-  retained events, filtered events, reason counts, and filtered-all state.
-- `manifest.ths_portfolio_boundary_proof.authorization_scope_boundary` exposes
-  the same policy boundary to FinClaw before investor Wiki distillation.
-- Scope-enabled packages apply the same boundary to `trades.normalized.json`
-  and `estimated_holdings.json`, and omit full metadata/GUI sidecars to avoid
-  bypassing event-level authorization.
-- This preserves exact retained trade numbers and read-only/no-mutation
-  semantics, but does not promote Tonghuashun beyond `deep-beta` until broader
-  real-device and multi-account validation is complete.
+- `ths-portfolio` is upgraded to `0.5.2`.
+- If a readable Tonghuashun input is fully outside the user's event-kind,
+  symbol, account, source, or keyword authorization scope, the package writes
+  one `ths_scope_policy_filtered_all` profile gap event instead of an empty
+  `events.jsonl`.
+- The manifest still reports
+  `collection_readiness.status=scope_policy_filtered_all` and
+  `can_enter_finclaw=false`, so FinClaw can track the boundary without treating
+  it as successful user fact capture.
+- The gap event carries only policy counts and reason counts; it does not write
+  filtered trade, holding, order, execution, cashflow, metadata sidecar, GUI
+  snapshot sidecar, credential, or mutation facts.
+- This improves package ingestion safety, but does not promote Tonghuashun
+  beyond `deep-beta` until broader real-device and multi-account validation is
+  complete.
 
 The prior completed wave: `ticktick-cli` now has a SoulMirror-aligned live collector path:
 
@@ -1066,7 +1069,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | Collector | Current status |
 | --- | --- |
 | `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and strong trade boundary proof exist; Windows/Linux are code-level simulations or fallback paths |
-| `ths-portfolio` | `deep-beta`; strong local package, GUI snapshot design, event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and Wiki boundary proof exist, but broader real-device/multi-account validation is still required before production |
+| `ths-portfolio` | `deep-beta`; strong local package, GUI snapshot design, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, and Wiki boundary proof exist, but broader real-device/multi-account validation is still required before production |
 | `ths-watchlist` | `baseline+audit`; authorized local-scan plus export/package collector for same-channel watchlist/attention-universe evidence with local-scan provenance, path-level source audit, ZIP provenance, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all readiness, field coverage, ths_watchlist_boundary_proof, and standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
 | `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow plus standard package output, manifest/summary, field/filter audit, gap packages, and fixture package validation exist; current machine still has LLDB/passphrase capture limitation for real encrypted NT messages |
 

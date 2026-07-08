@@ -49,7 +49,7 @@
       "product_surface": "deep-beta",
       "evidence_role": "strong-trade-asset-facts",
       "user_step": "Authorize a local Tonghuashun scan or open an unlocked read-only trading screen; optionally narrow collection by event type, symbol, account, source, or keyword.",
-      "preflight": "Tonghuashun local data or visible trading UI is available without requesting a trading password; optional event scope filters are applied before Lake output and can return scope_policy_filtered_all.",
+      "preflight": "Tonghuashun local data or visible trading UI is available without requesting a trading password; optional event scope filters are applied before Lake output and can return a scope_policy_filtered_all gap event.",
       "failure_state": "needs_readable_ths_local_or_ui_or_scope_policy_retained_events"
     },
     {

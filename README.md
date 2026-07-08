@@ -119,7 +119,7 @@ Operational docs:
 
 | Collector | Skill | Status |
 | --- | --- | --- |
-| `ths-portfolio` | `ths-portfolio` | Local metadata + strong trade package with event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and Wiki boundary proof; ongoing real-device validation |
+| `ths-portfolio` | `ths-portfolio` | Local metadata + strong trade package with event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, and Wiki boundary proof; ongoing real-device validation |
 | `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake production candidate with event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and strong trade boundary proof; strong trade tables require unlocked trading account |
 | `xueqiu-watchlist` | `xueqiu-watchlist` | Authorized local export/package baseline for Xueqiu watchlists with source audit, symbol/market/group/industry/tag/keyword scope-policy audit, filtered-all readiness, field coverage, watchlist boundary proof, and 7/20 Wiki evidence package; attention-universe evidence only |
 | `xueqiu-investor-activity` | `xueqiu-investor-activity` | Normalized local export/package/HAR/browser-history baseline for watchlists, follows, posts, comments, favorites, saved pages, owner portfolios, browser-history visits, source apps, visit/typed counts, transition types, domain-filter audit, source/pagination audit, activity/source-surface/source-app/domain/symbol/author/keyword scope-policy audit, filtered-all readiness, field coverage, and SoulMirror lake sync; real account adapter pending |

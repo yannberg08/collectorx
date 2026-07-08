@@ -71,7 +71,7 @@ skill-name/
 | wechat-favorites | 8+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、公众号/来源类型/动作/标签/域名/关键词 scope-policy 审计、动作覆盖、行为字段、文章 ID、标的线索、逐输入来源审计、跳过原因和凭证字段过滤；`wechat-article-favorites` lens 已汇总文章面谱、动作、来源类型、阅读/收藏/分享行为边界和文章边界证明，仍需真实微信收藏/公众号阅读库验证 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
 | filesystem-collector | 8+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界；manifest 记录授权根、扩展/路径/文件名/目录/关键词 scope-policy 审计、filtered-all 状态、文件边界证明、扩展覆盖、跳过原因和逐根目录结果，仍保持 metadata-only |
-| ths-portfolio | 9+ | 同花顺强交易 deep-beta；CSV、本机 Xcs 历史成交、估算持仓、个人化元数据、GUI 只读快照、标准包、SoulMirror lake、事件级授权范围策略、filtered-all readiness 和 Wiki boundary proof 已有测试，仍需更多真机/多账户验证 |
+| ths-portfolio | 9+ | 同花顺强交易 deep-beta；CSV、本机 Xcs 历史成交、估算持仓、个人化元数据、GUI 只读快照、标准包、SoulMirror lake、事件级授权范围策略、filtered-all gap 事件和 Wiki boundary proof 已有测试，仍需更多真机/多账户验证 |
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake production candidate；支持事件级授权范围策略、filtered-all readiness、scope gap 事件、强交易 boundary proof 和 7/20 Wiki 证据包，强交易表需账户解锁，Windows/Linux 仍需真机验证 |
 | xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计、symbol/market/group/industry/tag/keyword scope-policy 审计、filtered-all readiness、字段覆盖、关注池边界证明和 7/20 Wiki 证据包已测试，仍需真实账号/分页验证 |
 | xueqiu-investor-activity | 8+ | 雪球个人活动垂直采集器；本地授权导出、浏览器网络 HAR、浏览器历史副本、保存页、activity/source-surface/source-app/domain/symbol/author/keyword scope-policy 审计、filtered-all readiness、活动覆盖证明、浏览器历史边界证明、分页完整性摘要、字段覆盖和 SoulMirror 同步已测试，仍需真实账号样本与一键 adapter |

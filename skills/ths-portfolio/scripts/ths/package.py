@@ -9,6 +9,7 @@ and organize.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import shutil
 from collections import Counter, defaultdict
@@ -42,6 +43,8 @@ def write_collection_package(
     lake_dir = output_dir / "lake" / COLLECTOR
     lake_dir.mkdir(parents=True, exist_ok=True)
     collected = collected_at or _first_collected_at(events) or now_iso()
+    if (collection_audit or {}).get("ths_scope_policy_filtered_all"):
+        events = [build_scope_policy_filtered_all_event(collection_audit or {}, collected)]
 
     event_file = lake_dir / "events.jsonl"
     write_jsonl(event_file, events)
@@ -143,12 +146,7 @@ def build_manifest(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     kind_counts = Counter(event.get("kind", "unknown") for event in events)
-    gap_count = sum(
-        1
-        for event in events
-        if event.get("kind") == "profile"
-        and str((event.get("data") or {}).get("profile_type", "")).startswith("ths_gui_empty_")
-    )
+    gap_count = sum(1 for event in events if _is_gap_profile_event(event))
     has_asset = kind_counts.get("asset_snapshot", 0) > 0
     has_current_holding = any(
         event.get("kind") == "holding" and (event.get("data") or {}).get("is_confirmed")
@@ -205,7 +203,7 @@ def build_manifest(
         "collection_readiness": {
             "status": status,
             "can_enter_soulmirror_lake": bool(events),
-            "can_enter_finclaw": bool(events),
+            "can_enter_finclaw": bool(events) and not scope_filtered_all,
             "can_claim_current_trade_collection": bool(has_asset and has_current_holding),
             "strong_current_event_count": strong_count,
             "gap_count": gap_count,
@@ -237,7 +235,76 @@ def build_manifest(
             "sensitive": True,
             "raw_private_outputs_not_for_git": True,
         },
+}
+
+
+def build_scope_policy_filtered_all_event(
+    collection_audit: Dict[str, Any],
+    collected_at: str,
+) -> Dict[str, Any]:
+    policy = collection_audit.get("ths_scope_policy") or {}
+    digest = hashlib_json(
+        {
+            "status": "ths_scope_policy_filtered_all",
+            "candidate_event_count": policy.get("candidate_event_count", 0),
+            "filtered_event_count": policy.get("filtered_event_count", 0),
+            "filter_reason_counts": policy.get("filter_reason_counts", {}),
+        }
+    )
+    return {
+        "schema": "collectorx.event.v1",
+        "id": f"{COLLECTOR}:scope-policy-filtered-all:{digest}",
+        "collector": COLLECTOR,
+        "source": "同花顺授权范围策略",
+        "owner_scope": "personal",
+        "kind": "profile",
+        "time": collected_at,
+        "collected_at": collected_at,
+        "data": {
+            "gap": "ths_scope_policy_filtered_all",
+            "status": "scope_policy_filtered_all",
+            "profile_type": "ths_scope_policy_filtered_all",
+            "candidate_event_count": policy.get("candidate_event_count", 0),
+            "retained_event_count": policy.get("retained_event_count", 0),
+            "filtered_event_count": policy.get("filtered_event_count", 0),
+            "filter_reason_counts": policy.get("filter_reason_counts", {}),
+            "policy_is_user_authorization_scope": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "exact_business_numbers_preserved": True,
+            "read_only": True,
+            "note": "输入已读取，但全部被同花顺授权范围策略排除；未把任何交易、持仓、委托、成交或资金流水事实写入 Lake。",
+        },
+        "raw_ref": {"scope_policy_enabled": True},
+        "privacy": {
+            "sensitive": True,
+            "local_only": True,
+            "contains": ["trade", "money", "portfolio"],
+        },
+        "wiki_targets": [
+            "investor.data_quality.collection_gaps",
+        ],
     }
+
+
+def _is_gap_profile_event(event: Dict[str, Any]) -> bool:
+    if event.get("kind") != "profile":
+        return False
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    profile_type = str(data.get("profile_type") or "")
+    status = str(data.get("status") or "")
+    return bool(
+        data.get("gap")
+        or profile_type.startswith("ths_gui_empty_")
+        or profile_type.endswith("_gap")
+        or status.endswith("_gap")
+        or status == "scope_policy_filtered_all"
+    )
+
+
+def hashlib_json(value: Any) -> str:
+    return hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:20]
 
 
 def build_investor_wiki_evidence(

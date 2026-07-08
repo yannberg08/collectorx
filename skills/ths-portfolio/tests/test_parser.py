@@ -563,8 +563,20 @@ def test_ths_scope_policy_filtered_all_package_status():
     assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
     assert manifest["collection_readiness"]["can_enter_finclaw"] is False
     assert manifest["collection_readiness"]["scope_policy_filtered_all"] is True
+    assert manifest["collection_readiness"]["gap_count"] == 1
+    assert manifest["event_count"] == 1
+    assert manifest["kind_counts"] == {"profile": 1}
     assert manifest["ths_portfolio_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
     assert json.loads((output / "trades.normalized.json").read_text(encoding="utf-8")) == []
+    events_path = output / "lake" / "ths-portfolio" / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+    assert len(events) == 1
+    assert events[0]["kind"] == "profile"
+    assert events[0]["data"]["gap"] == "ths_scope_policy_filtered_all"
+    assert events[0]["data"]["candidate_event_count"] == 2
+    assert events[0]["data"]["filtered_event_count"] == 2
+    assert events[0]["data"]["read_only"] is True
+    assert "symbol" not in events[0]["data"]
 
     print("test_ths_scope_policy_filtered_all_package_status: PASSED")
 

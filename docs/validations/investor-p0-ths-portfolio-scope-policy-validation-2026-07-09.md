@@ -8,7 +8,9 @@ business numbers for retained events.
 ## Scope
 
 - Collector: `ths-portfolio`
-- Version: `0.5.1`
+- Version: `0.5.1`; filtered-all package ingestion was later hardened in
+  `0.5.2` by
+  `docs/validations/investor-p0-ths-portfolio-filtered-all-gap-validation-2026-07-09.md`.
 - FinClaw route: strong trade and asset facts for the Investor Wiki, subject to
   real-device readiness and user authorization.
 - Evidence surfaces: CSV trades, local Xcs historical executions, inferred
@@ -27,7 +29,9 @@ business numbers for retained events.
 - Manifest `ths_portfolio_boundary_proof.authorization_scope_boundary` exposes
   the same policy boundary to FinClaw gating.
 - When every candidate event is filtered, readiness reports
-  `scope_policy_filtered_all` and `can_enter_finclaw=false`.
+  `scope_policy_filtered_all` and `can_enter_finclaw=false`; version `0.5.2`
+  also emits a traceable `ths_scope_policy_filtered_all` gap event so FinClaw
+  never ingests an empty package for a readable-but-out-of-scope input.
 - Scope-enabled packages filter `trades.normalized.json` and
   `estimated_holdings.json` with the same policy and omit full metadata/GUI
   sidecars to avoid bypassing the event-level authorization boundary.

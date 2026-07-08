@@ -1,7 +1,7 @@
 ---
 name: ths-portfolio
 description: 采集同花顺交易记录、估算持仓与个人化投资元数据。当用户说"同花顺记录"、"交易记录"、"交割单"、"持仓画像"、"自选股"、"投资者画像"时使用此skill。
-version: 0.5.1
+version: 0.5.2
 ---
 
 # 同花顺投资数据采集工具
@@ -17,6 +17,7 @@ version: 0.5.1
 - 支持多种CSV格式
 - 输出标准化JSON和 CollectorX Event JSONL
 - 支持事件级授权范围策略：按事件类型、证券代码、账户、来源和关键词 allow/deny 过滤
+- 授权范围过滤掉全部候选事件时，输出明确 `ths_scope_policy_filtered_all` gap 事件，避免空包被误判为用户没有数据
 - 明确区分“券商确认快照”和“历史成交推导”
 - 为 FinClaw investor-portrait / investor Wiki 提供可蒸馏事件
 
@@ -206,6 +207,7 @@ python <SKILL_DIR>/scripts/ths_query.py --file ~/Downloads/交割单.csv --stats
 - `collection_audit.ths_scope_policy_filtered_all`
 - `collection_readiness.scope_policy_filtered_all`
 - `ths_portfolio_boundary_proof.authorization_scope_boundary`
+- `lake/ths-portfolio/events.jsonl` 中的一条 `ths_scope_policy_filtered_all` gap 事件（当所有候选事件均被排除）
 
 策略启用时,`trades.normalized.json` 和 `estimated_holdings.json` 会同步按同一策略过滤；为避免旁路泄漏,完整 `metadata.json` 和 `gui_snapshot.json` sidecar 不会写入包内,保留后的证据以事件流为准。
 

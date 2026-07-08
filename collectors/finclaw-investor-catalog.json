@@ -44,7 +44,7 @@
       "gate": "G3-partial",
       "finclaw_action": "beta-readonly-local-scan-or-unlocked-ui-snapshot-with-optional-event-scope-policy",
       "cli": "python3 skills/ths-portfolio/scripts/ths_query.py --local-scan --include-metadata-events --include-gui-events --output <out-dir> --sync-soulmirror",
-      "collects": "Tonghuashun local executions, inferred holdings, personal metadata, read-only visible trading-page snapshots, event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and ths_portfolio_boundary_proof authorization boundary.",
+      "collects": "Tonghuashun local executions, inferred holdings, personal metadata, read-only visible trading-page snapshots, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, and ths_portfolio_boundary_proof authorization boundary.",
       "must_not_collect": "Trading passwords, order placement, order cancellation, or broker-side mutation.",
       "production_gap": "More real-device validation across Windows/macOS accounts, broader account samples, and stronger GUI snapshot coverage."
     },
