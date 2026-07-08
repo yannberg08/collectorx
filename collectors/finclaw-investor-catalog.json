@@ -102,7 +102,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-imap-or-local-email-import",
       "cli": "python3 skills/email-collector/scripts/email_api.py collect --account all --out-dir <out-dir>",
-      "collects": "Authorized IMAP or local email metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, local import path-level audit, skipped file reasons, ZIP member audit, field coverage, and archive provenance.",
+      "collects": "Authorized IMAP or local email metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, local import path-level audit, skipped file reasons, ZIP member audit, field coverage, archive provenance, and mailbox boundary proof.",
       "must_not_collect": "Full body unless explicitly authorized, attachment bodies by default, tokens, cookies, or passwords.",
       "production_gap": "Register real mailbox credentials via password_env, validate broker/IR sender matching, and run no-full-body leakage review."
     },

@@ -976,6 +976,24 @@ def build_email_manifest(
         status = "events_collected"
         source_scope = "authorized_imap" if is_imap else "partial_authorized_input"
         next_action = "Feed lake/email/events.jsonl into email-research lens."
+    field_coverage = build_email_field_coverage(events)
+    body_policy = {
+        "full_body_included": any("body" in (event.get("data") or {}) for event in events),
+        "full_body_requires_event_include_body": True,
+        "body_preview_char_limit": 300,
+    }
+    attachment_policy = {
+        "attachment_refs_included": any((event.get("data") or {}).get("attachment_refs") for event in events),
+        "attachment_bodies_included": False,
+        "retained_fields": ["filename", "content_type", "size"],
+    }
+    collection_readiness = {
+        "status": status,
+        "can_enter_finclaw": bool(events) and not gap_only,
+        "source_collection_scope": source_scope,
+        "full_body_included": body_policy["full_body_included"],
+        "next_action": next_action,
+    }
     return {
         "schema": package_schema,
         "collector": "email",
@@ -984,24 +1002,19 @@ def build_email_manifest(
         "kind_counts": dict(sorted(kind_counts.items())),
         "folder_counts": dict(sorted(folder_counts.items())),
         "mailbox_counts": dict(sorted(mailbox_counts.items())),
-        "field_coverage": build_email_field_coverage(events),
-        "collection_readiness": {
-            "status": status,
-            "can_enter_finclaw": bool(events) and not gap_only,
-            "source_collection_scope": source_scope,
-            "full_body_included": any("body" in (event.get("data") or {}) for event in events),
-            "next_action": next_action,
-        },
-        "body_policy": {
-            "full_body_included": any("body" in (event.get("data") or {}) for event in events),
-            "full_body_requires_event_include_body": True,
-            "body_preview_char_limit": 300,
-        },
-        "attachment_policy": {
-            "attachment_refs_included": any((event.get("data") or {}).get("attachment_refs") for event in events),
-            "attachment_bodies_included": False,
-            "retained_fields": ["filename", "content_type", "size"],
-        },
+        "field_coverage": field_coverage,
+        "collection_readiness": collection_readiness,
+        "body_policy": body_policy,
+        "attachment_policy": attachment_policy,
+        "mailbox_boundary_proof": build_mailbox_boundary_proof(
+            events,
+            audit=audit,
+            is_imap=is_imap,
+            field_coverage=field_coverage,
+            body_policy=body_policy,
+            attachment_policy=attachment_policy,
+            collection_readiness=collection_readiness,
+        ),
         "evidence_policy": {
             "generic_collector": True,
             "investor_wiki_requires_lens": "email-research",
@@ -1074,6 +1087,150 @@ def build_email_field_coverage(events: list[dict]) -> dict:
     }
 
 
+def build_mailbox_boundary_proof(
+    events: list[dict],
+    *,
+    audit: dict,
+    is_imap: bool,
+    field_coverage: dict,
+    body_policy: dict,
+    attachment_policy: dict,
+    collection_readiness: dict,
+) -> dict:
+    email_events = [event for event in events if event.get("kind") == "email"]
+    source_type = audit.get("source_type") or ("imap" if is_imap else "authorized_email_export")
+    mailbox_values = sorted(
+        {
+            str((event.get("data") or {}).get("mailbox"))
+            for event in email_events
+            if (event.get("data") or {}).get("mailbox")
+        }
+    )
+    folder_values = sorted(
+        {
+            str((event.get("data") or {}).get("folder"))
+            for event in email_events
+            if (event.get("data") or {}).get("folder")
+        }
+    )
+    required_fields = ["from", "to", "subject", "body_preview", "message_id"]
+    present_required = [
+        field
+        for field in required_fields
+        if (field_coverage.get("fields") or {}).get(field, {}).get("present", 0) > 0
+    ]
+    proof = {
+        "source_type": source_type,
+        "proof_level": mailbox_boundary_proof_level(email_events, audit=audit, is_imap=is_imap),
+        "email_event_count": len(email_events),
+        "mailbox_count": len(mailbox_values),
+        "folder_count": len(folder_values),
+        "mailboxes": mailbox_values,
+        "folders": folder_values,
+        "required_field_presence": {
+            "required_fields": required_fields,
+            "present_fields": present_required,
+            "missing_fields": [field for field in required_fields if field not in present_required],
+        },
+        "body_capture": {
+            "body_preview_included": (field_coverage.get("fields") or {}).get("body_preview", {}).get("present", 0) > 0,
+            "full_body_included": body_policy["full_body_included"],
+            "full_body_requires_event_include_body": body_policy["full_body_requires_event_include_body"],
+            "body_preview_char_limit": body_policy["body_preview_char_limit"],
+        },
+        "attachment_capture": {
+            "attachment_refs_included": attachment_policy["attachment_refs_included"],
+            "attachment_bodies_included": attachment_policy["attachment_bodies_included"],
+            "retained_fields": attachment_policy["retained_fields"],
+        },
+        "complete_mailbox_claimed": False,
+        "complete_account_history_claimed": False,
+        "bounded_by_user_selected_accounts_folders_days": bool(is_imap),
+        "investor_wiki_requires_lens": "email-research",
+        "collector_writes_investor_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness["can_enter_finclaw"],
+    }
+    if is_imap:
+        proof["imap_boundary"] = imap_boundary_from_audit(audit)
+    else:
+        proof["local_export_boundary"] = local_export_boundary_from_audit(audit)
+    return proof
+
+
+def mailbox_boundary_proof_level(email_events: list[dict], *, audit: dict, is_imap: bool) -> str:
+    if not email_events:
+        if is_imap and audit.get("status") == "no_registered_account":
+            return "no_authorized_mailbox"
+        if is_imap:
+            return "authorized_imap_gap"
+        return "no_authorized_email_export"
+    if is_imap:
+        if audit.get("status") == "partial_success":
+            return "partial_authorized_imap_folder_window"
+        return "authorized_imap_folder_window"
+    return "authorized_local_export_boundary"
+
+
+def imap_boundary_from_audit(audit: dict) -> dict:
+    accounts = audit.get("accounts") if isinstance(audit.get("accounts"), list) else []
+    requested_folders = sorted(
+        {
+            str(folder)
+            for account in accounts
+            for folder in account.get("folders_requested", [])
+            if folder
+        }
+    )
+    collected_folders = sorted(
+        {
+            str(folder.get("folder"))
+            for account in accounts
+            for folder in account.get("folder_results", [])
+            if folder.get("status") == "collected" and folder.get("folder")
+        }
+    )
+    return {
+        "requested_account": audit.get("requested_account"),
+        "configured_account_count": audit.get("configured_account_count", 0),
+        "selected_account_count": audit.get("selected_account_count", 0),
+        "account_status_counts": audit.get("account_status_counts", {}),
+        "folder_status_counts": audit.get("folder_status_counts", {}),
+        "requested_folders": requested_folders,
+        "collected_folders": collected_folders,
+        "days_windows": sorted({account.get("days") for account in accounts if account.get("days") is not None}),
+        "limit_values": sorted({account.get("limit") for account in accounts if account.get("limit") is not None}),
+        "matched_message_count": audit.get("matched_message_count", 0),
+        "fetched_message_count": audit.get("fetched_message_count", 0),
+        "skipped_fetch_count": audit.get("skipped_fetch_count", 0),
+        "read_only": audit.get("read_only", True),
+        "password_material_in_output": audit.get("password_material_in_output", False),
+    }
+
+
+def local_export_boundary_from_audit(audit: dict) -> dict:
+    return {
+        "input_count": audit.get("input_count", 0),
+        "requested_inputs": audit.get("requested_inputs", []),
+        "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+        "input_missing_count": audit.get("input_missing_count", 0),
+        "imported_email_count": audit.get("imported_email_count", 0),
+        "parsed_record_count": audit.get("parsed_record_count", 0),
+        "extension_counts": audit.get("extension_counts", {}),
+        "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+        "archive_count": audit.get("archive_count", 0),
+        "archive_member_count": audit.get("archive_member_count", 0),
+        "archive_member_imported_email_count": audit.get("archive_member_imported_email_count", 0),
+        "skipped_archive_member_reason_counts": audit.get("skipped_archive_member_reason_counts", {}),
+        "apple_mail_emlx_file_count": audit.get("apple_mail_emlx_file_count", 0),
+        "maildir_message_file_count": audit.get("maildir_message_file_count", 0),
+        "limit": audit.get("limit"),
+        "limit_reached": audit.get("limit_reached", False),
+        "attachment_bodies_included": audit.get("attachment_bodies_included", False),
+        "archive_path_traversal_members_collected": audit.get("archive_path_traversal_members_collected", False),
+        "windows_drive_archive_members_collected": audit.get("windows_drive_archive_members_collected", False),
+    }
+
+
 def increment_counter(audit: dict, key: str, value: str) -> None:
     counts = audit.setdefault(key, {})
     counts[value] = int(counts.get(value, 0)) + 1
@@ -1099,6 +1256,7 @@ def write_email_summary(path: Path, manifest: dict) -> None:
         f"- event_count: {manifest['event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- source_scope: `{manifest['collection_readiness']['source_collection_scope']}`",
+        f"- mailbox_boundary: `{manifest['mailbox_boundary_proof']['proof_level']}`",
         "",
         "Local email exports are generic email evidence. Use the `email-research` lens for broker research, roadshow, and IR mail evidence.",
     ]

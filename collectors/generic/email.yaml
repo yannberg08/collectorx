@@ -35,6 +35,7 @@ scope:
     - maildir_message_audit
     - field_coverage
     - archive_member_provenance
+    - mailbox_boundary_proof
   excludes:
     - mailbox_passwords
     - app_passwords
@@ -46,7 +47,7 @@ scope:
 description: |
   邮箱是通用个人证据源。它采集用户授权邮箱或本地邮件导出中的邮件头、
   正文预览和附件引用；manifest 记录账户/文件夹审计、逐输入导入审计、
-  跳过文件/ZIP 成员原因和正文/附件策略。投资相关筛选由
+  跳过文件/ZIP 成员原因、正文/附件策略和邮箱边界证明。投资相关筛选由
   `email-research` lens 完成。
 
 prompt: |
@@ -65,5 +66,5 @@ prompt: |
   授权 --event-include-body，否则不把完整正文写入事件。ZIP 包保留
   archive.zip::member 来源，并跳过路径穿越成员；Apple Mail EMLX 会剥离本地
   长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件。本地导入
-  manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir 计数
-  和 limit 截断。投资相关筛选必须交给 email-research lens。
+  manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir 计数、
+  limit 截断和 mailbox_boundary_proof。投资相关筛选必须交给 email-research lens。

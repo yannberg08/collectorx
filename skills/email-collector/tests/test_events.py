@@ -272,6 +272,19 @@ def test_imap_collect_standard_package():
         assert manifest["collection_audit"]["folder_status_counts"] == {"collected": 2}
         assert manifest["field_coverage"]["fields"]["from"]["present"] == 2
         assert manifest["evidence_policy"]["investor_wiki_requires_lens"] == "email-research"
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["proof_level"] == "authorized_imap_folder_window"
+        assert proof["source_type"] == "imap"
+        assert proof["email_event_count"] == 2
+        assert proof["mailboxes"] == ["owner@gmail.com"]
+        assert proof["folders"] == ["INBOX", "Sent"]
+        assert proof["complete_mailbox_claimed"] is False
+        assert proof["body_capture"]["full_body_included"] is False
+        assert proof["attachment_capture"]["attachment_refs_included"] is True
+        assert proof["attachment_capture"]["attachment_bodies_included"] is False
+        assert proof["imap_boundary"]["requested_folders"] == ["INBOX", "Sent"]
+        assert proof["imap_boundary"]["matched_message_count"] == 2
+        assert proof["imap_boundary"]["password_material_in_output"] is False
 
 
 def test_imap_collect_gap_package_without_registered_account():
@@ -304,6 +317,11 @@ def test_imap_collect_gap_package_without_registered_account():
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "needs_email_registered_account"
         assert manifest["collection_audit"]["status"] == "no_registered_account"
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["proof_level"] == "no_authorized_mailbox"
+        assert proof["can_enter_finclaw"] is False
+        assert proof["email_event_count"] == 0
+        assert proof["imap_boundary"]["selected_account_count"] == 0
 
 
 def test_local_email_import_package():
@@ -397,6 +415,16 @@ def test_local_email_import_package():
             ".txt": 1,
         }
         assert len(manifest["collection_audit"]["path_results"]) == 4
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["proof_level"] == "authorized_local_export_boundary"
+        assert proof["source_type"] == "authorized_email_export"
+        assert proof["email_event_count"] == 3
+        assert proof["folders"] == ["local-export"]
+        assert proof["complete_account_history_claimed"] is False
+        assert proof["body_capture"]["full_body_included"] is False
+        assert proof["attachment_capture"]["attachment_bodies_included"] is False
+        assert proof["local_export_boundary"]["resolved_input_file_count"] == 3
+        assert proof["local_export_boundary"]["skipped_reason_counts"] == {"unsupported_extension": 1}
 
 
 def test_local_email_import_apple_mail_emlx_and_maildir():
@@ -476,6 +504,9 @@ def test_local_email_import_apple_mail_emlx_and_maildir():
         assert audit["maildir_message_file_count"] == 1
         parser_counts = {result.get("parser") for result in audit["path_results"] if result["status"] == "parsed"}
         assert parser_counts == {"emlx", "maildir"}
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["local_export_boundary"]["apple_mail_emlx_file_count"] == 1
+        assert proof["local_export_boundary"]["maildir_message_file_count"] == 1
 
 
 def test_local_email_import_gap_event():
@@ -498,6 +529,7 @@ def test_local_email_import_gap_event():
         assert manifest["collection_audit"]["input_count"] == 0
         assert manifest["collection_audit"]["resolved_input_file_count"] == 0
         assert manifest["collection_audit"]["imported_email_count"] == 0
+        assert manifest["mailbox_boundary_proof"]["proof_level"] == "no_authorized_email_export"
 
 
 def test_local_email_import_missing_input_gap_audit():
@@ -523,6 +555,7 @@ def test_local_email_import_missing_input_gap_audit():
         assert manifest["collection_audit"]["input_missing_count"] == 1
         assert manifest["collection_audit"]["skipped_reason_counts"] == {"input_missing": 1}
         assert manifest["collection_audit"]["path_results"][0]["status"] == "missing"
+        assert manifest["mailbox_boundary_proof"]["local_export_boundary"]["input_missing_count"] == 1
 
 
 def test_local_email_import_zip_package():
@@ -582,6 +615,13 @@ def test_local_email_import_zip_package():
         assert manifest["collection_audit"]["archive_path_traversal_members_collected"] is False
         assert manifest["collection_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["attachment_policy"]["attachment_bodies_included"] is False
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["local_export_boundary"]["archive_member_count"] == 4
+        assert proof["local_export_boundary"]["archive_member_imported_email_count"] == 1
+        assert proof["local_export_boundary"]["skipped_archive_member_reason_counts"] == {
+            "unsafe_path": 2,
+            "unsupported_extension": 1,
+        }
 
 
 def test_local_email_import_zip_supports_emlx_and_maildir_members():

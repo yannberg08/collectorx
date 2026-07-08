@@ -326,7 +326,8 @@ Current status:
 - IMAP `collect --out-dir` and local `import --out-dir` both write
   `lake/email/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
 - Manifest output records account/folder audit, field coverage, body policy,
-  attachment policy, and the generic-to-lens evidence boundary.
+  attachment policy, mailbox boundary proof, and the generic-to-lens evidence
+  boundary.
 - Local import supports user-authorized EML, Apple Mail EMLX, Maildir, MBOX,
   JSON/JSONL/NDJSON, CSV/TSV, and ZIP packages. Maildir detection is limited to
   RFC822-like files under `cur/` and `new/` so ordinary extensionless files are
@@ -335,6 +336,9 @@ Current status:
   results, extension coverage, skipped file reasons, ZIP member counts, skipped
   ZIP member reasons, Apple Mail/Maildir counts, archive provenance, and
   `--limit` truncation.
+- `manifest.mailbox_boundary_proof` tells FinClaw which account/folder/time
+  window or local export boundary was actually collected and explicitly keeps
+  complete-mailbox-history claims false.
 - Full bodies are excluded by default and require explicit `--event-include-body`.
 - Attachment bodies are never written; only filename, content type, and size are
   retained.
