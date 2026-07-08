@@ -16,7 +16,8 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 COLLECTOR = "ticktick"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
+SUPPORTED_RECORD_EXTENSIONS = {".json", ".jsonl", ".ndjson"}
+SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
 EXPECTED_P1_TASK_PLATFORMS = ("ticktick", "dida365")
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 SOURCE_PATH_KEY = "_collectorx_source_path"
@@ -46,16 +47,68 @@ def now_iso() -> str:
 
 
 def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    paths = list(iter_paths(inputs))
+    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    input_list = list(inputs)
+    paths = list(iter_paths(input_list))
+    audit = new_collection_audit(input_list, paths, limit=limit)
     if not paths:
-        return [gap_event(collected_at=collected_at, reason="ticktick_authorized_input_missing")]
+        events = [gap_event(collected_at=collected_at, reason="ticktick_authorized_input_missing")]
+        audit["emitted_event_count"] = len(events)
+        finalize_audit(audit)
+        return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        for record in parse_path(path):
+        path_result = {
+            "path": str(path),
+            "extension": path.suffix.lower() or "<none>",
+            "parsed_record_count": 0,
+            "emitted_event_count": 0,
+            "status": "parsed",
+        }
+        audit["path_results"].append(path_result)
+        increment_counter(audit, "extension_counts", path_result["extension"])
+        records = parse_path(path, audit=audit)
+        path_result["parsed_record_count"] = len(records)
+        audit["parsed_record_count"] += len(records)
+        for record in records:
             events.append(task_to_event(record, path=path, collected_at=collected_at))
+            path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events
+                audit["emitted_event_count"] = len(events[:limit])
+                finalize_audit(audit)
+                return events[:limit], audit
+    audit["emitted_event_count"] = len(events)
+    finalize_audit(audit)
+    return events, audit
+
+
+def new_collection_audit(inputs: List[str], paths: List[Path], *, limit: Optional[int] = None) -> Dict[str, Any]:
+    return {
+        "source_type": "authorized_local_ticktick_export",
+        "input_count": len(inputs),
+        "resolved_input_file_count": len(paths),
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "skipped_archive_member_reason_counts": {},
+        "parsed_record_count": 0,
+        "emitted_event_count": 0,
+        "limit": limit,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "path_results": [],
+    }
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -63,15 +116,15 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
         path = Path(raw).expanduser()
         if path.is_dir():
             for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS | {".zip"}:
+                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
                     yield child
-        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS | {".zip"}:
+        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
             yield path
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     if path.suffix.lower() == ".zip":
-        return parse_zip(path)
+        return parse_zip(path, audit=audit)
     text = path.read_text(encoding="utf-8-sig").strip()
     return parse_json_text(text, suffix=path.suffix.lower())
 
@@ -88,14 +141,22 @@ def parse_json_text(text: str, *, suffix: str) -> List[Dict[str, Any]]:
     return [row for row in rows if isinstance(row, dict)]
 
 
-def parse_zip(path: Path) -> List[Dict[str, Any]]:
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     tasks: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
         for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
-            if should_skip_zip_member(member):
-                continue
             member_name = normalize_zip_member_name(member.filename)
             suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
+            skip_reason = zip_member_skip_reason(member)
+            if skip_reason:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_reason_counts", skip_reason)
+                continue
             text = archive.read(member).decode("utf-8-sig", errors="replace")
             try:
                 parsed = parse_json_text(text, suffix=suffix)
@@ -112,14 +173,20 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    return zip_member_skip_reason(member) != ""
+
+
+def zip_member_skip_reason(member: zipfile.ZipInfo) -> str:
     member_name = normalize_zip_member_name(member.filename)
     member_path = PurePosixPath(member_name)
     windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
-        return True
+        return "directory"
     if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
-        return True
-    return Path(member_name).suffix.lower() not in SUPPORTED_EXTENSIONS
+        return "unsafe_path"
+    if Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS:
+        return "unsupported_extension"
+    return ""
 
 
 def normalize_zip_member_name(name: str) -> str:
@@ -227,7 +294,12 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
     source_app_counts = Counter(source_app_for(event) for event in events if source_app_for(event) != "unknown")
@@ -252,7 +324,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         },
         "field_coverage": field_coverage(events),
         "time_status_summary": time_status_summary(events),
-        "source_audit": source_audit(events),
+        "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
             "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
@@ -309,6 +381,7 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- overdue_tasks: {manifest['time_status_summary']['overdue_task_count']}",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         "",
         "Generic task events are not written to the investor Wiki directly. Use the task-calendar-investor lens.",
     ]
@@ -318,13 +391,13 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if out_dir:
         write_jsonl(out_dir / "lake" / COLLECTOR / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)
     print(json.dumps({"collector": COLLECTOR, "event_count": len(events)}, ensure_ascii=False, sort_keys=True))
@@ -457,18 +530,37 @@ def time_status_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
-def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     archives = [
         (event.get("raw_ref") or {}).get("source_archive")
         for event in events
         if (event.get("raw_ref") or {}).get("source_archive")
     ]
-    return {
+    audit = {
         "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "archive_count": len(set(archives)),
         "archive_path_traversal_members_collected": False,
     }
+    if collection_audit:
+        audit.update(collection_audit)
+    return audit
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+        "skipped_archive_member_reason_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    return audit
 
 
 def infer_task_source(record: Dict[str, Any], path_label: str) -> str:

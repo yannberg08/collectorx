@@ -74,6 +74,11 @@ def test_ticktick_json_to_task_events() -> None:
         assert manifest["time_status_summary"]["pending_task_count"] == 1
         assert manifest["time_status_summary"]["events_with_due"] == 1
         assert manifest["time_status_summary"]["overdue_task_count"] == 0
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 1
+        assert manifest["source_audit"]["extension_counts"] == {".json": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 1
+        assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["evidence_policy"]["required_lens"] == "task-calendar-investor"
 
 
@@ -123,11 +128,34 @@ def test_ticktick_zip_dida_export_and_unsafe_member_skip() -> None:
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["dida365"]
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
+        assert manifest["source_audit"]["extension_counts"] == {".zip": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 1
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert len(manifest["source_audit"]["path_results"]) == 1
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["time_status_summary"]["completed_task_count"] == 1
+
+
+def test_ticktick_without_input_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
+        events = [json.loads(line) for line in (out / "lake" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "ticktick_authorized_input_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["source_audit"]["input_count"] == 0
+        assert manifest["source_audit"]["resolved_input_file_count"] == 0
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
 
 
 if __name__ == "__main__":
     test_ticktick_json_to_task_events()
     test_ticktick_zip_dida_export_and_unsafe_member_skip()
+    test_ticktick_without_input_gap()
     print("ticktick event tests passed.")

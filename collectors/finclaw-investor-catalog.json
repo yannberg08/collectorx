@@ -258,7 +258,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-task-export-import-or-oauth-after-token-setup",
       "cli": "python3 skills/ticktick-cli/scripts/ticktick_events.py collect --input <authorized-ticktick-export> --out-dir <out-dir>",
-      "collects": "TickTick/Dida task titles, projects, status, start/due/completion times, recurrence, reminders, and ZIP provenance.",
+      "collects": "TickTick/Dida task titles, projects, status, start/due/completion times, recurrence, reminders, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "OAuth tokens in output or direct investment conclusions.",
       "production_gap": "Real OAuth validation and recurring task/timezone backtest."
     },
@@ -271,7 +271,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-calendar-export-import",
       "cli": "python3 skills/calendar-collector/scripts/calendar_query.py collect --input <authorized-calendar-export> --out-dir <out-dir>",
-      "collects": "Calendar events, start/end time, all-day flag, location, meeting links, organizer, attendees, recurrence, reminders, and platform coverage.",
+      "collects": "Calendar events, start/end time, all-day flag, location, meeting links, organizer, attendees, recurrence, reminders, platform coverage, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "Calendar account credentials or direct investment conclusions.",
       "production_gap": "Real Apple/Google/Outlook/Feishu/DingTalk/WeCom/Tencent Meeting calendar validation."
     },

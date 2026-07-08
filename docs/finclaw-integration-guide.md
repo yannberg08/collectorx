@@ -350,8 +350,9 @@ Current status:
   coverage, missing sources, event counts, and `real_account_validation`.
 - Writes `manifest.field_coverage`, `time_status_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect title/project/status/start/due/
-  completion/recurrence/reminder coverage, overdue counts, ZIP provenance, and
-  the required `task-calendar-investor` lens boundary.
+  completion/recurrence/reminder coverage, overdue counts, ZIP provenance,
+  total/skipped ZIP members, skip reasons, per-input parse results, and the
+  required `task-calendar-investor` lens boundary.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-task status directly.
@@ -378,7 +379,8 @@ Current status:
   platforms, missing platforms, event counts, and `real_account_validation`.
 - Writes `manifest.field_coverage`, `time_surface_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect start/end, meeting URL, attendees,
-  recurrence, reminders, ZIP provenance, and the required lens boundary.
+  recurrence, reminders, ZIP provenance, total/skipped ZIP members, skip
+  reasons, per-input parse results, and the required lens boundary.
 - Does not claim investment-calendar status directly.
 - Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
   trading plans, earnings events, research meetings, and review reminders.

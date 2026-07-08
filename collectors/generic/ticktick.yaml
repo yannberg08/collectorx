@@ -23,6 +23,8 @@ scope:
     - time_status_summary
     - source_audit_manifest
     - archive_member_provenance
+    - archive_member_skip_audit
+    - path_level_collection_audit
   excludes:
     - oauth_token
     - application_secret
@@ -32,5 +34,5 @@ scope:
     - windows_drive_path_archive_members
 
 # 采集逻辑由 skill 定义。
-# ticktick_cli.py 处理 API 认证和任务获取；ticktick_events.py 把用户授权 JSON/ZIP 导出转成 lake/ticktick/events.jsonl，并在 manifest 中记录字段覆盖、时间状态和来源审计。
+# ticktick_cli.py 处理 API 认证和任务获取；ticktick_events.py 把用户授权 JSON/ZIP 导出转成 lake/ticktick/events.jsonl，并在 manifest 中记录字段覆盖、时间状态、ZIP 跳过成员原因、逐文件解析结果和来源审计。
 # 投资分身只通过 task-calendar-investor lens 筛交易计划、复盘提醒和研究任务。

@@ -35,7 +35,7 @@ python <SKILL_DIR>/scripts/calendar_query.py collect \
 本次实际观察平台、缺失平台、事件数和 `real_account_validation` 状态。
 它也会写入 `field_coverage`、`time_surface_summary`、`source_audit` 和
 `evidence_policy`，用于判断开始/结束时间、会议链接、参与人、循环、提醒、
-ZIP 来源和 generic/lens 边界。
+ZIP 来源、ZIP 跳过成员数量/原因、逐文件解析结果和 generic/lens 边界。
 
 投资分身使用时，应把 `lake/calendar/events.jsonl` 交给
 `task-calendar-investor` lens，由 lens 只筛交易计划、研究任务、财报日程和复盘提醒。

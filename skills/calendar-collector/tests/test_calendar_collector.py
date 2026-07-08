@@ -69,6 +69,11 @@ def test_collect_ics_event() -> None:
         assert manifest["field_coverage"]["field_counts"]["attendees"] == 1
         assert manifest["time_surface_summary"]["events_with_recurrence"] == 1
         assert manifest["time_surface_summary"]["events_with_reminders"] == 1
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 1
+        assert manifest["source_audit"]["extension_counts"] == {".ics": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 1
+        assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["evidence_policy"]["required_lens"] == "task-calendar-investor"
 
 
@@ -189,6 +194,13 @@ def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
         assert manifest["field_coverage"]["field_counts"]["source_platform"] == 7
         assert manifest["time_surface_summary"]["events_with_start"] == 7
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
+        assert manifest["source_audit"]["extension_counts"] == {".csv": 1, ".ics": 1, ".json": 4, ".zip": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 7
+        assert manifest["source_audit"]["emitted_event_count"] == 7
+        assert len(manifest["source_audit"]["path_results"]) == 7
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
 
@@ -199,6 +211,11 @@ def test_collect_without_input_gap() -> None:
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
         event = json.loads((out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
         assert event["data"]["gap"] == "calendar_authorized_input_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["source_audit"]["input_count"] == 0
+        assert manifest["source_audit"]["resolved_input_file_count"] == 0
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
 
 
 if __name__ == "__main__":

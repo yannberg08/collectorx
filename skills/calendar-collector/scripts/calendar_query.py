@@ -7,7 +7,7 @@ import argparse
 import json
 from pathlib import Path
 
-from calendar_collector.parser import build_manifest, collect_from_inputs, now_iso
+from calendar_collector.parser import build_manifest, collect_from_inputs_with_audit, now_iso
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -36,6 +36,7 @@ def write_summary(path: Path, manifest: dict) -> None:
         f"- meeting_url_events: {manifest['time_surface_summary']['events_with_meeting_url']}",
         f"- reminder_events: {manifest['time_surface_summary']['events_with_reminders']}",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         "",
         "Generic calendar events are not written to the investor Wiki directly. Use the task-calendar-investor lens.",
     ]
@@ -45,13 +46,13 @@ def write_summary(path: Path, manifest: dict) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if out_dir:
         write_jsonl(out_dir / "lake" / "calendar" / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)
     print(json.dumps({"collector": "calendar", "event_count": len(events)}, ensure_ascii=False, sort_keys=True))

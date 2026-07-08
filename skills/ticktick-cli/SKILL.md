@@ -17,7 +17,8 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect --input <tasks.json-or-zip
 `ticktick_events.py collect` 是 CollectorX/FinClaw 的只读事件导入路径：它
 解析用户授权的 TickTick/Dida JSON/JSONL/ZIP 导出，输出 `lake/ticktick/events.jsonl`
 和 `manifest.json`。manifest 会报告平台覆盖、任务字段覆盖、开始/截止/完成/
-过期/循环/提醒统计、ZIP 来源审计和 `task-calendar-investor` lens 边界。
+过期/循环/提醒统计、ZIP 来源审计、ZIP 跳过成员数量/原因、逐文件解析结果和
+`task-calendar-investor` lens 边界。
 generic task events 不能直接写投资 Wiki。
 
 `<SKILL_DIR>` 通常：

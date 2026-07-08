@@ -909,6 +909,28 @@ Findings:
   only `task-calendar-investor` can classify trading plans, research tasks, and
   review reminders for Wiki evidence.
 
+### Wave R3: P1 task/calendar source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-task-calendar-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `calendar-collector` to `0.2.0` and `ticktick-cli` event import to
+  `0.1.9`.
+- Added package-level source audit fields for input count, resolved file count,
+  top-level extension counts, parsed record count, emitted event count, and
+  path-level parse results.
+- Added ZIP member audit fields for total member count, member extension
+  counts, skipped member count, skipped member extension counts, and skip
+  reason counts.
+- Updated package summaries to surface skipped archive members.
+- Fixture tests now assert gap output and safe/unsafe ZIP accounting for both
+  generic calendar exports and TickTick/Dida task exports.
+
 ### Wave S: P1 meeting artifacts platform coverage pass 1
 
 Status: `completed-baseline`
