@@ -58,7 +58,7 @@ FinClaw 应按下面顺序调用：
 | `filesystem` + `research-documents` | 文件元数据、研报/财报/估值表内容 lens | `baseline+audit`；filesystem 标准包记录授权根、扩展名覆盖、跳过原因和逐根目录结果，research-documents 负责内容授权、逐输入审计、截图默认 metadata-only、显式 `--include-image-ocr` 本地 tesseract 适配和 Wiki 证据路由 | Windows/Linux 真机、本地真实样本、中文截图 OCR 质量评审 |
 | `email` + `email-research` | 邮箱原始通道和券商/IR/研报邮件 lens | `baseline+audit`；IMAP 和本地导入都能输出标准包，manifest 记录账户/文件夹审计、逐输入导入审计、跳过文件/ZIP 成员原因、字段覆盖、正文/附件策略和 generic-to-lens 边界 | 注册真实邮箱、附件/正文泄漏评审、真实发件人回测 |
 | `xueqiu-watchlist` + `xueqiu-investor-activity` | 雪球自选、关注、发帖、评论、收藏、保存页、组合活动 | `baseline+audit`；manifest 记录来源、HAR 网络包、ZIP、字段覆盖和分页标记审计；活动采集器可解析用户授权的 `xueqiu.com` 浏览器响应体并剥离请求头/Cookie/Authorization/URL 查询串；自选和活动均可输出 7/20 Wiki 证据包，但不当作强交易事实 | 真实账号/HAR 样本、真实分页和频率边界 |
-| `china-wealth-assets` | 支付宝、天天基金、蛋卷、且慢、银行理财资产 | `baseline+audit`；manifest 记录平台覆盖、字段覆盖、账户边界、资产面、币种、交易方向、来源审计和资产金额汇总 | 各平台真实导出/只读屏幕、完整资产边界证明 |
+| `china-wealth-assets` | 支付宝、天天基金、蛋卷、且慢、银行理财资产 | `baseline+audit`；manifest 记录平台覆盖、字段覆盖、账户边界、资产面、币种、交易方向、HAR 网络包、来源审计和资产金额汇总；可解析用户授权的基金/理财平台浏览器响应体并剥离请求头/Cookie/Authorization/URL 查询串 | 各平台真实 HAR/导出/只读屏幕、完整资产边界证明 |
 
 ## P1 采集器
 

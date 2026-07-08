@@ -406,11 +406,17 @@ Current status:
 - Parses authorized CSV/TSV/JSON/JSONL/XLSX/XLSM/HTML/TXT/ZIP exports for fund
   holdings, wealth holdings, cash-management holdings, subscriptions,
   redemptions, dividends, and asset snapshots.
+- Also accepts user-authorized browser network `.har` exports for whitelisted
+  Alipay, Tiantian Fund, Danjuan, Qieman, and bank wealth domains. Only response
+  bodies are parsed; request headers, cookies, Authorization values, and URL
+  query strings are stripped before events, manifest, or Wiki evidence are
+  written.
 - Normalizes platform names for Alipay, Tiantian Fund, Danjuan, Qieman, and
   bank wealth exports, preserves numeric asset/trade fields, records ZIP member
   provenance, and strips credential-like raw keys.
-- Per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/banks still need
-  real validation.
+- Per-platform one-click adapters for Alipay/Tiantian/Danjuan/Qieman/banks still
+  need real validation; the HAR path is an authorized browser export baseline
+  for real-account responses.
 - Any parsed input is treated as partial authorized input until platform/account
   coverage is verified.
 - `manifest.platform_coverage` tells FinClaw which expected P0 platforms were
@@ -419,8 +425,9 @@ Current status:
   which key asset fields are present and summarize this run's authorized values
   by platform.
 - `manifest.collection_audit` records input count, resolved files, extension
-  coverage, ZIP member/skipped-member counts, parsed record count, emitted
-  event count, and path-level parse results.
+  coverage, HAR entry/platform/endpoint/skip-reason coverage, ZIP
+  member/skipped-member counts, parsed record count, emitted event count, and
+  path-level parse results.
 
 ### 笔记
 

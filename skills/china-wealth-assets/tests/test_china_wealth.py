@@ -96,6 +96,160 @@ def test_collects_mixed_platform_json_and_sanitizes_raw() -> None:
         assert manifest["platform_coverage"]["real_account_validation"] is False
 
 
+def test_collects_har_network_export_with_platform_audit_and_credential_stripping() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        har_path = root / "china-wealth-network.har"
+        out = root / "out"
+        har_path.write_text(
+            json.dumps(
+                {
+                    "log": {
+                        "entries": [
+                            {
+                                "request": {
+                                    "url": "https://mobile.alipay.com/fund/asset/list?auth_token=must-not-leak",
+                                    "headers": [
+                                        {"name": "Cookie", "value": "ALIPAYJSESSIONID=must-not-leak"},
+                                        {"name": "Authorization", "value": "Bearer must-not-leak"},
+                                    ],
+                                    "cookies": [{"name": "ALIPAYJSESSIONID", "value": "must-not-leak"}],
+                                },
+                                "response": {
+                                    "status": 200,
+                                    "headers": [{"name": "Set-Cookie", "value": "session=must-not-leak"}],
+                                    "content": {
+                                        "mimeType": "application/json",
+                                        "text": json.dumps(
+                                            {
+                                                "success": True,
+                                                "data": {
+                                                    "holdings": [
+                                                        {
+                                                            "account_name": "alipay-main",
+                                                            "type": "货币基金",
+                                                            "fund_code": "000001",
+                                                            "fund_name": "余额宝货币",
+                                                            "shares": "1000",
+                                                            "unit_nav": "1.23456",
+                                                            "holding_amount": "1234.56",
+                                                            "profit": "12.3",
+                                                            "cookie": "must-not-leak",
+                                                        }
+                                                    ]
+                                                },
+                                            },
+                                            ensure_ascii=False,
+                                        ),
+                                    },
+                                },
+                            },
+                            {
+                                "request": {
+                                    "url": "https://fundmobapi.eastmoney.com/FundMApi/FundTrade/Records?token=must-not-leak",
+                                },
+                                "response": {
+                                    "status": 200,
+                                    "content": {
+                                        "mimeType": "application/json",
+                                        "text": json.dumps(
+                                            {
+                                                "data": {
+                                                    "transactions": [
+                                                        {
+                                                            "account": "tt-001",
+                                                            "transaction_type": "申购",
+                                                            "fund_code": "110022",
+                                                            "fund_name": "易方达消费",
+                                                            "amount": "800",
+                                                            "fee": "1.2",
+                                                            "confirm_date": "2026-07-08",
+                                                        }
+                                                    ]
+                                                }
+                                            },
+                                            ensure_ascii=False,
+                                        ),
+                                    },
+                                },
+                            },
+                            {
+                                "request": {"url": "https://example.com/profile"},
+                                "response": {"status": 200, "content": {"mimeType": "application/json", "text": "{}"}},
+                            },
+                            {
+                                "request": {"url": "https://www.cmbchina.com/wealth/list"},
+                                "response": {"status": 200, "content": {"mimeType": "text/html", "text": "<html>not json</html>"}},
+                            },
+                        ]
+                    }
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(har_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T14:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert [event["data"]["platform"] for event in events] == ["alipay", "tiantian-fund"]
+        assert events[0]["data"]["subtype"] == "cash_management"
+        assert events[0]["data"]["account"] == "alipay-main"
+        assert events[0]["data"]["market_value"] == 1234.56
+        assert events[0]["data"]["quantity"] == 1000.0
+        assert events[1]["kind"] == "trade"
+        assert events[1]["data"]["side"] == "buy"
+        assert events[1]["data"]["transaction_amount"] == 800.0
+        assert events[1]["data"]["fee"] == 1.2
+        assert events[0]["raw_ref"]["parser"] == "har"
+        assert events[0]["raw_ref"]["har_endpoint"] == "/fund/asset/list"
+        assert events[1]["raw_ref"]["har_endpoint"] == "/FundMApi/FundTrade/Records"
+        assert "?" not in events[0]["raw_ref"]["har_endpoint"]
+        serialized_events = json.dumps(events, ensure_ascii=False)
+        assert "must-not-leak" not in serialized_events
+        assert "auth_token" not in serialized_events
+        assert "Authorization" not in serialized_events
+        assert "Cookie" not in serialized_events
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["extension_counts"] == {".har": 1}
+        assert audit["authorized_browser_network_export_used"] is True
+        assert audit["browser_network_export_file_count"] == 1
+        assert audit["har_entry_count"] == 4
+        assert audit["har_investment_entry_count"] == 3
+        assert audit["har_response_record_count"] == 2
+        assert audit["har_skipped_entry_count"] == 2
+        assert audit["har_skip_reason_counts"] == {
+            "non_investment_platform_url": 1,
+            "non_json_response": 1,
+        }
+        assert audit["har_platform_entry_counts"] == {"alipay": 1, "bank-wealth": 1, "tiantian-fund": 1}
+        assert audit["har_endpoint_counts"] == {
+            "/FundMApi/FundTrade/Records": 1,
+            "/fund/asset/list": 1,
+            "/wealth/list": 1,
+        }
+        assert audit["har_secret_material_stripped_count"] >= 4
+        assert audit["har_query_string_stripped_count"] == 2
+        assert manifest["platform_counts"] == {"alipay": 1, "tiantian-fund": 1}
+        assert manifest["asset_value_summary"]["alipay"]["market_value"] == 1234.56
+        assert manifest["asset_surface_summary"]["transaction_amount_by_side"] == {"buy": 800.0}
+
+
 def test_collects_xlsx_exports() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         from openpyxl import Workbook
@@ -304,6 +458,7 @@ if __name__ == "__main__":
     test_collect_fund_holding_and_transaction()
     test_collect_without_input_gap()
     test_collects_mixed_platform_json_and_sanitizes_raw()
+    test_collects_har_network_export_with_platform_audit_and_credential_stripping()
     test_collects_xlsx_exports()
     test_syncs_package_to_soulmirror_lake()
     test_manifest_reports_expected_platform_coverage()

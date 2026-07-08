@@ -27,13 +27,23 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
   --input ~/Downloads/fund-export.csv \
   --out-dir ~/Desktop/china-wealth-collect \
   --sync-soulmirror
+
+python <SKILL_DIR>/scripts/china_wealth.py collect \
+  --input ~/Downloads/china-wealth-network.har \
+  --out-dir ~/Desktop/china-wealth-collect
 ```
 
-支持 CSV/TSV/JSON/JSONL/Excel/HTML/TXT/Markdown/ZIP。解析器会归一化支付宝、
+支持 CSV/TSV/JSON/JSONL/Excel/HTML/TXT/Markdown/HAR/ZIP。解析器会归一化支付宝、
 天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
 成本、收益等数字字段，并剔除 cookie、token、password 等凭据类字段。
+HAR 是用户已登录对应平台后、明确授权选择的浏览器网络导出文件。采集器只读取
+支付宝/天天基金/蛋卷/且慢/银行理财域名白名单内的响应体，按域名推断平台，
+并记录接口路径、状态、平台覆盖和跳过原因；请求头、Cookie、Authorization 和
+URL 查询串不会写入事件、manifest 或 Wiki evidence。
+
 ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会记录
-输入文件数、扩展名覆盖、ZIP 成员/跳过成员、解析记录数、发出事件数和路径级结果。
+输入文件数、扩展名覆盖、HAR 网络包覆盖、ZIP 成员/跳过成员、解析记录数、
+发出事件数和路径级结果。
 没有授权输入时，只输出缺口事件。
 
 ## 完整性口径

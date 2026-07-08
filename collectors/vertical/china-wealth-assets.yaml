@@ -18,6 +18,7 @@ scope:
     - danjuan
     - qieman
     - bank-wealth
+    - authorized_browser_network_export_har
     - authorized_export_zip
   collects:
     - asset_snapshots
@@ -33,10 +34,15 @@ scope:
     - currency_summary
     - transaction_surface_summary
     - source_audit
+    - browser_network_response_audit
     - archive_member_provenance
   excludes:
     - payment_password
     - bank_password
+    - request_headers
+    - request_cookies
+    - authorization_headers
+    - request_url_query_strings
     - consumption_records
     - non_investment_payments
     - archive_path_traversal_members
@@ -44,6 +50,8 @@ scope:
 description: |
   采支付宝基金、天天基金、蛋卷、且慢、银行理财等非股票账户资产边界，
   输出标准 CollectorX lake 包与投资 Wiki 证据包。它只处理用户授权的
-  只读界面、导出文件、ZIP 包或官方账单，不碰支付和银行凭证。manifest
-  会报告字段覆盖、平台覆盖、账户边界、资产面、币种、交易方向、来源审计和本次输入内的资产金额汇总，
+  只读界面、导出文件、HAR 浏览器网络响应、ZIP 包或官方账单；HAR 只读取
+  投资/基金/理财平台域名白名单内的响应体，不写入请求头、Cookie、
+  Authorization 或 URL 查询串，也不碰支付和银行凭证。manifest 会报告字段覆盖、
+  平台覆盖、账户边界、资产面、币种、交易方向、HAR/来源审计和本次输入内的资产金额汇总，
   但不声明完整资产边界。

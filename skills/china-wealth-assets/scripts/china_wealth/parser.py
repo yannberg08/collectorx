@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import csv
 import hashlib
 import json
@@ -15,6 +17,7 @@ from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
+from urllib.parse import urlparse
 
 try:
     from collectorx.investor_wiki import augment_evidence_with_dimensions
@@ -28,10 +31,49 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 COLLECTOR = "china-wealth-assets"
 CN_TZ = timezone(timedelta(hours=8))
-SUPPORTED_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm", ".html", ".htm", ".txt", ".md", ".markdown", ".zip"}
+SUPPORTED_EXTENSIONS = {
+    ".csv",
+    ".tsv",
+    ".json",
+    ".jsonl",
+    ".ndjson",
+    ".xlsx",
+    ".xlsm",
+    ".html",
+    ".htm",
+    ".txt",
+    ".md",
+    ".markdown",
+    ".har",
+    ".zip",
+}
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session", "paypass")
 EXPECTED_P0_PLATFORMS = ("alipay", "tiantian-fund", "danjuan", "qieman", "bank-wealth")
+HAR_PLATFORM_DOMAINS = {
+    "alipay": ("alipay.com", "antfortune.com", "antfin.com", "mybank.cn"),
+    "tiantian-fund": ("eastmoney.com", "1234567.com.cn"),
+    "danjuan": ("danjuanapp.com", "danjuanfunds.com", "danjuan.com"),
+    "qieman": ("qieman.com", "qieman.com.cn"),
+    "bank-wealth": (
+        "abchina.com",
+        "bankcomm.com",
+        "boc.cn",
+        "ccb.com",
+        "cebbank.com",
+        "cgbchina.com.cn",
+        "cib.com.cn",
+        "citicbank.com",
+        "cmbchina.com",
+        "cmbc.com.cn",
+        "hxb.com.cn",
+        "icbc.com.cn",
+        "pingan.com",
+        "pingan.com.cn",
+        "psbc.com",
+        "spdb.com.cn",
+    ),
+}
 RECOMMENDED_FIELDS = (
     "platform",
     "account",
@@ -154,6 +196,19 @@ def collect_from_inputs_with_audit(
         "skipped_archive_member_extension_counts": {},
         "parsed_record_count": 0,
         "emitted_event_count": 0,
+        "browser_network_export_supported": True,
+        "authorized_browser_network_export_used": False,
+        "browser_network_export_file_count": 0,
+        "har_entry_count": 0,
+        "har_investment_entry_count": 0,
+        "har_response_record_count": 0,
+        "har_skipped_entry_count": 0,
+        "har_skip_reason_counts": {},
+        "har_endpoint_counts": {},
+        "har_platform_entry_counts": {},
+        "har_secret_material_stripped_count": 0,
+        "har_query_string_stripped_count": 0,
+        "har_secret_material_policy": "request_headers_cookies_authorization_query_strings_are_never_written_to_events_or_manifest",
         "limit": limit,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
@@ -214,6 +269,8 @@ def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Di
         return parse_json(path)
     if suffix in {".html", ".htm"}:
         return [parse_html(path)]
+    if suffix == ".har":
+        return parse_har(path, audit=audit)
     if suffix == ".zip":
         return parse_zip(path, audit=audit)
     return [parse_text(path)]
@@ -240,9 +297,11 @@ def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dic
             target = tmp_root.joinpath(*member_path.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(archive.read(info))
-            for member_row, record in enumerate(parse_path(target), start=1):
+            for member_row, record in enumerate(parse_path(target, audit=audit), start=1):
                 if isinstance(record, dict):
+                    raw_ref = record.get("_collectorx_raw_ref") if isinstance(record.get("_collectorx_raw_ref"), dict) else {}
                     record["_collectorx_raw_ref"] = {
+                        **raw_ref,
                         "path": f"{path}::{member_name}",
                         "archive": str(path),
                         "archive_member": member_name,
@@ -305,26 +364,167 @@ def parse_json(path: Path) -> List[Dict[str, Any]]:
     return [row if isinstance(row, dict) else {"value": row} for row in rows]
 
 
+def parse_har(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    if audit is not None:
+        audit["authorized_browser_network_export_used"] = True
+        audit["browser_network_export_file_count"] += 1
+    loaded = json.loads(path.read_text(encoding="utf-8-sig"))
+    entries = loaded.get("log", {}).get("entries", []) if isinstance(loaded, dict) else []
+    records: List[Dict[str, Any]] = []
+    for index, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            record_har_skip(audit, "malformed_entry")
+            continue
+        if audit is not None:
+            audit["har_entry_count"] += 1
+            audit["har_secret_material_stripped_count"] += har_secret_material_count(entry)
+        request = entry.get("request") if isinstance(entry.get("request"), dict) else {}
+        response = entry.get("response") if isinstance(entry.get("response"), dict) else {}
+        parsed_url = urlparse(str(request.get("url") or ""))
+        platform = platform_for_har_host(parsed_url)
+        if platform is None:
+            record_har_skip(audit, "non_investment_platform_url")
+            continue
+        if audit is not None:
+            audit["har_investment_entry_count"] += 1
+            increment_counter(audit, "har_platform_entry_counts", platform)
+            if parsed_url.query:
+                audit["har_query_string_stripped_count"] += 1
+        endpoint = har_endpoint(parsed_url)
+        if audit is not None:
+            increment_counter(audit, "har_endpoint_counts", endpoint)
+        text = decode_har_response_text(response.get("content") if isinstance(response.get("content"), dict) else {})
+        if not text:
+            record_har_skip(audit, "missing_response_text")
+            continue
+        try:
+            payload = loads_network_json(text)
+        except json.JSONDecodeError:
+            record_har_skip(audit, "non_json_response")
+            continue
+        extracted = extract_records(payload)
+        if audit is not None:
+            audit["har_response_record_count"] += len(extracted)
+        for row, item in enumerate(extracted, start=1):
+            record = item if isinstance(item, dict) else {"value": item}
+            record = with_context(
+                record,
+                {
+                    "platform": platform,
+                    "har_endpoint": endpoint,
+                    "har_status": response.get("status"),
+                    "har_row": row,
+                },
+            )
+            record["_collectorx_raw_ref"] = {
+                "path": str(path),
+                "har_entry": index,
+                "har_row": row,
+                "har_endpoint": endpoint,
+                "har_status": response.get("status"),
+                "parser": "har",
+                "platform": platform,
+            }
+            records.append(record)
+    return records
+
+
+def platform_for_har_host(parsed_url: Any) -> Optional[str]:
+    host = str(getattr(parsed_url, "netloc", "") or "").lower().split("@")[-1].split(":")[0]
+    for platform, domains in HAR_PLATFORM_DOMAINS.items():
+        if any(host == domain or host.endswith(f".{domain}") for domain in domains):
+            return platform
+    return None
+
+
+def har_endpoint(parsed_url: Any) -> str:
+    path = str(getattr(parsed_url, "path", "") or "/")
+    return path or "/"
+
+
+def decode_har_response_text(content: Dict[str, Any]) -> Optional[str]:
+    text = content.get("text")
+    if text in (None, ""):
+        return None
+    if str(content.get("encoding") or "").lower() == "base64":
+        try:
+            return base64.b64decode(str(text)).decode("utf-8", errors="replace")
+        except (binascii.Error, ValueError, TypeError):
+            return None
+    return str(text)
+
+
+def loads_network_json(text: str) -> Any:
+    stripped = text.strip()
+    if stripped.startswith("while(1);"):
+        stripped = stripped[len("while(1);") :].lstrip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        jsonp = re.match(r"^[A-Za-z_$][\w$]*\((.*)\)\s*;?\s*$", stripped, flags=re.DOTALL)
+        if jsonp:
+            return json.loads(jsonp.group(1))
+        raise
+
+
+def record_har_skip(audit: Optional[Dict[str, Any]], reason: str) -> None:
+    if audit is None:
+        return
+    audit["har_skipped_entry_count"] += 1
+    increment_counter(audit, "har_skip_reason_counts", reason)
+
+
+def har_secret_material_count(entry: Dict[str, Any]) -> int:
+    count = 0
+    for section_name in ("request", "response"):
+        section = entry.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        for list_name in ("headers", "cookies"):
+            values = section.get(list_name)
+            if not isinstance(values, list):
+                continue
+            for item in values:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name") or "").lower()
+                if any(fragment in name for fragment in SECRET_KEY_FRAGMENTS):
+                    count += 1
+    return count
+
+
 def extract_records(loaded: Any) -> List[Any]:
     if isinstance(loaded, list):
         return loaded
     if not isinstance(loaded, dict):
         return [{"value": loaded}]
+    context = {
+        str(key): value
+        for key, value in loaded.items()
+        if not isinstance(value, (list, dict)) and value not in (None, "")
+    }
     rows: List[Any] = []
     for key in ("assets", "assetSnapshots", "holdings", "positions", "funds", "products", "transactions", "trades", "records", "items", "list", "data"):
         value = loaded.get(key)
         if isinstance(value, list):
-            rows.extend(value)
+            rows.extend(with_context(item, context) for item in value)
         if isinstance(value, dict):
             nested = extract_records(value)
             if not (len(nested) == 1 and nested[0] == value):
-                rows.extend(nested)
+                rows.extend(with_context(item, context) for item in nested)
     if rows:
         return rows
     for value in loaded.values():
         if isinstance(value, list):
-            return value
+            return [with_context(item, context) for item in value]
     return [loaded]
+
+
+def with_context(item: Any, context: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(item, dict):
+        return {**context, "value": item}
+    record = {**context, **item}
+    return record
 
 
 def parse_html(path: Path) -> Dict[str, Any]:
@@ -874,6 +1074,9 @@ def finalize_audit(audit: Dict[str, Any]) -> None:
         "extension_counts",
         "archive_member_extension_counts",
         "skipped_archive_member_extension_counts",
+        "har_skip_reason_counts",
+        "har_endpoint_counts",
+        "har_platform_entry_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
