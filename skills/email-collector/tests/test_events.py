@@ -610,6 +610,83 @@ def test_local_email_scan_package_masks_source_paths():
         assert "private.path.account@example.net" not in json.dumps(probe_payload, ensure_ascii=False)
 
 
+def test_local_email_scan_thunderbird_mbox_boundary():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        profile_root = root / ".thunderbird" / "abcd.default-release"
+        mailbox_dir = profile_root / "Mail" / "pop.broker.example"
+        mailbox_dir.mkdir(parents=True)
+        out = root / "out"
+        probe = root / "probe.json"
+
+        broker_msg = EmailMessage()
+        broker_msg["Message-ID"] = "<thunderbird-broker-note@example.com>"
+        broker_msg["From"] = "Broker Strategy <strategy@broker.example>"
+        broker_msg["To"] = "Owner <owner@example.com>"
+        broker_msg["Subject"] = str(Header("Thunderbird 晨会策略", "utf-8"))
+        broker_msg["Date"] = "Thu, 09 Jul 2026 08:30:00 +0800"
+        broker_msg.set_content("Thunderbird 本机邮箱里的券商晨会策略。")
+        (mailbox_dir / "Inbox").write_bytes(
+            b"From - Thu Jul 09 08:30:00 2026\n" + broker_msg.as_bytes() + b"\n\n"
+        )
+        (mailbox_dir / "Inbox.msf").write_text("Thunderbird summary index", encoding="utf-8")
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--local-scan",
+                "--platform",
+                "linux",
+                "--container-root",
+                str(profile_root),
+                "--probe-export",
+                str(probe),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T09:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        event = events[0]
+        assert event["data"]["subject"] == "Thunderbird 晨会策略"
+        assert event["raw_ref"]["format"] == "thunderbird_mbox"
+        assert event["raw_ref"]["local_scan"] is True
+        assert event["raw_ref"]["source_platform"] == "linux"
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["resolved_input_file_count"] == 1
+        assert audit["imported_email_count"] == 1
+        assert audit["thunderbird_mbox_file_count"] == 1
+        assert audit["extension_counts"] == {"<thunderbird-mbox>": 1}
+        assert audit["local_scan_candidate_format_counts"] == {"thunderbird_mbox": 1}
+        assert audit["local_scan_root_type_counts"] == {"thunderbird": 1}
+        assert audit["local_scan_skipped_reason_counts"] == {"thunderbird_summary_index": 1}
+        assert audit["local_scan_thunderbird_summary_index_skipped_count"] == 1
+        assert audit["local_scan_candidate_selection"]["thunderbird_mbox_supported"] is True
+
+        proof = manifest["mailbox_boundary_proof"]["local_export_boundary"]
+        assert proof["thunderbird_mbox_file_count"] == 1
+        assert proof["local_scan_skipped_reason_counts"] == {"thunderbird_summary_index": 1}
+
+        probe_payload = json.loads(probe.read_text(encoding="utf-8"))
+        assert probe_payload["scan_summary"]["candidate_format_counts"] == {"thunderbird_mbox": 1}
+        assert probe_payload["scan_summary"]["root_type_counts"] == {"thunderbird": 1}
+        assert probe_payload["scan_summary"]["thunderbird_summary_index_skipped_count"] == 1
+
+
 def test_local_email_import_gap_event():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -868,6 +945,7 @@ if __name__ == "__main__":
     test_local_email_import_package()
     test_local_email_import_apple_mail_emlx_and_maildir()
     test_local_email_scan_package_masks_source_paths()
+    test_local_email_scan_thunderbird_mbox_boundary()
     test_local_email_import_gap_event()
     test_local_email_import_missing_input_gap_audit()
     test_local_email_import_zip_package()

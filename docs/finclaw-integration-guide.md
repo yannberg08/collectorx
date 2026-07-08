@@ -483,13 +483,16 @@ Current status:
   attachment policy, mailbox boundary proof, and the generic-to-lens evidence
   boundary.
 - Local scan/import supports user-authorized EML, Apple Mail EMLX, Maildir,
-  MBOX, JSON/JSONL/NDJSON, CSV/TSV, and ZIP packages. Maildir detection is
-  limited to RFC822-like files under `cur/` and `new/` so ordinary extensionless
-  files are skipped.
+  MBOX, Thunderbird no-extension mbox, JSON/JSONL/NDJSON, CSV/TSV, and ZIP
+  packages. Maildir detection is limited to RFC822-like files under `cur/` and
+  `new/`; Thunderbird detection is limited to `Mail/`/`ImapMail/` mbox files
+  or files with `.msf` sidecar proof, and `.msf` indexes are recorded as
+  skipped index files.
 - Local scan/import manifests record requested inputs, local-scan platform/root
   and candidate files, missing inputs, per-file parse results, extension
   coverage, skipped file reasons, ZIP member counts, skipped ZIP member reasons,
-  Apple Mail/Maildir counts, archive provenance, and `--limit` truncation.
+  Apple Mail/Maildir/Thunderbird counts, local-scan root status, archive
+  provenance, and `--limit` truncation.
 - Local scan probe, manifest, and raw refs mask path email addresses and long
   numeric account fragments.
 - `manifest.mailbox_boundary_proof` tells FinClaw which account/folder/time

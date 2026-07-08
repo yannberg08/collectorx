@@ -16,18 +16,19 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`email` now has an authorized local-scan path in addition to IMAP and export
-imports:
+`email` now has a stronger authorized local mailbox scan path in addition to
+IMAP and export imports:
 
 - `skills/email-collector/scripts/email_api.py import --local-scan` can scan a
   user-authorized local mail root for EML, Apple Mail EMLX, Maildir, MBOX,
-  JSON/CSV/TSV, and ZIP mail sources.
+  Thunderbird no-extension mbox, JSON/CSV/TSV, and ZIP mail sources.
 - `--platform auto|mac|windows|linux|generic`, `--container-root`, and
   `--probe-export` give FinClaw a product-safe preflight and execution path for
   local mail roots.
 - Manifest `collection_audit` records local-scan platform, roots, candidate
-  files, candidate-selection rules, Apple Mail/Maildir counts, and local-scan
-  imported email counts.
+  files, candidate-selection rules, root status, root-type counts,
+  Apple Mail/Maildir/Thunderbird counts, Thunderbird `.msf` index skip counts,
+  and local-scan imported email counts.
 - `mailbox_boundary_proof` now distinguishes
   `authorized_local_email_scan_boundary` from ordinary export imports while
   keeping complete-mailbox claims false.
@@ -754,7 +755,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons and per-root results; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extraction policy, parser counts, content-read counts, limit truncation, screenshot metadata-only/default policy, explicit `--include-image-ocr` tesseract adapter audit, legacy XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide-text extraction, research document surface summary, and research corpus boundary proof | Broader private PDF/XLS/XLSX/DOCX/PPTX/image samples, real binary `.xls` with xlrd validation, OCR quality review on real Chinese screenshots, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, and explicit non-broker-trade evidence policy; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, activity-boundary proof, pagination completeness summary, HAR browser-network export parsing for `xueqiu.com` response bodies, copied Chromium/Safari browser history with Xueqiu-domain filtering, visit/typed counts, transition types, credential/query stripping audit, raw sanitization, and SoulMirror sync; not yet a one-click real account adapter | Real Xueqiu account/HAR/browser-history samples, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/legacy `.xls`/Excel XML/HTML table/JSON/CSV/ZIP plus HAR browser-network export parsing for whitelisted fund/wealth domains, platform inference, numeric asset fields, platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, source/HAR audit, asset value summary, credential/query stripping, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no one-click real account adapter yet | Real platform HAR/export samples, per-platform UI adapters, real account validation, complete account-boundary proof |
-| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir`, local email `import --local-scan --out-dir`, and local EML/Apple Mail EMLX/Maildir/MBOX/JSON/CSV/TSV/ZIP `import --out-dir` produce standard packages with account/folder audit, local-scan/import audit, skipped file/ZIP-member reasons, Apple Mail/Maildir counts, field coverage, sanitized attachment refs, body/attachment policy, mailbox boundary proof, generic-to-lens evidence boundary, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, validate real local mail roots, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
+| 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir`, local email `import --local-scan --out-dir`, and local EML/Apple Mail EMLX/Maildir/MBOX/Thunderbird mbox/JSON/CSV/TSV/ZIP `import --out-dir` produce standard packages with account/folder audit, local-scan/import audit, skipped file/ZIP-member reasons, Apple Mail/Maildir/Thunderbird counts, Thunderbird `.msf` index skip audit, local-scan root status, field coverage, sanitized attachment refs, body/attachment policy, mailbox boundary proof, generic-to-lens evidence boundary, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, validate real Apple Mail/Thunderbird/Maildir local roots, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
 
 ## P1 Status
 

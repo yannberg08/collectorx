@@ -19,6 +19,7 @@ scope:
     - local_email_scan
     - apple_mail_emlx
     - maildir
+    - thunderbird_mbox
     - local_email_export_zip
   collects:
     - message_headers
@@ -35,6 +36,8 @@ scope:
     - skipped_archive_member_reason_counts
     - apple_mail_emlx_audit
     - maildir_message_audit
+    - thunderbird_mbox_audit
+    - local_scan_root_status_audit
     - field_coverage
     - archive_member_provenance
     - mailbox_boundary_proof
@@ -74,6 +77,7 @@ prompt: |
   授权 --event-include-body，否则不把完整正文写入事件。ZIP 包保留
   archive.zip::member 来源，并跳过路径穿越成员；本机扫描会在 probe、manifest
   和 raw_ref 中掩码路径里的邮箱地址和长数字账号片段；Apple Mail EMLX 会剥离本地
-  长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件。本机扫描/本地导入
-  manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir 计数、
+  长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件，Thunderbird 只采
+  Mail/ImapMail 下或带 .msf 旁路证明的无后缀 mbox，并把 .msf 索引作为跳过原因记录。
+  本机扫描/本地导入 manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir/Thunderbird 计数、
   limit 截断和 mailbox_boundary_proof。投资相关筛选必须交给 email-research lens。

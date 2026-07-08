@@ -69,6 +69,8 @@ DEFAULT_FOLDERS = ["INBOX"]
 SUPPORTED_IMPORT_EXTENSIONS = {".eml", ".emlx", ".mbox", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".zip"}
 SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS = SUPPORTED_IMPORT_EXTENSIONS - {".zip"}
 MAILDIR_PARENT_NAMES = {"cur", "new"}
+THUNDERBIRD_MBOX_PARENT_NAMES = {"mail", "imapmail"}
+THUNDERBIRD_SUMMARY_SUFFIX = ".msf"
 EMAIL_HEADER_MARKERS = (
     b"from:",
     b"to:",
@@ -531,16 +533,27 @@ def collect_imported_emails_with_audit(
         "limit": limit,
         "limit_reached": False,
         "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
+        "supported_local_mailbox_formats": ["eml", "emlx", "maildir", "mbox", "thunderbird_mbox"],
         "apple_mail_emlx_supported": True,
         "apple_mail_emlx_file_count": 0,
         "maildir_message_import_supported": True,
         "maildir_message_file_count": 0,
+        "thunderbird_mbox_import_supported": True,
+        "thunderbird_mbox_file_count": 0,
         "local_scan_requested": local_scan,
         "local_scan_platform": (local_scan_report or {}).get("platform"),
         "local_scan_roots": (local_scan_report or {}).get("scan_roots", []),
+        "local_scan_root_statuses": (local_scan_report or {}).get("scan_summary", {}).get("root_statuses", []),
+        "local_scan_root_type_counts": (local_scan_report or {}).get("scan_summary", {}).get("root_type_counts", {}),
         "local_scan_candidate_file_count": len(local_scan_files),
         "local_scan_candidate_files": [local_email_file_label(path) for path in local_scan_files],
+        "local_scan_candidate_format_counts": (local_scan_report or {}).get("scan_summary", {}).get("candidate_format_counts", {}),
         "local_scan_candidate_selection": (local_scan_report or {}).get("candidate_selection", {}),
+        "local_scan_scanned_file_count": (local_scan_report or {}).get("scan_summary", {}).get("scanned_file_count", 0),
+        "local_scan_skipped_file_count": (local_scan_report or {}).get("scan_summary", {}).get("skipped_file_count", 0),
+        "local_scan_skipped_reason_counts": (local_scan_report or {}).get("scan_summary", {}).get("skipped_reason_counts", {}),
+        "local_scan_thunderbird_summary_index_skipped_count": (local_scan_report or {}).get("scan_summary", {}).get("thunderbird_summary_index_skipped_count", 0),
+        "local_scan_truncated_root_count": (local_scan_report or {}).get("scan_summary", {}).get("scan_truncated_root_count", 0),
         "local_scan_imported_email_count": 0,
         "attachment_bodies_included": False,
         "archive_path_traversal_members_collected": False,
@@ -575,16 +588,19 @@ def collect_imported_emails_with_audit(
             ext = extension_label(path)
             increment_counter(audit, "extension_counts", ext)
             if not is_supported_import_path(path):
+                skip_reason = local_email_skip_reason(path)
                 audit["skipped_file_count"] += 1
                 increment_counter(audit, "skipped_extension_counts", ext)
-                increment_counter(audit, "skipped_reason_counts", "unsupported_extension")
-                audit["path_results"].append(path_result(path, status="skipped", reason="unsupported_extension"))
+                increment_counter(audit, "skipped_reason_counts", skip_reason)
+                audit["path_results"].append(path_result(path, status="skipped", reason=skip_reason))
                 continue
             audit["resolved_input_file_count"] += 1
             if path.suffix.lower() == ".emlx":
                 audit["apple_mail_emlx_file_count"] += 1
             if is_maildir_message_path(path):
                 audit["maildir_message_file_count"] += 1
+            if is_thunderbird_mbox_path(path):
+                audit["thunderbird_mbox_file_count"] += 1
             source_meta = local_scan_meta.get(path_key(path))
             result = path_result(path, status="pending", source_meta=source_meta)
             before_archive_member_count = audit["archive_member_count"]
@@ -698,6 +714,81 @@ def find_local_email_files(container_root: str = None, *, platform: str = "auto"
     return dedupe_paths(found)
 
 
+def build_local_email_scan_summary(roots: list[Path]) -> dict:
+    candidate_format_counts = Counter()
+    root_type_counts = Counter()
+    skipped_reason_counts = Counter()
+    root_statuses: list[dict] = []
+    scanned_file_count = 0
+    supported_file_count = 0
+    skipped_file_count = 0
+    thunderbird_mbox_file_count = 0
+    thunderbird_summary_index_skipped_count = 0
+    truncated_root_count = 0
+
+    for root in roots:
+        status = {
+            "root": safe_path_label(root),
+            "exists": root.exists(),
+            "readable": root.exists() and os.access(root, os.R_OK),
+            "kind": "missing",
+            "scanned_file_count": 0,
+            "truncated": False,
+        }
+        if not root.exists():
+            root_statuses.append(status)
+            continue
+        if root.is_file():
+            status["kind"] = "file"
+            iterator = iter([root])
+        elif root.is_dir():
+            status["kind"] = "directory"
+            iterator = root.rglob("*")
+        else:
+            status["kind"] = "unsupported"
+            root_statuses.append(status)
+            continue
+
+        try:
+            for path in iterator:
+                if not path.is_file():
+                    continue
+                status["scanned_file_count"] += 1
+                scanned_file_count += 1
+                if status["scanned_file_count"] > LOCAL_EMAIL_SCAN_MAX_FILES:
+                    status["truncated"] = True
+                    truncated_root_count += 1
+                    break
+                if is_supported_import_path(path):
+                    supported_file_count += 1
+                    candidate_format_counts[parser_name_for_path(path)] += 1
+                    root_type_counts[classify_local_email_path(path)] += 1
+                    if is_thunderbird_mbox_path(path):
+                        thunderbird_mbox_file_count += 1
+                else:
+                    reason = local_email_skip_reason(path)
+                    skipped_file_count += 1
+                    skipped_reason_counts[reason] += 1
+                    if reason == "thunderbird_summary_index":
+                        thunderbird_summary_index_skipped_count += 1
+        except OSError:
+            status["kind"] = "unreadable"
+        root_statuses.append(status)
+
+    return {
+        "root_statuses": root_statuses,
+        "scanned_file_count": scanned_file_count,
+        "supported_file_count": supported_file_count,
+        "skipped_file_count": skipped_file_count,
+        "skipped_reason_counts": dict(sorted(skipped_reason_counts.items())),
+        "candidate_format_counts": dict(sorted(candidate_format_counts.items())),
+        "root_type_counts": dict(sorted(root_type_counts.items())),
+        "thunderbird_mbox_file_count": thunderbird_mbox_file_count,
+        "thunderbird_summary_index_skipped_count": thunderbird_summary_index_skipped_count,
+        "scan_truncated_root_count": truncated_root_count,
+    }
+
+
 def build_local_email_scan_report(
     *,
     platform: str = "auto",
@@ -707,6 +798,7 @@ def build_local_email_scan_report(
     resolved = resolve_local_email_scan_platform(platform)
     file_list = dedupe_paths(files if files is not None else find_local_email_files(container_root=container_root, platform=platform))
     roots = local_email_scan_roots(container_root, platform=platform)
+    scan_summary = build_local_email_scan_summary(roots)
     return {
         "probe_type": "email_local_scan",
         "platform": {
@@ -719,6 +811,7 @@ def build_local_email_scan_report(
             ),
         },
         "scan_roots": [safe_path_label(root) for root in roots],
+        "scan_summary": scan_summary,
         "mail_candidates": {
             "file_count": len(file_list),
             "files": [local_email_file_label(path) for path in file_list],
@@ -726,7 +819,10 @@ def build_local_email_scan_report(
         },
         "candidate_selection": {
             "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
+            "supported_local_mailbox_formats": ["eml", "emlx", "maildir", "mbox", "thunderbird_mbox"],
             "maildir_parent_names": sorted(MAILDIR_PARENT_NAMES),
+            "thunderbird_mbox_supported": True,
+            "thunderbird_summary_index_skip_reason": "thunderbird_summary_index",
             "max_scan_files_per_root": LOCAL_EMAIL_SCAN_MAX_FILES,
         },
         "privacy_policy": {
@@ -761,10 +857,35 @@ def annotate_local_scan_email_record(record: dict, *, source_meta: dict = None) 
 
 
 def is_supported_import_path(path: Path) -> bool:
-    return path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS or is_maildir_message_path(path)
+    return (
+        path.suffix.lower() in SUPPORTED_IMPORT_EXTENSIONS
+        or is_maildir_message_path(path)
+        or is_thunderbird_mbox_path(path)
+    )
+
+
+def local_email_skip_reason(path: Path) -> str:
+    if is_thunderbird_summary_index_path(path):
+        return "thunderbird_summary_index"
+    return "unsupported_extension"
+
+
+def classify_local_email_path(path: Path) -> str:
+    lower_parts = {part.lower() for part in path.parts}
+    if is_thunderbird_mbox_path(path) or "thunderbird" in lower_parts or ".thunderbird" in lower_parts:
+        return "thunderbird"
+    if "com.apple.mail" in lower_parts or ("library" in lower_parts and "mail" in lower_parts and path.suffix.lower() == ".emlx"):
+        return "apple_mail"
+    if "evolution" in lower_parts:
+        return "evolution"
+    if is_maildir_message_path(path):
+        return "maildir"
+    return "generic"
 
 
 def extension_label(path: Path) -> str:
+    if is_thunderbird_mbox_path(path):
+        return "<thunderbird-mbox>"
     if is_maildir_message_path(path):
         return "<maildir>"
     return path.suffix.lower() or "<none>"
@@ -785,6 +906,8 @@ def parser_name_for_path(path: Path) -> str:
         return "eml"
     if suffix == ".emlx":
         return "emlx"
+    if is_thunderbird_mbox_path(path):
+        return "thunderbird_mbox"
     if is_maildir_message_path(path):
         return "maildir"
     if suffix == ".mbox":
@@ -851,7 +974,7 @@ def parse_email_export(path: Path, *, audit: dict = None) -> list[dict]:
         raw = path.read_bytes()
         msg = email.message_from_bytes(raw, policy=email_policy.default)
         return [message_to_record(msg, path=path, row=1)]
-    if suffix == ".mbox":
+    if suffix == ".mbox" or is_thunderbird_mbox_path(path):
         box = mailbox.mbox(str(path))
         try:
             return [message_to_record(msg, path=path, row=index) for index, msg in enumerate(box, start=1)]
@@ -939,12 +1062,20 @@ def archive_member_skip_reason(info: zipfile.ZipInfo):
         return "directory"
     if not is_safe_archive_member(member_path) or windows_path.drive:
         return "unsafe_path"
-    if suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS and not archive_member_is_maildir_message_path(member_name):
+    if archive_member_is_thunderbird_summary_index_path(member_name):
+        return "thunderbird_summary_index"
+    if (
+        suffix not in SUPPORTED_ARCHIVE_EMAIL_EXTENSIONS
+        and not archive_member_is_maildir_message_path(member_name)
+        and not archive_member_is_thunderbird_mbox_path(member_name)
+    ):
         return "unsupported_extension"
     return None
 
 
 def archive_member_extension_label(member_name: str) -> str:
+    if archive_member_is_thunderbird_mbox_path(member_name):
+        return "<thunderbird-mbox>"
     if archive_member_is_maildir_message_path(member_name):
         return "<maildir>"
     return Path(member_name).suffix.lower() or "<none>"
@@ -957,16 +1088,57 @@ def archive_member_is_maildir_message_path(member_name: str) -> bool:
     return len(parts) >= 2 and parts[-2] in MAILDIR_PARENT_NAMES and not parts[-1].startswith(".")
 
 
+def archive_member_is_thunderbird_mbox_path(member_name: str) -> bool:
+    normalized = member_name.replace("\\", "/")
+    parts = PurePosixPath(normalized).parts
+    if len(parts) < 3:
+        return False
+    name = parts[-1]
+    if not name or name.startswith(".") or Path(name).suffix:
+        return False
+    lower_parts = [part.lower() for part in parts[:-1]]
+    return any(part in THUNDERBIRD_MBOX_PARENT_NAMES for part in lower_parts)
+
+
+def archive_member_is_thunderbird_summary_index_path(member_name: str) -> bool:
+    return Path(member_name.replace("\\", "/")).suffix.lower() == THUNDERBIRD_SUMMARY_SUFFIX
+
+
 def is_maildir_message_path(path: Path) -> bool:
     if path.name.startswith(".") or path.parent.name not in MAILDIR_PARENT_NAMES:
         return False
     return looks_like_rfc822_message(path)
 
 
+def is_thunderbird_summary_index_path(path: Path) -> bool:
+    return path.suffix.lower() == THUNDERBIRD_SUMMARY_SUFFIX
+
+
+def is_thunderbird_mbox_path(path: Path) -> bool:
+    if path.name.startswith(".") or path.suffix:
+        return False
+    lower_parts = [part.lower() for part in path.parts[:-1]]
+    has_thunderbird_container = any(part in THUNDERBIRD_MBOX_PARENT_NAMES for part in lower_parts)
+    has_summary_sibling = path.with_name(path.name + THUNDERBIRD_SUMMARY_SUFFIX).exists()
+    if not (has_thunderbird_container or has_summary_sibling):
+        return False
+    return looks_like_mbox_file(path)
+
+
 def looks_like_rfc822_message(path: Path) -> bool:
     try:
         chunk = path.read_bytes()[:4096].lower()
     except OSError:
+        return False
+    return any(marker in chunk for marker in EMAIL_HEADER_MARKERS)
+
+
+def looks_like_mbox_file(path: Path) -> bool:
+    try:
+        chunk = path.read_bytes()[:4096].lower()
+    except OSError:
+        return False
+    if not chunk.startswith(b"from "):
         return False
     return any(marker in chunk for marker in EMAIL_HEADER_MARKERS)
 
@@ -1016,6 +1188,8 @@ def message_to_record(msg, *, path: Path, row: int) -> dict:
 
 
 def source_format_for_path(path: Path) -> str:
+    if is_thunderbird_mbox_path(path):
+        return "thunderbird_mbox"
     if is_maildir_message_path(path):
         return "maildir"
     suffix = path.suffix.lower().lstrip(".")
@@ -1442,12 +1616,21 @@ def local_export_boundary_from_audit(audit: dict) -> dict:
         "skipped_archive_member_reason_counts": audit.get("skipped_archive_member_reason_counts", {}),
         "apple_mail_emlx_file_count": audit.get("apple_mail_emlx_file_count", 0),
         "maildir_message_file_count": audit.get("maildir_message_file_count", 0),
+        "thunderbird_mbox_file_count": audit.get("thunderbird_mbox_file_count", 0),
         "local_scan_requested": audit.get("local_scan_requested", False),
         "local_scan_platform": audit.get("local_scan_platform"),
         "local_scan_roots": audit.get("local_scan_roots", []),
+        "local_scan_root_statuses": audit.get("local_scan_root_statuses", []),
+        "local_scan_root_type_counts": audit.get("local_scan_root_type_counts", {}),
         "local_scan_candidate_file_count": audit.get("local_scan_candidate_file_count", 0),
         "local_scan_candidate_files": audit.get("local_scan_candidate_files", []),
+        "local_scan_candidate_format_counts": audit.get("local_scan_candidate_format_counts", {}),
         "local_scan_candidate_selection": audit.get("local_scan_candidate_selection", {}),
+        "local_scan_scanned_file_count": audit.get("local_scan_scanned_file_count", 0),
+        "local_scan_skipped_file_count": audit.get("local_scan_skipped_file_count", 0),
+        "local_scan_skipped_reason_counts": audit.get("local_scan_skipped_reason_counts", {}),
+        "local_scan_thunderbird_summary_index_skipped_count": audit.get("local_scan_thunderbird_summary_index_skipped_count", 0),
+        "local_scan_truncated_root_count": audit.get("local_scan_truncated_root_count", 0),
         "local_scan_imported_email_count": audit.get("local_scan_imported_email_count", 0),
         "limit": audit.get("limit"),
         "limit_reached": audit.get("limit_reached", False),
@@ -1470,6 +1653,9 @@ def finalize_import_audit(audit: dict) -> None:
         "archive_member_extension_counts",
         "skipped_archive_member_extension_counts",
         "skipped_archive_member_reason_counts",
+        "local_scan_root_type_counts",
+        "local_scan_candidate_format_counts",
+        "local_scan_skipped_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
