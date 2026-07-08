@@ -225,6 +225,71 @@ def test_collects_zip_package_with_value_summary() -> None:
         assert manifest["evidence_policy"]["complete_asset_boundary_claimed"] is False
 
 
+def test_manifest_reports_account_asset_currency_and_transaction_boundaries() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "multi-account.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {"平台": "支付宝", "账户名称": "alipay-main", "类型": "资产快照", "总资产": "10000", "可用余额": "500", "币种": "CNY"},
+                        {"平台": "支付宝", "账户名称": "alipay-main", "类型": "货币基金", "产品名称": "余额宝", "持有金额": "2000", "币种": "CNY"},
+                        {"平台": "天天基金", "基金账号": "tt-001", "类型": "持仓", "基金代码": "000001", "基金名称": "测试混合", "持仓金额": "3000", "持仓成本": "2500", "持有收益": "500", "币种": "CNY"},
+                        {"平台": "蛋卷", "账户名称": "dj-001", "交易类型": "申购", "基金代码": "110022", "基金名称": "测试消费", "确认金额": "800", "手续费": "1", "币种": "CNY"},
+                        {"平台": "且慢", "账户名称": "qm-001", "交易类型": "赎回", "基金代码": "000300", "基金名称": "测试指数", "确认金额": "120", "币种": "USD"},
+                        {"平台": "招商银行", "理财账号": "cmb-001", "类型": "银行理财", "产品代码": "CMB001", "产品名称": "稳健理财", "持仓金额": "5000", "币种": "CNY"},
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(json_path), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        account_summary = manifest["account_boundary_summary"]
+        assert account_summary["account_boundary_scope"] == "partial_authorized_input"
+        assert account_summary["observed_account_group_count"] == 5
+        assert account_summary["observed_named_account_group_count"] == 5
+        assert account_summary["unknown_account_event_count"] == 0
+        assert account_summary["complete_account_boundary_claimed"] is False
+        assert account_summary["requires_real_account_validation"] is True
+
+        alipay_account = next(account for account in account_summary["accounts"] if account["platform"] == "alipay")
+        assert alipay_account["account_ref"] == "alipay-main"
+        assert alipay_account["subtype_counts"] == {"asset_snapshot": 1, "cash_management": 1}
+        assert alipay_account["value_summary"]["CNY"]["total_asset"] == 10000.0
+        assert alipay_account["value_summary"]["CNY"]["market_value"] == 2000.0
+
+        surface_summary = manifest["asset_surface_summary"]
+        assert surface_summary["missing_expected_asset_surfaces"] == []
+        assert surface_summary["holding_event_count"] == 3
+        assert surface_summary["transaction_event_count"] == 2
+        assert surface_summary["asset_snapshot_event_count"] == 1
+        assert surface_summary["transaction_side_counts"] == {"buy": 1, "sell": 1}
+        assert surface_summary["transaction_amount_by_side"] == {"buy": 800.0, "sell": 120.0}
+        assert surface_summary["platform_surface_matrix"]["bank-wealth"] == {"wealth_holding": 1}
+
+        currency_summary = manifest["currency_summary"]
+        assert currency_summary["currency_counts"] == {"CNY": 5, "USD": 1}
+        assert currency_summary["value_fields_by_currency"]["CNY"]["market_value"] == 10000.0
+        assert currency_summary["value_fields_by_currency"]["CNY"]["total_asset"] == 10000.0
+        assert currency_summary["value_fields_by_currency"]["USD"]["transaction_amount"] == 120.0
+        assert manifest["evidence_policy"]["personal_authorized_assets_only"] is True
+        assert manifest["evidence_policy"]["does_not_place_orders"] is True
+        assert manifest["evidence_policy"]["does_not_move_money"] is True
+
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["account_boundary_summary"]["observed_named_account_group_count"] == 5
+        assert evidence["coverage_summary"]["asset_surface_summary"]["missing_expected_asset_surfaces"] == []
+
+
 if __name__ == "__main__":
     test_collect_fund_holding_and_transaction()
     test_collect_without_input_gap()
@@ -233,4 +298,5 @@ if __name__ == "__main__":
     test_syncs_package_to_soulmirror_lake()
     test_manifest_reports_expected_platform_coverage()
     test_collects_zip_package_with_value_summary()
+    test_manifest_reports_account_asset_currency_and_transaction_boundaries()
     print("china-wealth-assets tests passed.")

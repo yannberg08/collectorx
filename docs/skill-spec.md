@@ -71,7 +71,7 @@ skill-name/
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
 | xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计和字段覆盖已测试，仍需真实账号/分页验证 |
 | xueqiu-investor-activity | 8+ | 雪球个人活动垂直采集器；本地授权导出、保存页、分页标记审计、字段覆盖和 SoulMirror 同步已测试，仍需真实账号 adapter |
-| china-wealth-assets | 8+ | 中国基金理财资产垂直采集器；本地授权导入、ZIP、来源审计、平台/字段覆盖和金额汇总已测试，仍需真实账号边界证明 |
+| china-wealth-assets | 8+ | 中国基金理财资产垂直采集器；本地授权导入、ZIP、来源审计、平台/字段/账户/资产面/币种覆盖和金额汇总已测试，仍需真实账号边界证明 |
 | financial-news-usage | 8+ | 财经资讯使用痕迹垂直采集器 baseline；支持授权文件/目录/ZIP/浏览器历史副本、平台/动作覆盖、逐输入来源审计、跳过原因和凭证字段过滤，仍需真实财联社/华尔街见闻/格隆汇账号验证 |
 | hk-us-brokerage | 8+ | 港美股券商强交易垂直采集器 baseline；支持授权 CSV/JSON/Excel/ZIP、券商/交易表/字段覆盖、逐输入来源审计、跳过原因和凭证字段过滤，仍需真实富途/老虎/盈透账号验证 |
 | pro-terminal-usage | 8+ | 专业终端使用痕迹垂直采集器 baseline；支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP、终端/活动/字段覆盖、逐输入来源审计、跳过原因和凭证/许可字段过滤，仍需真实 Wind/Choice/iFinD/Bloomberg 账号验证 |

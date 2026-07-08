@@ -58,3 +58,9 @@ ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manif
 `manifest.field_coverage` 会列出平台、产品代码、产品名称、份额、净值、市值、
 总资产、现金、成本、收益、申赎金额等推荐字段覆盖情况；`asset_value_summary`
 会按平台汇总本次授权输入里的市值、总资产和交易金额。
+
+`manifest.account_boundary_summary` 会按平台和账户引用汇总本次输入覆盖的账户组、
+资产面、产品数、币种和值字段；`asset_surface_summary` 会说明是否看到了资产快照、
+基金持仓、理财持仓、现金管理和申赎/分红交易；`currency_summary` 会按币种和
+平台-币种汇总金额字段。这些摘要可进入 FinClaw/SoulMirror 的投资分身 Wiki，
+但仍只代表用户授权输入内的证据。

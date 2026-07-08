@@ -24,6 +24,7 @@ SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "cred
 EXPECTED_P0_PLATFORMS = ("alipay", "tiantian-fund", "danjuan", "qieman", "bank-wealth")
 RECOMMENDED_FIELDS = (
     "platform",
+    "account",
     "product_code",
     "product_name",
     "product_type",
@@ -39,6 +40,26 @@ RECOMMENDED_FIELDS = (
     "fee",
     "side",
 )
+ACCOUNT_FIELDS = (
+    "account",
+    "account_id",
+    "account_name",
+    "fund_account",
+    "wealth_account",
+    "portfolio_account",
+    "账户",
+    "账号",
+    "账户名称",
+    "交易账号",
+    "基金账号",
+    "理财账号",
+    "组合账号",
+    "户名",
+)
+VALUE_FIELDS = ("market_value", "total_asset", "transaction_amount", "available_cash", "cost", "pnl", "fee")
+EXPECTED_ASSET_SURFACES = ("asset_snapshot", "fund_holding", "wealth_holding", "cash_management", "fund_transaction")
+HOLDING_SUBTYPES = {"fund_holding", "wealth_holding", "cash_management"}
+TRADE_SUBTYPES = {"fund_transaction"}
 
 
 def now_iso() -> str:
@@ -273,7 +294,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     data = {
         "subtype": subtype,
         "platform": platform,
-        "account": first(record, ["account", "account_id", "账户", "账号", "户名"]),
+        "account": first(record, ACCOUNT_FIELDS),
         "product_code": first(record, ["product_code", "fund_code", "code", "基金代码", "产品代码", "代码"]),
         "product_name": first(record, ["product_name", "fund_name", "name", "title", "基金名称", "产品名称", "名称", "标题"]),
         "product_type": infer_product_type(record),
@@ -424,10 +445,17 @@ def build_manifest(
         },
         "field_coverage": field_coverage(events),
         "asset_value_summary": asset_value_summary(events),
+        "currency_summary": currency_summary(events),
+        "asset_surface_summary": asset_surface_summary(events),
+        "account_boundary_summary": account_boundary_summary(events),
         "platform_coverage": platform_coverage(platform_counts),
         "evidence_policy": {
             "complete_asset_boundary_claimed": False,
             "real_account_validation": False,
+            "personal_authorized_assets_only": True,
+            "does_not_place_orders": True,
+            "does_not_move_money": True,
+            "does_not_collect_consumption_or_payment_flows": True,
             "payment_or_bank_credentials_collected": False,
             "requires_corroboration_with": ["brokerage_accounts", "bank_statements", "fund_platform_exports", "investment_notes"],
         },
@@ -469,6 +497,9 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "platform_coverage": platform_coverage(platform_counts),
             "field_coverage": field_coverage(events),
             "asset_value_summary": asset_value_summary(events),
+            "currency_summary": currency_summary(events),
+            "asset_surface_summary": asset_surface_summary(events),
+            "account_boundary_summary": account_boundary_summary(events),
             "asset_boundary_source": True,
             "complete_asset_boundary_claimed": False,
         },
@@ -489,7 +520,7 @@ def platform_coverage(platform_counts: Counter) -> Dict[str, Any]:
 
 
 def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    usable_events = [event for event in events if (event.get("data") or {}).get("subtype") != "collector_gap"]
+    usable_events = non_gap_events(events)
     field_counts = {
         field: sum(1 for event in usable_events if (event.get("data") or {}).get(field) is not None)
         for field in RECOMMENDED_FIELDS
@@ -506,12 +537,14 @@ def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def non_gap_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if (event.get("data") or {}).get("subtype") != "collector_gap"]
+
+
 def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
     summary: Dict[str, Dict[str, float]] = defaultdict(lambda: {"market_value": 0.0, "total_asset": 0.0, "transaction_amount": 0.0})
-    for event in events:
+    for event in non_gap_events(events):
         data = event.get("data") or {}
-        if data.get("subtype") == "collector_gap":
-            continue
         platform = str(data.get("platform") or "unknown")
         for key in ("market_value", "total_asset", "transaction_amount"):
             value = data.get(key)
@@ -522,6 +555,153 @@ def asset_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, flo
         for platform, values in sorted(summary.items())
         if any(values.values())
     }
+
+
+def currency_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    counts: Counter = Counter()
+    value_summary: Dict[str, Dict[str, float]] = defaultdict(lambda: {key: 0.0 for key in VALUE_FIELDS})
+    platform_currency: Dict[str, Dict[str, Dict[str, float]]] = defaultdict(lambda: defaultdict(lambda: {key: 0.0 for key in VALUE_FIELDS}))
+    for event in non_gap_events(events):
+        data = event.get("data") or {}
+        currency = str(data.get("currency") or "unknown")
+        platform = str(data.get("platform") or "unknown")
+        counts[currency] += 1
+        for key in VALUE_FIELDS:
+            value = data.get(key)
+            if isinstance(value, (int, float)):
+                value_summary[currency][key] += float(value)
+                platform_currency[platform][currency][key] += float(value)
+    return {
+        "currency_counts": dict(sorted(counts.items())),
+        "value_fields_by_currency": {
+            currency: compact_float_dict(values)
+            for currency, values in sorted(value_summary.items())
+            if any(values.values())
+        },
+        "value_fields_by_platform_currency": {
+            platform: {
+                currency: compact_float_dict(values)
+                for currency, values in sorted(currencies.items())
+                if any(values.values())
+            }
+            for platform, currencies in sorted(platform_currency.items())
+            if any(any(values.values()) for values in currencies.values())
+        },
+    }
+
+
+def asset_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = non_gap_events(events)
+    subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in usable_events)
+    kind_counts = Counter(event.get("kind", "unknown") for event in usable_events)
+    product_type_counts = Counter((event.get("data") or {}).get("product_type", "unknown") for event in usable_events)
+    side_counts = Counter((event.get("data") or {}).get("side", "unknown") for event in usable_events if (event.get("data") or {}).get("subtype") in TRADE_SUBTYPES)
+    platform_surface: Dict[str, Counter] = defaultdict(Counter)
+    transaction_amount_by_side: Dict[str, float] = defaultdict(float)
+    products = set()
+    for event in usable_events:
+        data = event.get("data") or {}
+        platform = str(data.get("platform") or "unknown")
+        subtype = str(data.get("subtype") or "unknown")
+        platform_surface[platform][subtype] += 1
+        product_ref = product_identity(data)
+        if product_ref:
+            products.add(product_ref)
+        if subtype in TRADE_SUBTYPES:
+            side = str(data.get("side") or "unknown")
+            amount = data.get("transaction_amount")
+            if isinstance(amount, (int, float)):
+                transaction_amount_by_side[side] += float(amount)
+    observed = sorted(surface for surface, count in subtype_counts.items() if count > 0)
+    return {
+        "expected_asset_surfaces": list(EXPECTED_ASSET_SURFACES),
+        "observed_asset_surfaces": observed,
+        "missing_expected_asset_surfaces": [surface for surface in EXPECTED_ASSET_SURFACES if subtype_counts.get(surface, 0) == 0],
+        "kind_counts": dict(sorted(kind_counts.items())),
+        "subtype_counts": dict(sorted(subtype_counts.items())),
+        "product_type_counts": dict(sorted(product_type_counts.items())),
+        "distinct_product_count": len(products),
+        "holding_event_count": sum(1 for event in usable_events if (event.get("data") or {}).get("subtype") in HOLDING_SUBTYPES),
+        "transaction_event_count": sum(1 for event in usable_events if (event.get("data") or {}).get("subtype") in TRADE_SUBTYPES),
+        "asset_snapshot_event_count": subtype_counts.get("asset_snapshot", 0),
+        "transaction_side_counts": dict(sorted(side_counts.items())),
+        "transaction_amount_by_side": compact_float_dict(transaction_amount_by_side),
+        "platform_surface_matrix": {platform: dict(sorted(counter.items())) for platform, counter in sorted(platform_surface.items())},
+    }
+
+
+def account_boundary_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = non_gap_events(events)
+    grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
+    unknown_account_events = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        platform = str(data.get("platform") or "unknown")
+        account = str(data.get("account") or "unknown")
+        if account == "unknown":
+            unknown_account_events += 1
+        grouped[(platform, account)].append(event)
+    accounts: List[Dict[str, Any]] = []
+    for (platform, account), account_events in sorted(grouped.items()):
+        product_refs = sorted({product_identity(event.get("data") or {}) for event in account_events if product_identity(event.get("data") or {})})
+        accounts.append(
+            {
+                "platform": platform,
+                "account_ref": account,
+                "event_count": len(account_events),
+                "kind_counts": dict(sorted(Counter(event.get("kind", "unknown") for event in account_events).items())),
+                "subtype_counts": dict(sorted(Counter((event.get("data") or {}).get("subtype", "unknown") for event in account_events).items())),
+                "asset_surfaces": sorted({str((event.get("data") or {}).get("subtype") or "unknown") for event in account_events}),
+                "product_type_counts": dict(sorted(Counter((event.get("data") or {}).get("product_type", "unknown") for event in account_events).items())),
+                "currency_counts": dict(sorted(Counter((event.get("data") or {}).get("currency", "unknown") for event in account_events).items())),
+                "distinct_product_count": len(product_refs),
+                "product_refs_sample": product_refs[:20],
+                "product_refs_sample_truncated": len(product_refs) > 20,
+                "value_summary": account_value_summary(account_events),
+            }
+        )
+    return {
+        "account_boundary_scope": "none" if not usable_events else "partial_authorized_input",
+        "observed_account_group_count": len(accounts),
+        "observed_named_account_group_count": sum(1 for account in accounts if account["account_ref"] != "unknown"),
+        "unknown_account_event_count": unknown_account_events,
+        "accounts": accounts,
+        "complete_account_boundary_claimed": False,
+        "requires_real_account_validation": True,
+        "read_only_authorized_source": True,
+    }
+
+
+def account_value_summary(events: List[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    summary: Dict[str, Dict[str, float]] = defaultdict(lambda: {key: 0.0 for key in VALUE_FIELDS})
+    for event in events:
+        data = event.get("data") or {}
+        currency = str(data.get("currency") or "unknown")
+        for key in VALUE_FIELDS:
+            value = data.get(key)
+            if isinstance(value, (int, float)):
+                summary[currency][key] += float(value)
+    return {
+        currency: compact_float_dict(values)
+        for currency, values in sorted(summary.items())
+        if any(values.values())
+    }
+
+
+def product_identity(data: Dict[str, Any]) -> Optional[str]:
+    code = data.get("product_code")
+    name = data.get("product_name")
+    if code and name:
+        return f"{code} {name}"
+    if code:
+        return str(code)
+    if name:
+        return str(name)
+    return None
+
+
+def compact_float_dict(values: Dict[str, float]) -> Dict[str, float]:
+    return {key: round(value, 6) for key, value in sorted(values.items()) if value}
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
