@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import re
+import sys
 import tempfile
 import zipfile
 from collections import Counter
@@ -19,6 +20,15 @@ try:
     import openpyxl
 except ImportError:  # pragma: no cover - optional dependency for runtime installs
     openpyxl = None
+
+try:
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
 
 
 COLLECTOR = "xueqiu-watchlist"
@@ -40,6 +50,44 @@ SUPPORTED_EXTENSIONS = {
 }
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
+INVESTOR_WIKI_SUBDIMENSION_RULES = {
+    "inv-market-view": {
+        "support_level": "weak",
+        "route_targets": ["investor.opportunity_watchlist.watchlist", "investor.capability_circle.attention_universe"],
+        "signals": ["雪球自选股能反映用户正在观察的市场机会。"],
+        "gaps": ["自选不是持仓，也不能证明用户的市场信念。"],
+    },
+    "inv-value-preference": {
+        "support_level": "weak",
+        "route_targets": ["investor.opportunity_watchlist.watchlist"],
+        "signals": ["自选分组、备注和标签可作为资产偏好侧影。"],
+        "gaps": ["偏好原因需要研究笔记、聊天或复盘补充。"],
+    },
+    "inv-industry-circle": {
+        "support_level": "medium",
+        "route_targets": ["investor.capability_circle.attention_universe"],
+        "signals": ["自选列表中的行业、板块和标的可形成关注宇宙。"],
+        "gaps": ["关注宇宙不等于能力圈，需要研究产物和交易复盘验证。"],
+    },
+    "inv-information-learning-style": {
+        "support_level": "weak",
+        "route_targets": ["investor.opportunity_watchlist.watchlist", "investor.capability_circle.attention_universe"],
+        "signals": ["分组和标签能提示用户组织投资信息的方式。"],
+        "gaps": ["仍缺少信息筛选、学习和验证过程。"],
+    },
+    "inv-style-profile": {
+        "support_level": "weak",
+        "route_targets": ["investor.opportunity_watchlist.watchlist"],
+        "signals": ["自选池结构可作为风格画像的弱线索。"],
+        "gaps": ["自选不等于真实交易风格。"],
+    },
+    "inv-information-source": {
+        "support_level": "weak",
+        "route_targets": ["investor.capability_circle.attention_universe"],
+        "signals": ["雪球自选源可记录用户的信息入口之一。"],
+        "gaps": ["需要与阅读、收藏、讨论和交易时间线交叉验证。"],
+    },
+}
 
 
 def now_iso() -> str:
@@ -425,6 +473,34 @@ def build_manifest(
         },
         "collection_audit": collection_audit or {},
     }
+
+
+def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+    usable_events = [event for event in events if not (event.get("data") or {}).get("gap")]
+    by_target: Dict[str, List[Dict[str, Any]]] = {}
+    for event in usable_events:
+        for target in event.get("wiki_targets") or []:
+            by_target.setdefault(str(target), []).append(event)
+    evidence = {
+        "schema": "finclaw.investor_wiki_evidence.v1",
+        "generated_at": generated_at or now_iso(),
+        "generated_from": {
+            "collector": COLLECTOR,
+            "event_schema": "collectorx.event.v1",
+            "event_count": len(usable_events),
+        },
+        "wiki_write_policy": {
+            "collector_writes_wiki_directly": False,
+            "raw_json_writes_wiki_directly": False,
+            "required_flow": ["collectorx.event.v1", "finclaw.investor_wiki_evidence.v1", "SoulMirror investor-portrait distill/organize"],
+        },
+        "coverage_summary": {
+            "xueqiu_watchlist_is_strong_trade_source": False,
+            "watchlist_attention_universe_only": True,
+            "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
+        },
+    }
+    return augment_evidence_with_dimensions(evidence, usable_events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def build_watchlist_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:

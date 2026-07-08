@@ -1741,6 +1741,30 @@ Findings:
 - This wave improves Wiki consumability and FinClaw gating; it does not claim
   new real-account validation.
 
+### Wave Z: Watchlist Investor Wiki evidence pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-watchlist-evidence-contract-validation-2026-07-08.md`
+
+Findings:
+
+- Added `investor_wiki_evidence.v1.json` package output to
+  `xueqiu-watchlist` and `ths-watchlist`.
+- Both collectors now reuse the shared `collectorx.investor_wiki` contract and
+  emit canonical 7-dimension/20-subdimension coverage.
+- Watchlist evidence supports market-view, value-preference, industry-circle,
+  information-learning-style, style-profile, and information-source
+  subdimensions with conservative weak/medium support levels.
+- The evidence policy remains explicit: self-selected watchlists are attention
+  universe signals, not broker-confirmed holdings, trades, orders, cashflows, or
+  complete portfolio facts.
+- Fixture validation covers standard package output, evidence package
+  generation, contract dimensions, non-strong-trade policy, source audit, ZIP
+  provenance for Xueqiu, and gap behavior.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -1748,7 +1772,7 @@ Findings:
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, and explicit filtered-all gap status; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot metadata-only/no-OCR boundary, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLSX/DOCX/PDF samples, optional screenshot OCR adapter review, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, and research-attachment filename matching; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
-| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
+| 4 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM support, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no real account adapter | G2/G3: real Snowball account adapter or authorized export workflow, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 5 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, asset surface summary, currency summary, transaction-side summary, asset value summary, ZIP provenance, raw sanitization, and SoulMirror sync; no real account export found in latest pass | G2/G3: per-platform adapters for Alipay/Tiantian/Danjuan/Qieman/bank wealth exports or read-only screens |
 
 ## P1 Work Queue

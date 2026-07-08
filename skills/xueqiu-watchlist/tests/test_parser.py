@@ -131,6 +131,18 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         assert manifest["collection_audit"]["skipped_archive_member_count"] == 1
         assert manifest["collection_audit"]["filtered_record_count"] >= 1
         assert manifest["field_coverage"]["fields"]["symbol"]["present"] == 7
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["xueqiu_watchlist_is_strong_trade_source"] is False
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        industry_circle = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-industry-circle"
+        )
+        assert industry_circle["support_level"] == "medium"
+        assert industry_circle["evidence_count"] == 7
 
 
 def test_gap_event() -> None:

@@ -16,8 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-Investor Wiki evidence packages now have a shared 7-dimension/20-subdimension
-contract and validator:
+`xueqiu-watchlist` and `ths-watchlist` now emit standard Investor Wiki evidence
+packages for attention-universe signals:
+
+- `xueqiu_query.py collect --input <authorized-watchlist-export> --out-dir
+  <dir>` now writes `investor_wiki_evidence.v1.json` alongside
+  `lake/xueqiu-watchlist/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
+- `ths_watchlist.py collect --input <authorized-watchlist-export> --out-dir
+  <dir>` now writes the same evidence package shape for Tonghuashun watchlists.
+- Both packages pass the shared 7-dimension/20-subdimension contract and route
+  watchlists to market-view, value-preference, industry-circle,
+  information-learning-style, style-profile, and information-source
+  subdimensions.
+- The evidence boundary remains conservative: watchlists are attention-universe
+  evidence only, not broker-confirmed holdings, executions, orders, fund flows,
+  or complete portfolio boundaries.
+
+The prior completed wave: Investor Wiki evidence packages now have a shared
+7-dimension/20-subdimension contract and validator:
 
 - Added `collectorx.investor_wiki` as the shared FinClaw/SoulMirror evidence
   contract helper. It defines `external.investor / 7 dimensions / 20
@@ -326,7 +342,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- |
 | `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; Windows/Linux are code-level simulations or fallback paths |
 | `ths-portfolio` | `deep-beta`; strong local package and GUI snapshot design exists, but needs broader real-device validation to claim production |
-| `ths-watchlist` | `baseline`; authorized local export collector for same-channel watchlist/attention-universe evidence; not a strong trade, holding, order, or fund-flow collector |
+| `ths-watchlist` | `baseline+audit`; authorized local export collector for same-channel watchlist/attention-universe evidence with standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
 | `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow exists, current machine still has LLDB/passphrase capture limitation |
 
 ## Product Rule

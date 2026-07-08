@@ -93,6 +93,18 @@ def test_collect_ths_watchlist_exports() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_ths_attention_universe"] is False
         assert manifest["market_counts"]["SH"] >= 2
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["ths_watchlist_is_strong_trade_source"] is False
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        industry_circle = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-industry-circle"
+        )
+        assert industry_circle["support_level"] == "medium"
+        assert industry_circle["evidence_count"] == 6
 
 
 def test_gap_event() -> None:

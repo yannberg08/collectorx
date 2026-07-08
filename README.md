@@ -101,13 +101,13 @@ Operational docs:
 | --- | --- | --- |
 | `ths-portfolio` | `ths-portfolio` | Local metadata + trade package; ongoing real-device validation |
 | `eastmoney-portfolio` | `eastmoney-portfolio` | macOS local + authorized full trade Lake Beta; strong trade tables require unlocked trading account |
-| `xueqiu-watchlist` | `xueqiu-watchlist` | Authorized local export/package baseline for Xueqiu watchlists with source audit and field coverage; attention-universe evidence only |
+| `xueqiu-watchlist` | `xueqiu-watchlist` | Authorized local export/package baseline for Xueqiu watchlists with source audit, field coverage, and 7/20 Wiki evidence package; attention-universe evidence only |
 | `xueqiu-investor-activity` | `xueqiu-investor-activity` | Normalized local export/package baseline for watchlists, follows, posts, comments, favorites, saved pages, owner portfolios, source/pagination audit, field coverage, and SoulMirror lake sync; real account adapter pending |
 | `china-wealth-assets` | `china-wealth-assets` | Normalized local export/package baseline for fund, wealth, cash-management holdings, transactions, asset snapshots, Excel/JSON/CSV/ZIP inputs, source audit, platform/field/account/asset-surface/currency coverage, asset value summary, and SoulMirror lake sync |
 | `financial-news-usage` | `financial-news-usage` | Local usage export, saved-page, ZIP, and browser-history baseline for finance-app read, favorite, subscribe, search, and alert actions with platform/action/topic coverage, per-input source audit, skip reasons, and path-safety manifest |
 | `hk-us-brokerage` | `hk-us-brokerage` | Local read-only CSV/JSON/Excel/ZIP export baseline for Futu/Tiger/IBKR assets, positions, executions, orders, cashflows, dividends, FX, margin, tax, settlement fields, account-boundary/currency-market/fee-tax-margin summaries, broker/trade-surface/field coverage, per-input source audit, skip reasons, and path-safety manifest |
 | `pro-terminal-usage` | `pro-terminal-usage` | Local workflow CSV/JSON/Excel/HTML/TXT/LOG/ZIP export baseline for Wind/Choice/iFinD/Bloomberg workspaces, watchlists, searches, downloads, templates, factors, datasets, fields, function codes, terminal/activity/field/topic coverage, per-input source audit, skip reasons, and license-safe manifest |
-| `ths-watchlist` | `ths-watchlist` | Authorized local export baseline for Tonghuashun watchlists; attention-universe evidence only, corroborate with trades/research |
+| `ths-watchlist` | `ths-watchlist` | Authorized local export baseline for Tonghuashun watchlists with 7/20 Wiki evidence package; attention-universe evidence only, corroborate with trades/research |
 
 ### Investor Lenses
 

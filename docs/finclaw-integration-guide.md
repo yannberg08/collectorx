@@ -135,6 +135,8 @@ Current status:
 - Captures symbol, name, market, group, industry, tags, note/reason, and
   added time when present.
 - Recursively filters credential-like raw keys.
+- Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
+  coverage for attention-universe subdimensions.
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows; use `ths-portfolio` for strong trading evidence.
 
@@ -277,6 +279,8 @@ Current status for `xueqiu-watchlist`:
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
   counts, parsed/filtered record counts, and watchlist field coverage.
 - Recursively filters credential-like raw keys.
+- Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
+  coverage for attention-universe subdimensions.
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows.
 
