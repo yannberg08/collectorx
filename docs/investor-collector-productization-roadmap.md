@@ -1957,6 +1957,34 @@ Findings:
   watchlist ZIP provenance, unsafe ZIP member skipping, evidence summary
   routing, and all expected workflow topics.
 
+### Wave W5: P2 professional terminal workflow-boundary proof pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-pro-terminal-workflow-boundary-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `pro-terminal-usage` to `0.2.5`.
+- Added `manifest.workflow_boundary_proof` as the single FinClaw gate for
+  authorized input presence, Wind/Choice/iFinD/Bloomberg coverage, activity
+  coverage, workflow-field coverage, workflow-topic coverage, workflow surfaces,
+  source audit counts, license-safe boundaries, and Investor Wiki flow.
+- Added the same workflow-boundary proof to
+  `investor_wiki_evidence.v1.json.coverage_summary` so SoulMirror/FinClaw can
+  inspect the proof without opening the raw manifest.
+- Kept the collector scoped to user personal workflow metadata. False claims
+  remain explicit: no complete terminal history, no real licensed-account
+  validation, no vendor database mirror, no licensed content body mirror, no
+  public market data mirror, no credentials, no license keys, no order mutation,
+  and no direct Wiki write.
+- Package `SUMMARY.md` now surfaces the workflow-boundary proof level and
+  license mirror state.
+- Fixture validation covers medium partial, strong partial, and missing-input
+  proof levels.
+
 ### Wave X: P2 social activity coverage pass 1
 
 Status: `completed-baseline`
@@ -2257,7 +2285,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
-| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false-positive review, license-safe validation |
+| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false-positive review, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, lens social-surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 
 ## Git Practice

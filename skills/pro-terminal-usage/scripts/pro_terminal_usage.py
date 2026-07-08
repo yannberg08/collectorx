@@ -37,7 +37,7 @@ def collect(args: argparse.Namespace) -> int:
         write_jsonl(out / "lake" / COLLECTOR / "events.jsonl", events)
         manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out / "manifest.json", manifest)
-        write_json(out / "investor_wiki_evidence.v1.json", build_evidence(events, generated_at=collected_at))
+        write_json(out / "investor_wiki_evidence.v1.json", build_evidence(events, generated_at=collected_at, collection_audit=collection_audit))
         (out / "SUMMARY.md").write_text(
             "\n".join(
                 [
@@ -50,6 +50,8 @@ def collect(args: argparse.Namespace) -> int:
                     f"- missing_expected_terminals：`{', '.join(manifest['terminal_coverage']['missing_expected_terminals']) or 'none'}`",
                     f"- observed_activities：`{', '.join(manifest['activity_coverage']['observed_activities']) or 'none'}`",
                     f"- missing_activities：`{', '.join(manifest['activity_coverage']['missing_expected_activities']) or 'none'}`",
+                    f"- workflow_boundary_proof：`{manifest['workflow_boundary_proof']['proof_level']}`",
+                    f"- licensed_content_mirrored：`{manifest['workflow_boundary_proof']['license_boundary']['licensed_content_mirrored']}`",
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
                     f"- skipped_archive_members：{manifest['source_audit'].get('skipped_archive_member_count', 0)}",
                     f"- source_section_events：{manifest['source_audit']['source_section_event_count']}",

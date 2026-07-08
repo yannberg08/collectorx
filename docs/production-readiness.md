@@ -248,6 +248,24 @@ coverage for authorized Weibo, Bilibili, and Xiaohongshu activity packages:
   allowlists, social-topic false-positive review, weak-evidence backtest, or
   Windows/macOS/Linux path validation.
 
+The prior completed wave: `pro-terminal-usage` now has unified workflow-boundary
+proof for authorized Wind, Choice, iFinD, and Bloomberg workflow packages:
+
+- `manifest.workflow_boundary_proof` gives FinClaw one gate for authorized
+  input presence, terminal coverage, activity coverage, workflow-field coverage,
+  workflow-topic coverage, workflow surfaces, source audit counts, license
+  safety, and Investor Wiki flow.
+- The proof keeps personal workflow metadata usable for the investor avatar:
+  workspaces, watchlists, searches, downloads, exports, templates, models,
+  factors, datasets, fields, function codes, symbols, projects, and topics.
+- False claims remain explicit: no complete terminal usage history, no real
+  licensed-account validation, no vendor database mirror, no licensed content
+  body mirror, no public market data mirror, no credentials, no license keys,
+  no order mutation, and no direct Wiki write.
+- This improves FinClaw gating for P2 professional terminal packages, but still
+  does not replace real Wind/Choice/iFinD/Bloomberg account/export validation
+  or legal/license review.
+
 The prior completed wave: `pro-terminal-usage` now has stronger workflow-topic
 coverage for authorized Wind, Choice, iFinD, and Bloomberg workflow packages:
 

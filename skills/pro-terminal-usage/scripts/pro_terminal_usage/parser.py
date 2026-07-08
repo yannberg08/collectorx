@@ -987,6 +987,7 @@ def build_manifest(
             "real_account_validation": False,
         },
         "workflow_surface_summary": workflow_surface_summary(events),
+        "workflow_boundary_proof": workflow_boundary_proof(events, collection_audit=collection_audit),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "license_policy": {
             "license_boundary": "workflow_metadata_only",
@@ -1079,6 +1080,166 @@ def workflow_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def workflow_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    usable_events = usable_terminal_events(events)
+    activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in usable_events)
+    terminal_counts = Counter((event.get("data") or {}).get("terminal", "unknown") for event in usable_events)
+    field_counts = Counter(
+        field
+        for event in usable_events
+        for field in RECOMMENDED_WORKFLOW_FIELDS
+        if (event.get("data") or {}).get(field) not in (None, "", [])
+    )
+    observed_expected_terminals = [terminal for terminal in EXPECTED_PRO_TERMINALS if terminal_counts.get(terminal)]
+    missing_expected_terminals = [terminal for terminal in EXPECTED_PRO_TERMINALS if not terminal_counts.get(terminal)]
+    observed_expected_activities = [activity for activity in EXPECTED_TERMINAL_ACTIVITY_TYPES if activity_counts.get(activity)]
+    missing_expected_activities = [activity for activity in EXPECTED_TERMINAL_ACTIVITY_TYPES if not activity_counts.get(activity)]
+    observed_recommended_fields = [field for field in RECOMMENDED_WORKFLOW_FIELDS if field_counts.get(field)]
+    missing_recommended_fields = [field for field in RECOMMENDED_WORKFLOW_FIELDS if not field_counts.get(field)]
+    surface = workflow_surface_summary(events)
+    audit = source_audit(events, collection_audit=collection_audit)
+    expected_topics = list(TERMINAL_WORKFLOW_TOPIC_ORDER[:-1])
+    observed_topics = [topic for topic in expected_topics if surface["workflow_topic_counts"].get(topic)]
+    missing_topics = list(surface["missing_expected_workflow_topics"])
+    all_expected_terminals = bool(observed_expected_terminals) and not missing_expected_terminals
+    all_expected_activities = bool(observed_expected_activities) and not missing_expected_activities
+    all_recommended_fields = bool(observed_recommended_fields) and not missing_recommended_fields
+    all_expected_topics = bool(observed_topics) and not missing_topics
+    if not usable_events:
+        gap_reason = None
+        if events:
+            gap_reason = (events[0].get("data") or {}).get("gap")
+        proof_level = "no_authorized_terminal_input" if gap_reason == "pro_terminal_usage_authorized_input_missing" else "no_usable_terminal_workflow_records"
+    elif all_expected_terminals and all_expected_activities and all_recommended_fields and all_expected_topics:
+        proof_level = "strong_partial_workflow_boundary"
+    elif len(observed_expected_terminals) >= 2 and len(observed_expected_activities) >= 3 and surface["events_with_workflow_topics"] > 0:
+        proof_level = "medium_partial_workflow_boundary"
+    else:
+        proof_level = "weak_partial_workflow_boundary"
+    blockers = []
+    if not usable_events:
+        blockers.append("authorized_terminal_workflow_export_missing")
+    if missing_expected_terminals:
+        blockers.append("missing_expected_terminals:" + ",".join(missing_expected_terminals))
+    if missing_expected_activities:
+        blockers.append("missing_expected_activities:" + ",".join(missing_expected_activities))
+    if missing_recommended_fields:
+        blockers.append("missing_recommended_workflow_fields:" + ",".join(missing_recommended_fields))
+    if missing_topics:
+        blockers.append("missing_workflow_topics:" + ",".join(missing_topics))
+    if surface["events_with_workflow_topics"] == 0:
+        blockers.append("workflow_topic_classification_missing")
+    if not audit.get("path_results"):
+        blockers.append("path_level_source_audit_missing")
+    if audit.get("limit_reached"):
+        blockers.append("collection_limit_reached")
+    blockers.extend(
+        [
+            "real_wind_choice_ifind_bloomberg_validation_missing",
+            "license_safe_account_review_missing",
+            "complete_terminal_usage_history_not_proven",
+            "workflow_topic_false_positive_review_missing",
+        ]
+    )
+    return {
+        "proof_level": proof_level,
+        "authorized_input_observed": bool(usable_events),
+        "personal_workflow_only": True,
+        "workflow_metadata_only": True,
+        "can_enter_finclaw_lake": bool(usable_events),
+        "can_feed_investor_wiki_evidence": bool(usable_events),
+        "observed_event_count": len(usable_events),
+        "terminal_boundary": {
+            "observed_terminals": observed_expected_terminals,
+            "missing_expected_terminals": missing_expected_terminals,
+            "terminal_counts": dict(sorted(terminal_counts.items())),
+            "real_account_validation": False,
+        },
+        "activity_boundary": {
+            "observed_activities": observed_expected_activities,
+            "missing_expected_activities": missing_expected_activities,
+            "activity_counts": dict(sorted(activity_counts.items())),
+            "complete_activity_history_claimed": False,
+        },
+        "workflow_field_boundary": {
+            "observed_recommended_fields": observed_recommended_fields,
+            "missing_recommended_fields": missing_recommended_fields,
+        },
+        "workflow_topic_boundary": {
+            "expected_workflow_topics": expected_topics,
+            "observed_workflow_topics": observed_topics,
+            "missing_expected_workflow_topics": missing_topics,
+            "workflow_topic_counts": surface["workflow_topic_counts"],
+            "events_with_workflow_topics": surface["events_with_workflow_topics"],
+            "workflow_topic_false_positive_reviewed": False,
+        },
+        "workflow_surface_boundary": {
+            "events_with_workspace": surface["events_with_workspace"],
+            "events_with_project": surface["events_with_project"],
+            "events_with_module": surface["events_with_module"],
+            "events_with_function_code": surface["events_with_function_code"],
+            "events_with_menu_path": surface["events_with_menu_path"],
+            "events_with_query": surface["events_with_query"],
+            "events_with_symbols": surface["events_with_symbols"],
+            "events_with_datasets": surface["events_with_datasets"],
+            "events_with_fields": surface["events_with_fields"],
+            "events_with_content_preview": surface["events_with_content_preview"],
+        },
+        "source_boundary": {
+            "requested_input_count": int(audit.get("input_count") or 0),
+            "resolved_input_file_count": int(audit.get("resolved_input_file_count") or 0),
+            "input_missing_count": int(audit.get("input_missing_count") or 0),
+            "skipped_file_count": int(audit.get("skipped_file_count") or 0),
+            "archive_count": int(audit.get("archive_count") or 0),
+            "archive_member_count": int(audit.get("archive_member_count") or 0),
+            "archive_member_event_count": int(audit.get("archive_member_event_count") or 0),
+            "skipped_archive_member_count": int(audit.get("skipped_archive_member_count") or 0),
+            "limit_reached": bool(audit.get("limit_reached")),
+            "path_level_audit_available": bool(audit.get("path_results")),
+            "archive_path_traversal_members_collected": False,
+            "windows_drive_archive_members_collected": False,
+        },
+        "license_boundary": {
+            "license_boundary": "workflow_metadata_only",
+            "licensed_content_mirrored": False,
+            "vendor_database_mirror": False,
+            "public_market_data_mirror": False,
+            "content_preview_max_chars": CONTENT_PREVIEW_MAX_CHARS,
+            "credentials_collected": False,
+            "license_keys_collected": False,
+            "license_safe_account_reviewed": False,
+        },
+        "wiki_boundary": {
+            "event_schema": "collectorx.event.v1",
+            "evidence_schema": "finclaw.investor_wiki_evidence.v1",
+            "collector_writes_wiki_directly": False,
+            "required_flow": [
+                "pro-terminal-usage collector",
+                "collectorx.event.v1",
+                "finclaw.investor_wiki_evidence.v1",
+                "SoulMirror investor-portrait distill/organize",
+            ],
+        },
+        "false_claims": {
+            "complete_terminal_usage_history_claimed": False,
+            "real_account_validation_claimed": False,
+            "license_safe_account_review_claimed": False,
+            "vendor_database_mirrored": False,
+            "licensed_content_body_mirrored": False,
+            "public_market_data_mirrored": False,
+            "terminal_credentials_collected": False,
+            "license_keys_collected": False,
+            "order_mutation_supported": False,
+            "collector_writes_wiki_directly": False,
+        },
+        "completion_blockers": blockers,
+    }
+
+
 def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     usable_events = usable_terminal_events(events)
     archives = [
@@ -1114,7 +1275,12 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     return audit
 
 
-def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+def build_evidence(
+    events: List[Dict[str, Any]],
+    *,
+    generated_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     usable_events = 0
     for event in events:
@@ -1142,6 +1308,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "workflow_metadata_only": True,
             "vendor_database_mirror": False,
             "workflow_surface_summary": workflow_surface_summary(events),
+            "workflow_boundary_proof": workflow_boundary_proof(events, collection_audit=collection_audit),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

@@ -92,8 +92,18 @@ def test_collect_terminal_workflow_exports() -> None:
         assert manifest["workflow_surface_summary"]["events_with_workflow_topics"] == 5
         assert manifest["workflow_surface_summary"]["workflow_topic_counts"]["macro_policy"] == 1
         assert manifest["workflow_surface_summary"]["workflow_topic_counts"]["valuation_model"] >= 1
+        proof = manifest["workflow_boundary_proof"]
+        assert proof["proof_level"] == "medium_partial_workflow_boundary"
+        assert proof["can_enter_finclaw_lake"] is True
+        assert proof["workflow_metadata_only"] is True
+        assert proof["terminal_boundary"]["observed_terminals"] == ["wind", "choice", "ifind"]
+        assert proof["license_boundary"]["licensed_content_mirrored"] is False
+        assert proof["false_claims"]["vendor_database_mirrored"] is False
+        assert "missing_expected_terminals:bloomberg" in proof["completion_blockers"]
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["licensed_content_mirrored"] is False
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["can_feed_investor_wiki_evidence"] is True
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["source_boundary"]["path_level_audit_available"] is True
         assert evidence["coverage_summary"]["workflow_surface_summary"]["events_with_workflow_topics"] == 5
         assert evidence["generated_from"]["event_count"] == 5
         assert evidence["coverage_summary"]["dimension_count"] == 7
@@ -241,6 +251,25 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert manifest["workflow_surface_summary"]["events_with_datasets"] == 2
         assert manifest["workflow_surface_summary"]["events_with_fields"] == 2
         assert manifest["workflow_surface_summary"]["events_with_content_preview"] == 1
+        boundary_proof = manifest["workflow_boundary_proof"]
+        assert boundary_proof["proof_level"] == "strong_partial_workflow_boundary"
+        assert boundary_proof["authorized_input_observed"] is True
+        assert boundary_proof["terminal_boundary"]["observed_terminals"] == ["wind", "choice", "ifind", "bloomberg"]
+        assert boundary_proof["terminal_boundary"]["missing_expected_terminals"] == []
+        assert boundary_proof["activity_boundary"]["missing_expected_activities"] == []
+        assert boundary_proof["workflow_field_boundary"]["missing_recommended_fields"] == []
+        assert boundary_proof["workflow_topic_boundary"]["missing_expected_workflow_topics"] == []
+        assert boundary_proof["workflow_surface_boundary"]["events_with_content_preview"] == 1
+        assert boundary_proof["source_boundary"]["requested_input_count"] == 1
+        assert boundary_proof["source_boundary"]["resolved_input_file_count"] == 3
+        assert boundary_proof["source_boundary"]["archive_member_count"] == 4
+        assert boundary_proof["source_boundary"]["skipped_archive_member_count"] == 3
+        assert boundary_proof["license_boundary"]["content_preview_max_chars"] == 800
+        assert boundary_proof["license_boundary"]["license_keys_collected"] is False
+        assert boundary_proof["wiki_boundary"]["collector_writes_wiki_directly"] is False
+        assert boundary_proof["false_claims"]["complete_terminal_usage_history_claimed"] is False
+        assert boundary_proof["false_claims"]["licensed_content_body_mirrored"] is False
+        assert "complete_terminal_usage_history_not_proven" in boundary_proof["completion_blockers"]
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_member_count"] == 4
         assert manifest["source_audit"]["skipped_archive_member_count"] == 3
@@ -273,6 +302,8 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert evidence["coverage_summary"]["workflow_metadata_only"] is True
         assert evidence["coverage_summary"]["vendor_database_mirror"] is False
         assert evidence["coverage_summary"]["workflow_surface_summary"]["missing_expected_workflow_topics"] == []
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["proof_level"] == "strong_partial_workflow_boundary"
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["source_boundary"]["archive_member_count"] == 4
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
 
@@ -356,6 +387,10 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "needs_pro_terminal_usage_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["workflow_boundary_proof"]["proof_level"] == "no_authorized_terminal_input"
+        assert manifest["workflow_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["workflow_boundary_proof"]["source_boundary"]["input_missing_count"] == 1
+        assert manifest["workflow_boundary_proof"]["false_claims"]["license_keys_collected"] is False
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["input_missing_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 0

@@ -845,9 +845,15 @@ Current status:
 - Writes terminal, activity, and workflow-field coverage manifests so FinClaw
   can see missing platforms, activity types, or research-workflow metadata.
 - Writes `manifest.workflow_surface_summary`, `manifest.source_audit`,
-  `manifest.license_policy`, and `manifest.evidence_policy` so Lake can see
-  workflow metadata and topic availability, ZIP/section provenance, and
-  license-safe boundaries before using the evidence.
+  `manifest.workflow_boundary_proof`, `manifest.license_policy`, and
+  `manifest.evidence_policy` so Lake can see workflow metadata and topic
+  availability, ZIP/section provenance, and license-safe boundaries before
+  using the evidence.
+- `manifest.workflow_boundary_proof` gives FinClaw a single gate for authorized
+  input presence, terminal/activity/field/topic coverage, workflow surfaces,
+  source audit, license safety, Wiki flow, and explicit false claims such as no
+  complete terminal history, no vendor database mirror, no licensed content body
+  mirror, no credentials, no license keys, and no direct Wiki write.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.
