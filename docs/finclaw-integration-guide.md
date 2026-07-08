@@ -616,10 +616,12 @@ python3 skills/notes-collector/scripts/notes_api.py import \
 Current status:
 
 - Emits generic `notes` events and a standard package.
-- Supports authorized local import for Markdown, HTML, TXT, JSON/JSONL,
-  CSV/TSV table exports, Evernote ENEX, and ZIP packages containing those
-  formats. CSV/TSV rows are converted into note events so Notion databases,
-  rules tables, review tables, and research checklists can enter the notes lake.
+- Supports authorized local import for Markdown, Obsidian Canvas, HTML, TXT,
+  JSON/JSONL, CSV/TSV table exports, Evernote ENEX, and ZIP packages containing
+  those formats. CSV/TSV rows are converted into note events so Notion
+  databases, rules tables, review tables, and research checklists can enter the
+  notes lake; `.canvas` files preserve text nodes, linked files, linked URLs,
+  node counts, and edge counts.
 - Writes `manifest.platform_coverage` with expected P1 note platforms
   (`obsidian`, `notion`, `youdao`, `evernote`), observed platforms, missing
   platforms, event counts, and `real_account_validation`.
@@ -627,8 +629,8 @@ Current status:
   FinClaw can tell whether title/path/content preview/tags/time fields are
   present, whether per-input parse results and ZIP member provenance exist,
   which files or archive members were skipped and why, how many table files and
-  rows were imported, and whether the run used preview-only or full-content
-  authorization.
+  rows were imported, how many Canvas files/notes were imported, and whether
+  the run used preview-only or full-content authorization.
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.

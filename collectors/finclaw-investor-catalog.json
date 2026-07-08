@@ -252,7 +252,7 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-vault-or-notes-export-import",
       "cli": "python3 skills/notes-collector/scripts/notes_api.py import --input <authorized-notes-export> --source-app auto --out-dir <out-dir>",
-      "collects": "Obsidian, Notion, Youdao, Evernote/Yinxiang, Markdown, HTML, JSON, ENEX, and ZIP note previews with tags, paths, URLs, platform coverage, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
+      "collects": "Obsidian Markdown/Canvas, Notion, Youdao, Evernote/Yinxiang, Markdown, HTML, JSON, CSV/TSV, ENEX, and ZIP note previews with tags, paths, URLs, platform coverage, table/Canvas import audit, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
       "must_not_collect": "Note service tokens, direct investor conclusions, or full content unless explicitly authorized.",
       "production_gap": "Real Notion/Youdao/Evernote account validation and Windows/Linux vault path validation."
     },

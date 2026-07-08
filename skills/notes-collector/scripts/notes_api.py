@@ -9,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from notes.events import notes_to_events, write_jsonl, write_package
-from notes.parser import parse_notes_export_with_audit
+from notes.parser import parse_canvas_notes_text, parse_notes_export_with_audit
 
 # Windows控制台utf-8
 try:
@@ -34,25 +34,33 @@ def collect_obsidian(
         return
     
     notes = []
-    md_files = sorted(vault.rglob("*.md"))
-    total_md_files = len(md_files)
+    note_files = sorted(
+        child
+        for child in vault.rglob("*")
+        if child.is_file() and child.suffix.lower() in {".md", ".canvas"}
+    )
+    total_note_files = len(note_files)
     
     if limit:
-        md_files = md_files[:limit]
+        note_files = note_files[:limit]
+    extension_counts = Counter(child.suffix.lower() or "<none>" for child in note_files)
     audit = {
         "source_type": "obsidian_vault",
         "input": str(vault),
         "input_exists": True,
         "input_kind": "directory",
         "input_count": 1,
-        "resolved_input_file_count": len(md_files),
+        "resolved_input_file_count": len(note_files),
         "source_app": "obsidian",
         "limit": limit,
-        "limit_reached": bool(limit and total_md_files > len(md_files)),
-        "extension_counts": {".md": len(md_files)} if md_files else {},
+        "limit_reached": bool(limit and total_note_files > len(note_files)),
+        "extension_counts": dict(sorted(extension_counts.items())),
         "skipped_extension_counts": {},
         "skipped_reason_counts": {},
         "skipped_file_count": 0,
+        "canvas_import_supported": True,
+        "canvas_file_count": extension_counts.get(".canvas", 0),
+        "canvas_note_count": 0,
         "archive_count": 0,
         "archive_member_count": 0,
         "archive_member_event_count": 0,
@@ -62,24 +70,37 @@ def collect_obsidian(
         "windows_drive_archive_members_collected": False,
         "parsed_note_count": 0,
         "path_results": [],
-        "unvisited_input_file_count_due_limit": max(0, total_md_files - len(md_files)),
+        "unvisited_input_file_count_due_limit": max(0, total_note_files - len(note_files)),
     }
     skipped_reason_counts: Counter[str] = Counter()
     
-    for md_file in md_files:
-        result = {"path": str(md_file), "extension": ".md", "status": "pending"}
+    for note_file in note_files:
+        suffix = note_file.suffix.lower() or "<none>"
+        result = {"path": str(note_file), "extension": suffix, "status": "pending"}
         try:
-            content = md_file.read_text(encoding="utf-8")
-            note = {
-                "path": str(md_file.relative_to(vault)),
-                "name": md_file.stem,
-                "content": content,
-                "mtime": md_file.stat().st_mtime
-            }
-            notes.append(note)
-            result.update({"status": "parsed", "parsed_note_count": 1})
+            content = note_file.read_text(encoding="utf-8")
+            if suffix == ".canvas":
+                parsed = parse_canvas_notes_text(
+                    content,
+                    default_title=note_file.stem,
+                    path_label=str(note_file.relative_to(vault)),
+                    mtime=note_file.stat().st_mtime,
+                )
+                audit["canvas_note_count"] += len(parsed)
+            else:
+                parsed = [
+                    {
+                        "path": str(note_file.relative_to(vault)),
+                        "name": note_file.stem,
+                        "content": content,
+                        "mtime": note_file.stat().st_mtime,
+                        "note_format": "markdown",
+                    }
+                ]
+            notes.extend(parsed)
+            result.update({"status": "parsed", "parsed_note_count": len(parsed)})
         except Exception as e:
-            print(f"读取失败 {md_file}: {e}")
+            print(f"读取失败 {note_file}: {e}")
             audit["skipped_file_count"] += 1
             skipped_reason_counts["read_error"] += 1
             result.update({"status": "read_error", "reason": "read_error", "parsed_note_count": 0})

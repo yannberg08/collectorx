@@ -21,6 +21,19 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         vault = root / "vault"
         vault.mkdir()
         (vault / "investment.md").write_text("#复盘\n贵州茅台 估值和买入纪律\n", encoding="utf-8")
+        (vault / "research.canvas").write_text(
+            json.dumps(
+                {
+                    "nodes": [
+                        {"id": "n1", "type": "text", "text": "#估值\n研究贵州茅台现金流和安全边际"},
+                        {"id": "n2", "type": "file", "file": "reports/maotai.md"},
+                    ],
+                    "edges": [{"id": "e1", "fromNode": "n1", "toNode": "n2"}],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
         export = root / "notes.json"
         out = root / "out"
         subprocess.run(
@@ -40,31 +53,44 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert len(events) == 1
-        event = events[0]
+        assert len(events) == 2
+        event = next(item for item in events if item["data"]["title"] == "investment")
         assert event["schema"] == "collectorx.event.v1"
         assert event["collector"] == "notes"
         assert event["kind"] == "note"
         assert event["data"]["source_app"] == "obsidian"
+        assert event["data"]["note_format"] == "markdown"
         assert event["data"]["content_preview"].startswith("#复盘")
         assert event["data"]["content_length"] == len("#复盘\n贵州茅台 估值和买入纪律\n")
         assert event["data"]["content_included"] is False
         assert len(event["data"]["content_digest"]) == 64
         assert "content" not in event["data"]
         assert event["wiki_targets"] == ["internal.knowledge.notes"]
+        canvas_event = next(item for item in events if item["data"]["title"] == "research")
+        assert canvas_event["data"]["note_format"] == "obsidian_canvas"
+        assert canvas_event["data"]["canvas_node_count"] == 2
+        assert canvas_event["data"]["canvas_edge_count"] == 1
+        assert canvas_event["data"]["linked_files"] == ["reports/maotai.md"]
+        assert canvas_event["data"]["tags"] == ["估值"]
+        assert "安全边际" in canvas_event["data"]["content_preview"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_investment_notes"] is False
         assert manifest["content_policy"]["full_content_event_count"] == 0
-        assert manifest["content_policy"]["preview_only_event_count"] == 1
+        assert manifest["content_policy"]["preview_only_event_count"] == 2
         assert manifest["evidence_policy"]["required_lens"] == "investment-notes"
-        assert manifest["field_coverage"]["field_counts"]["content_length"] == 1
+        assert manifest["field_coverage"]["field_counts"]["content_length"] == 2
+        assert manifest["field_coverage"]["field_counts"]["note_format"] == 2
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian"]
         assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"notion", "youdao", "evernote"}
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
         assert manifest["source_audit"]["source_type"] == "obsidian_vault"
-        assert manifest["source_audit"]["resolved_input_file_count"] == 1
-        assert manifest["source_audit"]["parsed_note_count"] == 1
-        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 2
+        assert manifest["source_audit"]["extension_counts"] == {".canvas": 1, ".md": 1}
+        assert manifest["source_audit"]["canvas_import_supported"] is True
+        assert manifest["source_audit"]["canvas_file_count"] == 1
+        assert manifest["source_audit"]["canvas_note_count"] == 1
+        assert manifest["source_audit"]["parsed_note_count"] == 2
+        assert manifest["source_audit"]["emitted_event_count"] == 2
         assert manifest["source_audit"]["path_results"][0]["status"] == "parsed"
 
 
@@ -103,6 +129,10 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
             encoding="utf-8",
         )
         (exports / "rules.md").write_text("# 交易规则\n控制仓位和回撤\n", encoding="utf-8")
+        (exports / "obsidian.canvas").write_text(
+            json.dumps({"nodes": [{"id": "n1", "type": "text", "text": "#规则\n仓位上限和回撤控制"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
         (exports / "ignore.bin").write_bytes(b"not a note")
         export = root / "notes.json"
         out = root / "out"
@@ -125,26 +155,30 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert len(events) == 3
-        assert {event["data"]["source_app"] for event in events} == {"youdao", "evernote", "markdown"}
-        assert {event["data"]["title"] for event in events} == {"半导体复盘", "白酒跟踪", "交易规则"}
+        assert len(events) == 4
+        assert {event["data"]["source_app"] for event in events} == {"youdao", "evernote", "markdown", "obsidian"}
+        assert {event["data"]["title"] for event in events} == {"半导体复盘", "白酒跟踪", "交易规则", "obsidian"}
         assert all("content" not in event["data"] for event in events)
         assert any("现金流和估值复盘" in event["data"]["content_preview"] for event in events)
+        assert any(event["data"].get("note_format") == "obsidian_canvas" for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["platform_coverage"]["source_app_counts"] == {
             "evernote": 1,
             "markdown": 1,
+            "obsidian": 1,
             "youdao": 1,
         }
-        assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"obsidian", "notion"}
+        assert set(manifest["platform_coverage"]["missing_expected_platforms"]) == {"notion"}
         assert manifest["source_audit"]["source_type"] == "authorized_notes_export"
-        assert manifest["source_audit"]["resolved_input_file_count"] == 3
-        assert manifest["source_audit"]["parsed_note_count"] == 3
-        assert manifest["source_audit"]["emitted_event_count"] == 3
+        assert manifest["source_audit"]["resolved_input_file_count"] == 4
+        assert manifest["source_audit"]["canvas_file_count"] == 1
+        assert manifest["source_audit"]["canvas_note_count"] == 1
+        assert manifest["source_audit"]["parsed_note_count"] == 4
+        assert manifest["source_audit"]["emitted_event_count"] == 4
         assert manifest["source_audit"]["skipped_file_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
         assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
-        assert len(manifest["source_audit"]["path_results"]) == 4
+        assert len(manifest["source_audit"]["path_results"]) == 5
 
 
 def test_import_notion_csv_database_and_tsv_zip_tables() -> None:

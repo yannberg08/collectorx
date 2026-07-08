@@ -16,6 +16,7 @@ EXPECTED_P1_NOTE_PLATFORMS = ("obsidian", "notion", "youdao", "evernote")
 GENERIC_NOTE_SOURCES = {"markdown", "notes-export"}
 RECOMMENDED_NOTE_FIELDS = (
     "source_app",
+    "note_format",
     "title",
     "path",
     "content_preview",
@@ -68,6 +69,7 @@ def note_to_event(
     event_time = normalize_time(first(note, ["updated", "last_edited", "last_edited_time", "mtime", "created", "created_time"]))
     data = {
         "source_app": actual_source_app,
+        "note_format": first(note, ["note_format", "format"]),
         "title": title,
         "path": path,
         "url": url,
@@ -77,6 +79,9 @@ def note_to_event(
         "content_digest": content_digest(content),
         "content_included": include_content,
         "tags": tags_for(note, content),
+        "canvas_node_count": int_value(first(note, ["canvas_node_count"])),
+        "canvas_edge_count": int_value(first(note, ["canvas_edge_count"])),
+        "linked_files": list_value(note.get("linked_files")),
     }
     if include_content:
         data["content"] = content
@@ -312,6 +317,23 @@ def tags_for(note: Dict[str, Any], content: str) -> List[str]:
         if token.startswith("#") and len(token) > 1:
             tags.append(token.strip("#,，.;；:："))
     return sorted(set(tags))
+
+
+def int_value(value: Optional[str]) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(str(value)))
+    except ValueError:
+        return None
+
+
+def list_value(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    if value in (None, ""):
+        return []
+    return [str(value)]
 
 
 def normalize_time(value: Optional[str]) -> Optional[str]:

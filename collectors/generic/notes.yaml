@@ -21,6 +21,7 @@ scope:
     - content_policy_manifest
     - source_audit_manifest
     - table_import_audit
+    - canvas_import_audit
     - archive_member_provenance
     - path_level_collection_audit
     - skipped_file_reason_counts
@@ -33,6 +34,6 @@ scope:
     - windows_drive_path_archive_members
 
 # 采集逻辑由 skill 定义。
-# skill 会处理：Notion API、Obsidian 本地 vault、有道云/印象笔记/Markdown/HTML/JSON/CSV/TSV/ZIP 授权导出。
+# skill 会处理：Notion API、Obsidian 本地 Markdown/Canvas vault、有道云/印象笔记/Markdown/HTML/JSON/CSV/TSV/ZIP 授权导出。
 # generic notes 只进入 lake/notes/events.jsonl；manifest 记录字段覆盖、内容策略、
-# 表格导入审计、逐输入来源审计、ZIP 跳过原因和路径安全边界；投资笔记由 investment-notes lens 筛选。
+# 表格/Canvas 导入审计、逐输入来源审计、ZIP 跳过原因和路径安全边界；投资笔记由 investment-notes lens 筛选。

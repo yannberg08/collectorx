@@ -10,7 +10,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 from typing import List, Dict, Any, Iterable, Optional, Tuple
 
 
-SUPPORTED_NOTE_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".enex"}
+SUPPORTED_NOTE_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".enex", ".canvas"}
 SUPPORTED_EXPORT_EXTENSIONS = SUPPORTED_NOTE_EXTENSIONS | {".zip"}
 TABLE_TITLE_FIELDS = ("title", "name", "标题", "名称", "Name")
 TABLE_CONTENT_FIELDS = ("content", "text", "body", "正文", "内容", "备注", "notes", "note", "description", "Description", "记录", "复盘", "规则")
@@ -76,6 +76,9 @@ def parse_notes_export_with_audit(
         "table_file_count": 0,
         "table_row_count": 0,
         "table_note_count": 0,
+        "canvas_import_supported": True,
+        "canvas_file_count": 0,
+        "canvas_note_count": 0,
         "source_app": source_app,
         "limit": limit,
         "limit_reached": False,
@@ -141,6 +144,11 @@ def parse_notes_export_with_audit(
             elif suffix == ".enex":
                 parsed = parse_enex_notes(file_path)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "enex", "parsed_note_count": len(parsed)})
+            elif suffix == ".canvas":
+                parsed = parse_canvas_notes(file_path)
+                audit["canvas_file_count"] += 1
+                audit["canvas_note_count"] += len(parsed)
+                result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "canvas", "parsed_note_count": len(parsed), "canvas_note_count": len(parsed)})
             elif suffix in {".csv", ".tsv"}:
                 parsed = parse_table_notes(file_path)
                 audit["table_file_count"] += 1
@@ -296,6 +304,75 @@ def parse_enex_notes_text(text: str, *, path_label: str) -> List[Dict[str, Any]]
     return notes
 
 
+def parse_canvas_notes(path: Path) -> List[Dict[str, Any]]:
+    return parse_canvas_notes_text(
+        path.read_text(encoding="utf-8-sig", errors="replace"),
+        default_title=path.stem,
+        path_label=str(path),
+        mtime=path.stat().st_mtime,
+    )
+
+
+def parse_canvas_notes_text(
+    text: str,
+    *,
+    default_title: str,
+    path_label: str,
+    mtime: Optional[float] = None,
+) -> List[Dict[str, Any]]:
+    if not text.strip():
+        return []
+    loaded = json.loads(text)
+    if not isinstance(loaded, dict):
+        return []
+    nodes = loaded.get("nodes") if isinstance(loaded.get("nodes"), list) else []
+    edges = loaded.get("edges") if isinstance(loaded.get("edges"), list) else []
+    text_nodes: List[str] = []
+    linked_files: List[str] = []
+    linked_urls: List[str] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_type = str(node.get("type") or "")
+        if node_type == "text" and node.get("text") not in (None, ""):
+            text_nodes.append(str(node.get("text")))
+        if node_type == "file" and node.get("file") not in (None, ""):
+            linked_files.append(str(node.get("file")))
+        if node_type in {"link", "url"} and node.get("url") not in (None, ""):
+            linked_urls.append(str(node.get("url")))
+    summary_parts = []
+    if text_nodes:
+        summary_parts.append("\n\n".join(text_nodes))
+    if linked_files:
+        summary_parts.append("Linked files:\n" + "\n".join(sorted(set(linked_files))))
+    if linked_urls:
+        summary_parts.append("Linked URLs:\n" + "\n".join(sorted(set(linked_urls))))
+    if not summary_parts:
+        summary_parts.append(f"Obsidian canvas with {len(nodes)} nodes and {len(edges)} edges.")
+    note = {
+        "source_app": "obsidian",
+        "note_format": "obsidian_canvas",
+        "title": default_title,
+        "content": "\n\n".join(summary_parts),
+        "path": path_label,
+        "mtime": mtime,
+        "canvas_node_count": len(nodes),
+        "canvas_edge_count": len(edges),
+        "linked_files": sorted(set(linked_files)),
+        "url": linked_urls[0] if linked_urls else None,
+        "tags": tags_from_canvas(text_nodes),
+    }
+    return [{key: value for key, value in note.items() if value not in (None, "", [], {})}]
+
+
+def tags_from_canvas(text_nodes: List[str]) -> List[str]:
+    tags: List[str] = []
+    for text in text_nodes:
+        for match in re.finditer(r"(?<!\w)#([\w\u4e00-\u9fff-]{1,40})", text):
+            tags.append(match.group(1))
+    return sorted(set(tags))
+
+
 def parse_table_notes(path: Path) -> List[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8-sig", errors="replace")
     return parse_table_notes_text(text, suffix=path.suffix.lower(), default_title=path.stem, path_label=str(path))
@@ -398,6 +475,8 @@ def parse_zip_notes_with_audit(
         "table_member_count": 0,
         "table_row_count": 0,
         "table_note_count": 0,
+        "canvas_file_count": 0,
+        "canvas_note_count": 0,
         "limit_reached": False,
         "member_results": [],
     }
@@ -425,6 +504,14 @@ def parse_zip_notes_with_audit(
                     )
                 elif suffix == ".enex":
                     parsed = parse_enex_notes_text(text, path_label=path_label)
+                elif suffix == ".canvas":
+                    parsed = parse_canvas_notes_text(
+                        text,
+                        default_title=Path(member_name).stem,
+                        path_label=path_label,
+                    )
+                    audit["canvas_file_count"] += 1
+                    audit["canvas_note_count"] += len(parsed)
                 elif suffix in {".csv", ".tsv"}:
                     parsed = parse_table_notes_text(
                         text,
@@ -506,6 +593,8 @@ def merge_archive_audit(audit: Dict[str, Any], archive_audit: Dict[str, Any], sk
     audit["table_file_count"] += int(archive_audit.get("table_member_count") or 0)
     audit["table_row_count"] += int(archive_audit.get("table_row_count") or 0)
     audit["table_note_count"] += int(archive_audit.get("table_note_count") or 0)
+    audit["canvas_file_count"] += int(archive_audit.get("canvas_file_count") or 0)
+    audit["canvas_note_count"] += int(archive_audit.get("canvas_note_count") or 0)
     for reason, count in (archive_audit.get("skipped_archive_member_reason_counts") or {}).items():
         skipped_reason_counts[str(reason)] += int(count)
 
