@@ -111,6 +111,14 @@ same item shape as `doctor` but groups entries into product execution stages:
 - `soulmirror_runner`: collectors that must be delegated to the SoulMirror
   runner.
 
+By default, `runbook` auto-fills deterministic lens inputs named
+`<upstream-id-events-jsonl>` when the upstream collector is also selected,
+ready to run, and has a known output package directory. For example, a P0
+runbook with `--out-dir-root /path/to/run` will point `email-research` at
+`/path/to/run/email/lake/email/events.jsonl` after `email` is collected. Use
+`--no-auto-link-upstream` when the product needs to force explicit upstream Lake
+selection.
+
 Product runners should use `--require-ready` before ordinary shell execution.
 If the helper exits with status `2`, FinClaw should parse the same JSON
 response and follow `next_action` instead of running the command:

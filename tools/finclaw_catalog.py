@@ -413,6 +413,7 @@ def build_runbook(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema": "collectorx.finclaw_runbook.v1",
         "doctor_schema": report["schema"],
+        "auto_upstream_links": report.get("auto_upstream_links", []),
         "total": report["total"],
         "ready_to_run": report["ready_to_run"],
         "not_ready": report["not_ready"],
@@ -422,6 +423,44 @@ def build_runbook(report: dict[str, Any]) -> dict[str, Any]:
         },
         "stages": stages,
     }
+
+
+def build_upstream_lake_path(upstream_item: dict[str, Any]) -> str | None:
+    package_validation = upstream_item.get("package_validation") or {}
+    package_dir = package_validation.get("package_dir")
+    if not package_validation.get("ready") or not package_dir:
+        return None
+    return str(Path(package_dir) / "lake" / upstream_item["id"] / "events.jsonl")
+
+
+def auto_upstream_replacements(report: dict[str, Any]) -> tuple[dict[str, str], list[dict[str, str]]]:
+    by_id = {item["id"]: item for item in report["items"]}
+    replacements: dict[str, str] = {}
+    links: list[dict[str, str]] = []
+    for item in report["items"]:
+        if item["next_action"] != "wait_for_upstream_lake":
+            continue
+        missing = set(item.get("missing_placeholders") or [])
+        for upstream_id in item.get("requires_upstream") or []:
+            upstream = by_id.get(upstream_id)
+            if not upstream or not upstream.get("ready_to_run"):
+                continue
+            placeholder = f"{upstream_id}-events-jsonl"
+            if placeholder not in missing:
+                continue
+            events_jsonl = build_upstream_lake_path(upstream)
+            if not events_jsonl:
+                continue
+            replacements[placeholder] = events_jsonl
+            links.append(
+                {
+                    "lens_id": item["id"],
+                    "upstream_id": upstream_id,
+                    "placeholder": placeholder,
+                    "events_jsonl": events_jsonl,
+                }
+            )
+    return replacements, links
 
 
 def print_human_runbook(runbook: dict[str, Any]) -> None:
@@ -436,6 +475,14 @@ def cmd_runbook(args: argparse.Namespace) -> int:
     entries = filtered_entries(args)
     replacements = parse_set_values(args.set_values or [])
     report = build_doctor_report(entries, replacements=replacements, out_dir_root=args.out_dir_root)
+    if args.auto_link_upstream:
+        auto_replacements, links = auto_upstream_replacements(report)
+        if auto_replacements:
+            merged_replacements = {**auto_replacements, **replacements}
+            report = build_doctor_report(entries, replacements=merged_replacements, out_dir_root=args.out_dir_root)
+        report["auto_upstream_links"] = links
+    else:
+        report["auto_upstream_links"] = []
     runbook = build_runbook(report)
     if args.json:
         print(json.dumps(runbook, ensure_ascii=False, indent=2, sort_keys=True))
@@ -520,6 +567,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="PLACEHOLDER=VALUE",
         help="Replace an arbitrary command placeholder across all plans.",
+    )
+    runbook_parser.add_argument(
+        "--no-auto-link-upstream",
+        dest="auto_link_upstream",
+        action="store_false",
+        default=True,
+        help="Do not auto-fill <upstream-id-events-jsonl> placeholders from ready upstream package paths.",
     )
     runbook_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     runbook_parser.add_argument(

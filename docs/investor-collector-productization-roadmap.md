@@ -2473,13 +2473,35 @@ Findings:
   `needs_user_input`, and `soulmirror_runner`.
 - P0 default runbook currently places `eastmoney-portfolio`, `ths-portfolio`,
   `wechat`, and `email` in `ready_collectors`.
-- P0 default runbook places `wechat-investment-dialogue`,
+- P0 runbook without upstream auto-linking places `wechat-investment-dialogue`,
   `research-documents`, and `email-research` in `needs_upstream_lake`.
-- When the `email-events-jsonl` placeholder is supplied, `email-research`
-  moves into `ready_lenses`.
+- With upstream auto-linking enabled, deterministic upstream placeholders move
+  `wechat-investment-dialogue` and `email-research` into `ready_lenses`.
 - Added runbook tests for P0 stage grouping, ready-lens promotion, and
   `--require-all-ready` failure behavior.
 - This improves FinClaw batch orchestration. It does not claim new real-account
+  validation for any collector.
+
+### Wave AM - FinClaw Runbook Upstream Auto-Linking
+
+Validation record:
+
+- `docs/validations/finclaw-runbook-upstream-auto-link-validation-2026-07-08.md`
+
+Findings:
+
+- `runbook` now auto-fills deterministic `<upstream-id-events-jsonl>`
+  placeholders from ready upstream package paths.
+- P0 default runbook now promotes `wechat-investment-dialogue` and
+  `email-research` into `ready_lenses` because `wechat` and `email` are ready
+  source collectors with known package output directories.
+- Ambiguous lens inputs such as `research-documents` remain in
+  `needs_upstream_lake`.
+- Added `--no-auto-link-upstream` to preserve explicit upstream Lake selection.
+- Added tests for auto-link generation, explicit input override, and disabled
+  auto-link behavior.
+- This reduces product orchestration work while preserving user control for
+  ambiguous or multi-source lens inputs. It does not claim new real-account
   validation for any collector.
 
 ## P0 Work Queue

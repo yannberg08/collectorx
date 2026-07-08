@@ -32,6 +32,9 @@ FinClaw now has a catalog helper readiness doctor and runbook for product-side d
 - `runbook --out-dir-root ... --json` groups the same catalog items into
   executable product stages: ready collectors, ready lenses, upstream-Lake
   waits, user-input waits, and SoulMirror-runner handoff.
+- Runbook auto-links deterministic `<upstream-id-events-jsonl>` lens inputs from
+  ready upstream package paths, while ambiguous inputs still remain explicit
+  user/product choices.
 - `plan --require-ready` exits with status `2` when a command is not ready for
   ordinary execution, while still returning JSON the product can inspect.
 - Plan and doctor JSON now report `next_action` and `blocked_reason`, so FinClaw
@@ -42,8 +45,8 @@ FinClaw now has a catalog helper readiness doctor and runbook for product-side d
   as a normal shell command.
 - `tools/test_finclaw_catalog.py` and project validation now cover catalog
   listing, lens upstream contracts, command placeholder replacement, safe argv
-  rendering, package-validation argv rendering, and ready-to-run
-  gate/doctor/runbook handling.
+  rendering, package-validation argv rendering, upstream auto-linking, and
+  ready-to-run gate/doctor/runbook handling.
 - This improves FinClaw product-call ergonomics, but it does not claim new
   real-account validation for any collector.
 

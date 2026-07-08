@@ -25,6 +25,8 @@ plan instead of inferring ordering from scattered collector plans.
   accounts, or placeholder values.
 - `soulmirror_runner` contains collectors that must be delegated to
   SoulMirror-managed execution.
+- By default, deterministic `<upstream-id-events-jsonl>` placeholders are
+  auto-linked from ready upstream package paths.
 
 ## Verification Commands
 
@@ -46,10 +48,11 @@ git diff --check
 ## Result
 
 - FinClaw catalog tests passed.
-- P0 default runbook grouped four entries into `ready_collectors`, three into
-  `needs_upstream_lake`, and five into `needs_user_input`.
-- Supplying `email-events-jsonl` promoted `email-research` into
-  `ready_lenses`.
+- P0 default runbook grouped four entries into `ready_collectors`, two into
+  `ready_lenses`, one into `needs_upstream_lake`, and five into
+  `needs_user_input`.
+- Supplying `email-events-jsonl` explicitly kept `email-research` in
+  `ready_lenses` using the user-provided Lake path.
 - Project validation passed.
 - Diff whitespace check passed.
 

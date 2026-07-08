@@ -78,6 +78,8 @@ Operational docs:
   for setup screens, `runbook` for batch execution order, and
   `plan --require-ready` before executing a single collector, then execute the
   returned `argv` list rather than reparsing the display command string.
+  Runbook auto-links deterministic `<upstream-id-events-jsonl>` lens inputs
+  from ready upstream package paths.
   After a collector exits, runners should execute the returned
   `package_validation.argv` before ingesting the package into Lake.
 - `tools/validate_investor_wiki_evidence.py` validates

@@ -240,16 +240,28 @@ def stage_ids(runbook: dict[str, object], name: str) -> set[str]:
 def test_runbook_groups_p0_entries_by_product_stage() -> None:
     runbook = run_json("runbook", "--priority", "P0", "--out-dir-root", "/tmp/collectorx-out", "--json")
     assert runbook["schema"] == "collectorx.finclaw_runbook.v1"
-    assert runbook["summary"]["by_stage"]["ready_collectors"] > 0
-    assert runbook["summary"]["by_stage"]["needs_user_input"] > 0
-    assert runbook["summary"]["by_stage"]["needs_upstream_lake"] > 0
+    assert runbook["summary"]["by_stage"]["ready_collectors"] == 4
+    assert runbook["summary"]["by_stage"]["ready_lenses"] == 2
+    assert runbook["summary"]["by_stage"]["needs_user_input"] == 5
+    assert runbook["summary"]["by_stage"]["needs_upstream_lake"] == 1
     assert "eastmoney-portfolio" in stage_ids(runbook, "ready_collectors")
     assert "email" in stage_ids(runbook, "ready_collectors")
+    assert "wechat-investment-dialogue" in stage_ids(runbook, "ready_lenses")
+    assert "email-research" in stage_ids(runbook, "ready_lenses")
     assert "ths-watchlist" in stage_ids(runbook, "needs_user_input")
-    assert "email-research" in stage_ids(runbook, "needs_upstream_lake")
+    assert "research-documents" in stage_ids(runbook, "needs_upstream_lake")
+    links = {(link["lens_id"], link["upstream_id"], link["placeholder"], link["events_jsonl"]) for link in runbook["auto_upstream_links"]}
+    assert (
+        "email-research",
+        "email",
+        "email-events-jsonl",
+        "/tmp/collectorx-out/email/lake/email/events.jsonl",
+    ) in links
+    email_lens = next(item for item in stage_by_name(runbook, "ready_lenses")["items"] if item["id"] == "email-research")
+    assert "/tmp/collectorx-out/email/lake/email/events.jsonl" in email_lens["argv"]
 
 
-def test_runbook_places_ready_lens_after_upstream_input_is_supplied() -> None:
+def test_runbook_respects_explicit_lens_input_over_auto_link() -> None:
     runbook = run_json(
         "runbook",
         "--priority",
@@ -264,6 +276,22 @@ def test_runbook_places_ready_lens_after_upstream_input_is_supplied() -> None:
     ready_lens = next(item for item in stage_by_name(runbook, "ready_lenses")["items"] if item["id"] == "email-research")
     assert ready_lens["ready_to_run"] is True
     assert ready_lens["package_validation"]["require_evidence"] is True
+    assert "/tmp/lake/email/events.jsonl" in ready_lens["argv"]
+
+
+def test_runbook_can_disable_auto_upstream_linking() -> None:
+    runbook = run_json(
+        "runbook",
+        "--priority",
+        "P0",
+        "--out-dir-root",
+        "/tmp/collectorx-out",
+        "--no-auto-link-upstream",
+        "--json",
+    )
+    assert runbook["auto_upstream_links"] == []
+    assert "email-research" in stage_ids(runbook, "needs_upstream_lake")
+    assert runbook["summary"]["by_stage"]["ready_lenses"] == 0
 
 
 def test_runbook_require_all_ready_fails_when_any_entry_is_blocked() -> None:
@@ -288,7 +316,8 @@ def main() -> int:
     test_doctor_filters_priority()
     test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
     test_runbook_groups_p0_entries_by_product_stage()
-    test_runbook_places_ready_lens_after_upstream_input_is_supplied()
+    test_runbook_respects_explicit_lens_input_over_auto_link()
+    test_runbook_can_disable_auto_upstream_linking()
     test_runbook_require_all_ready_fails_when_any_entry_is_blocked()
     print("finclaw catalog tests passed.")
     return 0
