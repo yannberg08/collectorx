@@ -13,7 +13,7 @@ from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 try:
     import openpyxl
@@ -182,8 +182,45 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    allow_brokers: Optional[Iterable[str]] = None,
+    deny_brokers: Optional[Iterable[str]] = None,
+    allow_accounts: Optional[Iterable[str]] = None,
+    deny_accounts: Optional[Iterable[str]] = None,
+    allow_subtypes: Optional[Iterable[str]] = None,
+    deny_subtypes: Optional[Iterable[str]] = None,
+    allow_symbols: Optional[Iterable[str]] = None,
+    deny_symbols: Optional[Iterable[str]] = None,
+    allow_markets: Optional[Iterable[str]] = None,
+    deny_markets: Optional[Iterable[str]] = None,
+    allow_currencies: Optional[Iterable[str]] = None,
+    deny_currencies: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        allow_brokers=allow_brokers,
+        deny_brokers=deny_brokers,
+        allow_accounts=allow_accounts,
+        deny_accounts=deny_accounts,
+        allow_subtypes=allow_subtypes,
+        deny_subtypes=deny_subtypes,
+        allow_symbols=allow_symbols,
+        deny_symbols=deny_symbols,
+        allow_markets=allow_markets,
+        deny_markets=deny_markets,
+        allow_currencies=allow_currencies,
+        deny_currencies=deny_currencies,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -192,6 +229,20 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_brokers: Optional[Iterable[str]] = None,
+    deny_brokers: Optional[Iterable[str]] = None,
+    allow_accounts: Optional[Iterable[str]] = None,
+    deny_accounts: Optional[Iterable[str]] = None,
+    allow_subtypes: Optional[Iterable[str]] = None,
+    deny_subtypes: Optional[Iterable[str]] = None,
+    allow_symbols: Optional[Iterable[str]] = None,
+    deny_symbols: Optional[Iterable[str]] = None,
+    allow_markets: Optional[Iterable[str]] = None,
+    deny_markets: Optional[Iterable[str]] = None,
+    allow_currencies: Optional[Iterable[str]] = None,
+    deny_currencies: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     events: List[Dict[str, Any]] = []
@@ -199,6 +250,25 @@ def collect_from_inputs_with_audit(
     skipped_extension_counts: Counter[str] = Counter()
     skipped_reason_counts: Counter[str] = Counter()
     skipped_archive_member_reason_counts: Counter[str] = Counter()
+    scope_policy_filter_reason_counts: Counter[str] = Counter()
+    candidate_record_count = 0
+    scope_policy_filtered_record_count = 0
+    policy = build_brokerage_scope_policy(
+        allow_brokers=allow_brokers,
+        deny_brokers=deny_brokers,
+        allow_accounts=allow_accounts,
+        deny_accounts=deny_accounts,
+        allow_subtypes=allow_subtypes,
+        deny_subtypes=deny_subtypes,
+        allow_symbols=allow_symbols,
+        deny_symbols=deny_symbols,
+        allow_markets=allow_markets,
+        deny_markets=deny_markets,
+        allow_currencies=allow_currencies,
+        deny_currencies=deny_currencies,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     audit: Dict[str, Any] = {
         "source_type": "authorized_hk_us_brokerage_export",
         "input_count": len(input_list),
@@ -219,6 +289,11 @@ def collect_from_inputs_with_audit(
         "skipped_archive_member_reason_counts": {},
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
+        "candidate_record_count": 0,
+        "scope_policy_filtered_record_count": 0,
+        "scope_policy_filter_reason_counts": {},
+        "brokerage_scope_policy": policy,
+        "brokerage_scope_policy_filtered_all": False,
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "path_results": [],
@@ -259,7 +334,8 @@ def collect_from_inputs_with_audit(
             result = path_result(path, status="pending")
             try:
                 if path.suffix.lower() == ".zip":
-                    parsed, archive_audit = parse_zip_with_audit(path, limit=remaining_limit(limit, events))
+                    zip_limit = None if policy["enabled"] else remaining_limit(limit, events)
+                    parsed, archive_audit = parse_zip_with_audit(path, limit=zip_limit)
                     merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
                     result.update(
                         {
@@ -287,31 +363,232 @@ def collect_from_inputs_with_audit(
                 result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0})
             audit["path_results"].append(result)
             row = 0
+            path_candidate_count = 0
+            path_filtered_count = 0
+            path_emitted_count = 0
             for record in parsed:
                 if not isinstance(record, dict):
                     continue
                 row += 1
-                events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+                candidate_record_count += 1
+                path_candidate_count += 1
+                event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+                filter_reason = brokerage_scope_policy_filter_reason(event, policy)
+                if filter_reason:
+                    scope_policy_filtered_record_count += 1
+                    path_filtered_count += 1
+                    scope_policy_filter_reason_counts[filter_reason] += 1
+                    continue
+                events.append(event)
+                path_emitted_count += 1
                 if limit is not None and len(events) >= limit:
                     audit["limit_reached"] = True
                     break
+            if path_candidate_count:
+                result["candidate_record_count"] = path_candidate_count
+                result["scope_policy_filtered_record_count"] = path_filtered_count
+                result["emitted_record_count"] = path_emitted_count
+                if policy["enabled"] and path_filtered_count == path_candidate_count and path_emitted_count == 0:
+                    result["status"] = "filtered_by_scope_policy"
+                    result["reason"] = "scope_policy_excluded_all_records"
+                elif path_filtered_count:
+                    result["scope_policy_filter_status"] = "partially_filtered"
         if limit is not None and len(events) >= limit:
             break
 
-    if not events:
+    scope_policy_filtered_all = (
+        policy["enabled"]
+        and candidate_record_count > 0
+        and scope_policy_filtered_record_count == candidate_record_count
+        and not events
+    )
+    if not events and not scope_policy_filtered_all:
         reason = (
             "hk_us_brokerage_authorized_input_missing"
             if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
             else "hk_us_brokerage_records_empty"
         )
         events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["parsed_record_count"] = len(usable_brokerage_events(events))
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
+    audit["brokerage_scope_policy_filtered_all"] = scope_policy_filtered_all
+    audit["parsed_record_count"] = candidate_record_count
     audit["emitted_event_count"] = len(events)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+    audit["archive_member_event_count"] = sum(1 for event in usable_brokerage_events(events) if (event.get("raw_ref") or {}).get("archive_member"))
     return events, audit
+
+
+def build_brokerage_scope_policy(
+    *,
+    allow_brokers: Optional[Iterable[str]] = None,
+    deny_brokers: Optional[Iterable[str]] = None,
+    allow_accounts: Optional[Iterable[str]] = None,
+    deny_accounts: Optional[Iterable[str]] = None,
+    allow_subtypes: Optional[Iterable[str]] = None,
+    deny_subtypes: Optional[Iterable[str]] = None,
+    allow_symbols: Optional[Iterable[str]] = None,
+    deny_symbols: Optional[Iterable[str]] = None,
+    allow_markets: Optional[Iterable[str]] = None,
+    deny_markets: Optional[Iterable[str]] = None,
+    allow_currencies: Optional[Iterable[str]] = None,
+    deny_currencies: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_brokers": normalize_scope_terms(allow_brokers, normalizer=normalize_broker_scope_term),
+        "deny_brokers": normalize_scope_terms(deny_brokers, normalizer=normalize_broker_scope_term),
+        "allow_accounts": normalize_scope_terms(allow_accounts),
+        "deny_accounts": normalize_scope_terms(deny_accounts),
+        "allow_subtypes": normalize_scope_terms(allow_subtypes, normalizer=normalize_subtype_scope_term),
+        "deny_subtypes": normalize_scope_terms(deny_subtypes, normalizer=normalize_subtype_scope_term),
+        "allow_symbols": normalize_scope_terms(allow_symbols, normalizer=normalize_symbol_scope_term),
+        "deny_symbols": normalize_scope_terms(deny_symbols, normalizer=normalize_symbol_scope_term),
+        "allow_markets": normalize_scope_terms(allow_markets, normalizer=normalize_market_scope_term),
+        "deny_markets": normalize_scope_terms(deny_markets, normalizer=normalize_market_scope_term),
+        "allow_currencies": normalize_scope_terms(allow_currencies, normalizer=normalize_currency_scope_term),
+        "deny_currencies": normalize_scope_terms(deny_currencies, normalizer=normalize_currency_scope_term),
+        "allow_keywords": normalize_scope_terms(allow_keywords, keep_case=True),
+        "deny_keywords": normalize_scope_terms(deny_keywords, keep_case=True),
+    }
+    policy["enabled"] = any(bool(values) for values in policy.values())
+    return policy
+
+
+def normalize_scope_terms(
+    values: Optional[Iterable[str]],
+    *,
+    normalizer: Optional[Any] = None,
+    keep_case: bool = False,
+) -> List[str]:
+    cleaned: List[str] = []
+    for term in split_policy_terms(values):
+        normalized = normalizer(term) if normalizer else term.strip()
+        if not normalized:
+            continue
+        cleaned.append(normalized if keep_case else normalized.lower())
+    return sorted(dict.fromkeys(cleaned))
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    terms: List[str] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, (list, tuple, set)):
+            terms.extend(split_policy_terms(value))
+            continue
+        terms.extend(item.strip() for item in re.split(r"[,，、;；|\n]+", str(value)) if item.strip())
+    return terms
+
+
+def normalize_broker_scope_term(term: str) -> str:
+    return infer_broker({"broker": term}, term)
+
+
+def normalize_subtype_scope_term(term: str) -> str:
+    return infer_subtype({"record_type": term}, term)
+
+
+def normalize_symbol_scope_term(term: str) -> str:
+    return re.sub(r"\s+", "", term.strip()).lower()
+
+
+def normalize_market_scope_term(term: str) -> str:
+    return (normalize_market(term) or term.strip()).lower()
+
+
+def normalize_currency_scope_term(term: str) -> str:
+    return term.strip().lower()
+
+
+def brokerage_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    data = event.get("data") or {}
+    broker = normalize_broker_scope_term(str(data.get("broker") or ""))
+    account = str(data.get("account_id") or "").strip().lower()
+    subtype = normalize_subtype_scope_term(str(data.get("subtype") or ""))
+    symbol = normalize_symbol_scope_term(str(data.get("symbol") or ""))
+    market = normalize_market_scope_term(str(data.get("market") or data.get("exchange") or ""))
+    currencies = brokerage_event_currencies(data)
+    if broker and broker in policy.get("deny_brokers", []):
+        return "broker_denied"
+    if account and account in policy.get("deny_accounts", []):
+        return "account_denied"
+    if subtype and subtype in policy.get("deny_subtypes", []):
+        return "subtype_denied"
+    if symbol and symbol in policy.get("deny_symbols", []):
+        return "symbol_denied"
+    if market and market in policy.get("deny_markets", []):
+        return "market_denied"
+    if currencies and set(currencies).intersection(policy.get("deny_currencies", [])):
+        return "currency_denied"
+    if policy_hit(policy.get("deny_keywords", []), flatten_brokerage_policy_surface(data)):
+        return "keyword_denied"
+    if policy.get("allow_brokers") and broker not in policy["allow_brokers"]:
+        return "broker_not_allowed"
+    if policy.get("allow_accounts") and account not in policy["allow_accounts"]:
+        return "account_not_allowed"
+    if policy.get("allow_subtypes") and subtype not in policy["allow_subtypes"]:
+        return "subtype_not_allowed"
+    if policy.get("allow_symbols") and symbol not in policy["allow_symbols"]:
+        return "symbol_not_allowed"
+    if policy.get("allow_markets") and market not in policy["allow_markets"]:
+        return "market_not_allowed"
+    if policy.get("allow_currencies") and not set(currencies).intersection(policy["allow_currencies"]):
+        return "currency_not_allowed"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], flatten_brokerage_policy_surface(data)):
+        return "keyword_not_allowed"
+    return None
+
+
+def brokerage_event_currencies(data: Dict[str, Any]) -> List[str]:
+    return [normalize_currency_scope_term(value) for value in currency_values(data)]
+
+
+def policy_hit(needles: Sequence[str], values: Iterable[Any]) -> bool:
+    if not needles:
+        return False
+    haystack = "\n".join(str(value) for value in values if value not in (None, "", [], {})).lower()
+    return any(str(needle).lower() in haystack for needle in needles if str(needle).strip())
+
+
+def flatten_brokerage_policy_surface(data: Dict[str, Any]) -> List[Any]:
+    values: List[Any] = []
+    for key in (
+        "broker",
+        "account_id",
+        "subtype",
+        "symbol",
+        "isin",
+        "cusip",
+        "name",
+        "market",
+        "exchange",
+        "currency",
+        "base_currency",
+        "from_currency",
+        "to_currency",
+        "side",
+        "status",
+        "order_type",
+        "flow_type",
+        "order_id",
+        "trade_id",
+        "source_section",
+    ):
+        values.append(data.get(key))
+    return values
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -771,7 +1048,10 @@ def build_manifest(
     kind_counts = Counter(event["kind"] for event in events)
     subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in events)
     broker_counts = Counter((event.get("data") or {}).get("broker", "unknown") for event in events)
+    collection_audit = collection_audit or {}
     gap_only = bool(events) and set(subtype_counts) == {"collector_gap"}
+    scope_policy_filtered_all = bool(collection_audit.get("brokerage_scope_policy_filtered_all"))
+    no_events = not events
     observed_brokers = sorted(broker for broker, count in broker_counts.items() if count and broker != "unknown")
     observed_expected_brokers = [broker for broker in EXPECTED_HK_US_BROKERS if broker_counts.get(broker)]
     missing_expected_brokers = [broker for broker in EXPECTED_HK_US_BROKERS if not broker_counts.get(broker)]
@@ -841,16 +1121,52 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_hk_us_brokerage_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": collection_readiness_status(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_complete_hk_us_trade_boundary": False,
-            "brokerage_boundary_scope": "none" if gap_only else "partial_authorized_input",
+            "brokerage_boundary_scope": brokerage_boundary_scope_for_readiness(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
             "broker_coverage_status": coverage_status(events, missing_expected_brokers, "broker"),
             "trade_surface_coverage_status": coverage_status(events, missing_expected_subtypes, "trade_surface"),
             "field_coverage_status": coverage_status(events, missing_recommended_fields, "field"),
-            "next_action": "Provide authorized Futu/Tiger/IBKR read-only export." if gap_only else "Use as strong trade evidence; continue per-broker real account validation.",
+            "next_action": collection_next_action(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
     }
+
+
+def collection_readiness_status(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only or no_events:
+        return "needs_hk_us_brokerage_authorized_input"
+    return "events_collected"
+
+
+def brokerage_boundary_scope_for_readiness(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only or no_events:
+        return "none"
+    return "partial_authorized_input"
+
+
+def collection_next_action(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden the user authorization scope or provide brokerage records that match the current policy."
+    if gap_only or no_events:
+        return "Provide authorized Futu/Tiger/IBKR read-only export."
+    return "Use as strong trade evidence; continue per-broker real account validation."
 
 
 def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], noun: str) -> str:
@@ -1274,7 +1590,9 @@ def brokerage_boundary_proof(
     all_expected_brokers = bool(observed_expected_brokers) and not missing_expected_brokers
     all_expected_surfaces = bool(observed_expected_subtypes) and not missing_expected_subtypes
     all_recommended_fields = bool(observed_recommended_fields) and not missing_recommended_fields
-    if not usable_events:
+    if audit.get("brokerage_scope_policy_filtered_all"):
+        proof_level = "scope_policy_filtered_all"
+    elif not usable_events:
         gap_reason = None
         if events:
             gap_reason = (events[0].get("data") or {}).get("gap")
@@ -1370,6 +1688,13 @@ def brokerage_boundary_proof(
             "path_level_audit_available": bool(audit.get("path_results")),
             "archive_path_traversal_members_collected": False,
             "windows_drive_archive_members_collected": False,
+        },
+        "authorization_scope_boundary": {
+            "policy": audit.get("brokerage_scope_policy", {}),
+            "candidate_record_count": audit.get("candidate_record_count", audit.get("parsed_record_count", len(usable_events))),
+            "scope_policy_filtered_record_count": audit.get("scope_policy_filtered_record_count", 0),
+            "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts", {}),
+            "brokerage_scope_policy_filtered_all": audit.get("brokerage_scope_policy_filtered_all", False),
         },
         "wiki_boundary": {
             "event_schema": "collectorx.event.v1",

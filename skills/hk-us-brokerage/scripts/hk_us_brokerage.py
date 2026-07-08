@@ -31,7 +31,25 @@ def write_jsonl(path: Path, events: list[dict]) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        allow_brokers=args.allow_broker,
+        deny_brokers=args.deny_broker,
+        allow_accounts=args.allow_account,
+        deny_accounts=args.deny_account,
+        allow_subtypes=args.allow_subtype,
+        deny_subtypes=args.deny_subtype,
+        allow_symbols=args.allow_symbol,
+        deny_symbols=args.deny_symbol,
+        allow_markets=args.allow_market,
+        deny_markets=args.deny_market,
+        allow_currencies=args.allow_currency,
+        deny_currencies=args.deny_currency,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
+    )
     if args.out_dir:
         out = Path(args.out_dir).expanduser()
         write_jsonl(out / "lake" / COLLECTOR / "events.jsonl", events)
@@ -55,6 +73,9 @@ def collect(args: argparse.Namespace) -> int:
                     f"dividend_events：{manifest['cashflow_activity_summary']['dividend_event_count']}, "
                     f"fx_events：{manifest['cashflow_activity_summary']['fx_event_count']}",
                     f"- order_statuses：`{', '.join(manifest['order_execution_summary']['status_counts'].keys()) or 'none'}`",
+                    f"- scope_policy_enabled：{manifest['source_audit']['brokerage_scope_policy'].get('enabled', False)}",
+                    f"- scope_policy_filtered：{manifest['source_audit'].get('scope_policy_filtered_record_count', 0)} / "
+                    f"{manifest['source_audit'].get('candidate_record_count', manifest['source_audit'].get('parsed_record_count', 0))}",
                     f"- brokerage_boundary_proof：`{manifest['brokerage_boundary_proof']['proof_level']}`",
                     f"- complete_boundary_claimed：`{manifest['brokerage_boundary_proof']['false_claims']['complete_hk_us_trade_boundary_claimed']}`",
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
@@ -80,6 +101,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--event-export")
     p.add_argument("--limit", type=int)
     p.add_argument("--collected-at")
+    p.add_argument("--allow-broker", action="append", help="Only collect matching brokers, e.g. futu, tiger, ibkr.")
+    p.add_argument("--deny-broker", action="append", help="Exclude matching brokers.")
+    p.add_argument("--allow-account", action="append", help="Only collect matching account IDs.")
+    p.add_argument("--deny-account", action="append", help="Exclude matching account IDs.")
+    p.add_argument("--allow-subtype", action="append", help="Only collect matching strong-trade subtypes, e.g. asset_snapshot, position, execution, order, cashflow, dividend, fx.")
+    p.add_argument("--deny-subtype", action="append", help="Exclude matching strong-trade subtypes.")
+    p.add_argument("--allow-symbol", action="append", help="Only collect matching symbols.")
+    p.add_argument("--deny-symbol", action="append", help="Exclude matching symbols.")
+    p.add_argument("--allow-market", action="append", help="Only collect matching markets, e.g. HK or US.")
+    p.add_argument("--deny-market", action="append", help="Exclude matching markets.")
+    p.add_argument("--allow-currency", action="append", help="Only collect records with matching currencies.")
+    p.add_argument("--deny-currency", action="append", help="Exclude records with matching currencies.")
+    p.add_argument("--allow-keyword", action="append", help="Only collect records whose broker/account/symbol/name/status/source fields contain a keyword.")
+    p.add_argument("--deny-keyword", action="append", help="Exclude records whose broker/account/symbol/name/status/source fields contain a keyword.")
     p.set_defaults(func=collect)
     return parser
 

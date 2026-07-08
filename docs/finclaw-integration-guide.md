@@ -1051,6 +1051,19 @@ python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
   --out-dir <out-dir>
 ```
 
+Optional authorization scope filters:
+
+```bash
+python3 skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect \
+  --input <authorized-futu-tiger-ibkr-readonly-export-or-zip> \
+  --out-dir <out-dir> \
+  --allow-broker futu \
+  --allow-account F-1 \
+  --allow-subtype position \
+  --allow-market US \
+  --allow-currency USD
+```
+
 Current status:
 
 - Converts authorized CSV/TSV/JSON/JSONL/NDJSON/XLSX/XLSM/ZIP exports into
@@ -1074,6 +1087,14 @@ Current status:
   tax/margin availability, reported asset totals by currency, cashflow,
   dividend/FX, income/fee/tax drag, order execution status, export package
   provenance, and read-only boundaries.
+- Optional scope filters narrow authorized records by broker, account, strong
+  trade subtype, symbol, market, currency, or keyword before Lake output.
+- `manifest.source_audit.brokerage_scope_policy`,
+  `scope_policy_filtered_record_count`, `scope_policy_filter_reason_counts`,
+  and `brokerage_scope_policy_filtered_all` explain what the authorization
+  policy kept or excluded; `collection_readiness.status=scope_policy_filtered_all`
+  means the collector ran successfully but the user's policy excluded every
+  candidate record.
 - `manifest.brokerage_boundary_proof` gives FinClaw a single gate for the
   authorized input boundary, broker coverage, strong trade surfaces, account
   IDs, asset values, multi-currency, fee/tax/margin, cashflow activity, income

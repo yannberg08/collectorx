@@ -420,6 +420,217 @@ def test_collect_zip_limit_counts_only_emitted_records() -> None:
         assert source_audit["path_results"][0]["parsed_record_count"] == 1
 
 
+def test_collect_scope_policy_filters_broker_account_subtype_symbol_market_currency_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "brokerage.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                            "name": "Apple",
+                            "quantity": "10",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                            "name": "Apple 排除",
+                            "quantity": "1",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Tiger",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-2",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                        },
+                        {
+                            "record_type": "order",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "MSFT",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "HK",
+                            "symbol": "AAPL",
+                        },
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "HKD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-broker",
+                "futu",
+                "--allow-account",
+                "F-1",
+                "--allow-subtype",
+                "position",
+                "--allow-symbol",
+                "AAPL",
+                "--allow-market",
+                "US",
+                "--allow-currency",
+                "USD",
+                "--deny-keyword",
+                "排除",
+                "--collected-at",
+                "2026-07-08T04:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "hk-us-brokerage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["broker"] == "futu"
+        assert events[0]["data"]["account_id"] == "F-1"
+        assert events[0]["data"]["symbol"] == "AAPL"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        source_audit = manifest["source_audit"]
+        assert source_audit["candidate_record_count"] == 8
+        assert source_audit["parsed_record_count"] == 8
+        assert source_audit["scope_policy_filtered_record_count"] == 7
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["scope_policy_filter_reason_counts"] == {
+            "account_not_allowed": 1,
+            "broker_not_allowed": 1,
+            "currency_not_allowed": 1,
+            "keyword_denied": 1,
+            "market_not_allowed": 1,
+            "subtype_not_allowed": 1,
+            "symbol_not_allowed": 1,
+        }
+        assert source_audit["brokerage_scope_policy"]["enabled"] is True
+        assert source_audit["brokerage_scope_policy"]["allow_brokers"] == ["futu"]
+        path_audit = source_audit["path_results"][0]
+        assert path_audit["status"] == "parsed"
+        assert path_audit["scope_policy_filter_status"] == "partially_filtered"
+        assert path_audit["candidate_record_count"] == 8
+        assert path_audit["scope_policy_filtered_record_count"] == 7
+        assert path_audit["emitted_record_count"] == 1
+        proof = manifest["brokerage_boundary_proof"]["authorization_scope_boundary"]
+        assert proof["candidate_record_count"] == 8
+        assert proof["scope_policy_filtered_record_count"] == 7
+        assert proof["brokerage_scope_policy_filtered_all"] is False
+
+
+def test_collect_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "brokerage.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "records": [
+                        {
+                            "record_type": "position",
+                            "broker": "Futu",
+                            "account_id": "F-1",
+                            "currency": "USD",
+                            "market": "US",
+                            "symbol": "AAPL",
+                            "quantity": "10",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-broker",
+                "ibkr",
+                "--collected-at",
+                "2026-07-08T04:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "hk-us-brokerage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert events == []
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["brokerage_boundary_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["candidate_record_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 1
+        assert manifest["source_audit"]["scope_policy_filtered_record_count"] == 1
+        assert manifest["source_audit"]["emitted_event_count"] == 0
+        assert manifest["source_audit"]["brokerage_scope_policy_filtered_all"] is True
+        assert manifest["source_audit"]["scope_policy_filter_reason_counts"] == {"broker_not_allowed": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "filtered_by_scope_policy"
+        assert manifest["brokerage_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+        assert manifest["brokerage_boundary_proof"]["can_enter_finclaw_lake"] is False
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+
+
 def test_collect_missing_input_writes_gap_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -463,5 +674,7 @@ if __name__ == "__main__":
     test_collect_brokerage_exports()
     test_collect_nested_sections_and_workbook()
     test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_scope_policy_filters_broker_account_subtype_symbol_market_currency_and_keyword()
+    test_collect_scope_policy_filtered_all_status()
     test_collect_missing_input_writes_gap_audit()
     print("hk-us-brokerage tests passed.")
