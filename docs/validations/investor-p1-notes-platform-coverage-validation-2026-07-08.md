@@ -67,6 +67,6 @@ Result:
 - Validate real Notion ZIP/Markdown exports from a user account.
 - Validate real Youdao Cloud Note exports.
 - Validate real Evernote/Yinxiang ENEX exports with resources/attachments.
-- Add user-selected allowlists for vault folders, notebooks, and tags.
+- Tune source-app/path/tag allowlists on real user vault folders, notebooks, and tags.
 - Backtest `investment-notes` false positives before writing investor Wiki
   conclusions.

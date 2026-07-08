@@ -252,9 +252,9 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-vault-or-notes-export-import",
       "cli": "python3 skills/notes-collector/scripts/notes_api.py import --input <authorized-notes-export> --source-app auto --out-dir <out-dir>",
-      "collects": "Obsidian Markdown/Canvas, Notion, Youdao, Evernote/Yinxiang, Markdown, HTML, JSON, CSV/TSV, ENEX, and ZIP note previews with tags, paths, URLs, platform coverage, table/Canvas import audit, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
+      "collects": "Obsidian Markdown/Canvas, Notion, Youdao, Evernote/Yinxiang, Markdown, HTML, JSON, CSV/TSV, ENEX, and ZIP note previews with tags, paths, URLs, source-app/path/tag authorization filters, note source-policy audit, platform coverage, table/Canvas import audit, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
       "must_not_collect": "Note service tokens, direct investor conclusions, or full content unless explicitly authorized.",
-      "production_gap": "Real Notion/Youdao/Evernote account validation and Windows/Linux vault path validation."
+      "production_gap": "Real Notion/Youdao/Evernote account validation, real-user allowlist tuning, and Windows/Linux vault path validation."
     },
     {
       "id": "investment-notes",
@@ -267,7 +267,7 @@
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source investment-notes --input <notes-events-jsonl> --out-dir <out-dir>",
       "collects": "Investment notes, review records, rules, checklists, valuation assumptions, thesis updates, decision frameworks, note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof.",
       "must_not_collect": "Non-investment notes as investor facts.",
-      "production_gap": "User allowlists and real note-corpus false-positive backtest."
+      "production_gap": "Real note-corpus false-positive backtest and user-tuned note-source policy validation."
     },
     {
       "id": "ticktick",

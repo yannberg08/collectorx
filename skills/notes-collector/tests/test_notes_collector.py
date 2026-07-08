@@ -246,6 +246,124 @@ def test_import_notion_csv_database_and_tsv_zip_tables() -> None:
         assert manifest["content_policy"]["full_content_event_count"] == 0
 
 
+def test_import_note_source_policy_filters_by_source_path_and_tag() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        exports = root / "exports"
+        notion_dir = exports / "Notion Export"
+        notion_dir.mkdir(parents=True)
+        (notion_dir / "Investment Rules.csv").write_text(
+            "Name,Content,Tags,Updated\n"
+            "买入规则,估值低于安全边际才买入,\"规则,checklist\",2026-07-08\n"
+            "生活清单,周末买菜,\"生活\",2026-07-08\n",
+            encoding="utf-8",
+        )
+        (exports / "youdao.json").write_text(
+            json.dumps({"notes": [{"source": "有道云笔记", "title": "规则旁注", "content": "#规则 估值和复盘"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        zip_path = exports / "notion-scope.zip"
+        with zipfile.ZipFile(zip_path, "w") as archive:
+            archive.writestr("Notion Export/valuation.md", "# 估值规则\n#规则\n现金流和安全边际\n")
+
+        export = root / "notes.json"
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "import",
+                "--input",
+                str(exports),
+                "--source-app",
+                "auto",
+                "--allow-source-app",
+                "notion",
+                "--allow-path",
+                "Notion Export",
+                "--allow-tag",
+                "规则",
+                "--deny-tag",
+                "生活",
+                "--export",
+                str(export),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 2
+        assert {event["data"]["source_app"] for event in events} == {"notion"}
+        assert {event["data"]["title"] for event in events} == {"买入规则", "估值规则"}
+        assert not any(event["data"]["title"] == "生活清单" for event in events)
+        assert not any(event["data"]["title"] == "规则旁注" for event in events)
+        zip_event = next(event for event in events if event["data"]["title"] == "估值规则")
+        assert zip_event["raw_ref"]["source_archive"] == str(zip_path)
+        assert zip_event["raw_ref"]["archive_member"] == "Notion Export/valuation.md"
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["source_audit"]
+        policy = audit["note_source_policy"]
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert audit["candidate_note_count"] == 4
+        assert audit["parsed_note_count"] == 2
+        assert audit["archive_member_event_count"] == 1
+        assert policy["enabled"] is True
+        assert policy["allow_source_apps"] == ["notion"]
+        assert policy["allow_paths"] == ["Notion Export"]
+        assert policy["allow_tags"] == ["规则"]
+        assert policy["deny_tags"] == ["生活"]
+        assert policy["filtered_note_count"] == 2
+        assert policy["filter_reason_counts"] == {"source_app_not_allowed": 1, "tag_denied": 1}
+        assert policy["policy_does_not_assert_investment_relevance"] is True
+        assert audit["note_source_policy_filtered_all"] is False
+
+
+def test_import_note_source_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        exports = root / "exports"
+        exports.mkdir()
+        (exports / "rules.md").write_text("# 交易规则\n控制仓位和回撤\n", encoding="utf-8")
+        export = root / "notes.json"
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "import",
+                "--input",
+                str(exports),
+                "--source-app",
+                "auto",
+                "--allow-tag",
+                "不存在的标签",
+                "--export",
+                str(export),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events_path = out / "lake" / "notes" / "events.jsonl"
+        assert events_path.read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "source_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["source_audit"]
+        assert audit["candidate_note_count"] == 1
+        assert audit["parsed_note_count"] == 0
+        assert audit["note_source_policy_filtered_all"] is True
+        assert audit["note_source_policy"]["filtered_note_count"] == 1
+        assert audit["note_source_policy"]["filter_reason_counts"] == {"tag_not_allowed": 1}
+
+
 def test_import_zip_and_all_expected_platform_coverage() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -360,6 +478,8 @@ if __name__ == "__main__":
     test_obsidian_outputs_collectorx_events_without_full_content_by_default()
     test_import_outputs_youdao_evernote_and_markdown_events()
     test_import_notion_csv_database_and_tsv_zip_tables()
+    test_import_note_source_policy_filters_by_source_path_and_tag()
+    test_import_note_source_policy_filtered_all_status()
     test_import_zip_and_all_expected_platform_coverage()
     test_import_missing_input_has_source_audit_gap()
     print("notes-collector tests passed.")

@@ -82,7 +82,7 @@ skill-name/
 | social-activity | 8+ | 社交平台用户活动通用采集器 baseline；支持授权 JSON/CSV/Excel/HTML/TXT/ZIP/浏览器历史副本、弱证据策略、平台/动作/字段覆盖、社交影响主题、浏览器来源/访问/跳转方式审计、社交活动边界证明、逐输入来源审计、跳过原因、ZIP 成员审计和凭证字段过滤，仍需真实微博/B站/小红书账号验证 |
 | email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、Apple Mail EMLX、Maildir、Thunderbird mbox、账户/文件夹审计、本机扫描根目录审计、逐输入导入审计、跳过文件/ZIP 成员原因、字段覆盖和邮箱边界证明已补齐，仍需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
-| notes-collector | 8+ | 笔记通用采集器 baseline；支持 Obsidian Markdown/Canvas、Notion、有道/印象/Markdown/HTML/JSON/CSV/TSV/ENEX/ZIP 授权导入、平台覆盖、表格/Canvas 导入审计、逐输入来源审计、跳过原因和内容策略 manifest，仍需真实 Notion/有道/印象账号验证 |
+| notes-collector | 8+ | 笔记通用采集器 baseline；支持 Obsidian Markdown/Canvas、Notion、有道/印象/Markdown/HTML/JSON/CSV/TSV/ENEX/ZIP 授权导入、来源应用/路径/标签授权范围策略、平台覆盖、表格/Canvas 导入审计、逐输入来源审计、跳过原因和内容策略 manifest，仍需真实 Notion/有道/印象账号验证 |
 | investor-source-collectors | 8+ | 投资分身分类、路由和 lens 证据包工具；wechat-investment-dialogue 已补来源策略、对话边界证明和微信投资对话面谱；research-documents 已补逐输入审计、显式内容抽取、legacy/binary `.xls` parser 边界审计、`--include-image-ocr` 本地截图 OCR 审计、研究语料边界证明和研究文档面谱；investment-notes 已补投资笔记边界证明和笔记类型面谱；task-calendar-investor 已补任务日历边界证明、投资面谱、任务 checklist/重复/时区执行结构，不替代通用/垂直源采集器 |
 
 ## 输出契约

@@ -7,7 +7,7 @@ from collections import Counter
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import List, Dict, Any, Iterable, Optional, Tuple
+from typing import List, Dict, Any, Iterable, Optional, Sequence, Tuple
 
 
 SUPPORTED_NOTE_EXTENSIONS = {".md", ".markdown", ".txt", ".html", ".htm", ".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".enex", ".canvas"}
@@ -48,9 +48,30 @@ def parse_obsidian_vault(vault_path: str, limit: int = None) -> List[Dict[str, A
     return notes
 
 
-def parse_notes_export(input_path: str, *, source_app: str = "auto", limit: Optional[int] = None) -> List[Dict[str, Any]]:
+def parse_notes_export(
+    input_path: str,
+    *,
+    source_app: str = "auto",
+    limit: Optional[int] = None,
+    allow_source_apps: Optional[Sequence[str]] = None,
+    deny_source_apps: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_tags: Optional[Sequence[str]] = None,
+    deny_tags: Optional[Sequence[str]] = None,
+) -> List[Dict[str, Any]]:
     """Parse user-authorized notes exports from common local formats."""
-    notes, _audit = parse_notes_export_with_audit(input_path, source_app=source_app, limit=limit)
+    notes, _audit = parse_notes_export_with_audit(
+        input_path,
+        source_app=source_app,
+        limit=limit,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_tags=allow_tags,
+        deny_tags=deny_tags,
+    )
     return notes
 
 
@@ -59,11 +80,27 @@ def parse_notes_export_with_audit(
     *,
     source_app: str = "auto",
     limit: Optional[int] = None,
+    allow_source_apps: Optional[Sequence[str]] = None,
+    deny_source_apps: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_tags: Optional[Sequence[str]] = None,
+    deny_tags: Optional[Sequence[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """Parse notes exports and return a source audit suitable for manifest output."""
     path = Path(input_path).expanduser()
     notes: List[Dict[str, Any]] = []
     files = list(iter_authorized_files(path))
+    note_source_policy = build_note_source_policy(
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_tags=allow_tags,
+        deny_tags=deny_tags,
+    )
+    source_policy_filtered_count = 0
+    source_policy_reason_counts: Counter[str] = Counter()
     audit: Dict[str, Any] = {
         "source_type": "authorized_notes_export",
         "input": str(path),
@@ -80,6 +117,12 @@ def parse_notes_export_with_audit(
         "canvas_file_count": 0,
         "canvas_note_count": 0,
         "source_app": source_app,
+        "note_source_policy": {
+            **note_source_policy,
+            "filtered_note_count": 0,
+            "filter_reason_counts": {},
+            "policy_does_not_assert_investment_relevance": True,
+        },
         "limit": limit,
         "limit_reached": False,
         "extension_counts": {},
@@ -93,6 +136,7 @@ def parse_notes_export_with_audit(
         "skipped_archive_member_reason_counts": {},
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
+        "candidate_note_count": 0,
         "parsed_note_count": 0,
         "path_results": [],
     }
@@ -121,58 +165,93 @@ def parse_notes_export_with_audit(
             continue
         audit["resolved_input_file_count"] += 1
         result = path_result(file_path, status="pending")
+        candidate_count = 0
+        policy_applied_in_parser = False
         try:
             if suffix == ".zip":
                 parsed, archive_audit = parse_zip_notes_with_audit(
                     file_path,
                     source_app=source_app,
+                    note_source_policy=note_source_policy,
                     limit=remaining_limit(limit, notes),
                 )
                 merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
+                source_policy_filtered_count += int(archive_audit.get("source_policy_filtered_note_count") or 0)
+                for reason, count in (archive_audit.get("source_policy_filter_reason_counts") or {}).items():
+                    source_policy_reason_counts[str(reason)] += int(count)
+                candidate_count = int(archive_audit.get("candidate_note_count") or len(parsed))
+                policy_applied_in_parser = True
                 result.update(
                     {
                         "status": "parsed" if parsed else "no_notes_parsed",
                         "parser": "zip",
                         "parsed_note_count": len(parsed),
+                        "candidate_note_count": candidate_count,
+                        "source_policy_filtered_note_count": int(archive_audit.get("source_policy_filtered_note_count") or 0),
                         "archive_member_count": archive_audit["archive_member_count"],
                         "skipped_archive_member_count": archive_audit["skipped_archive_member_count"],
                     }
                 )
             elif suffix in {".json", ".jsonl", ".ndjson"}:
                 parsed = parse_json_notes(file_path)
+                candidate_count = len(parsed)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "json", "parsed_note_count": len(parsed)})
             elif suffix == ".enex":
                 parsed = parse_enex_notes(file_path)
+                candidate_count = len(parsed)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "enex", "parsed_note_count": len(parsed)})
             elif suffix == ".canvas":
                 parsed = parse_canvas_notes(file_path)
+                candidate_count = len(parsed)
                 audit["canvas_file_count"] += 1
                 audit["canvas_note_count"] += len(parsed)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "canvas", "parsed_note_count": len(parsed), "canvas_note_count": len(parsed)})
             elif suffix in {".csv", ".tsv"}:
                 parsed = parse_table_notes(file_path)
+                candidate_count = len(parsed)
                 audit["table_file_count"] += 1
                 audit["table_row_count"] += len(parsed)
                 audit["table_note_count"] += len(parsed)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "table", "parsed_note_count": len(parsed), "table_row_count": len(parsed)})
             else:
                 parsed = [parse_text_note(file_path)]
+                candidate_count = len(parsed)
                 result.update({"status": "parsed" if parsed else "no_notes_parsed", "parser": "text", "parsed_note_count": len(parsed)})
         except Exception:
             parsed = []
+            candidate_count = 0
             audit["skipped_file_count"] += 1
             skipped_reason_counts["parse_error"] += 1
             skipped_extension_counts[suffix or "<none>"] += 1
             result.update({"status": "parse_error", "reason": "parse_error", "parsed_note_count": 0})
         audit["path_results"].append(result)
+        audit["candidate_note_count"] += candidate_count
+        emitted_from_file = 0
+        filtered_from_file = int(result.get("source_policy_filtered_note_count") or 0) if policy_applied_in_parser else 0
         for note in parsed:
-            note["source_app"] = normalize_source_app(source_app, file_path, note)
+            if not policy_applied_in_parser:
+                note["source_app"] = normalize_source_app(source_app, file_path, note)
+                filter_reason = note_source_policy_filter_reason(note, note_source_policy)
+                if filter_reason:
+                    source_policy_filtered_count += 1
+                    source_policy_reason_counts[filter_reason] += 1
+                    filtered_from_file += 1
+                    continue
             notes.append(note)
+            emitted_from_file += 1
             if limit is not None and len(notes) >= limit:
                 audit["limit_reached"] = True
                 break
+        if candidate_count or parsed:
+            result["emitted_note_count"] = emitted_from_file
+            result["source_policy_filtered_note_count"] = filtered_from_file
+            if candidate_count > 0 and emitted_from_file == 0 and filtered_from_file > 0:
+                result["status"] = "filtered_by_source_policy"
 
     audit["parsed_note_count"] = len(notes)
+    audit["note_source_policy"]["filtered_note_count"] = source_policy_filtered_count
+    audit["note_source_policy"]["filter_reason_counts"] = dict(sorted(source_policy_reason_counts.items()))
+    audit["note_source_policy_filtered_all"] = note_source_policy["enabled"] and audit["candidate_note_count"] > 0 and len(notes) == 0
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
@@ -213,6 +292,96 @@ def remaining_limit(limit: Optional[int], notes: List[Dict[str, Any]]) -> Option
     if limit is None:
         return None
     return max(limit - len(notes), 0)
+
+
+def build_note_source_policy(
+    *,
+    allow_source_apps: Optional[Sequence[str]] = None,
+    deny_source_apps: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_tags: Optional[Sequence[str]] = None,
+    deny_tags: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "enabled": False,
+        "allow_source_apps": split_policy_terms(allow_source_apps),
+        "deny_source_apps": split_policy_terms(deny_source_apps),
+        "allow_paths": split_policy_terms(allow_paths),
+        "deny_paths": split_policy_terms(deny_paths),
+        "allow_tags": split_policy_terms(allow_tags),
+        "deny_tags": split_policy_terms(deny_tags),
+    }
+    policy["enabled"] = any(policy[key] for key in policy if key != "enabled")
+    return policy
+
+
+def split_policy_terms(values: Optional[Sequence[str]]) -> List[str]:
+    terms: List[str] = []
+    for value in values or []:
+        for part in re.split(r"[,，]", str(value)):
+            term = part.strip()
+            if term:
+                terms.append(term)
+    return sorted(set(terms))
+
+
+def note_source_policy_filter_reason(note: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    source_app = str(note.get("source_app") or "").strip().lower()
+    path_surface = note_path_surface(note)
+    tag_surface = note_tag_surface(note)
+
+    if policy_hit(policy.get("deny_source_apps", []), source_app):
+        return "source_app_denied"
+    if policy_hit(policy.get("deny_paths", []), path_surface):
+        return "path_denied"
+    if policy_hit(policy.get("deny_tags", []), tag_surface):
+        return "tag_denied"
+    if policy.get("allow_source_apps") and not policy_hit(policy.get("allow_source_apps", []), source_app):
+        return "source_app_not_allowed"
+    if policy.get("allow_paths") and not policy_hit(policy.get("allow_paths", []), path_surface):
+        return "path_not_allowed"
+    if policy.get("allow_tags") and not policy_hit(policy.get("allow_tags", []), tag_surface):
+        return "tag_not_allowed"
+    return None
+
+
+def note_path_surface(note: Dict[str, Any]) -> str:
+    parts = [
+        note.get("path"),
+        note.get("file"),
+        note.get("source_path"),
+        note.get("source_archive"),
+        note.get("archive_member"),
+        note.get("notebook"),
+        note.get("notebook_name"),
+        note.get("folder"),
+        note.get("workspace"),
+    ]
+    return " ".join(str(part) for part in parts if part not in (None, "")).replace("\\", "/").lower()
+
+
+def note_tag_surface(note: Dict[str, Any]) -> str:
+    values: List[str] = []
+    raw = note.get("tags") or note.get("tag") or note.get("标签") or []
+    if isinstance(raw, list):
+        values.extend(str(item) for item in raw if str(item))
+    elif raw not in (None, ""):
+        values.extend(split_table_tags(str(raw)))
+    content = str(note.get("content") or note.get("text") or note.get("body") or "")
+    values.extend(match.group(1) for match in re.finditer(r"(?<!\w)#([\w\u4e00-\u9fff-]{1,40})", content))
+    return " ".join(sorted(set(values))).lower()
+
+
+def policy_hit(patterns: Sequence[str], surface: str) -> Optional[str]:
+    lowered = surface.lower()
+    for pattern in patterns:
+        probe = str(pattern).strip().lower()
+        if probe and probe in lowered:
+            return str(pattern)
+    return None
 
 
 def parse_json_notes(path: Path) -> List[Dict[str, Any]]:
@@ -462,16 +631,22 @@ def parse_zip_notes_with_audit(
     path: Path,
     *,
     source_app: str,
+    note_source_policy: Optional[Dict[str, Any]] = None,
     limit: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     notes: List[Dict[str, Any]] = []
     skipped_reason_counts: Counter[str] = Counter()
+    source_policy_reason_counts: Counter[str] = Counter()
+    source_policy = note_source_policy or build_note_source_policy()
     audit: Dict[str, Any] = {
         "archive": str(path),
         "archive_member_count": 0,
         "archive_member_event_count": 0,
         "skipped_archive_member_count": 0,
         "skipped_archive_member_reason_counts": {},
+        "candidate_note_count": 0,
+        "source_policy_filtered_note_count": 0,
+        "source_policy_filter_reason_counts": {},
         "table_member_count": 0,
         "table_row_count": 0,
         "table_note_count": 0,
@@ -538,20 +713,49 @@ def parse_zip_notes_with_audit(
                 skipped_reason_counts["parse_error"] += 1
                 audit["member_results"].append({"member": member_name, "status": "parse_error", "reason": "parse_error"})
                 continue
-            audit["member_results"].append({"member": member_name, "status": "parsed" if parsed else "no_notes_parsed", "parsed_note_count": len(parsed)})
+            audit["candidate_note_count"] += len(parsed)
+            emitted_from_member = 0
+            filtered_from_member = 0
             for note in parsed:
                 note.setdefault("source_archive", str(path))
                 note.setdefault("archive_member", member_name)
                 note["source_app"] = normalize_source_app(source_app, Path(path.name) / member_name, note)
+                filter_reason = note_source_policy_filter_reason(note, source_policy)
+                if filter_reason:
+                    filtered_from_member += 1
+                    audit["source_policy_filtered_note_count"] += 1
+                    source_policy_reason_counts[filter_reason] += 1
+                    continue
                 notes.append(note)
                 audit["archive_member_event_count"] += 1
+                emitted_from_member += 1
                 if limit is not None and len(notes) >= limit:
                     audit["limit_reached"] = True
                     audit["unvisited_archive_member_count_due_limit"] = max(0, len(members) - audit["archive_member_count"])
                     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+                    audit["source_policy_filter_reason_counts"] = dict(sorted(source_policy_reason_counts.items()))
+                    audit["member_results"].append(
+                        {
+                            "member": member_name,
+                            "status": "parsed" if parsed else "no_notes_parsed",
+                            "parsed_note_count": len(parsed),
+                            "emitted_note_count": emitted_from_member,
+                            "source_policy_filtered_note_count": filtered_from_member,
+                        }
+                    )
                     return notes[:limit], audit
+            audit["member_results"].append(
+                {
+                    "member": member_name,
+                    "status": "parsed" if parsed else "no_notes_parsed",
+                    "parsed_note_count": len(parsed),
+                    "emitted_note_count": emitted_from_member,
+                    "source_policy_filtered_note_count": filtered_from_member,
+                }
+            )
     audit["unvisited_archive_member_count_due_limit"] = 0
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    audit["source_policy_filter_reason_counts"] = dict(sorted(source_policy_reason_counts.items()))
     return notes, audit
 
 

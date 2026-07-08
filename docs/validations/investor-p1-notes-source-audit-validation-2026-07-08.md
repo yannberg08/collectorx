@@ -67,5 +67,6 @@ Next gates:
 
 - Validate real Notion, Youdao, and Evernote/Yinxiang account/export flows.
 - Validate Windows and Linux Obsidian vault path behavior on real devices.
+- Tune source-app/path/tag allowlists on real user vaults and exports.
 - Backtest `investment-notes` false positives against broader real note corpora.
 - Keep full note body collection behind explicit `--include-content`.

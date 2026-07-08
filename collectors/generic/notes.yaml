@@ -22,6 +22,10 @@ scope:
     - source_audit_manifest
     - table_import_audit
     - canvas_import_audit
+    - note_source_policy_audit
+    - authorized_source_app_filters
+    - authorized_path_filters
+    - authorized_tag_filters
     - archive_member_provenance
     - path_level_collection_audit
     - skipped_file_reason_counts
@@ -36,4 +40,4 @@ scope:
 # 采集逻辑由 skill 定义。
 # skill 会处理：Notion API、Obsidian 本地 Markdown/Canvas vault、有道云/印象笔记/Markdown/HTML/JSON/CSV/TSV/ZIP 授权导出。
 # generic notes 只进入 lake/notes/events.jsonl；manifest 记录字段覆盖、内容策略、
-# 表格/Canvas 导入审计、逐输入来源审计、ZIP 跳过原因和路径安全边界；投资笔记由 investment-notes lens 筛选。
+# 表格/Canvas 导入审计、授权范围策略、逐输入来源审计、ZIP 跳过原因和路径安全边界；投资笔记由 investment-notes lens 筛选。

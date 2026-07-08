@@ -48,7 +48,7 @@ the `investment-notes` lens.
 ## Remaining production gaps
 
 - Real Notion, Youdao, and Evernote account exports/APIs still need validation.
-- User allowlists and folder/tag policies need backtesting on real note vaults.
+- Source-app/path/tag policies need tuning and backtesting on real note vaults.
 - Windows/Linux vault paths and sync-directory behavior need real-device checks.
 - False-positive review is still required before readiness can move beyond
   `baseline+audit`.

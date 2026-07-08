@@ -60,5 +60,5 @@ Current gate:
 - Obsidian local source: G2/G3 partial on macOS.
 - Investment-note lens: G3 partial on real local notes.
 - Remaining before production: Notion API event validation, Youdao/Evernote
-  adapters, user allowlists, false-positive review, Windows/Linux vault path
+  adapters, real-user allowlist tuning, false-positive review, Windows/Linux vault path
   validation, and optional content extraction policy.

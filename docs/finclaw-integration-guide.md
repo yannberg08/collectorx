@@ -642,6 +642,20 @@ python3 skills/notes-collector/scripts/notes_api.py import \
   --out-dir <out-dir>
 ```
 
+When the user only authorizes a specific source, notebook/folder, or tag scope,
+pass explicit source-policy filters before Lake output:
+
+```bash
+python3 skills/notes-collector/scripts/notes_api.py import \
+  --input <authorized-notes-export-or-folder> \
+  --source-app auto \
+  --allow-source-app notion \
+  --allow-path "Notion Export" \
+  --allow-tag 投资 \
+  --export <out-dir>/notes.json \
+  --out-dir <out-dir>
+```
+
 Current status:
 
 - Emits generic `notes` events and a standard package.
@@ -658,8 +672,10 @@ Current status:
   FinClaw can tell whether title/path/content preview/tags/time fields are
   present, whether per-input parse results and ZIP member provenance exist,
   which files or archive members were skipped and why, how many table files and
-  rows were imported, how many Canvas files/notes were imported, and whether
-  the run used preview-only or full-content authorization.
+  rows were imported, how many Canvas files/notes were imported, whether
+  source-app/path/tag authorization filters were applied, how many candidate
+  notes were filtered by policy, and whether the run used preview-only or
+  full-content authorization.
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.

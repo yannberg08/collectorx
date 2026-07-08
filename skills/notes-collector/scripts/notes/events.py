@@ -132,6 +132,7 @@ def build_manifest(
         for app, count in source_app_counts.items()
         if app not in EXPECTED_P1_NOTE_PLATFORMS and app not in GENERIC_NOTE_SOURCES
     )
+    readiness_status = notes_readiness_status(events, collection_audit)
     return {
         "schema": "collectorx.notes.manifest.v1",
         "collector": COLLECTOR,
@@ -159,11 +160,11 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "events_collected" if events else "no_notes_collected",
+            "status": readiness_status,
             "can_enter_finclaw": bool(events),
             "can_claim_investment_notes": False,
             "platform_coverage_status": platform_coverage_status(events, missing_expected),
-            "next_action": "Feed notes events into investment-notes lens for investor-specific routing." if events else "Provide an authorized notes vault/export.",
+            "next_action": notes_next_action(readiness_status),
         },
     }
 
@@ -222,6 +223,22 @@ def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: Lis
     if not missing_expected:
         return "all_expected_platforms_observed"
     return "partial_expected_platforms_observed"
+
+
+def notes_readiness_status(events: List[Dict[str, Any]], collection_audit: Optional[Dict[str, Any]]) -> str:
+    if events:
+        return "events_collected"
+    if collection_audit and collection_audit.get("note_source_policy_filtered_all"):
+        return "source_policy_filtered_all"
+    return "no_notes_collected"
+
+
+def notes_next_action(status: str) -> str:
+    if status == "events_collected":
+        return "Feed notes events into investment-notes lens for investor-specific routing."
+    if status == "source_policy_filtered_all":
+        return "Check note source-app/path/tag allow and deny filters, or provide a broader authorized notes export."
+    return "Provide an authorized notes vault/export."
 
 
 def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:

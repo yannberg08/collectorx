@@ -208,8 +208,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Provide an authorized note vault, Notion/Youdao/Evernote export, table export, or ZIP package.",
-      "preflight": "Input is user-selected; full-content inclusion remains explicit.",
+      "user_step": "Provide an authorized note vault, Notion/Youdao/Evernote export, table export, or ZIP package; optionally provide source-app, path/notebook, or tag allow/deny filters.",
+      "preflight": "Input is user-selected; note source-policy filters are applied before Lake output when provided; full-content inclusion remains explicit.",
       "failure_state": "needs_authorized_notes_export"
     },
     {

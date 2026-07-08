@@ -42,5 +42,5 @@ Remaining before production:
 - Validate real Notion exports and API pages including block content.
 - Validate real Youdao Cloud Note exports.
 - Validate real Evernote/Yinxiang ENEX exports with attachments and resources.
-- Add source allowlists and false-positive review before promoting note content
+- Tune source-app/path/tag allowlists and false-positive review before promoting note content
   into investor Wiki conclusions.

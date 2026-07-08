@@ -9,7 +9,12 @@ from collections import Counter
 from pathlib import Path
 
 from notes.events import notes_to_events, write_jsonl, write_package
-from notes.parser import parse_canvas_notes_text, parse_notes_export_with_audit
+from notes.parser import (
+    build_note_source_policy,
+    note_source_policy_filter_reason,
+    parse_canvas_notes_text,
+    parse_notes_export_with_audit,
+)
 
 # Windows控制台utf-8
 try:
@@ -26,6 +31,12 @@ def collect_obsidian(
     event_export: str = None,
     out_dir: str = None,
     include_content: bool = False,
+    allow_source_apps: list[str] | None = None,
+    deny_source_apps: list[str] | None = None,
+    allow_paths: list[str] | None = None,
+    deny_paths: list[str] | None = None,
+    allow_tags: list[str] | None = None,
+    deny_tags: list[str] | None = None,
 ):
     """采集Obsidian笔记（本地文件）"""
     vault = Path(vault_path)
@@ -44,6 +55,14 @@ def collect_obsidian(
     if limit:
         note_files = note_files[:limit]
     extension_counts = Counter(child.suffix.lower() or "<none>" for child in note_files)
+    note_source_policy = build_note_source_policy(
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_tags=allow_tags,
+        deny_tags=deny_tags,
+    )
     audit = {
         "source_type": "obsidian_vault",
         "input": str(vault),
@@ -61,6 +80,12 @@ def collect_obsidian(
         "canvas_import_supported": True,
         "canvas_file_count": extension_counts.get(".canvas", 0),
         "canvas_note_count": 0,
+        "note_source_policy": {
+            **note_source_policy,
+            "filtered_note_count": 0,
+            "filter_reason_counts": {},
+            "policy_does_not_assert_investment_relevance": True,
+        },
         "archive_count": 0,
         "archive_member_count": 0,
         "archive_member_event_count": 0,
@@ -68,11 +93,13 @@ def collect_obsidian(
         "skipped_archive_member_reason_counts": {},
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
+        "candidate_note_count": 0,
         "parsed_note_count": 0,
         "path_results": [],
         "unvisited_input_file_count_due_limit": max(0, total_note_files - len(note_files)),
     }
     skipped_reason_counts: Counter[str] = Counter()
+    source_policy_reason_counts: Counter[str] = Counter()
     
     for note_file in note_files:
         suffix = note_file.suffix.lower() or "<none>"
@@ -90,6 +117,7 @@ def collect_obsidian(
             else:
                 parsed = [
                     {
+                        "source_app": "obsidian",
                         "path": str(note_file.relative_to(vault)),
                         "name": note_file.stem,
                         "content": content,
@@ -97,8 +125,25 @@ def collect_obsidian(
                         "note_format": "markdown",
                     }
                 ]
-            notes.extend(parsed)
-            result.update({"status": "parsed", "parsed_note_count": len(parsed)})
+            kept = []
+            for note in parsed:
+                note["source_app"] = "obsidian"
+                filter_reason = note_source_policy_filter_reason(note, note_source_policy)
+                if filter_reason:
+                    audit["note_source_policy"]["filtered_note_count"] += 1
+                    source_policy_reason_counts[filter_reason] += 1
+                    continue
+                kept.append(note)
+            audit["candidate_note_count"] += len(parsed)
+            notes.extend(kept)
+            result.update(
+                {
+                    "status": "parsed" if parsed else "no_notes_parsed",
+                    "parsed_note_count": len(parsed),
+                    "emitted_note_count": len(kept),
+                    "source_policy_filtered_note_count": max(0, len(parsed) - len(kept)),
+                }
+            )
         except Exception as e:
             print(f"读取失败 {note_file}: {e}")
             audit["skipped_file_count"] += 1
@@ -107,6 +152,8 @@ def collect_obsidian(
         audit["path_results"].append(result)
     audit["parsed_note_count"] = len(notes)
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    audit["note_source_policy"]["filter_reason_counts"] = dict(sorted(source_policy_reason_counts.items()))
+    audit["note_source_policy_filtered_all"] = note_source_policy["enabled"] and audit["candidate_note_count"] > 0 and len(notes) == 0
     
     # 导出
     with open(export_path, "w", encoding="utf-8") as f:
@@ -224,9 +271,25 @@ def collect_import(
     event_export: str = None,
     out_dir: str = None,
     include_content: bool = False,
+    allow_source_apps: list[str] | None = None,
+    deny_source_apps: list[str] | None = None,
+    allow_paths: list[str] | None = None,
+    deny_paths: list[str] | None = None,
+    allow_tags: list[str] | None = None,
+    deny_tags: list[str] | None = None,
 ):
     """采集用户授权的笔记导出文件/目录。"""
-    notes, collection_audit = parse_notes_export_with_audit(input_path, source_app=source_app, limit=limit)
+    notes, collection_audit = parse_notes_export_with_audit(
+        input_path,
+        source_app=source_app,
+        limit=limit,
+        allow_source_apps=allow_source_apps,
+        deny_source_apps=deny_source_apps,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_tags=allow_tags,
+        deny_tags=deny_tags,
+    )
     with open(export_path, "w", encoding="utf-8") as f:
         json.dump(notes, f, ensure_ascii=False, indent=2)
 
@@ -285,6 +348,7 @@ def main():
     obs_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
     obs_parser.add_argument("--out-dir", help="导出完整采集包目录")
     obs_parser.add_argument("--include-content", action="store_true", help="在事件中包含完整笔记正文；默认只放预览")
+    add_note_source_policy_args(obs_parser)
     
     # notion命令
     not_parser = subparsers.add_parser("notion", help="采集Notion笔记")
@@ -305,6 +369,7 @@ def main():
     import_parser.add_argument("--event-export", help="导出 CollectorX Event JSONL")
     import_parser.add_argument("--out-dir", help="导出完整采集包目录")
     import_parser.add_argument("--include-content", action="store_true", help="在事件中包含完整笔记正文；默认只放预览")
+    add_note_source_policy_args(import_parser)
     
     # status命令
     subparsers.add_parser("status", help="显示状态")
@@ -312,15 +377,51 @@ def main():
     args = parser.parse_args()
     
     if args.command == "obsidian":
-        collect_obsidian(args.vault, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
+        collect_obsidian(
+            args.vault,
+            args.export,
+            args.limit,
+            args.event_export,
+            args.out_dir,
+            args.include_content,
+            args.allow_source_app,
+            args.deny_source_app,
+            args.allow_path,
+            args.deny_path,
+            args.allow_tag,
+            args.deny_tag,
+        )
     elif args.command == "notion":
         collect_notion(args.token, args.export, args.limit, args.event_export, args.out_dir, args.include_content, args.token_env)
     elif args.command == "import":
-        collect_import(args.input, args.source_app, args.export, args.limit, args.event_export, args.out_dir, args.include_content)
+        collect_import(
+            args.input,
+            args.source_app,
+            args.export,
+            args.limit,
+            args.event_export,
+            args.out_dir,
+            args.include_content,
+            args.allow_source_app,
+            args.deny_source_app,
+            args.allow_path,
+            args.deny_path,
+            args.allow_tag,
+            args.deny_tag,
+        )
     elif args.command == "status":
         cmd_status()
     else:
         parser.print_help()
+
+
+def add_note_source_policy_args(parser):
+    parser.add_argument("--allow-source-app", action="append", help="Only keep notes from this source app. Repeat or comma-separate.")
+    parser.add_argument("--deny-source-app", action="append", help="Drop notes from this source app. Repeat or comma-separate.")
+    parser.add_argument("--allow-path", action="append", help="Only keep notes whose path/notebook/folder contains this text. Repeat or comma-separate.")
+    parser.add_argument("--deny-path", action="append", help="Drop notes whose path/notebook/folder contains this text. Repeat or comma-separate.")
+    parser.add_argument("--allow-tag", action="append", help="Only keep notes with this tag or #tag in content. Repeat or comma-separate.")
+    parser.add_argument("--deny-tag", action="append", help="Drop notes with this tag or #tag in content. Repeat or comma-separate.")
 
 
 if __name__ == "__main__":
