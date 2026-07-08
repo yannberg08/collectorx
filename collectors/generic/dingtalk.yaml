@@ -28,6 +28,8 @@ scope:
     - collaboration_surface_summary
     - source_audit_manifest
     - archive_member_provenance
+    - archive_member_skip_audit
+    - path_level_collection_audit
   excludes:
     - investment_classification
     - password
@@ -40,4 +42,4 @@ scope:
 prompt: |
   使用 collaboration-exports skill 采集用户授权的钉钉本地导出。
   CLI: python3 skills/collaboration-exports/scripts/collaboration_exports.py collect --platform dingtalk --input <authorized-export> --out-dir <out>
-  只输出通用协作事件；manifest 记录字段覆盖、协作面和 ZIP 来源审计；投资讨论由后续 lens 筛选。
+  只输出通用协作事件；manifest 记录字段覆盖、协作面、ZIP 来源审计、跳过成员原因和逐文件解析结果；投资讨论由后续 lens 筛选。

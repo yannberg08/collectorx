@@ -18,30 +18,46 @@ from meeting_artifacts.events import (
     write_jsonl,
     write_summary,
 )
-from meeting_artifacts.parser import iter_paths, parse_path
+from meeting_artifacts.parser import finalize_collection_audit, iter_paths, new_collection_audit, parse_path
 
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
     events = []
-    paths = list(iter_paths(args.input or []))
+    inputs = args.input or []
+    paths = list(iter_paths(inputs))
+    collection_audit = new_collection_audit(inputs, paths, limit=args.limit)
     if not paths:
         events = [gap_event(collected_at=collected_at, reason="meeting_artifact_input_missing")]
     else:
         for path in paths:
-            for record in parse_path(path):
+            path_result = {
+                "path": str(path),
+                "extension": path.suffix.lower() or "<none>",
+                "parsed_record_count": 0,
+                "emitted_event_count": 0,
+                "status": "parsed",
+            }
+            collection_audit["path_results"].append(path_result)
+            records = parse_path(path, audit=collection_audit)
+            path_result["parsed_record_count"] = len(records)
+            collection_audit["parsed_record_count"] += len(records)
+            for record in records:
                 events.append(artifact_to_event(record, path=path, collected_at=collected_at))
+                path_result["emitted_event_count"] += 1
                 if args.limit is not None and len(events) >= args.limit:
                     break
             if args.limit is not None and len(events) >= args.limit:
                 break
+    collection_audit["emitted_event_count"] = len(events)
+    finalize_collection_audit(collection_audit)
 
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
         out_dir = Path(args.out_dir).expanduser()
         write_jsonl(out_dir / "lake" / COLLECTOR / "events.jsonl", events)
-        manifest = build_manifest(events, collected_at=collected_at)
+        manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)
 

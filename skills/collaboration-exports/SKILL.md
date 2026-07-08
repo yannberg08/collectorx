@@ -13,8 +13,8 @@ description: 钉钉/企业微信通用协作导出采集器。采集用户授权
 - 发送人、会话、时间、正文预览、文件名、会议链接、参与人、标签等协作元数据。
 - JSON/JSONL/NDJSON、CSV/TSV、HTML、Markdown、TXT、ZIP 本地授权导出。
 - `manifest.field_coverage`、`collaboration_surface_summary`、`source_audit`
-  和 `evidence_policy`，用于判断消息/会议/文件/联系人覆盖、ZIP 来源和
-  generic/lens 边界。
+  和 `evidence_policy`，用于判断消息/会议/文件/联系人覆盖、每个输入文件的
+  解析结果、ZIP 成员总数、跳过成员数量/原因、ZIP 来源和 generic/lens 边界。
 
 不采集：
 

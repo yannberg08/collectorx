@@ -408,7 +408,8 @@ Current status:
   previews.
 - Writes `manifest.field_coverage`, `collaboration_surface_summary`,
   `source_audit`, and `evidence_policy` so FinClaw can inspect message/meeting/
-  file/contact coverage, ZIP provenance, and required downstream lenses.
+  file/contact coverage, ZIP provenance, total/skipped ZIP members, skip
+  reasons, per-input parse results, and required downstream lenses.
 - Filters credential-like raw keys and keeps file bodies out of the generic
   collaboration collector.
 - Does not claim investment collaboration directly.
@@ -438,7 +439,8 @@ Current status:
   `real_account_validation`.
 - Writes `manifest.field_coverage`, `meeting_surface_summary`, `source_audit`,
   and `evidence_policy` so FinClaw can inspect text, participants, organizer,
-  meeting URL, attachments, duration, start/end time, ZIP provenance, and the
+  meeting URL, attachments, duration, start/end time, ZIP provenance,
+  total/skipped ZIP members, skip reasons, per-input parse results, and the
   required `meeting-minutes` lens boundary.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.

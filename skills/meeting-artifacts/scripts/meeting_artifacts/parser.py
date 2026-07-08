@@ -9,7 +9,7 @@ import zipfile
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List
+from typing import Any, Dict, Iterable, Iterator, List, Optional
 
 
 SUPPORTED_RECORD_EXTENSIONS = {
@@ -42,10 +42,33 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
             yield path
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def new_collection_audit(inputs: Iterable[str], paths: List[Path], *, limit: Optional[int] = None) -> Dict[str, Any]:
+    input_list = list(inputs)
+    return {
+        "source_type": "authorized_local_meeting_artifacts",
+        "input_count": len(input_list),
+        "resolved_input_file_count": len(paths),
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "skipped_archive_member_reason_counts": {},
+        "parsed_record_count": 0,
+        "emitted_event_count": 0,
+        "limit": limit,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "path_results": [],
+    }
+
+
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
+    if audit is not None:
+        increment_counter(audit, "extension_counts", suffix or "<none>")
     if suffix == ".zip":
-        return parse_zip(path)
+        return parse_zip(path, audit=audit)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
@@ -163,14 +186,22 @@ def parse_subtitle_text(text: str, *, path_label: str, default_title: str) -> Di
     }
 
 
-def parse_zip(path: Path) -> List[Dict[str, Any]]:
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
         for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
-            if should_skip_zip_member(member):
-                continue
             member_name = normalize_zip_member_name(member.filename)
             suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
+            skip_reason = zip_member_skip_reason(member)
+            if skip_reason:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_reason_counts", skip_reason)
+                continue
             text = archive.read(member).decode("utf-8-sig", errors="replace")
             path_label = f"{path}::{member_name}"
             try:
@@ -195,18 +226,40 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    return zip_member_skip_reason(member) != ""
+
+
+def zip_member_skip_reason(member: zipfile.ZipInfo) -> str:
     member_name = normalize_zip_member_name(member.filename)
     member_path = PurePosixPath(member_name)
     windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
-        return True
+        return "directory"
     if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
-        return True
-    return Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+        return "unsafe_path"
+    if Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS:
+        return "unsupported_extension"
+    return ""
 
 
 def normalize_zip_member_name(name: str) -> str:
     return name.replace("\\", "/")
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_collection_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+        "skipped_archive_member_reason_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    return audit
 
 
 def subtitle_text(text: str) -> str:

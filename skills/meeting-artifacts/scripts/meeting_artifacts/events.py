@@ -118,7 +118,12 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     type_counts = Counter((event.get("data") or {}).get("artifact_type", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
@@ -150,7 +155,7 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
         },
         "field_coverage": field_coverage(events),
         "meeting_surface_summary": meeting_surface_summary(events),
-        "source_audit": source_audit(events),
+        "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
             "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
@@ -203,6 +208,7 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- participant_events: {manifest['meeting_surface_summary']['events_with_participants']}",
         f"- attachment_events: {manifest['meeting_surface_summary']['events_with_attachments']}",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         "",
         "Generic meeting artifacts are not written to the investor Wiki directly. Use the meeting-minutes lens.",
     ]
@@ -255,18 +261,21 @@ def meeting_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
     }
 
 
-def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     archives = [
         (event.get("raw_ref") or {}).get("source_archive")
         for event in events
         if (event.get("raw_ref") or {}).get("source_archive")
     ]
-    return {
+    audit = {
         "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "archive_count": len(set(archives)),
         "archive_path_traversal_members_collected": False,
     }
+    if collection_audit:
+        audit.update(collection_audit)
+    return audit
 
 
 def participants_for(record: Dict[str, Any]) -> List[str]:

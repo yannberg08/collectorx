@@ -10,7 +10,7 @@ from pathlib import Path
 from collaboration_exports.parser import (
     PLATFORMS,
     build_manifest,
-    collect_from_inputs,
+    collect_from_inputs_with_audit,
     normalize_platform,
     now_iso,
     write_json,
@@ -22,13 +22,18 @@ from collaboration_exports.parser import (
 def collect(args: argparse.Namespace) -> int:
     platform = normalize_platform(args.platform)
     collected_at = args.collected_at or now_iso()
-    events = collect_from_inputs(args.input or [], platform=platform, collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        platform=platform,
+        collected_at=collected_at,
+        limit=args.limit,
+    )
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
         out_dir = Path(args.out_dir).expanduser()
         write_jsonl(out_dir / "lake" / platform / "events.jsonl", events)
-        manifest = build_manifest(events, platform=platform, collected_at=collected_at)
+        manifest = build_manifest(events, platform=platform, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out_dir / "manifest.json", manifest)
         write_summary(out_dir / "SUMMARY.md", manifest)
     print(json.dumps({"collector": platform, "event_count": len(events)}, ensure_ascii=False, sort_keys=True))

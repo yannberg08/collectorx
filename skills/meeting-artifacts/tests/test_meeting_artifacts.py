@@ -52,6 +52,11 @@ def test_collect_minutes_and_transcript_events() -> None:
         assert manifest["field_coverage"]["field_counts"]["artifact_type"] == 2
         assert manifest["meeting_surface_summary"]["events_with_text"] == 2
         assert manifest["meeting_surface_summary"]["events_with_participants"] == 1
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 2
+        assert manifest["source_audit"]["extension_counts"] == {".md": 1, ".vtt": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 2
+        assert manifest["source_audit"]["emitted_event_count"] == 2
         assert manifest["evidence_policy"]["required_lens"] == "meeting-minutes"
 
 
@@ -125,6 +130,13 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert manifest["field_coverage"]["field_counts"]["platform"] == 4
         assert manifest["meeting_surface_summary"]["events_with_attachments"] == 1
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
+        assert manifest["source_audit"]["extension_counts"] == {".csv": 1, ".html": 1, ".json": 1, ".zip": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 4
+        assert manifest["source_audit"]["emitted_event_count"] == 4
+        assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
 

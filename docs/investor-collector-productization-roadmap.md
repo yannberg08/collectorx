@@ -950,6 +950,29 @@ Findings:
   Lake, but `meeting-minutes` and related lenses classify investment evidence
   before Wiki use.
 
+### Wave S3: P1 meeting and collaboration source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-meeting-collaboration-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `meeting-artifacts` to `0.3.0` and `collaboration-exports` to
+  `0.2.0`.
+- Added package-level source audit fields for input count, resolved file count,
+  top-level extension counts, parsed record count, emitted event count, and
+  path-level parse results.
+- Added ZIP member audit fields for total member count, member extension
+  counts, skipped member count, skipped member extension counts, and skip
+  reason counts.
+- Updated package summaries to surface skipped archive members.
+- Fixture tests now assert the safe member is collected while POSIX traversal,
+  backslash traversal, and Windows drive-letter ZIP members are skipped and
+  counted.
+
 ### Wave T: P1 WeChat favorites action coverage pass 1
 
 Status: `completed-baseline`

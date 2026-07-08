@@ -96,6 +96,13 @@ def test_collect_dingtalk_package() -> None:
         assert manifest["field_coverage"]["field_counts"]["platform"] == 5
         assert manifest["collaboration_surface_summary"]["meeting_event_count"] == 2
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
+        assert manifest["source_audit"]["extension_counts"] == {".html": 1, ".json": 1, ".zip": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 5
+        assert manifest["source_audit"]["emitted_event_count"] == 5
+        assert len(manifest["source_audit"]["path_results"]) == 3
         assert manifest["source_audit"]["archive_count"] == 1
 
 
@@ -125,6 +132,11 @@ def test_collect_wecom_csv_and_gap() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["field_coverage"]["field_counts"]["record_kind"] == 2
         assert manifest["collaboration_surface_summary"]["meeting_event_count"] == 1
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 1
+        assert manifest["source_audit"]["extension_counts"] == {".csv": 1}
+        assert manifest["source_audit"]["parsed_record_count"] == 2
+        assert manifest["source_audit"]["emitted_event_count"] == 2
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--platform", "wecom", "--out-dir", str(gap_out)],
@@ -137,6 +149,10 @@ def test_collect_wecom_csv_and_gap() -> None:
         assert gap_events[0]["data"]["record_kind"] == "collector_gap"
         gap_manifest = json.loads((gap_out / "manifest.json").read_text(encoding="utf-8"))
         assert gap_manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert gap_manifest["source_audit"]["input_count"] == 0
+        assert gap_manifest["source_audit"]["resolved_input_file_count"] == 0
+        assert gap_manifest["source_audit"]["parsed_record_count"] == 0
+        assert gap_manifest["source_audit"]["emitted_event_count"] == 1
 
 
 if __name__ == "__main__":

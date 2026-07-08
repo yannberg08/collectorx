@@ -69,16 +69,68 @@ def collect_from_inputs(
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     platform = normalize_platform(platform)
-    paths = list(iter_paths(inputs))
+    events, _audit = collect_from_inputs_with_audit(inputs, platform=platform, collected_at=collected_at, limit=limit)
+    return events
+
+
+def collect_from_inputs_with_audit(
+    inputs: Iterable[str],
+    *,
+    platform: str,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    platform = normalize_platform(platform)
+    input_list = list(inputs)
+    paths = list(iter_paths(input_list))
+    audit = {
+        "source_type": f"authorized_local_{platform}_collaboration_export",
+        "input_count": len(input_list),
+        "resolved_input_file_count": len(paths),
+        "extension_counts": {},
+        "archive_member_count": 0,
+        "archive_member_extension_counts": {},
+        "skipped_archive_member_count": 0,
+        "skipped_archive_member_extension_counts": {},
+        "skipped_archive_member_reason_counts": {},
+        "parsed_record_count": 0,
+        "emitted_event_count": 0,
+        "limit": limit,
+        "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+        "real_account_adapter_used": False,
+        "path_results": [],
+    }
     if not paths:
-        return [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_authorized_input_missing")]
+        events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_authorized_input_missing")]
+        audit["emitted_event_count"] = len(events)
+        finalize_audit(audit)
+        return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
-        for row, record in enumerate(parse_path(path), start=1):
+        path_result = {
+            "path": str(path),
+            "extension": path.suffix.lower() or "<none>",
+            "parsed_record_count": 0,
+            "emitted_event_count": 0,
+            "status": "parsed",
+        }
+        audit["path_results"].append(path_result)
+        increment_counter(audit, "extension_counts", path_result["extension"])
+        records = parse_path(path, audit=audit)
+        path_result["parsed_record_count"] = len(records)
+        audit["parsed_record_count"] += len(records)
+        for row, record in enumerate(records, start=1):
             events.append(record_to_event(record, path=path, row=row, platform=platform, collected_at=collected_at))
+            path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
-                return events[:limit]
-    return events or [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_records_empty")]
+                audit["emitted_event_count"] = len(events[:limit])
+                finalize_audit(audit)
+                return events[:limit], audit
+    if not events:
+        events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_records_empty")]
+    audit["emitted_event_count"] = len(events)
+    finalize_audit(audit)
+    return events, audit
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -92,10 +144,10 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
             yield path
 
 
-def parse_path(path: Path) -> List[Dict[str, Any]]:
+def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
     if suffix == ".zip":
-        return parse_zip(path)
+        return parse_zip(path, audit=audit)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
@@ -105,14 +157,22 @@ def parse_path(path: Path) -> List[Dict[str, Any]]:
     return [parse_text(path)]
 
 
-def parse_zip(path: Path) -> List[Dict[str, Any]]:
+def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     with zipfile.ZipFile(path) as archive:
         for member in sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename)):
-            if should_skip_zip_member(member):
-                continue
             member_name = normalize_zip_member_name(member.filename)
             suffix = Path(member_name).suffix.lower()
+            if audit is not None:
+                audit["archive_member_count"] += 1
+                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
+            skip_reason = zip_member_skip_reason(member)
+            if skip_reason:
+                if audit is not None:
+                    audit["skipped_archive_member_count"] += 1
+                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_reason_counts", skip_reason)
+                continue
             text = archive.read(member).decode("utf-8-sig", errors="replace")
             path_label = f"{path}::{member_name}"
             try:
@@ -136,18 +196,40 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
 
 
 def should_skip_zip_member(member: zipfile.ZipInfo) -> bool:
+    return zip_member_skip_reason(member) != ""
+
+
+def zip_member_skip_reason(member: zipfile.ZipInfo) -> str:
     member_name = normalize_zip_member_name(member.filename)
     member_path = PurePosixPath(member_name)
     windows_path = PureWindowsPath(member.filename)
     if member.is_dir():
-        return True
+        return "directory"
     if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
-        return True
-    return Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS
+        return "unsafe_path"
+    if Path(member_name).suffix.lower() not in SUPPORTED_RECORD_EXTENSIONS:
+        return "unsupported_extension"
+    return ""
 
 
 def normalize_zip_member_name(name: str) -> str:
     return name.replace("\\", "/")
+
+
+def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
+    counts = audit.setdefault(key, {})
+    counts[value] = int(counts.get(value, 0)) + 1
+
+
+def finalize_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
+    for key in (
+        "extension_counts",
+        "archive_member_extension_counts",
+        "skipped_archive_member_extension_counts",
+        "skipped_archive_member_reason_counts",
+    ):
+        audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    return audit
 
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
@@ -341,7 +423,13 @@ def gap_event(*, platform: str, collected_at: Optional[str], reason: str) -> Dic
     }
 
 
-def build_manifest(events: List[Dict[str, Any]], *, platform: str, collected_at: Optional[str] = None) -> Dict[str, Any]:
+def build_manifest(
+    events: List[Dict[str, Any]],
+    *,
+    platform: str,
+    collected_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     record_counts = Counter((event.get("data") or {}).get("record_kind", "unknown") for event in events)
     gap_only = bool(events) and set(record_counts) == {"collector_gap"}
@@ -354,7 +442,7 @@ def build_manifest(events: List[Dict[str, Any]], *, platform: str, collected_at:
         "record_kind_counts": dict(sorted(record_counts.items())),
         "field_coverage": field_coverage(events),
         "collaboration_surface_summary": collaboration_surface_summary(events),
-        "source_audit": source_audit(events),
+        "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
             "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
@@ -394,6 +482,7 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",
+        f"- skipped_archive_members: {manifest['source_audit'].get('skipped_archive_member_count', 0)}",
         "",
         "Generic collaboration events are not written to the investor Wiki directly. Use investor lenses for investment filtering.",
     ]
@@ -443,18 +532,21 @@ def collaboration_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int
     }
 
 
-def source_audit(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     archives = [
         (event.get("raw_ref") or {}).get("source_archive")
         for event in events
         if (event.get("raw_ref") or {}).get("source_archive")
     ]
-    return {
+    audit = {
         "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "archive_count": len(set(archives)),
         "archive_path_traversal_members_collected": False,
     }
+    if collection_audit:
+        audit.update(collection_audit)
+    return audit
 
 
 def normalize_platform(value: str) -> str:

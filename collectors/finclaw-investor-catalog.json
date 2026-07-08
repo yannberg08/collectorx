@@ -167,7 +167,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-meeting-export-import",
       "cli": "python3 skills/meeting-artifacts/scripts/meeting_artifacts.py collect --input <authorized-meeting-export> --out-dir <out-dir>",
-      "collects": "Meeting minutes, transcripts, subtitles, participants, organizer, meeting URLs, time fields, text previews, and platform coverage.",
+      "collects": "Meeting minutes, transcripts, subtitles, participants, organizer, meeting URLs, time fields, text previews, platform coverage, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "Meeting platform credentials, unrelated meetings as investor evidence, or attachment bodies by default.",
       "production_gap": "Real Feishu/DingTalk/WeCom/Tencent Meeting account adapters and participant normalization."
     },
@@ -180,7 +180,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-collaboration-export-import",
       "cli": "python3 skills/collaboration-exports/scripts/collaboration_exports.py collect --platform dingtalk --input <authorized-dingtalk-export> --out-dir <out-dir>",
-      "collects": "DingTalk messages, chats, contacts, file refs, meeting refs, participants, content previews, and source audit.",
+      "collects": "DingTalk messages, chats, contacts, file refs, meeting refs, participants, content previews, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "Credential material, file bodies by default, or direct investor conclusions.",
       "production_gap": "Real DingTalk export/API validation and investment-collaboration lens backtest."
     },
@@ -193,7 +193,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-collaboration-export-import",
       "cli": "python3 skills/collaboration-exports/scripts/collaboration_exports.py collect --platform wecom --input <authorized-wecom-export> --out-dir <out-dir>",
-      "collects": "WeCom messages, chats, contacts, file refs, meeting refs, participants, content previews, and source audit.",
+      "collects": "WeCom messages, chats, contacts, file refs, meeting refs, participants, content previews, source audit, ZIP skip reasons, and path-level parse results.",
       "must_not_collect": "Credential material, file bodies by default, or direct investor conclusions.",
       "production_gap": "Real WeCom export/API validation and investment-collaboration lens backtest."
     },
