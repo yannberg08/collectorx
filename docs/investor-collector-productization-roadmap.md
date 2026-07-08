@@ -544,6 +544,31 @@ Findings:
   evidence from incomplete input, but it does not claim one-click real
   Alipay/Tiantian/Danjuan/Qieman/bank account validation.
 
+### Wave B4g: P0 China wealth legacy XLS and HTML-table export pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-legacy-xls-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `china-wealth-assets` to `0.4.4`.
+- Added `.xls` support for common Chinese fund/wealth exports that are actually
+  HTML tables, Excel XML Spreadsheet files, renamed OOXML workbooks, or
+  delimited text.
+- HTML `<table>` inputs now become structured asset records instead of a single
+  screen-snapshot text event when table rows are present.
+- Preserves table/sheet provenance through `raw_ref.sheet` so FinClaw can audit
+  which exported table produced each asset event.
+- Fixture validation covers an Alipay fund holding from legacy HTML `.xls` and
+  a bank-wealth holding from Excel XML `.xls`, including platform inference,
+  subtype inference, market-value preservation, extension audit, and asset
+  value summary.
+- This improves authorized export compatibility, but real
+  Alipay/Tiantian/Danjuan/Qieman/bank account validation remains pending.
+
 ### Wave B5: P0 Email IMAP package and audit pass
 
 Status: `completed-baseline+audit`
@@ -2656,7 +2681,7 @@ Findings:
 | 3 | `email` + `email-research` | G1/G2 local email export import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, per-input import audit, skipped file/ZIP-member reasons, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist import path with standard Lake output, manifest, path-level source audit, ZIP provenance, skipped-reason accounting, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun watchlist export/local-store validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
 | 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
-| 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
+| 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, legacy `.xls`/Excel XML/HTML-table export parsing, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
 
 ## P1 Work Queue
 

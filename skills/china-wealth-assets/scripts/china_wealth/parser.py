@@ -10,6 +10,7 @@ import json
 import re
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -39,6 +40,7 @@ SUPPORTED_EXTENSIONS = {
     ".ndjson",
     ".xlsx",
     ".xlsm",
+    ".xls",
     ".html",
     ".htm",
     ".txt",
@@ -271,10 +273,12 @@ def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Di
         return parse_table(path)
     if suffix in {".xlsx", ".xlsm"}:
         return parse_excel(path)
+    if suffix == ".xls":
+        return parse_legacy_excel(path)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".html", ".htm"}:
-        return [parse_html(path)]
+        return parse_html(path)
     if suffix == ".har":
         return parse_har(path, audit=audit)
     if suffix == ".zip":
@@ -326,7 +330,20 @@ def parse_table(path: Path) -> List[Dict[str, Any]]:
     if not text.strip():
         return []
     delimiter = "\t" if path.suffix.lower() == ".tsv" else sniff_delimiter(text)
-    return [{str(k): v for k, v in row.items() if k is not None} for row in csv.DictReader(text.splitlines(), delimiter=delimiter)]
+    return parse_delimited_text(text, delimiter=delimiter)
+
+
+def parse_delimited_text(text: str, *, delimiter: Optional[str] = None, source_sheet: Optional[str] = None) -> List[Dict[str, Any]]:
+    if not text.strip():
+        return []
+    actual_delimiter = delimiter or sniff_delimiter(text)
+    records: List[Dict[str, Any]] = []
+    for row in csv.DictReader(text.splitlines(), delimiter=actual_delimiter):
+        record = {str(key): value for key, value in row.items() if key is not None}
+        if source_sheet and record:
+            record["source_sheet"] = source_sheet
+        records.append(record)
+    return records
 
 
 def sniff_delimiter(text: str) -> str:
@@ -357,6 +374,29 @@ def parse_excel(path: Path) -> List[Dict[str, Any]]:
     finally:
         workbook.close()
     return records
+
+
+def parse_legacy_excel(path: Path) -> List[Dict[str, Any]]:
+    raw = path.read_bytes()
+    if raw.startswith(b"PK"):
+        with tempfile.NamedTemporaryFile(suffix=".xlsx") as handle:
+            handle.write(raw)
+            handle.flush()
+            return parse_excel(Path(handle.name))
+    text = decode_legacy_text(raw)
+    stripped = text.lstrip()
+    if stripped.startswith("<?xml") or "<Workbook" in stripped[:1000]:
+        xml_records = parse_xml_spreadsheet(text)
+        if xml_records:
+            return xml_records
+    if "<table" in stripped[:5000].lower() or "<html" in stripped[:5000].lower():
+        table_records = html_tables_to_records(text)
+        if table_records:
+            return table_records
+    table_records = parse_delimited_text(text, source_sheet="legacy_xls_text")
+    if table_records:
+        return table_records
+    return [legacy_text_snapshot(path, text)]
 
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
@@ -533,14 +573,26 @@ def with_context(item: Any, context: Dict[str, Any]) -> Dict[str, Any]:
     return record
 
 
-def parse_html(path: Path) -> Dict[str, Any]:
+def parse_html(path: Path) -> List[Dict[str, Any]]:
     html = path.read_text(encoding="utf-8", errors="replace")
+    table_records = html_tables_to_records(html)
+    if table_records:
+        return table_records
     text = html_to_text(html)
-    return {
+    return [{
         "record_type": "screen_snapshot",
         "title": meta_content(html, "og:title") or title_tag(html) or infer_title(path, text),
         "content": text,
         "url": first_url(html),
+        "path": str(path),
+    }]
+
+
+def legacy_text_snapshot(path: Path, text: str) -> Dict[str, Any]:
+    return {
+        "record_type": "screen_snapshot",
+        "title": infer_title(path, text),
+        "content": text,
         "path": str(path),
     }
 
@@ -1299,6 +1351,85 @@ def finalize_audit(audit: Dict[str, Any]) -> None:
         "har_platform_entry_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
+
+
+def decode_legacy_text(raw: bytes) -> str:
+    for encoding in ("utf-8-sig", "gb18030", "gbk", "utf-16", "latin1"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", errors="replace")
+
+
+def parse_xml_spreadsheet(text: str) -> List[Dict[str, Any]]:
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return []
+    records: List[Dict[str, Any]] = []
+    worksheet_index = 0
+    for worksheet in root.iter():
+        if local_name(worksheet.tag) != "Worksheet":
+            continue
+        worksheet_index += 1
+        sheet_name = worksheet.attrib.get("{urn:schemas-microsoft-com:office:spreadsheet}Name") or worksheet.attrib.get("ss:Name") or f"xml_sheet_{worksheet_index}"
+        rows: List[List[str]] = []
+        for row in worksheet.iter():
+            if local_name(row.tag) != "Row":
+                continue
+            values: List[str] = []
+            for cell in row:
+                if local_name(cell.tag) != "Cell":
+                    continue
+                data = next((child for child in cell.iter() if local_name(child.tag) == "Data"), None)
+                value = "".join(data.itertext()).strip() if data is not None else "".join(cell.itertext()).strip()
+                values.append(value)
+            if any(values):
+                rows.append(values)
+        records.extend(rows_to_records(rows, source_sheet=sheet_name))
+    return records
+
+
+def html_tables_to_records(html: str) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    for table_index, match in enumerate(re.finditer(r"(?is)<table\b.*?</table>", html), start=1):
+        table = match.group(0)
+        rows: List[List[str]] = []
+        for row_match in re.finditer(r"(?is)<tr\b.*?</tr>", table):
+            row_html = row_match.group(0)
+            values = [
+                html_to_text(cell_match.group(1))
+                for cell_match in re.finditer(r"(?is)<t[dh]\b[^>]*>(.*?)</t[dh]>", row_html)
+            ]
+            if any(values):
+                rows.append(values)
+        records.extend(rows_to_records(rows, source_sheet=f"html_table_{table_index}"))
+    return records
+
+
+def rows_to_records(rows: List[List[str]], *, source_sheet: str) -> List[Dict[str, Any]]:
+    if not rows:
+        return []
+    header_index = next((index for index, row in enumerate(rows) if any(cell.strip() for cell in row)), None)
+    if header_index is None:
+        return []
+    headers = [cell.strip() or f"column_{index + 1}" for index, cell in enumerate(rows[header_index])]
+    records: List[Dict[str, Any]] = []
+    for row in rows[header_index + 1 :]:
+        record = {
+            headers[index]: row[index].strip()
+            for index in range(min(len(headers), len(row)))
+            if headers[index] and row[index].strip()
+        }
+        if record:
+            record["source_sheet"] = source_sheet
+            records.append(record)
+    return records
+
+
+def local_name(tag: Any) -> str:
+    return str(tag).rsplit("}", 1)[-1]
 
 
 def html_to_text(html: str) -> str:

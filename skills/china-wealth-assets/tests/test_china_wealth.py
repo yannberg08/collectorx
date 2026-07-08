@@ -281,6 +281,76 @@ def test_collects_xlsx_exports() -> None:
         assert event["raw_ref"]["sheet"] == "且慢持仓"
 
 
+def test_collects_legacy_xls_html_and_xml_exports() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        html_xls = root / "alipay-fund.xls"
+        xml_xls = root / "bank-wealth.xls"
+        out = root / "out"
+
+        html_xls.write_text(
+            """
+            <html>
+              <body>
+                <table>
+                  <tr><th>平台</th><th>类型</th><th>基金代码</th><th>基金名称</th><th>持有份额</th><th>单位净值</th><th>持有金额</th><th>持有收益</th></tr>
+                  <tr><td>支付宝</td><td>持仓</td><td>001234</td><td>测试基金</td><td>100</td><td>1.5</td><td>150</td><td>30</td></tr>
+                </table>
+              </body>
+            </html>
+            """,
+            encoding="utf-8",
+        )
+        xml_xls.write_text(
+            """<?xml version="1.0"?>
+            <Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+              <Worksheet ss:Name="银行理财">
+                <Table>
+                  <Row>
+                    <Cell><Data ss:Type="String">平台</Data></Cell>
+                    <Cell><Data ss:Type="String">类型</Data></Cell>
+                    <Cell><Data ss:Type="String">产品代码</Data></Cell>
+                    <Cell><Data ss:Type="String">产品名称</Data></Cell>
+                    <Cell><Data ss:Type="String">持仓金额</Data></Cell>
+                  </Row>
+                  <Row>
+                    <Cell><Data ss:Type="String">招商银行</Data></Cell>
+                    <Cell><Data ss:Type="String">银行理财</Data></Cell>
+                    <Cell><Data ss:Type="String">CMB001</Data></Cell>
+                    <Cell><Data ss:Type="String">稳健理财</Data></Cell>
+                    <Cell><Data ss:Type="Number">20000</Data></Cell>
+                  </Row>
+                </Table>
+              </Worksheet>
+            </Workbook>
+            """,
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert [event["data"]["platform"] for event in events] == ["alipay", "bank-wealth"]
+        assert [event["data"]["subtype"] for event in events] == ["fund_holding", "wealth_holding"]
+        assert events[0]["data"]["market_value"] == 150.0
+        assert events[0]["raw_ref"]["sheet"] == "html_table_1"
+        assert events[1]["data"]["market_value"] == 20000.0
+        assert events[1]["raw_ref"]["sheet"] == "银行理财"
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_audit"]["extension_counts"] == {".xls": 2}
+        assert manifest["platform_coverage"]["observed_platforms"] == ["alipay", "bank-wealth"]
+        assert manifest["asset_value_summary"] == {
+            "alipay": {"market_value": 150.0},
+            "bank-wealth": {"market_value": 20000.0},
+        }
+
+
 def test_syncs_package_to_soulmirror_lake() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -494,6 +564,7 @@ if __name__ == "__main__":
     test_collects_mixed_platform_json_and_sanitizes_raw()
     test_collects_har_network_export_with_platform_audit_and_credential_stripping()
     test_collects_xlsx_exports()
+    test_collects_legacy_xls_html_and_xml_exports()
     test_syncs_package_to_soulmirror_lake()
     test_manifest_reports_expected_platform_coverage()
     test_collects_zip_package_with_value_summary()

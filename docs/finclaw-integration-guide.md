@@ -561,7 +561,7 @@ python3 skills/china-wealth-assets/scripts/china_wealth.py collect \
 
 Current status:
 
-- Parses authorized CSV/TSV/JSON/JSONL/XLSX/XLSM/HTML/TXT/ZIP exports for fund
+- Parses authorized CSV/TSV/JSON/JSONL/XLSX/XLSM/legacy `.xls`/HTML table/TXT/ZIP exports for fund
   holdings, wealth holdings, cash-management holdings, subscriptions,
   redemptions, dividends, and asset snapshots.
 - Also accepts user-authorized browser network `.har` exports for whitelisted
@@ -570,7 +570,8 @@ Current status:
   query strings are stripped before events, manifest, or Wiki evidence are
   written.
 - Normalizes platform names for Alipay, Tiantian Fund, Danjuan, Qieman, and
-  bank wealth exports, preserves numeric asset/trade fields, records ZIP member
+  bank wealth exports, preserves numeric asset/trade fields from workbook,
+  legacy `.xls`, Excel XML, and HTML table exports, records ZIP member
   provenance, and strips credential-like raw keys.
 - Per-platform one-click adapters for Alipay/Tiantian/Danjuan/Qieman/banks still
   need real validation; the HAR path is an authorized browser export baseline

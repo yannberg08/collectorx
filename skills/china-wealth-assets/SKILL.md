@@ -34,8 +34,8 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
   --out-dir ~/Desktop/china-wealth-collect
 ```
 
-支持 CSV/TSV/JSON/JSONL/Excel/HTML/TXT/Markdown/HAR/ZIP。解析器会归一化支付宝、
-天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
+支持 CSV/TSV/JSON/JSONL/Excel/旧式 `.xls`/HTML 表格/TXT/Markdown/HAR/ZIP。
+解析器会归一化支付宝、天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
 成本、收益等数字字段，并剔除 cookie、token、password 等凭据类字段。
 HAR 是用户已登录对应平台后、明确授权选择的浏览器网络导出文件。采集器只读取
 支付宝/天天基金/蛋卷/且慢/银行理财域名白名单内的响应体，按域名推断平台，
