@@ -1,1 +1,1 @@
-{"collector":"xueqiu-watchlist","class":"vertical","version":"0.2.0","status":"baseline","description":"Xueqiu watchlist export collector for authorized CSV/JSON/Excel/text watchlist inputs."}
+{"collector":"xueqiu-watchlist","class":"vertical","version":"0.3.0","status":"baseline+audit","description":"Xueqiu watchlist export collector for authorized CSV/JSON/Excel/text/ZIP watchlist inputs with source audit, field coverage, evidence package output, and attention-universe boundary policy."}

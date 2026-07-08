@@ -178,6 +178,9 @@ The suite currently checks:
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets
+- FinClaw catalog skill metadata: every catalog-referenced skill has
+  `.collectorx.json`, a `VERSION`, matching version values, and a non-empty
+  machine-readable description
 - parser unit tests for portfolio/watchlist collectors
 - investor lens classifier tests for matched and non-matched evidence
 - event example shape

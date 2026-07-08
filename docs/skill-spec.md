@@ -32,7 +32,11 @@ skill-name/
 - 版本号（如 0.1.0）
 
 ### .collectorx.json
-- 元数据（slug、version、description）
+- 元数据（slug/collector、version、status、description）
+- `version` 必须与同目录 `VERSION` 完全一致。
+- 凡是被 `collectors/finclaw-investor-catalog.json` 引用的 skill，都必须有
+  `.collectorx.json` 和 `VERSION`。`tools/validate_project.py` 会在全量门禁
+  中检查这个约束，避免 FinClaw 目录、GitHub skill 元数据和实际代码版本漂移。
 
 ### scripts/xxx_query.py
 - 主CLI入口

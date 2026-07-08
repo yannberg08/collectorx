@@ -16,7 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`xueqiu-investor-activity` now carries explicit activity-boundary and pagination proof:
+FinClaw skill metadata is now part of the project validation gate:
+
+- Every skill referenced by `collectors/finclaw-investor-catalog.json` must have
+  both `.collectorx.json` and `VERSION`.
+- `.collectorx.json.version` must exactly match the local `VERSION` file, and
+  the metadata must include a stable `slug` or `collector` plus a non-empty
+  description.
+- The gate is wired into `tools/validate_project.py`, so `bash
+  test_collectors.sh` now catches catalog-callable skills whose GitHub metadata
+  has drifted from the code.
+- Existing metadata drift was corrected for `calendar-collector`,
+  `china-wealth-assets`, `email-collector`, `notes-collector`,
+  `xueqiu-watchlist`, and `xueqiu-investor-activity`; missing metadata was
+  added for `wechat-export` and `ticktick-cli`.
+- This improves FinClaw discovery and release safety, but it does not claim new
+  real-account validation for any collector.
+
+The prior completed wave: `xueqiu-investor-activity` now carries explicit activity-boundary and pagination proof:
 
 - `manifest.activity_boundary_proof` and the Investor Wiki evidence coverage
   summary now report whether expected Snowball activity surfaces were observed:

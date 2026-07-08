@@ -2292,6 +2292,29 @@ Findings:
   validation and investor communication lens backtesting before production
   exposure.
 
+### Wave AE: FinClaw skill metadata consistency gate
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/finclaw-skill-metadata-gate-validation-2026-07-08.md`
+
+Findings:
+
+- Added `validate_skill_metadata()` to `tools/validate_project.py`.
+- Every skill referenced by `collectors/finclaw-investor-catalog.json` must now
+  have a `.collectorx.json` metadata file and a `VERSION` file.
+- Metadata version must exactly match the skill `VERSION`, and metadata must
+  declare a stable `slug` or `collector` plus a non-empty description.
+- Added missing metadata for `wechat-export` and `ticktick-cli`.
+- Corrected drifted metadata versions/descriptions for `calendar-collector`,
+  `china-wealth-assets`, `email-collector`, `notes-collector`,
+  `xueqiu-watchlist`, and `xueqiu-investor-activity`.
+- This improves GitHub/FinClaw discovery safety and prevents product catalog
+  calls from pointing at stale skill metadata. It does not claim new
+  real-account validation for any individual collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

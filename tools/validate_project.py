@@ -277,6 +277,47 @@ def validate_investor_catalog() -> None:
             raise SystemExit(f"Catalog has no {priority} entries")
 
 
+def validate_skill_metadata() -> None:
+    catalog_path = ROOT / "collectors" / "finclaw-investor-catalog.json"
+    catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+    catalog_skills = sorted({entry["skill"] for entry in catalog.get("entries", [])})
+
+    for skill in catalog_skills:
+        skill_dir = ROOT / "skills" / skill
+        metadata_path = skill_dir / ".collectorx.json"
+        version_path = skill_dir / "VERSION"
+        if not metadata_path.exists():
+            raise SystemExit(f"Catalog skill is missing .collectorx.json: skills/{skill}/.collectorx.json")
+        if not version_path.exists():
+            raise SystemExit(f"Catalog skill is missing VERSION: skills/{skill}/VERSION")
+
+    for metadata_path in sorted((ROOT / "skills").glob("*/.collectorx.json")):
+        skill_dir = metadata_path.parent
+        rel = metadata_path.relative_to(ROOT)
+        print(f"validate_skill_metadata {rel}", flush=True)
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise SystemExit(f"{rel} is invalid JSON: {exc}") from exc
+        if not isinstance(metadata, dict):
+            raise SystemExit(f"{rel} must contain a JSON object")
+
+        version_path = skill_dir / "VERSION"
+        if version_path.exists():
+            expected_version = version_path.read_text(encoding="utf-8").strip()
+            observed_version = metadata.get("version")
+            if observed_version != expected_version:
+                raise SystemExit(
+                    f"{rel} version {observed_version!r} does not match "
+                    f"{version_path.relative_to(ROOT)} {expected_version!r}"
+                )
+
+        if not (metadata.get("slug") or metadata.get("collector")):
+            raise SystemExit(f"{rel} must declare slug or collector")
+        if "description" not in metadata or not isinstance(metadata.get("description"), str) or not metadata["description"].strip():
+            raise SystemExit(f"{rel} must declare a non-empty description")
+
+
 def extract_catalog_script_refs(cli: str, skill: str) -> list[Path]:
     refs: list[Path] = []
     for raw in re.findall(r"skills/[^\s`'\"]+?\.py", cli):
@@ -334,6 +375,7 @@ def main() -> int:
     run_parser_tests()
     validate_event_examples()
     validate_investor_catalog()
+    validate_skill_metadata()
     run_first_loop_smoke_test()
     print("CollectorX validation passed.")
     return 0

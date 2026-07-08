@@ -1,5 +1,6 @@
 {
   "slug": "xueqiu-investor-activity",
-  "version": "0.2.0",
-  "description": "Xueqiu vertical investor-activity collector for normalized watchlists, follows, posts, comments, favorites, owner portfolios, and SoulMirror lake packages."
+  "version": "0.3.2",
+  "status": "baseline+audit",
+  "description": "Xueqiu vertical investor-activity collector for authorized exports, ZIP/HAR packages, follows, posts, comments, favorites, saved pages, owner portfolios, activity-boundary proof, pagination completeness, and SoulMirror lake packages."
 }
