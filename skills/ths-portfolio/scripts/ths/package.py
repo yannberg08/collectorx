@@ -35,6 +35,7 @@ def write_collection_package(
     metadata: Optional[Dict[str, Any]] = None,
     gui_snapshot: Optional[Dict[str, Any]] = None,
     probe_report: Optional[Dict[str, Any]] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     output_dir = output_dir.expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -69,6 +70,7 @@ def write_collection_package(
         output_dir=output_dir,
         source_event_file=event_file,
         evidence=evidence,
+        collection_audit=collection_audit,
     )
     write_json(output_dir / "manifest.json", manifest)
     write_summary(output_dir / "SUMMARY.md", manifest, evidence)
@@ -138,6 +140,7 @@ def build_manifest(
     output_dir: Path,
     source_event_file: Path,
     evidence: Dict[str, Any],
+    collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     kind_counts = Counter(event.get("kind", "unknown") for event in events)
     gap_count = sum(
@@ -160,7 +163,12 @@ def build_manifest(
             if event.get("kind") == "holding" and (event.get("data") or {}).get("is_confirmed")
         )
     )
-    if has_asset and has_current_holding:
+    ths_scope_policy = (collection_audit or {}).get("ths_scope_policy") or {}
+    scope_filtered_all = bool((collection_audit or {}).get("ths_scope_policy_filtered_all"))
+    if scope_filtered_all:
+        status = "scope_policy_filtered_all"
+        next_action = "输入已读取，但全部被同花顺授权范围策略排除；请检查事件类型、证券代码、账户、来源和关键词范围。"
+    elif has_asset and has_current_holding:
         status = "ready_for_investor_avatar"
         next_action = "可进入投资分身蒸馏；继续补买卖理由、投研笔记、复盘和投资讨论。"
     elif events:
@@ -178,13 +186,45 @@ def build_manifest(
         "source_event_file": str(source_event_file),
         "event_count": len(events),
         "kind_counts": dict(kind_counts),
+        "collection_audit": collection_audit
+        or {
+            "ths_scope_policy": {
+                "enabled": False,
+                "candidate_event_count": len(events),
+                "retained_event_count": len(events),
+                "filtered_event_count": 0,
+                "filter_reason_counts": {},
+                "filtered_all": False,
+                "policy_is_user_authorization_scope": True,
+                "policy_does_not_assert_investment_relevance": True,
+                "exact_business_numbers_preserved": True,
+                "read_only": True,
+            },
+            "ths_scope_policy_filtered_all": False,
+        },
         "collection_readiness": {
             "status": status,
             "can_enter_soulmirror_lake": bool(events),
+            "can_enter_finclaw": bool(events),
             "can_claim_current_trade_collection": bool(has_asset and has_current_holding),
             "strong_current_event_count": strong_count,
             "gap_count": gap_count,
+            "scope_policy_filtered_all": scope_filtered_all,
             "next_action": next_action,
+        },
+        "ths_portfolio_boundary_proof": {
+            "source_type": "broker_trade_and_local_behavior_evidence",
+            "event_count": len(events),
+            "kind_counts": dict(kind_counts),
+            "strong_current_event_count": strong_count,
+            "authorization_scope_boundary": ths_scope_policy,
+            "read_only": True,
+            "exact_business_numbers_preserved": True,
+            "order_mutation_performed": False,
+            "credentials_collected": False,
+            "complete_account_boundary_claimed": bool(has_asset and has_current_holding),
+            "complete_broker_history_claimed": False,
+            "policy_does_not_assert_investment_relevance": True,
         },
         "investor_wiki_evidence": {
             "schema": evidence.get("schema"),

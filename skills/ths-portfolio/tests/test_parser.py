@@ -2,6 +2,7 @@
 """
 同花顺交割单CSV解析测试
 """
+import json
 import sys
 from pathlib import Path
 
@@ -29,6 +30,12 @@ from ths.package import (
     build_investor_wiki_evidence,
     sync_package_to_soulmirror,
     write_collection_package,
+)
+from ths.scope import (
+    build_ths_scope_policy,
+    filter_events_with_scope,
+    filter_holdings_with_scope,
+    filter_records_with_scope,
 )
 from ths_query import _build_events, build_gui_collection_gap
 
@@ -407,6 +414,161 @@ def test_write_collection_package_and_sync():
     print("test_write_collection_package_and_sync: PASSED")
 
 
+def test_ths_scope_policy_filters_trade_package():
+    records = [
+        {
+            "date": "2024-01-15",
+            "time": "09:30:00",
+            "code": "600519",
+            "name": "样本A",
+            "direction": "买入",
+            "price": 10.0,
+            "quantity": 100,
+            "amount": 1000.0,
+            "fee": 1.0,
+            "tax": 0.0,
+            "account": "account-a",
+        },
+        {
+            "date": "2024-01-16",
+            "time": "10:00:00",
+            "code": "000001",
+            "name": "样本B",
+            "direction": "买入",
+            "price": 5.0,
+            "quantity": 200,
+            "amount": 1000.0,
+            "fee": 1.0,
+            "tax": 0.0,
+            "account": "account-b",
+        },
+    ]
+    holdings = infer_holdings(records)
+    events = _build_events(
+        records=records,
+        holdings=holdings,
+        metadata=None,
+        gui_snapshot=None,
+        gui_error_status=None,
+        source="同花顺交割单 CSV",
+        raw_file=None,
+        collected_at="2026-07-07T15:00:00+08:00",
+        include_holding_events=True,
+        include_gap_event=True,
+        include_metadata_events=False,
+        include_gui_events=False,
+        container_root=None,
+        platform="mac",
+        gui_screenshot_dir=None,
+    )
+    policy = build_ths_scope_policy(
+        allow_event_kinds=["trade"],
+        allow_symbols=["600519"],
+        allow_accounts=["account-a"],
+    )
+    filtered_events, audit = filter_events_with_scope(events, policy)
+
+    assert len(filtered_events) == 1
+    assert filtered_events[0]["kind"] == "trade"
+    assert filtered_events[0]["data"]["symbol"] == "600519"
+    assert filtered_events[0]["data"]["amount"] == 1000.0
+    assert filtered_events[0]["data"]["ths_scope_policy"]["allowed"] is True
+    scope = audit["ths_scope_policy"]
+    assert scope["candidate_event_count"] == len(events)
+    assert scope["retained_event_count"] == 1
+    assert scope["filtered_event_count"] == len(events) - 1
+    assert scope["filter_reason_counts"] == {
+        "allow_event_kind_not_matched": 3,
+        "allow_symbol_not_matched": 1,
+    }
+
+    output = Path("/tmp/ths_portfolio_scope_policy_package_test")
+    if output.exists():
+        import shutil
+        shutil.rmtree(output)
+    manifest = write_collection_package(
+        output,
+        events=filtered_events,
+        collected_at="2026-07-07T15:00:00+08:00",
+        records=filter_records_with_scope(records, policy),
+        holdings=filter_holdings_with_scope(holdings, policy),
+        collection_audit=audit,
+    )
+    sidecar_records = json.loads((output / "trades.normalized.json").read_text(encoding="utf-8"))
+    sidecar_holdings = json.loads((output / "estimated_holdings.json").read_text(encoding="utf-8"))
+    assert [record["code"] for record in sidecar_records] == ["600519"]
+    assert sidecar_holdings == []
+    assert manifest["collection_audit"]["ths_scope_policy"]["enabled"] is True
+    assert manifest["collection_readiness"]["status"] == "events_ready_but_current_snapshot_incomplete"
+    proof = manifest["ths_portfolio_boundary_proof"]
+    assert proof["authorization_scope_boundary"]["retained_event_count"] == 1
+    assert proof["exact_business_numbers_preserved"] is True
+    assert proof["order_mutation_performed"] is False
+
+    print("test_ths_scope_policy_filters_trade_package: PASSED")
+
+
+def test_ths_scope_policy_filtered_all_package_status():
+    records = [
+        {
+            "date": "2024-01-15",
+            "time": "09:30:00",
+            "code": "600519",
+            "name": "样本A",
+            "direction": "买入",
+            "price": 10.0,
+            "quantity": 100,
+            "amount": 1000.0,
+            "fee": 1.0,
+            "tax": 0.0,
+            "account": "account-a",
+        }
+    ]
+    holdings = infer_holdings(records)
+    events = _build_events(
+        records=records,
+        holdings=holdings,
+        metadata=None,
+        gui_snapshot=None,
+        gui_error_status=None,
+        source="同花顺交割单 CSV",
+        raw_file=None,
+        collected_at="2026-07-07T15:00:00+08:00",
+        include_holding_events=True,
+        include_gap_event=False,
+        include_metadata_events=False,
+        include_gui_events=False,
+        container_root=None,
+        platform="mac",
+        gui_screenshot_dir=None,
+    )
+    policy = build_ths_scope_policy(allow_symbols=["000001"])
+    filtered_events, audit = filter_events_with_scope(events, policy)
+    assert filtered_events == []
+    assert audit["ths_scope_policy_filtered_all"] is True
+    assert audit["ths_scope_policy"]["filter_reason_counts"] == {"allow_symbol_not_matched": 2}
+
+    output = Path("/tmp/ths_portfolio_scope_policy_filtered_all_test")
+    if output.exists():
+        import shutil
+        shutil.rmtree(output)
+    manifest = write_collection_package(
+        output,
+        events=filtered_events,
+        collected_at="2026-07-07T15:00:00+08:00",
+        records=filter_records_with_scope(records, policy),
+        holdings=filter_holdings_with_scope(holdings, policy),
+        collection_audit=audit,
+    )
+    assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+    assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+    assert manifest["collection_readiness"]["scope_policy_filtered_all"] is True
+    assert manifest["ths_portfolio_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+    assert json.loads((output / "trades.normalized.json").read_text(encoding="utf-8")) == []
+
+    print("test_ths_scope_policy_filtered_all_package_status: PASSED")
+
+
 if __name__ == "__main__":
     test_parse_csv()
     test_parse_empty_csv()
@@ -420,4 +582,6 @@ if __name__ == "__main__":
     test_gui_snapshot_to_events()
     test_gui_collection_gap_event()
     test_write_collection_package_and_sync()
+    test_ths_scope_policy_filters_trade_package()
+    test_ths_scope_policy_filtered_all_package_status()
     print("\nAll tests passed!")

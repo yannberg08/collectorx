@@ -30,6 +30,12 @@ from ths.local import (
 )
 from ths.metadata import collect_personal_metadata
 from ths.package import sync_package_to_soulmirror, write_collection_package
+from ths.scope import (
+    build_ths_scope_policy,
+    filter_events_with_scope,
+    filter_holdings_with_scope,
+    filter_records_with_scope,
+)
 from ths.stats import calculate_stats, calculate_stock_stats, format_stats
 
 # Windows控制台utf-8
@@ -61,12 +67,34 @@ def main():
     parser.add_argument("--include-metadata-events", action="store_true", help="在事件JSONL中加入自选/策略/资讯/组件等个人化元数据事件")
     parser.add_argument("--include-gui-events", action="store_true", help="在事件JSONL中加入已打开同花顺交易界面的真实账户/持仓/委托/成交快照事件")
     parser.add_argument("--gap-event", action="store_true", help="在事件JSONL中加入本机采集缺口状态事件")
+    parser.add_argument("--allow-event-kind", action="append", help="只保留指定事件类型，如 trade/holding/asset_snapshot/order/execution/cashflow/watchlist/profile")
+    parser.add_argument("--deny-event-kind", action="append", help="排除指定事件类型")
+    parser.add_argument("--allow-symbol", action="append", help="只保留指定证券代码，可重复或逗号分隔")
+    parser.add_argument("--deny-symbol", action="append", help="排除指定证券代码，可重复或逗号分隔")
+    parser.add_argument("--allow-account", action="append", help="只保留账户/股东账户元数据命中的事件")
+    parser.add_argument("--deny-account", action="append", help="排除账户/股东账户元数据命中的事件")
+    parser.add_argument("--allow-source", action="append", help="只保留来源面命中的事件，如 gui、xcs、metadata、csv")
+    parser.add_argument("--deny-source", action="append", help="排除来源面命中的事件")
+    parser.add_argument("--allow-keyword", action="append", help="只保留事件元数据命中关键词的事件")
+    parser.add_argument("--deny-keyword", action="append", help="排除事件元数据命中关键词的事件")
     parser.add_argument("--source", help="事件source字段")
     parser.add_argument("--collected-at", help="事件collected_at字段，默认当前时间")
     parser.add_argument("--stats", action="store_true", help="显示统计信息")
     
     args = parser.parse_args()
     package_requested = bool(args.output or args.sync_soulmirror)
+    scope_policy = build_ths_scope_policy(
+        allow_event_kinds=args.allow_event_kind,
+        deny_event_kinds=args.deny_event_kind,
+        allow_symbols=args.allow_symbol,
+        deny_symbols=args.deny_symbol,
+        allow_accounts=args.allow_account,
+        deny_accounts=args.deny_account,
+        allow_sources=args.allow_source,
+        deny_sources=args.deny_source,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
+    )
 
     records = []
     raw_labels = []
@@ -175,7 +203,7 @@ def main():
     
     if args.export:
         with open(args.export, "w", encoding="utf-8") as f:
-            json.dump(records, f, ensure_ascii=False, indent=2)
+            json.dump(filter_records_with_scope(records, scope_policy), f, ensure_ascii=False, indent=2)
         print(f"导出完成: {args.export}")
 
     holdings = []
@@ -183,9 +211,10 @@ def main():
         holdings = infer_holdings(records)
 
     if args.holdings_export:
+        holdings_for_export = filter_holdings_with_scope(holdings, scope_policy)
         with open(args.holdings_export, "w", encoding="utf-8") as f:
-            json.dump(holdings, f, ensure_ascii=False, indent=2)
-        print(f"估算持仓导出完成: {len(holdings)} 条 -> {args.holdings_export}")
+            json.dump(holdings_for_export, f, ensure_ascii=False, indent=2)
+        print(f"估算持仓导出完成: {len(holdings_for_export)} 条 -> {args.holdings_export}")
 
     if args.event_export or package_requested:
         events = _build_events(
@@ -205,6 +234,12 @@ def main():
             platform=args.platform,
             gui_screenshot_dir=args.gui_screenshot_dir,
         )
+    else:
+        events = []
+
+    scope_audit = {"ths_scope_policy": scope_policy, "ths_scope_policy_filtered_all": False}
+    if events:
+        events, scope_audit = filter_events_with_scope(events, scope_policy)
 
     if args.event_export:
         with open(args.event_export, "w", encoding="utf-8") as f:
@@ -224,11 +259,12 @@ def main():
             output_dir,
             events=events,
             collected_at=args.collected_at,
-            records=records,
-            holdings=holdings,
-            metadata=metadata,
-            gui_snapshot=gui_snapshot,
+            records=filter_records_with_scope(records, scope_policy),
+            holdings=filter_holdings_with_scope(holdings, scope_policy),
+            metadata=None if scope_policy.get("enabled") else metadata,
+            gui_snapshot=None if scope_policy.get("enabled") else gui_snapshot,
             probe_report=probe_report,
+            collection_audit=scope_audit,
         )
         print(f"完整采集包导出完成: {output_dir} ({manifest['event_count']} 条事件)")
         if args.sync_soulmirror:

@@ -1,7 +1,7 @@
 ---
 name: ths-portfolio
 description: 采集同花顺交易记录、估算持仓与个人化投资元数据。当用户说"同花顺记录"、"交易记录"、"交割单"、"持仓画像"、"自选股"、"投资者画像"时使用此skill。
-version: 0.5.0
+version: 0.5.1
 ---
 
 # 同花顺投资数据采集工具
@@ -16,6 +16,7 @@ version: 0.5.0
 - 读取同花顺本机个人化元数据：自选股分组、策略标签、资讯阅读标记、短线工具配置、组件/页面布局
 - 支持多种CSV格式
 - 输出标准化JSON和 CollectorX Event JSONL
+- 支持事件级授权范围策略：按事件类型、证券代码、账户、来源和关键词 allow/deny 过滤
 - 明确区分“券商确认快照”和“历史成交推导”
 - 为 FinClaw investor-portrait / investor Wiki 提供可蒸馏事件
 
@@ -60,6 +61,9 @@ python <SKILL_DIR>/scripts/ths_query.py --local-scan --output ~/Desktop/ths-port
 
 # 若同花顺交易页已登录并打开,可一起采集当前资产/持仓/委托/成交快照
 python <SKILL_DIR>/scripts/ths_query.py --local-scan --include-gui-events --gui-screenshot-dir ~/Desktop/ths-gui-screens --output ~/Desktop/ths-portfolio-collect --sync-soulmirror
+
+# 按用户授权范围缩小采集包：只保留指定证券的强交易事实,并把过滤审计写入 manifest
+python <SKILL_DIR>/scripts/ths_query.py --local-scan --include-gui-events --allow-event-kind trade --allow-event-kind execution --allow-event-kind order --allow-event-kind cashflow --allow-symbol 600519 --output ~/Desktop/ths-portfolio-collect
 
 # 查看统计
 python <SKILL_DIR>/scripts/ths_query.py --file ~/Downloads/交割单.csv --stats
@@ -110,6 +114,7 @@ python <SKILL_DIR>/scripts/ths_query.py --file ~/Downloads/交割单.csv --stats
 - 不读取、不导出 Cookie、密码、token 等凭证
 - 不自动荐股、不自动下单、不绕过用户确认闸
 - GUI 模式只按 `持仓`、`委托`、`成交`、`资金明细` 四个只读页签；不按 `确定买入`、`确定卖出`、`撤单`、`银证转账`、`退出` 等动作按钮
+- 授权范围策略只是用户授权边界,不是投资相关性判断；如果所有候选事件都被过滤,manifest 会标记 `scope_policy_filtered_all`
 
 ## 平台适配状态
 
@@ -184,6 +189,25 @@ python <SKILL_DIR>/scripts/ths_query.py --file ~/Downloads/交割单.csv --stats
 - 当日委托/撤单快照
 
 这些事件进入 lake 后,由 `investor-portrait` 这类应用负责组织到投资分身 Wiki。
+
+## 授权范围策略
+
+同花顺采集器默认保留用户授权输入范围内的全部事件。FinClaw 或用户也可以用下面参数继续缩小授权范围：
+
+- `--allow-event-kind` / `--deny-event-kind`: 事件类型,如 `trade`、`holding`、`asset_snapshot`、`order`、`execution`、`cashflow`、`watchlist`、`profile`
+- `--allow-symbol` / `--deny-symbol`: 证券代码,支持重复传入或逗号分隔
+- `--allow-account` / `--deny-account`: 账户或股东账户文本命中
+- `--allow-source` / `--deny-source`: 来源面命中,如 `gui`、`xcs`、`metadata`、`csv`
+- `--allow-keyword` / `--deny-keyword`: 事件元数据关键词命中
+
+过滤后的包会在 `manifest.json` 中写入：
+
+- `collection_audit.ths_scope_policy`
+- `collection_audit.ths_scope_policy_filtered_all`
+- `collection_readiness.scope_policy_filtered_all`
+- `ths_portfolio_boundary_proof.authorization_scope_boundary`
+
+策略启用时,`trades.normalized.json` 和 `estimated_holdings.json` 会同步按同一策略过滤；为避免旁路泄漏,完整 `metadata.json` 和 `gui_snapshot.json` sidecar 不会写入包内,保留后的证据以事件流为准。
 
 ## SoulMirror lake 同步
 

@@ -283,6 +283,12 @@ Preconditions:
 
 - User has authorized local app/file access.
 - GUI snapshot requires the relevant trading page to be visible/unlocked.
+- Optional authorization filters can narrow event kind, symbol, account,
+  source, or keyword. If every candidate is outside that scope, the package
+  reports `scope_policy_filtered_all` instead of a successful data capture.
+- Scope-enabled packages filter `trades.normalized.json` and
+  `estimated_holdings.json` with the same policy and omit full metadata/GUI
+  sidecars to avoid bypassing the event-level authorization boundary.
 
 ### 同花顺自选股
 

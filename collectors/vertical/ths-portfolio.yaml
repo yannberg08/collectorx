@@ -12,4 +12,5 @@ skill: ths-portfolio
 
 # 采集逻辑由skill定义
 # skill会处理：本机历史成交、个人化元数据、交易页只读快照、
-# CollectorX事件、投资Wiki证据包，以及按需同步到SoulMirror lake
+# 事件级授权范围审计、CollectorX事件、投资Wiki证据包，
+# 以及按需同步到SoulMirror lake
