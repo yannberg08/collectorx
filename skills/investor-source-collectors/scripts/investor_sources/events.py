@@ -273,6 +273,11 @@ def build_manifest(
         if source_id == "meeting-minutes"
         else None
     )
+    wechat_article_proof = (
+        build_wechat_article_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "wechat-article-favorites"
+        else None
+    )
     manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -312,6 +317,8 @@ def build_manifest(
         manifest["task_calendar_boundary_proof"] = task_calendar_proof
     if meeting_minutes_proof is not None:
         manifest["meeting_minutes_boundary_proof"] = meeting_minutes_proof
+    if wechat_article_proof is not None:
+        manifest["wechat_article_boundary_proof"] = wechat_article_proof
     return manifest
 
 
@@ -698,6 +705,97 @@ def meeting_minutes_proof_level(
     if int(surface.get("events_with_time") or 0) > 0:
         return "authorized_meeting_minutes_with_time_surface"
     return "authorized_meeting_minutes_event_only"
+
+
+def build_wechat_article_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    surface = wechat_article_surface_summary(usable_events)
+    return {
+        "source_type": "wechat_favorites_lake_investment_article_lens",
+        "proof_level": wechat_article_proof_level(usable_events, audit=audit, readiness=collection_readiness),
+        "event_count": len(usable_events),
+        "candidate_record_count": audit.get("candidate_record_count", 0),
+        "matched_event_count": audit.get("matched_event_count", 0),
+        "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
+        "input_boundary": {
+            "input_count": audit.get("input_count", 0),
+            "requested_inputs": audit.get("requested_inputs", []),
+            "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+            "input_missing_count": audit.get("input_missing_count", 0),
+            "skipped_file_count": audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+            "limit": audit.get("limit"),
+            "limit_reached": audit.get("limit_reached", False),
+        },
+        "source_policy_boundary": {
+            "enabled": source_policy.get("enabled", False),
+            "allow_chats": source_policy.get("allow_chats", []),
+            "deny_chats": source_policy.get("deny_chats", []),
+            "allow_senders": source_policy.get("allow_senders", []),
+            "deny_senders": source_policy.get("deny_senders", []),
+            "filtered_candidate_count": source_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": source_policy.get("filter_reason_counts", {}),
+            "policy_does_not_assert_investment_relevance": source_policy.get("policy_does_not_assert_investment_relevance", True),
+        },
+        "upstream_boundary": {
+            "upstream_collector_counts": surface.get("upstream_collector_counts", {}),
+            "item_type_counts": surface.get("item_type_counts", {}),
+        },
+        "article_action_boundary": {
+            "action_type_counts": surface.get("action_type_counts", {}),
+            "source_account_type_counts": surface.get("source_account_type_counts", {}),
+            "source_account_count": surface.get("source_account_count", 0),
+            "public_account_article_count": surface.get("public_account_article_count", 0),
+            "matched_symbol_event_count": surface.get("matched_symbol_event_count", 0),
+        },
+        "content_pointer_boundary": {
+            "events_with_url": surface.get("events_with_url", 0),
+            "events_with_source_account": surface.get("events_with_source_account", 0),
+            "events_with_tags": surface.get("events_with_tags", 0),
+            "events_with_text": surface.get("events_with_text", 0),
+            "events_with_action_time": surface.get("events_with_action_time", 0),
+        },
+        "wechat_article_boundary": surface,
+        "complete_wechat_favorites_claimed": False,
+        "complete_wechat_read_history_claimed": False,
+        "public_account_full_crawl_claimed": False,
+        "public_article_body_mirrored": False,
+        "direct_wechat_reconnect": False,
+        "requires_upstream_wechat_favorites_collector": True,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness.get("can_enter_finclaw", False),
+    }
+
+
+def wechat_article_proof_level(
+    usable_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    readiness: Dict[str, Any],
+) -> str:
+    if not usable_events:
+        status = str(readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            return "no_authorized_wechat_favorites_lake_input"
+        if status == "source_policy_filtered_all":
+            return "source_policy_filtered_all"
+        if status == "no_readable_input":
+            return "no_readable_wechat_favorites_lake_input"
+        return "no_usable_investment_articles_after_filter"
+    surface = wechat_article_surface_summary(usable_events)
+    if int(surface.get("events_with_text") or 0) > 0 and int(surface.get("events_with_source_account") or 0) > 0:
+        return "authorized_wechat_articles_with_source_and_content_surface"
+    if int(surface.get("events_with_source_account") or 0) > 0:
+        return "authorized_wechat_articles_with_source_accounts"
+    if int(surface.get("events_with_url") or 0) > 0:
+        return "authorized_wechat_articles_with_url_surface"
+    return "authorized_wechat_article_actions_event_only"
 
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:

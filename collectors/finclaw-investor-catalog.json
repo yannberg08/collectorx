@@ -310,7 +310,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-wechat-favorites-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source wechat-article-favorites --input <wechat-favorites-events-jsonl> --out-dir <out-dir>",
-      "collects": "Investment public-account articles, saved/read/share/saved-file action surface, source account types, broker research, company fundamentals, market strategy, industry themes, valuation methods, portfolio cases, risk warnings, macro policy articles, URLs, tags, and text-preview availability.",
+      "collects": "Investment public-account articles, saved/read/share/saved-file action surface, source account types, broker research, company fundamentals, market strategy, industry themes, valuation methods, portfolio cases, risk warnings, macro policy articles, URLs, tags, text-preview availability, and WeChat article boundary proof.",
       "must_not_collect": "General reading history as investor conclusions.",
       "production_gap": "Real WeChat favorites/public-account stores, account/tag allowlists, action metadata validation, Windows/Linux path validation, and false-positive review."
     },

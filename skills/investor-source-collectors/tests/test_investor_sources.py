@@ -1590,6 +1590,34 @@ def test_wechat_article_favorites_lens_reports_article_surface_and_actions() -> 
         assert surface["events_with_text"] == 4
         assert surface["events_with_action_time"] == 4
         assert surface["collector_writes_wiki_directly"] is False
+        proof = manifest["wechat_article_boundary_proof"]
+        assert proof["proof_level"] == "authorized_wechat_articles_with_source_and_content_surface"
+        assert proof["event_count"] == 4
+        assert proof["candidate_record_count"] == 5
+        assert proof["matched_event_count"] == 4
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["upstream_boundary"]["upstream_collector_counts"] == {"wechat-favorites": 4}
+        assert proof["upstream_boundary"]["item_type_counts"] == {"public_account_article": 4}
+        assert proof["article_action_boundary"]["action_type_counts"] == {
+            "favorite": 1,
+            "read": 1,
+            "saved_file": 1,
+            "share": 1,
+        }
+        assert proof["article_action_boundary"]["source_account_count"] == 4
+        assert proof["article_action_boundary"]["public_account_article_count"] == 4
+        assert proof["content_pointer_boundary"]["events_with_url"] == 4
+        assert proof["content_pointer_boundary"]["events_with_source_account"] == 4
+        assert proof["content_pointer_boundary"]["events_with_tags"] == 4
+        assert proof["content_pointer_boundary"]["events_with_text"] == 4
+        assert proof["content_pointer_boundary"]["events_with_action_time"] == 4
+        assert proof["complete_wechat_favorites_claimed"] is False
+        assert proof["complete_wechat_read_history_claimed"] is False
+        assert proof["public_account_full_crawl_claimed"] is False
+        assert proof["public_article_body_mirrored"] is False
+        assert proof["direct_wechat_reconnect"] is False
+        assert proof["requires_upstream_wechat_favorites_collector"] is True
+        assert proof["wechat_article_boundary"]["wechat_article_surface_counts"]["risk_warning_article"] == 2
 
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["wechat-article-favorites"]

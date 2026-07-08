@@ -723,6 +723,12 @@ Current status:
   lens for investment public-account articles, saved/read/share/saved-file
   action surfaces, source-account types, and broker/fundamental/strategy/
   industry/valuation/portfolio/risk/macro article surfaces.
+- The `wechat-article-favorites` lens writes
+  `manifest.wechat_article_boundary_proof` with authorized input counts,
+  upstream WeChat-favorites source counts, candidate/matched/filtered counts,
+  favorite/read/share/saved-file action counts, source-account type counts,
+  URL/tag/text/time coverage, and explicit no-complete-favorites,
+  no-complete-read-history, and no-public-account-crawl boundaries.
 - Real WeChat favorites database/public-account read-history adapters still
   require version-specific validation.
 
