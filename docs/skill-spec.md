@@ -73,8 +73,8 @@ skill-name/
 | filesystem-collector | 8+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界；manifest 记录授权根、扩展覆盖、跳过原因和逐根目录结果，仍保持 metadata-only |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
-| xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计、字段覆盖和 7/20 Wiki 证据包已测试，仍需真实账号/分页验证 |
-| xueqiu-investor-activity | 8+ | 雪球个人活动垂直采集器；本地授权导出、浏览器网络 HAR、浏览器历史副本、保存页、活动覆盖证明、浏览器历史边界证明、分页完整性摘要、字段覆盖和 SoulMirror 同步已测试，仍需真实账号样本与一键 adapter |
+| xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计、symbol/market/group/industry/tag/keyword scope-policy 审计、filtered-all readiness、字段覆盖、关注池边界证明和 7/20 Wiki 证据包已测试，仍需真实账号/分页验证 |
+| xueqiu-investor-activity | 8+ | 雪球个人活动垂直采集器；本地授权导出、浏览器网络 HAR、浏览器历史副本、保存页、activity/source-surface/source-app/domain/symbol/author/keyword scope-policy 审计、filtered-all readiness、活动覆盖证明、浏览器历史边界证明、分页完整性摘要、字段覆盖和 SoulMirror 同步已测试，仍需真实账号样本与一键 adapter |
 | china-wealth-assets | 8+ | 中国基金理财资产垂直采集器；本地授权导入、PDF 官方账单、浏览器网络 HAR、ZIP、来源审计、平台/字段/账户/资产边界证明/资产面/币种覆盖和金额汇总已测试，仍需真实账号完整边界证明 |
 | financial-news-usage | 8+ | 财经资讯使用痕迹垂直采集器 baseline；支持授权文件/目录/ZIP/直接与 ZIP 内 Chromium/Safari 浏览器历史副本、平台/动作/主题覆盖、搜索/订阅/提醒/停留/访问行为覆盖、平台/动作/来源应用/域名/主题/关键词 scope-policy 审计、浏览器来源计数、逐输入来源审计、跳过原因、使用边界证明和凭证字段过滤，仍需真实财联社/华尔街见闻/格隆汇账号验证 |
 | hk-us-brokerage | 8+ | 港美股券商强交易垂直采集器 baseline；支持授权 CSV/JSON/Excel/ZIP、券商/交易表/字段覆盖、账户边界、币种市场、费用税费保证金、现金流活动、收益回报、订单执行、券商/账户/交易表/标的/市场/币种/关键词 scope-policy 审计、统一券商边界证明、逐输入来源审计、跳过原因和凭证字段过滤，仍需真实富途/老虎/盈透账号验证 |

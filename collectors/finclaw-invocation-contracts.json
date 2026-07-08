@@ -1,6 +1,6 @@
 {
   "schema": "collectorx.finclaw_invocation_contracts.v1",
-  "updated_at": "2026-07-08",
+  "updated_at": "2026-07-09",
   "authorization_modes": {
     "authorized-local-export": "User selects or provides a local export, folder, ZIP, workbook, saved page, or read-only copied file.",
     "authorized-mailbox-or-export": "User registers a mailbox through password_env or provides a local email export.",
@@ -130,18 +130,18 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
-      "user_step": "Provide an authorized Xueqiu watchlist export or package.",
-      "preflight": "Input is a user-owned Xueqiu watchlist export; it is not treated as broker holdings.",
-      "failure_state": "needs_authorized_xueqiu_watchlist_export"
+      "user_step": "Provide an authorized Xueqiu watchlist export or package; optionally choose symbol, market, group, industry, tag, and keyword allow/deny scope filters.",
+      "preflight": "Input is a user-owned Xueqiu watchlist export; optional scope filters are applied before Lake output; filtered-all results are reported explicitly and are not treated as broker holdings.",
+      "failure_state": "needs_authorized_xueqiu_watchlist_export_or_scope_policy_retained_records"
     },
     {
       "id": "xueqiu-investor-activity",
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
-      "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, browser-network HAR, or copied Chromium/Safari browser history file.",
-      "preflight": "Input belongs to the user; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com, and neither path is treated as broker trade evidence.",
-      "failure_state": "needs_authorized_xueqiu_activity_export_har_or_browser_history"
+      "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, browser-network HAR, or copied Chromium/Safari browser history file; optionally choose activity, source surface, source app, domain, symbol, author, and keyword allow/deny scope filters.",
+      "preflight": "Input belongs to the user; optional scope filters are applied before Lake output; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com, filtered-all results are reported explicitly, and neither path is treated as broker trade evidence.",
+      "failure_state": "needs_authorized_xueqiu_activity_export_har_browser_history_or_scope_policy_retained_records"
     },
     {
       "id": "china-wealth-assets",

@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from xueqiu.parser import build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso, parse_watchlist_csv, write_json, write_jsonl, write_summary
+from xueqiu.parser import WATCHLIST_SCOPE_POLICY_KEYS, build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso, parse_watchlist_csv, write_json, write_jsonl, write_summary
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -21,7 +21,12 @@ except (AttributeError, OSError):
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        scope_policy=scope_policy_from_args(args),
+    )
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
@@ -61,12 +66,32 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
+    add_scope_policy_args(p_collect)
     p_collect.set_defaults(func=collect)
 
     parser.add_argument("--file", help="Legacy mode: watchlist CSV/JSON file path.")
     parser.add_argument("--export", help="Legacy mode: export normalized JSON path.")
     parser.add_argument("--list", action="store_true", help="Legacy mode: print watchlist.")
     return parser
+
+
+def add_scope_policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--allow-symbol", action="append", help="Only keep matching symbols/codes; repeat or comma-separate.")
+    parser.add_argument("--deny-symbol", action="append", help="Exclude matching symbols/codes; repeat or comma-separate.")
+    parser.add_argument("--allow-market", action="append", help="Only keep matching markets such as SH/SZ/HK/BJ.")
+    parser.add_argument("--deny-market", action="append", help="Exclude matching markets such as SH/SZ/HK/BJ.")
+    parser.add_argument("--allow-group", action="append", help="Only keep matching watchlist groups.")
+    parser.add_argument("--deny-group", action="append", help="Exclude matching watchlist groups.")
+    parser.add_argument("--allow-industry", action="append", help="Only keep matching industries/sectors.")
+    parser.add_argument("--deny-industry", action="append", help="Exclude matching industries/sectors.")
+    parser.add_argument("--allow-tag", action="append", help="Only keep matching tags.")
+    parser.add_argument("--deny-tag", action="append", help="Exclude matching tags.")
+    parser.add_argument("--allow-keyword", action="append", help="Only keep records whose symbol/name/group/industry/note/tag/raw fields match keyword.")
+    parser.add_argument("--deny-keyword", action="append", help="Exclude records whose symbol/name/group/industry/note/tag/raw fields match keyword.")
+
+
+def scope_policy_from_args(args: argparse.Namespace) -> dict:
+    return {key: getattr(args, key, None) for key in WATCHLIST_SCOPE_POLICY_KEYS}
 
 
 def main() -> int:

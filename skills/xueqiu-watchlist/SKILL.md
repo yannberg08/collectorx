@@ -28,6 +28,14 @@ description: 雪球关注/自选列表垂直采集器。采集用户授权导出
 python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
   --input /path/to/authorized/xueqiu-watchlist-export \
   --out-dir /path/to/out
+
+# 可选：按用户授权范围收窄关注池
+python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
+  --input /path/to/authorized/xueqiu-watchlist-export \
+  --out-dir /path/to/out \
+  --allow-market SH \
+  --allow-group 核心观察 \
+  --deny-keyword 私人
 ```
 
 输出：
@@ -54,3 +62,8 @@ python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py \
 ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会明确
 标注 `xueqiu_watchlist_is_strong_trade_source: false`，并记录输入文件数、
 扩展名覆盖、ZIP 成员/跳过成员、解析记录数、过滤记录数和字段覆盖。
+`collect` 支持 symbol、market、group、industry、tag、keyword 的 allow/deny
+授权范围过滤。`manifest.collection_audit.xueqiu_watchlist_scope_policy` 会记录配置、
+候选事件数、保留数、过滤数、原因计数和 filtered-all 状态；
+`manifest.xueqiu_watchlist_boundary_proof.authorization_scope_boundary` 给 FinClaw
+检查本轮关注池授权边界。该策略只限定用户授权范围，不判断投资相关性。

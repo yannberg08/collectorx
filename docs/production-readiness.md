@@ -269,6 +269,25 @@ The prior completed wave: FinClaw catalog coverage and invocation contracts are 
 - This improves FinClaw call safety and user-facing precondition handling, but
   it does not claim new real-account validation for any collector.
 
+The latest completed wave: `xueqiu-watchlist` and
+`xueqiu-investor-activity` now expose explicit authorization scope-policy
+boundaries:
+
+- `xueqiu-watchlist` accepts symbol, market, group, industry, tag, and keyword
+  allow/deny filters before watchlist records enter the Lake.
+- `xueqiu-investor-activity` accepts activity, source-surface, source-app,
+  domain, symbol, author, and keyword allow/deny filters before Xueqiu activity,
+  HAR response, saved-page, or browser-history records enter the Lake.
+- Manifest audits now report configured filters, candidate counts, retained
+  counts, filtered counts, reason counts, and filtered-all status.
+- Filtered-all runs produce explicit `scope_policy_filtered_all` readiness
+  instead of looking like empty successful imports.
+- Watchlist and activity boundary proof now expose the authorization scope
+  boundary so FinClaw can route attention evidence without confusing it with
+  broker-confirmed trade facts.
+- This improves user authorization control and Wiki routing, but it does not
+  claim real Xueqiu account adapter or real pagination validation.
+
 The prior completed wave: FinClaw skill metadata is now part of the project validation gate:
 
 - Every skill referenced by `collectors/finclaw-investor-catalog.json` must have
@@ -286,7 +305,7 @@ The prior completed wave: FinClaw skill metadata is now part of the project vali
 - This improves FinClaw discovery and release safety, but it does not claim new
   real-account validation for any collector.
 
-The latest completed wave: `xueqiu-investor-activity` now supports user-authorized copied browser history:
+The prior completed wave: `xueqiu-investor-activity` now supports user-authorized copied browser history:
 
 - Chromium `History`, Safari `History.db`, `.sqlite`, `.sqlite3`, and `.db`
   inputs are parsed read-only when the user provides a copy.
@@ -934,7 +953,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- | --- | --- |
 | 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, WeChat dialogue boundary proof, dialogue surface summary, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons and per-root results; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all status, extraction policy, parser counts, content-read counts, limit truncation, screenshot metadata-only/default policy, explicit `--include-image-ocr` tesseract adapter audit, legacy XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide-text extraction, research document surface summary, and research corpus boundary proof | Broader private PDF/XLS/XLSX/DOCX/PPTX/image samples, real binary `.xls` with xlrd validation, OCR quality review on real Chinese screenshots, real Windows/Linux device validation, backtest against real trades/reviews |
-| 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, and explicit non-broker-trade evidence policy; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, activity-boundary proof, pagination completeness summary, HAR browser-network export parsing for `xueqiu.com` response bodies, copied Chromium/Safari browser history with Xueqiu-domain filtering, visit/typed counts, transition types, credential/query stripping audit, raw sanitization, and SoulMirror sync; not yet a one-click real account adapter | Real Xueqiu account/HAR/browser-history samples, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
+| 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, authorization scope-policy audit, filtered-all readiness, and explicit non-broker-trade evidence policy; watchlist emits attention-universe boundary proof for symbol/market/group/industry/tag/keyword scope; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, activity/source/domain/symbol/author/keyword scope boundaries, activity-boundary proof, pagination completeness summary, HAR browser-network export parsing for `xueqiu.com` response bodies, copied Chromium/Safari browser history with Xueqiu-domain filtering, visit/typed counts, transition types, credential/query stripping audit, raw sanitization, and SoulMirror sync; not yet a one-click real account adapter | Real Xueqiu account/HAR/browser-history samples, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/legacy `.xls`/Excel XML/HTML table/PDF statement/JSON/CSV/ZIP plus HAR browser-network export parsing for whitelisted fund/wealth domains, platform inference, numeric asset fields, platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, source/PDF/HAR audit, asset value summary, credential/query stripping, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no one-click real account adapter yet | Real platform PDF/HAR/export samples, per-platform UI adapters, real account validation, complete account-boundary proof |
 | 邮件研报 | `email` generic collector + `email-research` lens classifier | `baseline+audit`; IMAP `collect --out-dir`, local email `import --local-scan --out-dir`, and local EML/Apple Mail EMLX/Maildir/MBOX/Thunderbird mbox/JSON/CSV/TSV/ZIP `import --out-dir` produce standard packages with account/folder audit, local-scan/import audit, skipped file/ZIP-member reasons, Apple Mail/Maildir/Thunderbird counts, Thunderbird `.msf` index skip audit, local-scan root status, field coverage, sanitized attachment refs, body/attachment policy, mailbox boundary proof, generic-to-lens evidence boundary, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; current machine has no registered mailbox, so real mailbox validation is still pending | Register mailbox through `password_env`, validate real Apple Mail/Thunderbird/Maildir local roots, broader broker/IR sender backtest, no-full-body Wiki leakage review on real mailboxes |
 

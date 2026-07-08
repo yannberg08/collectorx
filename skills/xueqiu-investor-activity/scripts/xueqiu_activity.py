@@ -9,7 +9,7 @@ import re
 import shutil
 from pathlib import Path
 
-from xueqiu_activity.parser import build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso
+from xueqiu_activity.parser import ACTIVITY_SCOPE_POLICY_KEYS, build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -101,7 +101,12 @@ def sync_package_to_soulmirror(output_dir: Path, *, soulmirror_home: Path | None
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        scope_policy=scope_policy_from_args(args),
+    )
     package_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if args.sync_soulmirror and package_dir is None:
         run_id = re.sub(r"[^0-9A-Za-z_.-]+", "-", collected_at).strip("-")
@@ -128,8 +133,30 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--soulmirror-home", help="SoulMirror 根目录，默认 ~/.soulmirror")
     p.add_argument("--limit", type=int)
     p.add_argument("--collected-at")
+    add_scope_policy_args(p)
     p.set_defaults(func=collect)
     return parser
+
+
+def add_scope_policy_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--allow-activity", action="append", help="Only keep matching activity types.")
+    parser.add_argument("--deny-activity", action="append", help="Exclude matching activity types.")
+    parser.add_argument("--allow-source-surface", action="append", help="Only keep matching source surfaces.")
+    parser.add_argument("--deny-source-surface", action="append", help="Exclude matching source surfaces.")
+    parser.add_argument("--allow-source-app", action="append", help="Only keep matching source apps, such as chromium_history or safari_history.")
+    parser.add_argument("--deny-source-app", action="append", help="Exclude matching source apps.")
+    parser.add_argument("--allow-domain", action="append", help="Only keep matching URL domains.")
+    parser.add_argument("--deny-domain", action="append", help="Exclude matching URL domains.")
+    parser.add_argument("--allow-symbol", action="append", help="Only keep matching symbols/codes.")
+    parser.add_argument("--deny-symbol", action="append", help="Exclude matching symbols/codes.")
+    parser.add_argument("--allow-author", action="append", help="Only keep matching authors, target users, or author ids.")
+    parser.add_argument("--deny-author", action="append", help="Exclude matching authors, target users, or author ids.")
+    parser.add_argument("--allow-keyword", action="append", help="Only keep events whose content, URL, symbols, author, portfolio, or raw preview matches keyword.")
+    parser.add_argument("--deny-keyword", action="append", help="Exclude events whose content, URL, symbols, author, portfolio, or raw preview matches keyword.")
+
+
+def scope_policy_from_args(args: argparse.Namespace) -> dict:
+    return {key: getattr(args, key, None) for key in ACTIVITY_SCOPE_POLICY_KEYS}
 
 
 def main() -> int:

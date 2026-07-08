@@ -34,6 +34,8 @@ scope:
     - pagination_marker_audit
     - browser_network_response_audit
     - browser_history_domain_filtering_audit
+    - scope_policy_audit
+    - scope_policy_filtered_all_readiness
     - field_coverage
     - activity_boundary_proof
     - pagination_completeness_summary
@@ -56,4 +58,6 @@ description: |
   只保留 xueqiu.com 域名访问记录、来源浏览器、访问/输入次数和 transition 类型；ZIP
   包保留 archive.zip::member 来源并跳过路径穿越成员。manifest 记录输入、HAR、浏览器
   历史、ZIP、分页标记、字段覆盖、活动面覆盖证明和分页完整性摘要。
+  可用 activity、source_surface、source_app、domain、symbol、author、keyword
+  授权范围策略在写入 Lake 前过滤，并把 filtered-all 状态写入 manifest。
   不能当券商强交易事实，也不爬全站舆情。

@@ -544,7 +544,10 @@ Current status:
 ```bash
 python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
   --input <authorized-xueqiu-watchlist-export-or-folder> \
-  --out-dir <out-dir>
+  --out-dir <out-dir> \
+  --allow-market SH \
+  --allow-group 核心观察 \
+  --deny-keyword 私人
 ```
 
 Current status for `xueqiu-watchlist`:
@@ -557,7 +560,9 @@ Current status for `xueqiu-watchlist`:
   followed time when present; ZIP packages preserve `archive.zip::member`
   provenance and skip path-traversal members.
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
-  counts, parsed/filtered record counts, and watchlist field coverage.
+  counts, parsed/filtered record counts, symbol/market/group/industry/tag/
+  keyword scope-policy audit, filtered-all readiness, authorization scope
+  boundary, and watchlist field coverage.
 - Recursively filters credential-like raw keys.
 - Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
   coverage for attention-universe subdimensions.
@@ -568,6 +573,9 @@ Current status for `xueqiu-watchlist`:
 python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect \
   --input <authorized-xueqiu-export-har-or-browser-history-copy> \
   --out-dir <out-dir> \
+  --allow-activity post \
+  --allow-symbol SH600519 \
+  --deny-keyword 私人 \
   --sync-soulmirror
 ```
 
@@ -590,7 +598,9 @@ Current status:
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
   counts, HAR entry/endpoint/skip-reason coverage, browser-history boundary
   proof, parsed records, pagination marker fields, activity field coverage,
-  source-surface coverage, `activity_boundary_proof`, and pagination
+  source-surface coverage, activity/source-surface/source-app/domain/symbol/
+  author/keyword scope-policy audit, filtered-all readiness,
+  `activity_boundary_proof.authorization_scope_boundary`, and pagination
   completeness.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade
   evidence.

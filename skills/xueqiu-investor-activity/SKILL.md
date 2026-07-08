@@ -45,6 +45,14 @@ python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
 python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
   --input ~/Desktop/authorized-browser-history-copy/History \
   --out-dir ~/Desktop/xueqiu-investor-collect
+
+# 可选：按用户授权范围收窄雪球活动
+python <SKILL_DIR>/scripts/xueqiu_activity.py collect \
+  --input ~/Downloads/xueqiu-export.json \
+  --out-dir ~/Desktop/xueqiu-investor-collect \
+  --allow-activity post \
+  --allow-symbol SH600519 \
+  --deny-keyword 私人
 ```
 
 支持 JSON/JSONL/CSV/TSV/XLSX/XLSM/HTML/TXT/Markdown/HAR/ZIP，以及用户授权复制出来的
@@ -67,6 +75,11 @@ ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manif
 模拟组合证据，不能替代券商强交易事实。manifest 还会记录输入文件数、扩展名覆盖、
 ZIP 成员/跳过成员、HAR 网络包覆盖、浏览器历史覆盖、跳过原因、解析记录数、分页标记字段、
 字段覆盖、来源面覆盖、活动覆盖证明和分页完整性摘要。
+`collect` 支持 activity、source_surface、source_app、domain、symbol、author、
+keyword 的 allow/deny 授权范围过滤。`manifest.collection_audit.xueqiu_activity_scope_policy`
+会记录配置、候选事件数、保留数、过滤数、原因计数和 filtered-all 状态；
+`manifest.activity_boundary_proof.authorization_scope_boundary` 给 FinClaw 检查本轮
+雪球活动授权边界。该策略只限定用户授权范围，不判断投资相关性。
 
 `manifest.activity_boundary_proof` 会区分：
 

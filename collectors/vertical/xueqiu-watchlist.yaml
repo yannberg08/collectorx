@@ -25,6 +25,9 @@ scope:
     - followed_time
     - archive_member_provenance
     - source_audit
+    - scope_policy_audit
+    - scope_policy_filtered_all_readiness
+    - xueqiu_watchlist_boundary_proof
     - field_coverage
   excludes:
     - credentials
@@ -41,8 +44,8 @@ scope:
 description: |
   雪球关注列表是投资垂直关注池源。它只采用户授权导出的雪球关注/自选列表，
   用于 FinClaw 判断关注宇宙；发帖、评论、收藏和组合调仓由
-  `xueqiu-investor-activity` 采集。manifest 记录输入、ZIP、过滤和字段覆盖
-  审计，券商强交易事实必须来自交易类采集器。
+  `xueqiu-investor-activity` 采集。manifest 记录输入、ZIP、过滤、授权范围策略、
+  filtered-all 状态、关注池边界证明和字段覆盖审计，券商强交易事实必须来自交易类采集器。
 
 prompt: |
   运行：
@@ -52,6 +55,9 @@ prompt: |
 
   输入支持 CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT。
   也支持 ZIP 包，保留 archive.zip::member 来源并跳过路径穿越成员。
+  可用 --allow-symbol/--deny-symbol、--allow-market/--deny-market、
+  --allow-group/--deny-group、--allow-industry/--deny-industry、
+  --allow-tag/--deny-tag、--allow-keyword/--deny-keyword 收窄用户授权范围。
   输出 collectorx.event.v1 到 lake/xueqiu-watchlist/events.jsonl，并写入 manifest.json。
   关注列表只作为 attention-universe 证据，后续必须与雪球活动、券商交易、
   研报、笔记和复盘交叉验证。

@@ -149,6 +149,121 @@ def test_collect_posts_json() -> None:
         assert [event["kind"] for event in events] == ["note", "profile"]
 
 
+def test_activity_scope_policy_filters_authorized_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "activities.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "type": "post",
+                        "symbol": "600519",
+                        "screen_name": "价值研究员",
+                        "text": "白酒复盘，继续观察赔率。",
+                        "url": "https://xueqiu.com/1/1",
+                    },
+                    {
+                        "type": "post",
+                        "symbol": "688981",
+                        "screen_name": "价值研究员",
+                        "text": "半导体复盘。",
+                        "url": "https://xueqiu.com/1/2",
+                    },
+                    {
+                        "type": "post",
+                        "symbol": "600519",
+                        "screen_name": "价值研究员",
+                        "text": "私人备忘。",
+                        "url": "https://xueqiu.com/1/3",
+                    },
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--allow-activity",
+                "post",
+                "--allow-domain",
+                "xueqiu.com",
+                "--allow-symbol",
+                "SH600519",
+                "--allow-author",
+                "价值",
+                "--allow-keyword",
+                "白酒",
+                "--deny-keyword",
+                "私人",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["symbol"] == "SH600519"
+        assert events[0]["data"]["symbols"] == ["SH600519"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["xueqiu_activity_scope_policy"]["configured"] is True
+        assert audit["scope_policy_candidate_event_count"] == 3
+        assert audit["scope_policy_retained_event_count"] == 1
+        assert audit["scope_policy_filtered_event_count"] == 2
+        assert audit["scope_policy_filter_reason_counts"] == {
+            "allow_keyword_mismatch": 2,
+            "allow_symbol_mismatch": 1,
+            "deny_keyword": 1,
+        }
+        proof = manifest["activity_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["policy_configured"] is True
+        assert proof["authorization_scope_boundary"]["retained_event_count"] == 1
+
+
+def test_activity_scope_policy_filtered_all_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "activities.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps([{"type": "post", "text": "普通复盘", "url": "https://xueqiu.com/1/1"}], ensure_ascii=False),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--allow-activity",
+                "comment",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "xueqiu_scope_policy_filtered_all"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_audit"]["xueqiu_activity_scope_policy_filtered_all"] is True
+        assert manifest["activity_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+
+
 def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -675,6 +790,8 @@ def test_activity_boundary_proof_reports_broad_partial_coverage() -> None:
 if __name__ == "__main__":
     test_collect_watchlist_csv()
     test_collect_posts_json()
+    test_activity_scope_policy_filters_authorized_records()
+    test_activity_scope_policy_filtered_all_gap()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
     test_collects_har_network_export_without_leaking_secrets()
     test_collects_browser_history_copy_filters_xueqiu_domains()
