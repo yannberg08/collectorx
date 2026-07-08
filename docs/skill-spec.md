@@ -80,7 +80,7 @@ skill-name/
 | hk-us-brokerage | 8+ | 港美股券商强交易垂直采集器 baseline；支持授权 CSV/JSON/Excel/ZIP、券商/交易表/字段覆盖、账户边界、币种市场、费用税费保证金、现金流活动、收益回报、订单执行、券商/账户/交易表/标的/市场/币种/关键词 scope-policy 审计、统一券商边界证明、逐输入来源审计、跳过原因和凭证字段过滤，仍需真实富途/老虎/盈透账号验证 |
 | pro-terminal-usage | 8+ | 专业终端使用痕迹垂直采集器 baseline；支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP、终端/活动/字段覆盖、工作流主题面谱、查询词/参数/导出路径/行数/工作区模板 ID/对象计数强度摘要、终端/活动/工作区/项目/数据集/字段/关键词 scope-policy 审计、filtered-all 状态、统一工作流边界证明、逐输入来源审计、跳过原因和凭证/许可字段过滤，仍需真实 Wind/Choice/iFinD/Bloomberg 账号验证 |
 | social-activity | 8+ | 社交平台用户活动通用采集器 baseline；支持授权 JSON/CSV/Excel/HTML/TXT/ZIP/浏览器历史副本、弱证据策略、平台/动作/来源应用/域名/创作者/主题/关键词 scope-policy 审计、filtered-all 状态、平台/动作/字段覆盖、社交影响主题、浏览器来源/访问/跳转方式审计、社交活动边界证明、逐输入来源审计、跳过原因、ZIP 成员审计和凭证字段过滤，仍需真实微博/B站/小红书账号验证 |
-| email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、Apple Mail EMLX、Maildir、Thunderbird mbox、账户/文件夹审计、本机扫描根目录审计、逐输入导入审计、跳过文件/ZIP 成员原因、字段覆盖和邮箱边界证明已补齐，仍需真实邮箱验证与安全评审 |
+| email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、Apple Mail EMLX、Maildir、Thunderbird mbox、账户/文件夹审计、本机扫描根目录审计、逐输入导入审计、跳过文件/ZIP 成员原因、邮箱授权范围策略、filtered-all 状态、字段覆盖和邮箱边界证明已补齐，仍需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |
 | notes-collector | 8+ | 笔记通用采集器 baseline；支持 Obsidian Markdown/Canvas、Notion、有道/印象/Markdown/HTML/JSON/CSV/TSV/ENEX/ZIP 授权导入、来源应用/路径/标签授权范围策略、平台覆盖、表格/Canvas 导入审计、逐输入来源审计、跳过原因和内容策略 manifest，仍需真实 Notion/有道/印象账号验证 |
 | investor-source-collectors | 8+ | 投资分身分类、路由和 lens 证据包工具；wechat-investment-dialogue 已补来源策略、对话边界证明和微信投资对话面谱；research-documents 已补逐输入审计、显式内容抽取、legacy/binary `.xls` parser 边界审计、文档授权范围策略、`--include-image-ocr` 本地截图 OCR 审计、研究语料边界证明和研究文档面谱；investment-notes 已补投资笔记边界证明和笔记类型面谱；task-calendar-investor 已补任务日历边界证明、scope-policy 边界、投资面谱、任务 checklist/重复/时区执行结构，不替代通用/垂直源采集器 |

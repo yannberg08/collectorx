@@ -287,6 +287,76 @@ def test_imap_collect_standard_package():
         assert proof["imap_boundary"]["password_material_in_output"] is False
 
 
+def test_imap_collect_scope_policy_filters_authorized_folder():
+    import email_api
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        state_path = root / "email.json"
+        FakeIMAP.mailboxes = {
+            ("owner@gmail.com", "INBOX"): {
+                1: _mail_bytes("晨会纪要", "Analyst <a@broker.example>", "Owner <owner@gmail.com>", "半导体 正文A")
+            },
+            ("owner@gmail.com", "Sent"): {
+                2: _mail_bytes("调研回复", "Owner <owner@gmail.com>", "Analyst <a@broker.example>", "半导体 正文B")
+            },
+        }
+
+        original_imap = email_api.imaplib.IMAP4_SSL
+        original_token_file = email_api.TOKEN_FILE
+        email_api.imaplib.IMAP4_SSL = FakeIMAP
+        email_api.TOKEN_FILE = state_path
+        try:
+            email_api._save_accounts(
+                [
+                    {
+                        "id": "owner_gmail_com",
+                        "provider": "gmail",
+                        "host": "imap.gmail.com",
+                        "email": "owner@gmail.com",
+                        "password": "ok",
+                        "folders": ["INBOX", "Sent"],
+                        "days": 30,
+                        "enabled": True,
+                    }
+                ]
+            )
+            with redirect_stdout(StringIO()):
+                email_api.cmd_collect(
+                    days=None,
+                    folder=None,
+                    fmt="json",
+                    limit=None,
+                    out_dir=str(out),
+                    collected_at="2026-07-09T10:00:00+08:00",
+                    account_id="all",
+                    email_scope_policy={"allow_folder": ["INBOX"], "allow_keyword": ["半导体"]},
+                )
+        finally:
+            email_api.imaplib.IMAP4_SSL = original_imap
+            email_api.TOKEN_FILE = original_token_file
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["data"]["folder"] == "INBOX"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["status"] == "events_collected"
+        assert audit["email_scope_policy"]["configured"] is True
+        assert audit["scope_policy_candidate_email_count"] == 2
+        assert audit["scope_policy_retained_email_count"] == 1
+        assert audit["scope_policy_filtered_email_count"] == 1
+        assert audit["scope_policy_filter_reason_counts"] == {"allow_folder_mismatch": 1}
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["candidate_email_count"] == 2
+        assert proof["authorization_scope_boundary"]["retained_email_count"] == 1
+        assert proof["imap_boundary"]["scope_policy_filtered_email_count"] == 1
+
+
 def test_imap_collect_gap_package_without_registered_account():
     import email_api
 
@@ -425,6 +495,175 @@ def test_local_email_import_package():
         assert proof["attachment_capture"]["attachment_bodies_included"] is False
         assert proof["local_export_boundary"]["resolved_input_file_count"] == 3
         assert proof["local_export_boundary"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+
+
+def test_local_email_import_scope_policy_filters_authorized_records():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "mail-export.json"
+        out = root / "out"
+        rows = [
+            {
+                "mailbox": "owner@example.com",
+                "folder": "INBOX",
+                "from": "Broker Research <research@broker.example>",
+                "to": "Owner <owner@example.com>",
+                "subject": "晨会纪要：半导体",
+                "date": "2026-07-09T08:30:00+08:00",
+                "body": "半导体 估值变化。",
+                "attachments": [{"filename": "morning-note.pdf"}],
+            },
+            {
+                "mailbox": "owner@example.com",
+                "folder": "Archive",
+                "from": "Broker Research <research@broker.example>",
+                "to": "Owner <owner@example.com>",
+                "subject": "晨会纪要：半导体",
+                "date": "2026-07-09T08:31:00+08:00",
+                "body": "半导体 估值变化。",
+                "attachments": [{"filename": "morning-note.pdf"}],
+            },
+            {
+                "mailbox": "owner@example.com",
+                "folder": "INBOX",
+                "from": "Other <note@other.example>",
+                "to": "Owner <owner@example.com>",
+                "subject": "晨会纪要：半导体",
+                "date": "2026-07-09T08:32:00+08:00",
+                "body": "半导体 估值变化。",
+                "attachments": [{"filename": "morning-note.pdf"}],
+            },
+            {
+                "mailbox": "owner@example.com",
+                "folder": "INBOX",
+                "from": "Broker Research <research@broker.example>",
+                "to": "Owner <owner@example.com>",
+                "subject": "晨会纪要：半导体",
+                "date": "2026-07-09T08:33:00+08:00",
+                "body": "半导体 私人内容。",
+                "attachments": [{"filename": "morning-note.pdf"}],
+            },
+        ]
+        json_path.write_text(json.dumps({"emails": rows}, ensure_ascii=False), encoding="utf-8")
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--allow-mailbox",
+                "owner@example.com",
+                "--allow-folder",
+                "INBOX",
+                "--allow-sender-domain",
+                "broker.example",
+                "--allow-recipient",
+                "owner@example.com",
+                "--allow-subject",
+                "晨会",
+                "--allow-attachment",
+                "morning-note",
+                "--allow-keyword",
+                "半导体",
+                "--deny-keyword",
+                "私人",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["data"]["subject"] == "晨会纪要：半导体"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["pre_scope_policy_email_count"] == 4
+        assert audit["imported_email_count"] == 1
+        assert audit["email_scope_policy"]["configured"] is True
+        assert audit["scope_policy_candidate_email_count"] == 4
+        assert audit["scope_policy_retained_email_count"] == 1
+        assert audit["scope_policy_filtered_email_count"] == 3
+        assert audit["scope_policy_filter_reason_counts"] == {
+            "allow_folder_mismatch": 1,
+            "allow_sender_domain_mismatch": 1,
+            "deny_keyword": 1,
+        }
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["policy_configured"] is True
+        assert proof["authorization_scope_boundary"]["retained_email_count"] == 1
+        assert proof["local_export_boundary"]["pre_scope_policy_email_count"] == 4
+        assert proof["local_export_boundary"]["scope_policy_filtered_email_count"] == 3
+
+
+def test_local_email_import_scope_policy_filtered_all_gap():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "mail-export.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                {
+                    "emails": [
+                        {
+                            "mailbox": "owner@example.com",
+                            "folder": "INBOX",
+                            "from": "Other <note@other.example>",
+                            "to": "Owner <owner@example.com>",
+                            "subject": "普通邮件",
+                            "body": "不在授权域名里。",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--allow-sender-domain",
+                "broker.example",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["kind"] == "other"
+        assert events[0]["data"]["gap"] == "email_scope_policy_filtered_all"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["collection_audit"]
+        assert audit["status"] == "scope_policy_filtered_all"
+        assert audit["email_scope_policy_filtered_all"] is True
+        assert audit["scope_policy_filter_reason_counts"] == {"allow_sender_domain_mismatch": 1}
+        proof = manifest["mailbox_boundary_proof"]
+        assert proof["proof_level"] == "email_scope_policy_filtered_all"
+        assert proof["authorization_scope_boundary"]["filtered_all"] is True
+        assert proof["local_export_boundary"]["scope_policy_candidate_email_count"] == 1
 
 
 def test_local_email_import_apple_mail_emlx_and_maildir():

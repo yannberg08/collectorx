@@ -181,6 +181,7 @@ def gap_event(*, collected_at: Optional[str] = None, reason: str = "email_author
         "email_imap_account_missing": "No enabled mailbox account was registered for IMAP collection.",
         "email_imap_no_messages": "No messages matched the authorized IMAP account, folder, and time window.",
         "email_imap_collection_failed": "IMAP collection did not fetch messages; inspect collection_audit for account and folder errors.",
+        "email_scope_policy_filtered_all": "Email messages were found, but every candidate was outside the configured authorization scope policy.",
     }
     return {
         "schema": "collectorx.event.v1",

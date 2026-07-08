@@ -16,7 +16,24 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`research-documents` now supports explicit document authorization scope filters
+`email` now supports explicit email authorization scope filters before IMAP,
+local-scan, or local-import messages enter the Lake:
+
+- `email_api.py collect` and `email_api.py import` accept mailbox, folder,
+  sender, sender-domain, recipient, subject, attachment-name, and keyword
+  allow/deny filters.
+- Manifest `collection_audit.email_scope_policy` records configured filters,
+  candidate email count, retained count, filtered count, reason counts, and
+  whether every candidate was excluded by policy.
+- If every candidate email is filtered by policy, readiness reports
+  `scope_policy_filtered_all` and the package emits an
+  `email_scope_policy_filtered_all` gap instead of pretending the mailbox or
+  export was empty.
+- `mailbox_boundary_proof.authorization_scope_boundary` gives FinClaw a stable
+  place to inspect the exact mailbox/file/folder/person/topic authorization
+  boundary before email evidence is routed into `email-research`.
+
+The prior completed wave: `research-documents` now supports explicit document authorization scope filters
 before authorized research files enter the investor evidence package:
 
 - `investor_sources.py collect --source research-documents` accepts extension,

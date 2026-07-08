@@ -5,6 +5,7 @@
 import imaplib
 import email
 import csv
+import fnmatch
 import json
 import mailbox
 import os
@@ -16,6 +17,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 from email import policy as email_policy
 from email.header import decode_header
+from email.utils import getaddresses
 from pathlib import Path
 from pathlib import PurePosixPath
 from pathlib import PureWindowsPath
@@ -334,6 +336,7 @@ def cmd_collect(
     collected_at: str = None,
     event_include_body: bool = False,
     account_id: str = "all",
+    email_scope_policy: dict = None,
 ):
     """采集邮件"""
     state = _load_state()
@@ -346,6 +349,8 @@ def cmd_collect(
                 account_id=account_id,
                 status="no_registered_account",
             )
+            _empty_emails, scope_audit = apply_email_scope_policy([], email_scope_policy)
+            attach_email_scope_policy_audit(audit, scope_audit)
             events = [gap_event(collected_at=collected_at, reason="email_imap_account_missing")]
             if event_export:
                 write_events_jsonl(event_export, events)
@@ -377,13 +382,19 @@ def cmd_collect(
             emails.extend(account_emails)
             account_audits.append(account_audit)
 
-        audit_status = resolve_imap_audit_status(account_audits, emails)
+        candidate_email_count = len(emails)
+        emails, scope_audit = apply_email_scope_policy(emails, email_scope_policy)
+        if candidate_email_count and scope_audit.get("filtered_all"):
+            audit_status = "scope_policy_filtered_all"
+        else:
+            audit_status = resolve_imap_audit_status(account_audits, emails)
         collection_audit = build_imap_collection_audit(
             accounts=accounts,
             account_audits=account_audits,
             account_id=account_id,
             status=audit_status,
         )
+        attach_email_scope_policy_audit(collection_audit, scope_audit)
 
         if fmt == "json":
             print(json.dumps(emails, ensure_ascii=False, indent=2))
@@ -440,6 +451,7 @@ def cmd_import(
     platform: str = "auto",
     container_root: str = None,
     probe_export: str = None,
+    email_scope_policy: dict = None,
 ):
     """Import user-authorized local email exports without requiring IMAP registration."""
     local_scan_files = find_local_email_files(container_root=container_root, platform=platform) if local_scan else []
@@ -455,9 +467,11 @@ def cmd_import(
         platform=platform,
         container_root=container_root,
         local_scan_files=local_scan_files,
+        email_scope_policy=email_scope_policy,
     )
     if not emails:
-        events = [gap_event(collected_at=collected_at, reason="email_authorized_export_missing")]
+        reason = "email_scope_policy_filtered_all" if import_audit.get("email_scope_policy_filtered_all") else "email_authorized_export_missing"
+        events = [gap_event(collected_at=collected_at, reason=reason)]
     else:
         events = emails_to_events(
             emails,
@@ -493,6 +507,7 @@ def collect_imported_emails_with_audit(
     platform: str = "auto",
     container_root: str = None,
     local_scan_files: list[Path] = None,
+    email_scope_policy: dict = None,
 ) -> tuple[list[dict], dict]:
     input_list = list(inputs)
     local_scan_files = local_scan_files if local_scan_files is not None else (
@@ -649,8 +664,18 @@ def collect_imported_emails_with_audit(
                 break
         if limit is not None and len(collected) >= limit:
             break
+    candidate_email_count = len(collected)
+    collected, scope_audit = apply_email_scope_policy(collected, email_scope_policy)
+    attach_email_scope_policy_audit(audit, scope_audit)
+    audit["pre_scope_policy_email_count"] = candidate_email_count
+    audit["pre_scope_policy_local_scan_email_count"] = audit.get("local_scan_imported_email_count", 0)
+    audit["local_scan_imported_email_count"] = sum(
+        1 for record in collected if (record.get("raw_ref") or {}).get("local_scan") is True
+    )
     audit["imported_email_count"] = len(collected)
     audit["parsed_record_count"] = len(collected)
+    if audit.get("email_scope_policy_filtered_all"):
+        audit["status"] = "scope_policy_filtered_all"
     finalize_import_audit(audit)
     return collected, audit
 
@@ -1321,6 +1346,246 @@ def _normalize_key(value) -> str:
     return str(value).lower().replace("_", "").replace("-", "").replace(" ", "")
 
 
+EMAIL_SCOPE_POLICY_KEYS = (
+    "allow_mailbox",
+    "deny_mailbox",
+    "allow_folder",
+    "deny_folder",
+    "allow_sender",
+    "deny_sender",
+    "allow_sender_domain",
+    "deny_sender_domain",
+    "allow_recipient",
+    "deny_recipient",
+    "allow_subject",
+    "deny_subject",
+    "allow_attachment",
+    "deny_attachment",
+    "allow_keyword",
+    "deny_keyword",
+)
+
+
+def split_scope_values(values) -> list[str]:
+    if values in (None, ""):
+        return []
+    if isinstance(values, (list, tuple, set)):
+        raw_items = values
+    else:
+        raw_items = [values]
+    out: list[str] = []
+    seen = set()
+    for item in raw_items:
+        if isinstance(item, (list, tuple, set)):
+            parts = split_scope_values(item)
+        else:
+            parts = [part.strip() for part in re.split(r"[,，;；]", str(item)) if part.strip()]
+        for part in parts:
+            key = part.lower()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(part)
+    return out
+
+
+def normalize_email_scope_policy(policy: dict = None) -> dict:
+    policy = policy or {}
+    return {key: split_scope_values(policy.get(key)) for key in EMAIL_SCOPE_POLICY_KEYS}
+
+
+def email_scope_policy_configured(policy: dict) -> bool:
+    return any(policy.get(key) for key in EMAIL_SCOPE_POLICY_KEYS)
+
+
+def apply_email_scope_policy(emails: list[dict], policy: dict = None) -> tuple[list[dict], dict]:
+    normalized_policy = normalize_email_scope_policy(policy)
+    configured = email_scope_policy_configured(normalized_policy)
+    candidates = list(emails)
+    reason_counts = Counter()
+    retained = []
+    for record in candidates:
+        reasons = email_scope_filter_reasons(record, normalized_policy) if configured else []
+        if reasons:
+            for reason in reasons:
+                reason_counts[reason] += 1
+            continue
+        retained.append(record)
+    audit = {
+        "configured": configured,
+        "filters": normalized_policy,
+        "candidate_email_count": len(candidates),
+        "retained_email_count": len(retained),
+        "filtered_email_count": len(candidates) - len(retained),
+        "filter_reason_counts": dict(sorted(reason_counts.items())),
+        "filtered_all": configured and bool(candidates) and not retained,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
+        "deny_rules_win_over_allow_rules": True,
+        "allow_rule_semantics": {
+            "mailbox_folder": "case-insensitive exact match unless wildcard is used",
+            "sender_recipient_subject_attachment_keyword": "case-insensitive substring match unless wildcard is used",
+            "sender_domain": "case-insensitive exact or subdomain match unless wildcard is used",
+        },
+    }
+    return retained, audit
+
+
+def attach_email_scope_policy_audit(audit: dict, scope_audit: dict) -> None:
+    audit["email_scope_policy"] = scope_audit
+    audit["scope_policy_candidate_email_count"] = scope_audit.get("candidate_email_count", 0)
+    audit["scope_policy_retained_email_count"] = scope_audit.get("retained_email_count", 0)
+    audit["scope_policy_filtered_email_count"] = scope_audit.get("filtered_email_count", 0)
+    audit["scope_policy_filter_reason_counts"] = scope_audit.get("filter_reason_counts", {})
+    audit["email_scope_policy_filtered_all"] = bool(scope_audit.get("filtered_all"))
+
+
+def email_scope_filter_reasons(record: dict, policy: dict) -> list[str]:
+    checks = [
+        (
+            "mailbox",
+            policy.get("allow_mailbox", []),
+            policy.get("deny_mailbox", []),
+            [str(record.get("mailbox") or "")],
+            scope_identity_match,
+        ),
+        (
+            "folder",
+            policy.get("allow_folder", []),
+            policy.get("deny_folder", []),
+            [str(record.get("folder") or "")],
+            scope_identity_match,
+        ),
+        (
+            "sender",
+            policy.get("allow_sender", []),
+            policy.get("deny_sender", []),
+            email_text_candidates(record.get("from")),
+            scope_text_match,
+        ),
+        (
+            "sender_domain",
+            policy.get("allow_sender_domain", []),
+            policy.get("deny_sender_domain", []),
+            email_domain_candidates(record.get("from")),
+            scope_domain_match,
+        ),
+        (
+            "recipient",
+            policy.get("allow_recipient", []),
+            policy.get("deny_recipient", []),
+            email_text_candidates(record.get("to"), record.get("cc")),
+            scope_text_match,
+        ),
+        (
+            "subject",
+            policy.get("allow_subject", []),
+            policy.get("deny_subject", []),
+            [str(record.get("subject") or "")],
+            scope_text_match,
+        ),
+        (
+            "attachment",
+            policy.get("allow_attachment", []),
+            policy.get("deny_attachment", []),
+            email_attachment_names(record),
+            scope_text_match,
+        ),
+        (
+            "keyword",
+            policy.get("allow_keyword", []),
+            policy.get("deny_keyword", []),
+            [email_scope_search_text(record)],
+            scope_text_match,
+        ),
+    ]
+    reasons: list[str] = []
+    for name, allow_patterns, deny_patterns, values, matcher in checks:
+        if deny_patterns and any_scope_match(values, deny_patterns, matcher):
+            reasons.append(f"deny_{name}")
+        if allow_patterns and not any_scope_match(values, allow_patterns, matcher):
+            reasons.append(f"allow_{name}_mismatch")
+    return reasons
+
+
+def any_scope_match(values: list[str], patterns: list[str], matcher) -> bool:
+    return any(matcher(value, pattern) for value in values if value not in (None, "") for pattern in patterns)
+
+
+def scope_identity_match(value: str, pattern: str) -> bool:
+    value_norm = str(value or "").strip().lower()
+    pattern_norm = str(pattern or "").strip().lower()
+    if not value_norm or not pattern_norm:
+        return False
+    if "*" in pattern_norm or "?" in pattern_norm:
+        return fnmatch.fnmatch(value_norm, pattern_norm)
+    return value_norm == pattern_norm
+
+
+def scope_text_match(value: str, pattern: str) -> bool:
+    value_norm = str(value or "").strip().lower()
+    pattern_norm = str(pattern or "").strip().lower()
+    if not value_norm or not pattern_norm:
+        return False
+    if "*" in pattern_norm or "?" in pattern_norm:
+        return fnmatch.fnmatch(value_norm, pattern_norm)
+    return pattern_norm in value_norm
+
+
+def scope_domain_match(value: str, pattern: str) -> bool:
+    domain = str(value or "").strip().lower().lstrip("@")
+    pattern_norm = str(pattern or "").strip().lower().lstrip("@")
+    if not domain or not pattern_norm:
+        return False
+    if "*" in pattern_norm or "?" in pattern_norm:
+        return fnmatch.fnmatch(domain, pattern_norm)
+    return domain == pattern_norm or domain.endswith(f".{pattern_norm}")
+
+
+def email_text_candidates(*values) -> list[str]:
+    texts = [str(value or "") for value in values if value not in (None, "")]
+    addresses = []
+    for display, address in getaddresses(texts):
+        if display:
+            addresses.append(display)
+        if address:
+            addresses.append(address)
+    return [*texts, *addresses]
+
+
+def email_domain_candidates(*values) -> list[str]:
+    domains = set()
+    texts = [str(value or "") for value in values if value not in (None, "")]
+    for _display, address in getaddresses(texts):
+        if "@" in address:
+            domains.add(address.rsplit("@", 1)[1].lower())
+    for text in texts:
+        for match in re.findall(r"@([A-Za-z0-9.-]+\.[A-Za-z]{2,})", text):
+            domains.add(match.lower())
+    return sorted(domains)
+
+
+def email_attachment_names(record: dict) -> list[str]:
+    names: list[str] = []
+    for item in normalize_attachments(record.get("attachment_refs") or record.get("attachments") or []):
+        if item.get("filename"):
+            names.append(str(item["filename"]))
+    return names
+
+
+def email_scope_search_text(record: dict) -> str:
+    values = [
+        record.get("mailbox"),
+        record.get("folder"),
+        record.get("from"),
+        record.get("to"),
+        record.get("cc"),
+        record.get("subject"),
+        record.get("body"),
+    ]
+    values.extend(email_attachment_names(record))
+    return "\n".join(str(value) for value in values if value not in (None, "", []))
+
+
 def write_standard_email_package(
     out_dir: str,
     events: list[dict],
@@ -1427,6 +1692,8 @@ def build_import_manifest(events: list[dict], *, collected_at: str = None, impor
 
 def readiness_status_for_gap(event: dict, *, audit: dict, is_imap: bool) -> str:
     reason = (event.get("data") or {}).get("gap")
+    if reason == "email_scope_policy_filtered_all":
+        return "scope_policy_filtered_all"
     if reason == "email_imap_account_missing":
         return "needs_email_registered_account"
     if reason == "email_imap_no_messages":
@@ -1440,6 +1707,8 @@ def readiness_status_for_gap(event: dict, *, audit: dict, is_imap: bool) -> str:
 
 def next_action_for_gap(event: dict, *, is_imap: bool) -> str:
     reason = (event.get("data") or {}).get("gap")
+    if reason == "email_scope_policy_filtered_all":
+        return "Review or relax the email scope policy, then rerun the collector."
     if reason == "email_imap_account_missing":
         return "Register at least one mailbox with password_env, then run collect --out-dir again."
     if reason == "email_imap_no_messages":
@@ -1537,6 +1806,7 @@ def build_mailbox_boundary_proof(
         "complete_mailbox_claimed": False,
         "complete_account_history_claimed": False,
         "bounded_by_user_selected_accounts_folders_days": bool(is_imap),
+        "authorization_scope_boundary": email_authorization_scope_boundary_from_audit(audit),
         "investor_wiki_requires_lens": "email-research",
         "collector_writes_investor_wiki_directly": False,
         "can_enter_finclaw": collection_readiness["can_enter_finclaw"],
@@ -1550,6 +1820,8 @@ def build_mailbox_boundary_proof(
 
 def mailbox_boundary_proof_level(email_events: list[dict], *, audit: dict, is_imap: bool) -> str:
     if not email_events:
+        if audit.get("email_scope_policy_filtered_all"):
+            return "email_scope_policy_filtered_all"
         if is_imap and audit.get("status") == "no_registered_account":
             return "no_authorized_mailbox"
         if is_imap:
@@ -1597,6 +1869,10 @@ def imap_boundary_from_audit(audit: dict) -> dict:
         "skipped_fetch_count": audit.get("skipped_fetch_count", 0),
         "read_only": audit.get("read_only", True),
         "password_material_in_output": audit.get("password_material_in_output", False),
+        "scope_policy_candidate_email_count": audit.get("scope_policy_candidate_email_count", 0),
+        "scope_policy_retained_email_count": audit.get("scope_policy_retained_email_count", 0),
+        "scope_policy_filtered_email_count": audit.get("scope_policy_filtered_email_count", 0),
+        "email_scope_policy_filtered_all": audit.get("email_scope_policy_filtered_all", False),
     }
 
 
@@ -1606,6 +1882,7 @@ def local_export_boundary_from_audit(audit: dict) -> dict:
         "requested_inputs": audit.get("requested_inputs", []),
         "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
         "input_missing_count": audit.get("input_missing_count", 0),
+        "pre_scope_policy_email_count": audit.get("pre_scope_policy_email_count", 0),
         "imported_email_count": audit.get("imported_email_count", 0),
         "parsed_record_count": audit.get("parsed_record_count", 0),
         "extension_counts": audit.get("extension_counts", {}),
@@ -1632,11 +1909,31 @@ def local_export_boundary_from_audit(audit: dict) -> dict:
         "local_scan_thunderbird_summary_index_skipped_count": audit.get("local_scan_thunderbird_summary_index_skipped_count", 0),
         "local_scan_truncated_root_count": audit.get("local_scan_truncated_root_count", 0),
         "local_scan_imported_email_count": audit.get("local_scan_imported_email_count", 0),
+        "pre_scope_policy_local_scan_email_count": audit.get("pre_scope_policy_local_scan_email_count", 0),
         "limit": audit.get("limit"),
         "limit_reached": audit.get("limit_reached", False),
         "attachment_bodies_included": audit.get("attachment_bodies_included", False),
         "archive_path_traversal_members_collected": audit.get("archive_path_traversal_members_collected", False),
         "windows_drive_archive_members_collected": audit.get("windows_drive_archive_members_collected", False),
+        "scope_policy_candidate_email_count": audit.get("scope_policy_candidate_email_count", 0),
+        "scope_policy_retained_email_count": audit.get("scope_policy_retained_email_count", 0),
+        "scope_policy_filtered_email_count": audit.get("scope_policy_filtered_email_count", 0),
+        "email_scope_policy_filtered_all": audit.get("email_scope_policy_filtered_all", False),
+    }
+
+
+def email_authorization_scope_boundary_from_audit(audit: dict) -> dict:
+    scope = audit.get("email_scope_policy") or {}
+    return {
+        "policy_configured": bool(scope.get("configured")),
+        "filters": scope.get("filters", {}),
+        "candidate_email_count": scope.get("candidate_email_count", 0),
+        "retained_email_count": scope.get("retained_email_count", 0),
+        "filtered_email_count": scope.get("filtered_email_count", 0),
+        "filter_reason_counts": scope.get("filter_reason_counts", {}),
+        "filtered_all": bool(scope.get("filtered_all")),
+        "policy_is_user_authorization_scope": scope.get("policy_is_user_authorization_scope", True),
+        "policy_does_not_assert_investment_relevance": scope.get("policy_does_not_assert_investment_relevance", True),
     }
 
 
@@ -1656,6 +1953,7 @@ def finalize_import_audit(audit: dict) -> None:
         "local_scan_root_type_counts",
         "local_scan_candidate_format_counts",
         "local_scan_skipped_reason_counts",
+        "scope_policy_filter_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 
@@ -1749,6 +2047,8 @@ def resolve_imap_audit_status(account_audits: list[dict], emails: list[dict]) ->
 
 
 def gap_reason_for_imap_audit(status: str) -> str:
+    if status == "scope_policy_filtered_all":
+        return "email_scope_policy_filtered_all"
     if status == "no_registered_account":
         return "email_imap_account_missing"
     if status == "no_matching_mail_in_time_window":
@@ -1911,6 +2211,29 @@ def _resolve_password(account: dict) -> str:
     return account.get("password", "")
 
 
+def add_email_scope_policy_args(parser) -> None:
+    parser.add_argument("--allow-mailbox", action="append", help="只保留匹配的邮箱账号，可重复或逗号分隔")
+    parser.add_argument("--deny-mailbox", action="append", help="排除匹配的邮箱账号，可重复或逗号分隔")
+    parser.add_argument("--allow-folder", action="append", help="只保留匹配的邮箱文件夹，可重复或逗号分隔")
+    parser.add_argument("--deny-folder", action="append", help="排除匹配的邮箱文件夹，可重复或逗号分隔")
+    parser.add_argument("--allow-sender", action="append", help="只保留匹配的发件人/发件地址，可重复或逗号分隔")
+    parser.add_argument("--deny-sender", action="append", help="排除匹配的发件人/发件地址，可重复或逗号分隔")
+    parser.add_argument("--allow-sender-domain", action="append", help="只保留匹配的发件域名，可重复或逗号分隔")
+    parser.add_argument("--deny-sender-domain", action="append", help="排除匹配的发件域名，可重复或逗号分隔")
+    parser.add_argument("--allow-recipient", action="append", help="只保留匹配的收件人/抄送人，可重复或逗号分隔")
+    parser.add_argument("--deny-recipient", action="append", help="排除匹配的收件人/抄送人，可重复或逗号分隔")
+    parser.add_argument("--allow-subject", action="append", help="只保留主题匹配的邮件，可重复或逗号分隔")
+    parser.add_argument("--deny-subject", action="append", help="排除主题匹配的邮件，可重复或逗号分隔")
+    parser.add_argument("--allow-attachment", action="append", help="只保留附件名匹配的邮件，可重复或逗号分隔")
+    parser.add_argument("--deny-attachment", action="append", help="排除附件名匹配的邮件，可重复或逗号分隔")
+    parser.add_argument("--allow-keyword", action="append", help="只保留正文预览/主题/联系人/附件名含关键词的邮件，可重复或逗号分隔")
+    parser.add_argument("--deny-keyword", action="append", help="排除正文预览/主题/联系人/附件名含关键词的邮件，可重复或逗号分隔")
+
+
+def email_scope_policy_from_args(args) -> dict:
+    return normalize_email_scope_policy({key: getattr(args, key, None) for key in EMAIL_SCOPE_POLICY_KEYS})
+
+
 def main():
     import argparse
     
@@ -1945,6 +2268,7 @@ def main():
     col_parser.add_argument("--source", default="IMAP 邮件", help="事件source字段")
     col_parser.add_argument("--collected-at", help="事件collected_at字段，默认当前时间")
     col_parser.add_argument("--event-include-body", action="store_true", help="事件中包含完整正文，默认只包含预览")
+    add_email_scope_policy_args(col_parser)
 
     # import命令
     import_parser = subparsers.add_parser("import", help="导入用户授权的本地邮件导出文件/目录，或扫描授权本机邮箱目录")
@@ -1959,6 +2283,7 @@ def main():
     import_parser.add_argument("--source", default="授权邮件导出", help="事件source字段")
     import_parser.add_argument("--collected-at", help="事件collected_at字段，默认当前时间")
     import_parser.add_argument("--event-include-body", action="store_true", help="事件中包含完整正文，默认只包含预览")
+    add_email_scope_policy_args(import_parser)
     
     # status命令
     subparsers.add_parser("status", help="显示状态")
@@ -1991,6 +2316,7 @@ def main():
             collected_at=args.collected_at,
             event_include_body=args.event_include_body,
             account_id=args.account,
+            email_scope_policy=email_scope_policy_from_args(args),
         )
     elif args.command == "import":
         cmd_import(
@@ -2005,6 +2331,7 @@ def main():
             platform=args.platform,
             container_root=args.container_root,
             probe_export=args.probe_export,
+            email_scope_policy=email_scope_policy_from_args(args),
         )
     elif args.command == "status":
         cmd_status()

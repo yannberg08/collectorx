@@ -109,9 +109,9 @@
       "authorization_mode": "authorized-mailbox-or-export",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Register an IMAP account through password_env, authorize a local mailbox root for read-only scanning, or provide a local email export.",
-      "preflight": "Mailbox credentials are referenced by environment variable, or a user-owned local mail root/export is selected.",
-      "failure_state": "needs_mailbox_or_email_root_or_export"
+      "user_step": "Register an IMAP account through password_env, authorize a local mailbox root for read-only scanning, or provide a local email export; optionally narrow by mailbox, folder, sender, sender domain, recipient, subject, attachment name, or keyword.",
+      "preflight": "Mailbox credentials are referenced by environment variable, or a user-owned local mail root/export is selected; optional email scope filters are applied before Lake output and can return scope_policy_filtered_all.",
+      "failure_state": "needs_mailbox_or_email_root_or_export_or_scope_policy_relaxation"
     },
     {
       "id": "email-research",

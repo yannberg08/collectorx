@@ -1238,6 +1238,33 @@ Findings:
   `.thunderbird/<profile>/Mail/<server>/Inbox` and `Inbox.msf`, validates the
   standard package, manifest audit, probe output, and mailbox-boundary proof.
 
+### Wave N8: P0 email authorization scope-policy pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-scope-policy-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.6`.
+- Added mailbox, folder, sender, sender-domain, recipient, subject,
+  attachment-name, and keyword allow/deny filters to both IMAP `collect` and
+  local `import` paths.
+- Manifest `collection_audit.email_scope_policy` now records configured
+  filters, candidate email count, retained count, filtered count, filter reason
+  counts, and `filtered_all`.
+- `mailbox_boundary_proof.authorization_scope_boundary` exposes the same
+  authorization boundary for FinClaw gating and keeps
+  `policy_does_not_assert_investment_relevance=true`; investment relevance
+  remains the responsibility of `email-research`.
+- When all candidate emails are outside the configured scope, the package emits
+  `email_scope_policy_filtered_all` and readiness reports
+  `scope_policy_filtered_all` instead of a misleading missing-export gap.
+- Fixture validation covers IMAP post-fetch filtering, local import partial
+  filtering, and local import filtered-all gap behavior.
+
 ### Wave O: P0 filesystem cross-platform manifest pass 1
 
 Status: `completed-baseline`

@@ -464,6 +464,16 @@ python3 skills/email-collector/scripts/email_api.py collect \
   --out-dir <out-dir>
 ```
 
+Optional scope-policy narrowing:
+
+```bash
+python3 skills/email-collector/scripts/email_api.py collect \
+  --account all \
+  --out-dir <out-dir> \
+  --allow-sender-domain <authorized-domain> \
+  --allow-keyword <authorized-keyword>
+```
+
 Fallback for authorized local mail roots:
 
 ```bash
@@ -500,17 +510,26 @@ Current status:
   coverage, skipped file reasons, ZIP member counts, skipped ZIP member reasons,
   Apple Mail/Maildir/Thunderbird counts, local-scan root status, archive
   provenance, and `--limit` truncation.
+- IMAP and local scan/import can apply explicit email authorization scope
+  filters before Lake output: mailbox, folder, sender, sender domain,
+  recipient, subject, attachment name, and keyword allow/deny rules. Manifest
+  `collection_audit.email_scope_policy` records configured filters, candidate
+  count, retained count, filtered count, reason counts, and
+  `email_scope_policy_filtered_all`.
 - Local scan probe, manifest, and raw refs mask path email addresses and long
   numeric account fragments.
 - `manifest.mailbox_boundary_proof` tells FinClaw which account/folder/time
-  window or local export boundary was actually collected and explicitly keeps
-  complete-mailbox-history claims false.
+  window or local export boundary was actually collected, includes
+  `authorization_scope_boundary`, and explicitly keeps complete-mailbox-history
+  claims false.
 - Full bodies are excluded by default and require explicit `--event-include-body`.
 - Attachment bodies are never written; only filename, content type, and size are
   retained.
 - If no mailbox is registered, IMAP authorization fails, or the selected folders
   have no matching mail, the collector writes an explicit gap event and next
   action instead of pretending the mailbox was collected.
+- If authorized email exists but every candidate is outside the configured
+  email scope policy, readiness reports `scope_policy_filtered_all`.
 - Feed `lake/email/events.jsonl` into `email-research` before using broker
   research, IR, roadshow, or research-attachment evidence in the investor Wiki.
 - `email-research` writes `manifest.lens_surface_summary` and
