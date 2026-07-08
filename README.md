@@ -77,6 +77,8 @@ Operational docs:
   invocation contracts. Product runners should use `doctor` for setup screens
   and `plan --require-ready` before executing a single collector, then execute
   the returned `argv` list rather than reparsing the display command string.
+  After a collector exits, runners should execute the returned
+  `package_validation.argv` before ingesting the package into Lake.
 - `tools/validate_investor_wiki_evidence.py` validates
   `finclaw.investor_wiki_evidence.v1` packages before SoulMirror/FinClaw writes
   the final investor Wiki.
@@ -185,7 +187,7 @@ The suite currently checks:
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
 - FinClaw catalog helper CLI, invocation-plan tests, safe `argv` rendering,
-  readiness doctor, and ready-to-run gate
+  package-validation argv rendering, readiness doctor, and ready-to-run gate
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets

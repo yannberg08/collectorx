@@ -111,6 +111,37 @@ def plan_status(runner: str, placeholders: list[str], contract: dict[str, Any]) 
     return "run_command", None
 
 
+def value_after(argv: list[str], flags: set[str]) -> str | None:
+    for index, token in enumerate(argv):
+        if token in flags and index + 1 < len(argv):
+            return argv[index + 1]
+    return None
+
+
+def build_package_validation(entry: dict[str, Any], argv: list[str], placeholders: list[str]) -> dict[str, Any]:
+    package_dir = value_after(argv, {"--out-dir", "--output"})
+    package_dir_ready = bool(package_dir) and "out-dir" not in placeholders and not re.search(r"<[^<>]+>", package_dir or "")
+    require_evidence = entry["category"] in {"vertical", "lens"}
+    validation_argv = [
+        "python3",
+        "tools/validate_collector_package.py",
+        package_dir or "<out-dir>",
+        "--collector",
+        entry["id"],
+    ]
+    if require_evidence:
+        validation_argv.append("--require-evidence")
+    validation_argv.append("--json")
+    return {
+        "package_dir": package_dir,
+        "ready": package_dir_ready,
+        "require_evidence": require_evidence,
+        "argv": validation_argv if package_dir_ready else [],
+        "command": shlex.join(validation_argv) if package_dir_ready else None,
+        "blocked_reason": None if package_dir_ready else "missing_output_directory",
+    }
+
+
 def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[str, Any]:
     command = str(entry["cli"])
     for key, value in replacements.items():
@@ -120,6 +151,7 @@ def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[s
     runner = "soulmirror" if command.startswith("SoulMirror") else "command"
     contract = entry.get("invocation_contract") or {}
     next_action, blocked_reason = plan_status(runner, placeholders, contract)
+    package_validation = build_package_validation(entry, argv, placeholders)
     return {
         "id": entry["id"],
         "runner": runner,
@@ -136,6 +168,7 @@ def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[s
         "preflight": contract.get("preflight"),
         "failure_state": contract.get("failure_state"),
         "requires_upstream": contract.get("requires_upstream", []),
+        "package_validation": package_validation,
     }
 
 
@@ -201,6 +234,10 @@ def cmd_plan(args: argparse.Namespace) -> int:
         print(f"preflight: {plan['preflight']}")
         print(f"failure state: {plan['failure_state']}")
         print(f"command: {plan['command']}")
+        package_validation = plan["package_validation"]
+        print(f"package validation ready: {str(package_validation['ready']).lower()}")
+        if package_validation["ready"]:
+            print(f"package validation command: {package_validation['command']}")
     if args.require_ready and not plan["ready_to_run"]:
         return 2
     return 0
@@ -239,6 +276,7 @@ def doctor_item(entry: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
         "preflight": plan["preflight"],
         "command": plan["command"],
         "argv": plan["argv"],
+        "package_validation": plan["package_validation"],
     }
 
 

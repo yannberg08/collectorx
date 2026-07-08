@@ -66,6 +66,19 @@ def test_plan_replaces_placeholders() -> None:
     assert "skills/ths-watchlist/scripts/ths_watchlist.py" in plan["command"]
     assert plan["argv"][:3] == ["python3", "skills/ths-watchlist/scripts/ths_watchlist.py", "collect"]
     assert plan["argv"][-1] == "/tmp/collectorx-out"
+    validation = plan["package_validation"]
+    assert validation["ready"] is True
+    assert validation["package_dir"] == "/tmp/collectorx-out"
+    assert validation["require_evidence"] is True
+    assert validation["argv"] == [
+        "python3",
+        "tools/validate_collector_package.py",
+        "/tmp/collectorx-out",
+        "--collector",
+        "ths-watchlist",
+        "--require-evidence",
+        "--json",
+    ]
 
 
 def test_plan_argv_preserves_paths_with_spaces_without_shell_quotes() -> None:
@@ -99,6 +112,7 @@ def test_plan_reports_missing_placeholders_and_require_ready_fails() -> None:
     assert plan["next_action"] == "fill_placeholders"
     assert plan["blocked_reason"] == "missing_placeholders:authorized-ths-watchlist-export"
     assert plan["missing_placeholders"] == ["authorized-ths-watchlist-export"]
+    assert plan["package_validation"]["ready"] is True
 
 
 def test_require_ready_allows_ready_command_plan() -> None:
@@ -117,6 +131,21 @@ def test_require_ready_allows_ready_command_plan() -> None:
     assert plan["ready_to_run"] is True
 
 
+def test_generic_package_validation_does_not_require_evidence() -> None:
+    plan = run_json("plan", "email", "--out-dir", "/tmp/email-out", "--json")
+    validation = plan["package_validation"]
+    assert validation["ready"] is True
+    assert validation["require_evidence"] is False
+    assert validation["argv"] == [
+        "python3",
+        "tools/validate_collector_package.py",
+        "/tmp/email-out",
+        "--collector",
+        "email",
+        "--json",
+    ]
+
+
 def test_soulmirror_plan_is_not_plain_command() -> None:
     plan = run_json("plan", "ticktick", "--json")
     assert plan["runner"] == "soulmirror"
@@ -124,6 +153,8 @@ def test_soulmirror_plan_is_not_plain_command() -> None:
     assert plan["next_action"] == "use_soulmirror_runner"
     assert plan["blocked_reason"] == "soulmirror_runner_required"
     assert plan["failure_state"] == "ticktick_auth_required"
+    assert plan["package_validation"]["ready"] is False
+    assert plan["package_validation"]["blocked_reason"] == "missing_output_directory"
 
 
 def test_lens_plan_waits_for_upstream_lake() -> None:
@@ -160,10 +191,23 @@ def test_doctor_reports_batch_readiness_summary() -> None:
     assert by_id["eastmoney-portfolio"]["next_action"] == "run_command"
     assert "/tmp/collectorx-out/eastmoney-portfolio" in by_id["eastmoney-portfolio"]["command"]
     assert by_id["eastmoney-portfolio"]["argv"][-1] == "/tmp/collectorx-out/eastmoney-portfolio"
+    eastmoney_validation = by_id["eastmoney-portfolio"]["package_validation"]
+    assert eastmoney_validation["ready"] is True
+    assert eastmoney_validation["package_dir"] == "/tmp/collectorx-out/eastmoney-portfolio"
+    assert eastmoney_validation["require_evidence"] is True
+    assert "--require-evidence" in eastmoney_validation["argv"]
+    email_validation = by_id["email"]["package_validation"]
+    assert email_validation["ready"] is True
+    assert email_validation["require_evidence"] is False
+    assert "--require-evidence" not in email_validation["argv"]
     assert by_id["ths-watchlist"]["next_action"] == "fill_placeholders"
     assert by_id["ths-watchlist"]["missing_placeholders"] == ["authorized-ths-watchlist-export"]
     assert by_id["wechat-investment-dialogue"]["next_action"] == "wait_for_upstream_lake"
     assert by_id["wechat-investment-dialogue"]["missing_placeholders"] == ["wechat-events-jsonl"]
+    wechat_lens_validation = by_id["wechat-investment-dialogue"]["package_validation"]
+    assert wechat_lens_validation["ready"] is True
+    assert wechat_lens_validation["require_evidence"] is True
+    assert "--require-evidence" in wechat_lens_validation["argv"]
     assert by_id["ticktick"]["next_action"] == "use_soulmirror_runner"
 
 
@@ -188,6 +232,7 @@ def main() -> int:
     test_plan_argv_preserves_paths_with_spaces_without_shell_quotes()
     test_plan_reports_missing_placeholders_and_require_ready_fails()
     test_require_ready_allows_ready_command_plan()
+    test_generic_package_validation_does_not_require_evidence()
     test_soulmirror_plan_is_not_plain_command()
     test_lens_plan_waits_for_upstream_lake()
     test_require_ready_rejects_soulmirror_plan()

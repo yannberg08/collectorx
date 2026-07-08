@@ -2433,6 +2433,31 @@ Findings:
 - This improves product execution reliability. It does not claim new
   real-account validation for any collector.
 
+### Wave AK - FinClaw Package Validation Plan
+
+Validation record:
+
+- `docs/validations/finclaw-package-validation-plan-2026-07-08.md`
+
+Findings:
+
+- Added `package_validation` to `tools/finclaw_catalog.py plan` output.
+- Added `package_validation` to every `doctor` item.
+- `package_validation.argv` points to `tools/validate_collector_package.py`
+  with the resolved package directory and collector id.
+- Vertical collectors and investor lenses automatically include
+  `--require-evidence`.
+- Generic collectors omit `--require-evidence`.
+- Commands that use either `--out-dir` or `--output` now get package-validation
+  argv when the output directory is known.
+- SoulMirror-owned or otherwise unresolved outputs report
+  `package_validation.ready=false` until an output package directory exists.
+- Added catalog tests for vertical, lens/generic, `--output`, and SoulMirror
+  package-validation behavior.
+- This closes the product loop from preflight planning to execution to
+  post-run package gate. It does not claim new real-account validation for any
+  collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

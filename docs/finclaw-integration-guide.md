@@ -88,18 +88,20 @@ python3 tools/finclaw_catalog.py plan ths-watchlist \
 ```
 
 The `plan` output includes `ready_to_run`, unresolved placeholders, the display
-`command`, executable `argv`, `next_action`, `blocked_reason`, `user_step`,
-`preflight`, `failure_state`, product surface, and evidence role. The `doctor`
-output gives the same fields for every selected catalog entry, plus summary
-counts by priority, category, runner, and `next_action`; FinClaw should use it
-to render collector setup and authorization checklists.
+`command`, executable `argv`, `package_validation`, `next_action`,
+`blocked_reason`, `user_step`, `preflight`, `failure_state`, product surface,
+and evidence role. The `doctor` output gives the same fields for every selected
+catalog entry, plus summary counts by priority, category, runner, and
+`next_action`; FinClaw should use it to render collector setup and authorization
+checklists.
 
 Product runners should use `--require-ready` before ordinary shell execution.
 If the helper exits with status `2`, FinClaw should parse the same JSON
 response and follow `next_action` instead of running the command:
 
 - `run_command`: execute the rendered `argv` list without shell reparsing, then
-  run the package gate. The `command` string is for display and audit only.
+  run `package_validation.argv` when `package_validation.ready=true`. The
+  `command` string is for display and audit only.
 - `fill_placeholders`: ask the user for the missing authorized file, folder,
   account precondition, or output path shown in `missing_placeholders`.
 - `wait_for_upstream_lake`: run or select the upstream collectors shown in
@@ -116,22 +118,30 @@ upload arbitrary files when it should first run the upstream Lake collector.
 ## Package Gate
 
 After any collector finishes, FinClaw should validate the output directory
-before adding it to the durable Lake or running a downstream lens:
+before adding it to the durable Lake or running a downstream lens. Product
+runners should prefer the `package_validation.argv` emitted by `plan` or
+`doctor`, because it already contains the package directory, collector id, JSON
+output flag, and `--require-evidence` when needed.
 
-```bash
-python3 tools/validate_collector_package.py \
-  <out-dir> \
-  --collector <collector-id>
-```
-
-For vertical collectors or investor lenses that are expected to produce Wiki
-evidence, require the evidence package at the same gate:
+Generic collector example:
 
 ```bash
 python3 tools/validate_collector_package.py \
   <out-dir> \
   --collector <collector-id> \
-  --require-evidence
+  --json
+```
+
+For vertical collectors or investor lenses that are expected to produce Wiki
+evidence, the generated package-validation argv requires the evidence package
+at the same gate:
+
+```bash
+python3 tools/validate_collector_package.py \
+  <out-dir> \
+  --collector <collector-id> \
+  --require-evidence \
+  --json
 ```
 
 The package gate checks:
