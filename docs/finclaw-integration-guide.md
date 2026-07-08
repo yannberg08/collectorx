@@ -929,7 +929,8 @@ python3 skills/financial-news-usage/scripts/financial_news_usage.py collect \
 Current status:
 
 - Converts authorized JSON/JSONL, CSV/TSV, HTML, Markdown, TXT, ZIP packages,
-  Chromium `History`, and Safari `History.db` usage records into
+  direct Chromium `History`, direct Safari `History.db`, and ZIP-packaged
+  browser-history members into
   `financial-news-usage` events.
 - Captures user actions: read, favorite, subscribe, search, and alert.
 - Writes `manifest.platform_coverage` for CLS, WallstreetCN, and Gelonghui,
@@ -940,30 +941,31 @@ Current status:
 - Writes `manifest.field_coverage`, `manifest.usage_surface_summary`,
   `manifest.usage_behavior_summary`, `manifest.source_audit`,
   `manifest.content_policy`, and `manifest.evidence_policy` so Lake can tell
-  which usage fields, behavior fields, browser history sources, ZIP members,
-  and evidence boundaries are actually present.
+  which usage fields, behavior fields, browser history sources/source-app
+  counts, ZIP members, and evidence boundaries are actually present.
 - Writes `manifest.usage_boundary_proof` so FinClaw can inspect authorized
   inputs, platform/action/topic coverage, browser-history domain filtering, ZIP
   safety, content pointers, and the explicit no-complete-usage-history /
   no-public-news-crawl / no-public-article-mirror boundaries.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
-  skipped ZIP member reasons, browser-history source apps, and path-safety
-  flags.
+  skipped ZIP member reasons, browser-history source apps/source-app counts,
+  and path-safety flags.
 - For browser history, filters to CLS, WallstreetCN, and Gelonghui domains
   before writing events.
 - Captures domain, source app, URL, title, visit time, visit count, typed
-  count, query terms, subscription target, alert condition, notification
-  channel, trigger source, referrer, session ID, dwell seconds, browser
-  transition type, tags, symbols, and article ID where present.
+  count, Safari load status, query terms, subscription target, alert condition,
+  notification channel, trigger source, referrer, session ID, dwell seconds,
+  browser transition type, tags, symbols, and article ID where present.
 - Preserves file/ZIP member provenance in `raw_ref.path`, `source_archive`,
   and `archive_member`.
 - Recursively filters credential-like raw keys.
 - Outputs `investor_wiki_evidence.v1.json` for information-consumption and
   monitoring-rule evidence.
 - Does not crawl public news or platform-wide content.
-- Real CLS/WallstreetCN/Gelonghui app caches, account APIs, and subscription
-  stores still require account-level validation.
+- Real CLS/WallstreetCN/Gelonghui app caches, account APIs, subscription
+  stores, real Safari/macOS history samples, and Windows/Linux browser-history
+  paths still require account/device-level validation.
 
 ### 港美股券商
 

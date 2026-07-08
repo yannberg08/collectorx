@@ -22,6 +22,11 @@ def chromium_time(value: datetime) -> int:
     return int((value - epoch).total_seconds() * 1_000_000)
 
 
+def safari_time(value: datetime) -> float:
+    epoch = datetime(2001, 1, 1, tzinfo=timezone.utc)
+    return (value - epoch).total_seconds()
+
+
 def test_collect_usage_exports() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -300,6 +305,7 @@ def test_collect_chromium_browser_history() -> None:
         assert manifest["source_audit"]["browser_history_event_count"] == 2
         assert manifest["source_audit"]["browser_history_input_count"] == 1
         assert manifest["source_audit"]["browser_history_source_apps"] == ["chromium_history"]
+        assert manifest["source_audit"]["browser_history_source_app_counts"] == {"chromium_history": 2}
         assert manifest["source_audit"]["resolved_input_file_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 2
         assert manifest["source_audit"]["extension_counts"] == {"<browser_history>": 1}
@@ -315,6 +321,88 @@ def test_collect_chromium_browser_history() -> None:
         assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_input_count"] == 1
         assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_event_count"] == 2
         assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_source_apps"] == ["chromium_history"]
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_source_app_counts"] == {"chromium_history": 2}
+        assert manifest["usage_boundary_proof"]["unrelated_browser_history_collected"] is False
+
+
+def test_collect_safari_browser_history_direct_and_zip_member() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        history = root / "History.db"
+        history_zip = root / "safari-history.zip"
+        out = root / "out"
+        conn = sqlite3.connect(history)
+        try:
+            conn.execute("CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT, title TEXT, visit_count INTEGER)")
+            conn.execute(
+                "CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, visit_time REAL, load_successful INTEGER)"
+            )
+            conn.executemany(
+                "INSERT INTO history_items (id, url, title, visit_count) VALUES (?, ?, ?, ?)",
+                [
+                    (1, "https://www.cls.cn/detail/99", "财联社新能源风险预警", 4),
+                    (2, "https://www.gelonghui.com/news/88", "格隆汇港股创新药机会", 2),
+                    (3, "https://example.com/personal", "普通网页", 7),
+                ],
+            )
+            conn.executemany(
+                "INSERT INTO history_visits (id, history_item, visit_time, load_successful) VALUES (?, ?, ?, ?)",
+                [
+                    (20, 1, safari_time(datetime(2026, 7, 8, 1, 0, tzinfo=timezone.utc)), 1),
+                    (21, 2, safari_time(datetime(2026, 7, 8, 2, 0, tzinfo=timezone.utc)), 0),
+                    (22, 3, safari_time(datetime(2026, 7, 8, 3, 0, tzinfo=timezone.utc)), 1),
+                ],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        with zipfile.ZipFile(history_zip, "w") as archive:
+            archive.write(history, "Safari/History.db")
+
+        subprocess.run(
+            [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 4
+        assert {event["data"]["platform"] for event in events} == {"cls", "gelonghui"}
+        assert {event["data"]["source_app"] for event in events} == {"safari_history"}
+        assert all(event["data"]["action_type"] == "read" for event in events)
+        assert not any("example.com" in json.dumps(event, ensure_ascii=False) for event in events)
+        assert not any("collectorx-financial-news-history" in json.dumps(event, ensure_ascii=False) for event in events)
+        archive_events = [event for event in events if event["raw_ref"].get("archive_member")]
+        direct_events = [event for event in events if not event["raw_ref"].get("archive_member")]
+        assert len(archive_events) == 2
+        assert len(direct_events) == 2
+        assert {event["raw_ref"]["archive_member"] for event in archive_events} == {"Safari/History.db"}
+        assert all(event["raw_ref"]["source_archive"] == str(history_zip) for event in archive_events)
+        assert all(event["raw_ref"]["path"] == f"{history_zip}::Safari/History.db" for event in archive_events)
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["platform_counts"] == {"cls": 2, "gelonghui": 2}
+        assert manifest["source_audit"]["archive_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 1
+        assert manifest["source_audit"]["archive_member_event_count"] == 2
+        assert manifest["source_audit"]["browser_history_input_count"] == 2
+        assert manifest["source_audit"]["browser_history_event_count"] == 4
+        assert manifest["source_audit"]["browser_history_source_apps"] == ["safari_history"]
+        assert manifest["source_audit"]["browser_history_source_app_counts"] == {"safari_history": 4}
+        assert manifest["source_audit"]["extension_counts"] == {".zip": 1, "<browser_history>": 1}
+        assert {result["parser"] for result in manifest["source_audit"]["path_results"]} == {"browser_history", "zip"}
+        assert manifest["source_audit"]["path_results"][1]["archive_member_count"] == 1
+        assert manifest["usage_surface_summary"]["browser_history_event_count"] == 4
+        assert manifest["usage_behavior_summary"]["events_with_visit_count"] == 4
+        assert manifest["usage_behavior_summary"]["total_visit_count"] == 12
+        assert manifest["usage_behavior_summary"]["transition_type_counts"] == {"load_failed": 2, "load_successful": 2}
+        assert manifest["usage_behavior_summary"]["trigger_source_counts"] == {"browser_history": 4}
+        assert manifest["usage_boundary_proof"]["proof_level"] == "authorized_financial_news_usage_with_browser_history"
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_input_count"] == 2
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_event_count"] == 4
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_source_apps"] == ["safari_history"]
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_source_app_counts"] == {"safari_history": 4}
+        assert manifest["usage_boundary_proof"]["browser_history_domain_filtering"] is True
         assert manifest["usage_boundary_proof"]["unrelated_browser_history_collected"] is False
 
 
@@ -413,6 +501,7 @@ def test_collect_missing_input_writes_gap_audit() -> None:
 if __name__ == "__main__":
     test_collect_usage_exports()
     test_collect_chromium_browser_history()
+    test_collect_safari_browser_history_direct_and_zip_member()
     test_collect_zip_limit_counts_only_emitted_records()
     test_collect_missing_input_writes_gap_audit()
     print("financial-news-usage tests passed.")

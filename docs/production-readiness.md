@@ -16,7 +16,26 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`china-wealth-assets` now supports user-authorized PDF fund and wealth
+`financial-news-usage` now supports direct Safari `History.db` and ZIP-packaged
+browser-history members in addition to local usage exports, saved pages, and
+Chromium history copies:
+
+- `skills/financial-news-usage/scripts/financial_news_usage.py collect --input
+  <authorized-folder-or-zip> --out-dir <dir>` can parse copied Safari
+  `History.db` files and `archive.zip::Safari/History.db` members.
+- Browser-history events remain domain-filtered to CLS, WallstreetCN, and
+  Gelonghui before entering the Lake, so unrelated browser history is not
+  emitted as personal investor evidence.
+- Manifest `source_audit` and `usage_boundary_proof.source_artifact_boundary`
+  now include `browser_history_source_app_counts` alongside input/event counts
+  and source apps.
+- Safari records preserve `visit_count` when present and map
+  `load_successful` into behavior-level transition status.
+- ZIP provenance is kept as `raw_ref.path=<archive>::<member>`,
+  `source_archive`, and `archive_member`; temporary extraction paths are not
+  exposed in events.
+
+The prior completed wave: `china-wealth-assets` now supports user-authorized PDF fund and wealth
 statements in addition to CSV/Excel/HTML/HAR/ZIP inputs:
 
 - `skills/china-wealth-assets/scripts/china_wealth.py collect --input
@@ -578,8 +597,8 @@ pages, ZIP packages, and browser-history copies:
   authorized input provides them. `usage_boundary_proof.usage_behavior_boundary`
   exposes those counts to FinClaw without claiming complete account history.
 - This improves the P1 finance-news usage package path, but it does not claim
-  real app/account adapters, subscription stores, Safari, Windows, or Linux
-  validation.
+  real app/account adapters, subscription stores, real Safari/macOS history
+  samples, or Windows/Linux browser-history path validation.
 
 The prior completed wave: `wechat-favorites` now has stronger source audit and
 behavior-surface coverage for authorized WeChat favorites and public-account
@@ -759,7 +778,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + authorized export/ZIP import + `investment-notes` lens classifier | `baseline+audit`; macOS Obsidian-style real validation passed; Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP fixtures pass; generic notes manifest reports platform coverage, field coverage, table import audit, Canvas import audit, per-input parse results, skipped reasons, ZIP provenance, path-safety boundary, content policy, and generic-collector evidence policy; investment-notes manifest/evidence now reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote account exports or APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 日历/任务/滴答清单 | `ticktick-cli` SoulMirror YAML + AgentRunner + skill live path; `ticktick_events.py` offline export helper; `calendar-collector`; `task-calendar-investor` lens classifier | `baseline+audit`; TickTick live path now returns a dependency-light JSON snapshot through `collect_for_soulmirror.py`, fails clearly with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; fake OpenAPI validation covers active/completed tasks, project names, inbox fallback, dedupe, checklist counts, timezone/repeat/reminder fields, and token non-leakage; generic calendar ICS/JSON/CSV/TSV/ZIP paths report duration, multi-day, invalid-time and conflict quality; task-calendar lens surfaces preserve these time-quality counts plus task checklist execution structure and writes task/calendar boundary proof | Deploy FinClaw-managed TickTick OAuth Broker, run real account validation, validate real calendar exports/accounts, recurring tasks/timezones/checklists, backtest investment task classifier |
 | 公众号/微信收藏文章 | `wechat-favorites` local file/folder/ZIP collector + `wechat-article-favorites` lens classifier | `baseline+audit`; macOS saved-article validation passed; JSON/HTML/ZIP fixtures cover favorite/read/share/saved-file actions plus favorite reasons, share targets, read duration/progress, article IDs, symbols, and engagement counters; generic manifest reports action coverage, field coverage, article surface summary, article behavior summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, content policy, and generic-collector evidence policy; wechat-article lens reports broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surfaces, action counts, source-account type counts, URL/article-ID/tag/text/time coverage, behavior boundary proof, article boundary proof, and filters non-investment saved articles; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive backtest |
-| 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage/browser-history/ZIP collector | `baseline+audit`; JSON/CSV/HTML/TXT/ZIP fixture validation passed; Chromium browser-history validation passed; manifest reports platform/action/topic coverage, field coverage, usage surface summary, usage behavior summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, browser-history source audit, usage boundary proof, content policy, and evidence policy; usage topics cover macro policy, market strategy, industry themes, company fundamentals, HK/US markets, risk events, trading opportunities, and portfolio alerts; behavior fields cover query terms, subscription targets, alert conditions, notification channels, trigger sources, referrers, session IDs, dwell seconds, visit/typed counts, and browser transition types; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui app caches, account APIs, real subscription/alert stores, Safari/Windows/Linux browser-history paths, topic false-positive review; do not crawl public news as personal evidence |
+| 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage/browser-history/ZIP collector | `baseline+audit`; JSON/CSV/HTML/TXT/ZIP fixture validation passed; Chromium browser-history validation passed; Safari `History.db` direct-file and ZIP-member validation passed; manifest reports platform/action/topic coverage, field coverage, usage surface summary, usage behavior summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, browser-history source audit/source-app counts, usage boundary proof, content policy, and evidence policy; usage topics cover macro policy, market strategy, industry themes, company fundamentals, HK/US markets, risk events, trading opportunities, and portfolio alerts; behavior fields cover query terms, subscription targets, alert conditions, notification channels, trigger sources, referrers, session IDs, dwell seconds, visit/typed counts, Safari load status, and browser transition types; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui app caches, account APIs, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux browser-history paths, topic false-positive review; do not crawl public news as personal evidence |
 
 ## P2 Status
 

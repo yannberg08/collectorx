@@ -57,6 +57,6 @@ Result:
 Remaining production gaps:
 
 - Validate real CLS, WallstreetCN, and Gelonghui account/app exports.
-- Validate Safari, Windows, and Linux browser-history copies.
+- Validate real Safari/macOS, Windows, and Linux browser-history copies.
 - Backtest topic false positives on noisy real usage exports.
 - Confirm real subscription and alert field names.

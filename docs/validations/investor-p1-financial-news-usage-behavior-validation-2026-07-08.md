@@ -69,5 +69,5 @@ PYTHON=.venv/bin/python bash test_collectors.sh
 - Real CLS, WallstreetCN, and Gelonghui app cache validation.
 - Real account API validation.
 - Real subscription and alert-store field differences.
-- Safari, Windows, and Linux browser-history path validation.
+- Real Safari/macOS, Windows, and Linux browser-history path validation.
 - Topic and behavior false-positive review on noisy real exports.

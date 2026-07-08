@@ -281,8 +281,8 @@
       "authorization_mode": "browser-history-or-export",
       "product_surface": "import-beta",
       "evidence_role": "information-usage",
-      "user_step": "Provide authorized finance-news usage exports, saved pages, ZIP packages, or copied browser history.",
-      "preflight": "Only CLS, WallstreetCN, Gelonghui, or whitelisted finance-news usage traces are parsed.",
+      "user_step": "Provide authorized finance-news usage exports, saved pages, ZIP packages, copied browser history, or ZIP-packaged History.db members.",
+      "preflight": "Only CLS, WallstreetCN, Gelonghui, or whitelisted finance-news usage traces are parsed; browser-history inputs are domain-filtered and source-app counted.",
       "failure_state": "needs_authorized_finance_news_usage_input"
     },
     {

@@ -8,6 +8,7 @@ import json
 import re
 import sqlite3
 import sys
+import tempfile
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -46,7 +47,8 @@ SUPPORTED_RECORD_EXTENSIONS = {
     ".db",
 }
 SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
-SUPPORTED_ZIP_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS - {".sqlite", ".sqlite3", ".db"}
+BROWSER_HISTORY_EXTENSIONS = {".sqlite", ".sqlite3", ".db"}
+SUPPORTED_ZIP_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS
 BROWSER_HISTORY_NAMES = {"History", "History.db"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 FINANCIAL_NEWS_DOMAINS = {
@@ -243,6 +245,7 @@ def collect_from_inputs_with_audit(
     skipped_reason_counts: Counter[str] = Counter()
     skipped_archive_member_reason_counts: Counter[str] = Counter()
     browser_history_source_apps: set[str] = set()
+    browser_history_source_app_counts: Counter[str] = Counter()
     audit: Dict[str, Any] = {
         "source_type": "authorized_financial_news_usage_export",
         "input_count": len(input_list),
@@ -267,6 +270,7 @@ def collect_from_inputs_with_audit(
         "browser_history_input_count": 0,
         "browser_history_event_count": 0,
         "browser_history_source_apps": [],
+        "browser_history_source_app_counts": {},
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "path_results": [],
@@ -347,6 +351,7 @@ def collect_from_inputs_with_audit(
                 source_app = str((event.get("data") or {}).get("source_app") or "")
                 if source_app.endswith("_history"):
                     browser_history_source_apps.add(source_app)
+                    browser_history_source_app_counts[source_app] += 1
                 if limit is not None and len(events) >= limit:
                     audit["limit_reached"] = True
                     break
@@ -366,6 +371,7 @@ def collect_from_inputs_with_audit(
         1 for event in usable_usage_events(events) if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
     )
     audit["browser_history_source_apps"] = sorted(browser_history_source_apps)
+    audit["browser_history_source_app_counts"] = dict(sorted(browser_history_source_app_counts.items()))
     return events, audit
 
 
@@ -480,6 +486,14 @@ def table_names(conn: sqlite3.Connection) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
+def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    try:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    except sqlite3.Error:
+        return set()
+    return {str(row[1]) for row in rows}
+
+
 def parse_chromium_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str, Any]]:
     where_sql, params = financial_domain_where("urls.url")
     query = f"""
@@ -516,12 +530,18 @@ def parse_chromium_history(conn: sqlite3.Connection, path: Path) -> List[Dict[st
 
 def parse_safari_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str, Any]]:
     where_sql, params = financial_domain_where("history_items.url")
+    item_columns = table_columns(conn, "history_items")
+    visit_columns = table_columns(conn, "history_visits")
+    visit_count_sql = "history_items.visit_count" if "visit_count" in item_columns else "NULL"
+    load_successful_sql = "history_visits.load_successful" if "load_successful" in visit_columns else "NULL"
     query = f"""
         SELECT
             history_visits.id AS visit_id,
             history_items.url AS url,
             history_items.title AS title,
-            history_visits.visit_time AS visit_time
+            {visit_count_sql} AS visit_count,
+            history_visits.visit_time AS visit_time,
+            {load_successful_sql} AS load_successful
         FROM history_visits
         JOIN history_items ON history_visits.history_item = history_items.id
         WHERE {where_sql}
@@ -536,6 +556,9 @@ def parse_safari_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str,
             title=str(row["title"] or ""),
             event_time=safari_time_to_iso(row["visit_time"]),
             visit_id=row["visit_id"],
+            visit_count=row["visit_count"],
+            transition=row["load_successful"],
+            transition_type=safari_load_success_type(row["load_successful"]),
         )
         for row in rows
         if platform_from_url(str(row["url"] or ""))
@@ -563,6 +586,7 @@ def browser_history_record(
     visit_count: Any = None,
     typed_count: Any = None,
     transition: Any = None,
+    transition_type: Any = None,
 ) -> Dict[str, Any]:
     return {
         "action_type": "read",
@@ -575,6 +599,7 @@ def browser_history_record(
         "visit_count": visit_count,
         "typed_count": typed_count,
         "transition": transition,
+        "transition_type": transition_type,
         "path": str(path),
     }
 
@@ -599,6 +624,20 @@ def safari_time_to_iso(value: Any) -> Optional[str]:
         return None
     moment = datetime(2001, 1, 1, tzinfo=UTC) + timedelta(seconds=timestamp)
     return moment.astimezone(CN_TZ).isoformat(timespec="seconds")
+
+
+def safari_load_success_type(value: Any) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    try:
+        status = int(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if status == 1:
+        return "load_successful"
+    if status == 0:
+        return "load_failed"
+    return f"load_status_{status}"
 
 
 def parse_html(path: Path) -> Dict[str, Any]:
@@ -641,16 +680,22 @@ def parse_zip(path: Path) -> List[Dict[str, Any]]:
 def parse_zip_with_audit(path: Path, *, limit: Optional[int] = None) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     records: List[Dict[str, Any]] = []
     skipped_reason_counts: Counter[str] = Counter()
+    browser_history_source_app_counts: Counter[str] = Counter()
     audit: Dict[str, Any] = {
         "archive": str(path),
         "archive_member_count": 0,
         "archive_member_event_count": 0,
         "skipped_archive_member_count": 0,
         "skipped_archive_member_reason_counts": {},
+        "browser_history_input_count": 0,
+        "browser_history_event_count": 0,
+        "browser_history_source_apps": [],
+        "browser_history_source_app_counts": {},
         "limit_reached": False,
         "member_results": [],
     }
-    with zipfile.ZipFile(path) as archive:
+    with zipfile.ZipFile(path) as archive, tempfile.TemporaryDirectory(prefix="collectorx-financial-news-history-") as tmp_dir:
+        tmp_root = Path(tmp_dir)
         members = sorted(archive.infolist(), key=lambda item: normalize_zip_member_name(item.filename))
         for member in members:
             audit["archive_member_count"] += 1
@@ -662,22 +707,33 @@ def parse_zip_with_audit(path: Path, *, limit: Optional[int] = None) -> Tuple[Li
                 audit["member_results"].append({"member": member_name, "status": "skipped", "reason": skip_reason})
                 continue
             suffix = Path(member_name).suffix.lower()
-            text = archive.read(member).decode("utf-8-sig", errors="replace")
             path_label = f"{path}::{member_name}"
+            parser = "browser_history" if is_browser_history_archive_member(member_name) else parser_name_for_zip_member(member_name)
             try:
-                if suffix in {".json", ".jsonl", ".ndjson"}:
-                    parsed = parse_json_text(text, suffix=suffix, path_label=path_label)
-                elif suffix in {".csv", ".tsv"}:
-                    parsed = parse_table_text(text, suffix=suffix, path_label=path_label)
-                elif suffix in {".html", ".htm"}:
-                    parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member_name).stem)]
+                if parser == "browser_history":
+                    temp_member_path = tmp_root.joinpath(*PurePosixPath(member_name).parts)
+                    temp_member_path.parent.mkdir(parents=True, exist_ok=True)
+                    temp_member_path.write_bytes(archive.read(member))
+                    parsed = parse_browser_history(temp_member_path)
+                    audit["browser_history_input_count"] += 1
+                    for record in parsed:
+                        if isinstance(record, dict):
+                            record["path"] = path_label
                 else:
-                    parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member_name).stem)]
+                    text = archive.read(member).decode("utf-8-sig", errors="replace")
+                    if suffix in {".json", ".jsonl", ".ndjson"}:
+                        parsed = parse_json_text(text, suffix=suffix, path_label=path_label)
+                    elif suffix in {".csv", ".tsv"}:
+                        parsed = parse_table_text(text, suffix=suffix, path_label=path_label)
+                    elif suffix in {".html", ".htm"}:
+                        parsed = [parse_html_text(text, path_label=path_label, default_title=Path(member_name).stem)]
+                    else:
+                        parsed = [parse_text_text(text, path_label=path_label, default_title=Path(member_name).stem)]
             except Exception:
                 parsed = []
                 audit["skipped_archive_member_count"] += 1
                 skipped_reason_counts["parse_error"] += 1
-                audit["member_results"].append({"member": member_name, "status": "parse_error", "reason": "parse_error"})
+                audit["member_results"].append({"member": member_name, "status": "parse_error", "reason": "parse_error", "parser": parser})
                 continue
             remaining = None if limit is None else max(limit - len(records), 0)
             emittable = parsed if remaining is None else parsed[:remaining]
@@ -685,6 +741,7 @@ def parse_zip_with_audit(path: Path, *, limit: Optional[int] = None) -> Tuple[Li
                 {
                     "member": member_name,
                     "status": "parsed" if parsed else "no_records_parsed",
+                    "parser": parser,
                     "parsed_record_count": len(parsed),
                     "emitted_record_count": len(emittable),
                 }
@@ -694,14 +751,22 @@ def parse_zip_with_audit(path: Path, *, limit: Optional[int] = None) -> Tuple[Li
                     record[SOURCE_ARCHIVE_KEY] = str(path)
                     record[SOURCE_MEMBER_KEY] = member_name
                     audit["archive_member_event_count"] += 1
+                    source_app = str(record.get("source_app") or "")
+                    if source_app.endswith("_history"):
+                        browser_history_source_app_counts[source_app] += 1
+                        audit["browser_history_event_count"] += 1
             records.extend(emittable)
             if limit is not None and len(records) >= limit:
                 audit["limit_reached"] = True
                 audit["unvisited_archive_member_count_due_limit"] = max(0, len(members) - audit["archive_member_count"])
                 audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+                audit["browser_history_source_app_counts"] = dict(sorted(browser_history_source_app_counts.items()))
+                audit["browser_history_source_apps"] = sorted(browser_history_source_app_counts)
                 return records, audit
     audit["unvisited_archive_member_count_due_limit"] = 0
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    audit["browser_history_source_app_counts"] = dict(sorted(browser_history_source_app_counts.items()))
+    audit["browser_history_source_apps"] = sorted(browser_history_source_app_counts)
     return records, audit
 
 
@@ -717,13 +782,30 @@ def zip_member_skip_reason(member: zipfile.ZipInfo) -> Optional[str]:
         return "directory"
     if member_path.is_absolute() or windows_path.drive or ".." in member_path.parts:
         return "unsafe_path"
-    if Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS:
+    if Path(member_name).suffix.lower() not in SUPPORTED_ZIP_EXTENSIONS and not is_browser_history_archive_member(member_name):
         return "unsupported_extension"
     return None
 
 
 def normalize_zip_member_name(name: str) -> str:
     return name.replace("\\", "/")
+
+
+def is_browser_history_archive_member(member_name: str) -> bool:
+    normalized = normalize_zip_member_name(member_name)
+    name = PurePosixPath(normalized).name
+    return name in BROWSER_HISTORY_NAMES or Path(name).suffix.lower() in BROWSER_HISTORY_EXTENSIONS
+
+
+def parser_name_for_zip_member(member_name: str) -> str:
+    suffix = Path(member_name).suffix.lower()
+    if suffix in {".json", ".jsonl", ".ndjson"}:
+        return "json"
+    if suffix in {".csv", ".tsv"}:
+        return "table"
+    if suffix in {".html", ".htm"}:
+        return "html"
+    return "text"
 
 
 def remaining_limit(limit: Optional[int], events: List[Dict[str, Any]]) -> Optional[int]:
@@ -763,6 +845,13 @@ def merge_archive_audit(audit: Dict[str, Any], archive_audit: Dict[str, Any], sk
     audit["archive_member_count"] += int(archive_audit.get("archive_member_count") or 0)
     audit["archive_member_event_count"] += int(archive_audit.get("archive_member_event_count") or 0)
     audit["skipped_archive_member_count"] += int(archive_audit.get("skipped_archive_member_count") or 0)
+    audit["browser_history_input_count"] += int(archive_audit.get("browser_history_input_count") or 0)
+    audit["browser_history_event_count"] += int(archive_audit.get("browser_history_event_count") or 0)
+    app_counts = dict(audit.get("browser_history_source_app_counts") or {})
+    for app, count in (archive_audit.get("browser_history_source_app_counts") or {}).items():
+        app_counts[str(app)] = int(app_counts.get(str(app), 0)) + int(count)
+    audit["browser_history_source_app_counts"] = dict(sorted(app_counts.items()))
+    audit["browser_history_source_apps"] = sorted(set(audit.get("browser_history_source_apps") or []) | set(app_counts))
     if archive_audit.get("limit_reached"):
         audit["limit_reached"] = True
     for reason, count in (archive_audit.get("skipped_archive_member_reason_counts") or {}).items():
@@ -1139,6 +1228,7 @@ def build_usage_boundary_proof(
             "browser_history_input_count": audit.get("browser_history_input_count", 0),
             "browser_history_event_count": audit.get("browser_history_event_count", 0),
             "browser_history_source_apps": audit.get("browser_history_source_apps", []),
+            "browser_history_source_app_counts": audit.get("browser_history_source_app_counts", {}),
             "archive_path_traversal_members_collected": audit.get("archive_path_traversal_members_collected", False),
             "windows_drive_archive_members_collected": audit.get("windows_drive_archive_members_collected", False),
         },
@@ -1352,6 +1442,11 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
             if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
         }
     )
+    browser_history_app_counts = Counter(
+        str((event.get("data") or {}).get("source_app"))
+        for event in usage_events
+        if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
+    )
     audit = {
         "source_ref_count": sum(
             1
@@ -1368,6 +1463,7 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
             ]
         ),
         "browser_history_source_apps": browser_history_apps,
+        "browser_history_source_app_counts": dict(sorted(browser_history_app_counts.items())),
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
     }
@@ -1385,6 +1481,9 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
             int(audit.get("browser_history_event_count") or 0),
             len([event for event in usage_events if str((event.get("data") or {}).get("source_app", "")).endswith("_history")]),
         )
+        audit["browser_history_source_apps"] = sorted(set(audit.get("browser_history_source_apps") or []) | set(browser_history_apps))
+        if browser_history_app_counts:
+            audit["browser_history_source_app_counts"] = dict(sorted(browser_history_app_counts.items()))
         audit["archive_path_traversal_members_collected"] = False
         audit["windows_drive_archive_members_collected"] = False
     return audit
