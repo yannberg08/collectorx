@@ -88,6 +88,10 @@ python3 tools/finclaw_catalog.py batch-manifest \
   --priority P0 \
   --out-dir-root /path/to/run \
   --json
+python3 tools/run_finclaw_batch.py \
+  --priority P0 \
+  --out-dir-root /path/to/run \
+  --json
 python3 tools/finclaw_catalog.py plan ths-watchlist \
   --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
   --out-dir /path/to/out \
@@ -139,6 +143,17 @@ but emits:
 FinClaw should execute only `ready_steps[*].argv`, in listed order, and run
 `ready_steps[*].post_run_validation.argv` before treating that step's output as
 Lake-ready. `display_command` is for UI and audit display only.
+
+FinClaw may delegate that loop to `tools/run_finclaw_batch.py`. The runner can
+read an existing manifest with `--manifest <path>` or build one with the same
+filters as `batch-manifest`. It defaults to dry-run mode and reports the steps
+that would run without touching local user data. Add `--execute` only after the
+user has granted the required authorization. In execute mode, the runner stops
+on the first failed collector or failed package validation unless
+`--continue-on-error` is supplied. A collector command that succeeds without a
+ready post-run validation command is still reported as a validation failure. Use
+`--skip-validation` only for debugging; production runs should keep the post-run
+validation gate enabled.
 
 Product runners should use `--require-ready` before ordinary shell execution.
 If the helper exits with status `2`, FinClaw should parse the same JSON

@@ -31,7 +31,8 @@ FinClaw 应按下面顺序调用：
 3. 调用 `python3 tools/finclaw_catalog.py doctor/runbook/batch-manifest --json`
    生成产品侧设置页、批量顺序和可执行清单。产品执行时只运行
    `ready_steps[*].argv` 或 `plan.argv`，不要重新解析展示用 `command` 字符串。
-4. 只有在用户完成授权且 helper 返回 ready 后，才执行采集器命令。
+4. 可用 `python3 tools/run_finclaw_batch.py --json` 做 dry-run 检查；只有在用户完成
+   授权且 helper 返回 ready 后，才加 `--execute` 执行采集器命令。
 5. 采集完成后先运行 helper 返回的 `package_validation.argv` 或
    `ready_steps[*].post_run_validation.argv`；事件包、manifest 或隐私字段未通过时，
    不能进入持久 Lake。

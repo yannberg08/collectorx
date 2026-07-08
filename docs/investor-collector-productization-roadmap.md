@@ -2530,6 +2530,34 @@ Findings:
 - This improves FinClaw product execution safety. It does not claim new
   real-account validation for any collector.
 
+### Wave AO - FinClaw Batch Runner
+
+Validation record:
+
+- `docs/validations/finclaw-batch-runner-validation-2026-07-08.md`
+
+Findings:
+
+- Added `tools/run_finclaw_batch.py`.
+- The runner can consume an existing
+  `collectorx.finclaw_batch_manifest.v1` file or build one from catalog filters
+  and placeholder replacements.
+- The default mode is dry-run: it reports ready steps, blocked steps,
+  dependencies, output paths, and post-run validation plans without executing
+  any collector command.
+- `--execute` runs only `ready_steps[*].argv`; after a successful collector
+  command it runs that step's `post_run_validation.argv`.
+- The runner stops on the first collector or validation failure unless
+  `--continue-on-error` is supplied.
+- A successful collector command without a ready post-run validation command is
+  still treated as a validation failure.
+- Added project validation coverage for runner CLI help and parser tests.
+- Added tests for dry-run non-execution, successful execute plus package
+  validation, missing post-run validation failure, failed-step stopping, P0
+  catalog dry-run summaries, and `--require-all-ready` failure behavior.
+- This improves FinClaw execution-loop safety. It does not claim new
+  real-account validation for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

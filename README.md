@@ -83,6 +83,9 @@ Operational docs:
   from ready upstream package paths.
   After a collector exits, runners should execute the returned
   `package_validation.argv` before ingesting the package into Lake.
+- `tools/run_finclaw_batch.py` consumes a batch manifest or builds one from the
+  catalog. It defaults to dry-run reporting; `--execute` is required before it
+  runs ready steps and their post-run package validations.
 - `tools/validate_investor_wiki_evidence.py` validates
   `finclaw.investor_wiki_evidence.v1` packages before SoulMirror/FinClaw writes
   the final investor Wiki.

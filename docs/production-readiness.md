@@ -16,12 +16,16 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw now has a catalog helper readiness doctor, runbook, and compact batch
-manifest for product-side discovery and invocation planning:
+FinClaw now has a catalog helper readiness doctor, runbook, compact batch
+manifest, and dry-run-first batch runner for product-side discovery and
+invocation planning:
 
 - `tools/finclaw_catalog.py list/show/plan/doctor/runbook/batch-manifest` merges
   `collectors/finclaw-investor-catalog.json` with
   `collectors/finclaw-invocation-contracts.json`.
+- `tools/run_finclaw_batch.py` consumes an existing batch manifest or builds one
+  from the catalog filters. It defaults to dry-run reporting and requires
+  `--execute` before running collector commands.
 - Product runners can list collectors, inspect authorization/preflight details,
   and render a collector command with placeholder replacement before execution.
 - `plan` and `doctor` now include both a display `command` and executable
@@ -37,6 +41,11 @@ manifest for product-side discovery and invocation planning:
   executable `argv`, dependency ids, output directories, expected Lake
   `events.jsonl` paths, and post-run validation commands; blocked entries move
   to `blocked_steps` with the same `next_action` contract.
+- The batch runner executes only ready steps, runs post-run package validation
+  after successful collector commands, and stops on the first collector or
+  validation failure unless `--continue-on-error` is supplied. A successful
+  collector command without a ready validation command is still treated as a
+  validation failure.
 - Runbook auto-links deterministic `<upstream-id-events-jsonl>` lens inputs from
   ready upstream package paths, while ambiguous inputs still remain explicit
   user/product choices.
@@ -51,8 +60,8 @@ manifest for product-side discovery and invocation planning:
 - `tools/test_finclaw_catalog.py` and project validation now cover catalog
   listing, lens upstream contracts, command placeholder replacement, safe argv
   rendering, package-validation argv rendering, upstream auto-linking,
-  batch-manifest execution output, and ready-to-run gate/doctor/runbook
-  handling.
+  batch-manifest execution output, batch-runner dry-run/execute/failure
+  behavior, and ready-to-run gate/doctor/runbook handling.
 - This improves FinClaw product-call ergonomics, but it does not claim new
   real-account validation for any collector.
 
