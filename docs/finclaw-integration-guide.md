@@ -76,6 +76,10 @@ FinClaw can use the helper CLI instead of joining the JSON files itself:
 ```bash
 python3 tools/finclaw_catalog.py list --json
 python3 tools/finclaw_catalog.py show ths-watchlist --json
+python3 tools/finclaw_catalog.py doctor \
+  --priority P0 \
+  --out-dir-root /path/to/run \
+  --json
 python3 tools/finclaw_catalog.py plan ths-watchlist \
   --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
   --out-dir /path/to/out \
@@ -85,20 +89,28 @@ python3 tools/finclaw_catalog.py plan ths-watchlist \
 
 The `plan` output includes `ready_to_run`, unresolved placeholders, the
 rendered command, `next_action`, `blocked_reason`, `user_step`, `preflight`,
-`failure_state`, product surface, and evidence role. Product runners should use
-`--require-ready` before ordinary shell execution. If the helper exits with
-status `2`, FinClaw should parse the same JSON response and follow
-`next_action` instead of running the command:
+`failure_state`, product surface, and evidence role. The `doctor` output gives
+the same fields for every selected catalog entry, plus summary counts by
+priority, category, runner, and `next_action`; FinClaw should use it to render
+collector setup and authorization checklists.
+
+Product runners should use `--require-ready` before ordinary shell execution.
+If the helper exits with status `2`, FinClaw should parse the same JSON
+response and follow `next_action` instead of running the command:
 
 - `run_command`: execute the rendered command, then run the package gate.
 - `fill_placeholders`: ask the user for the missing authorized file, folder,
   account precondition, or output path shown in `missing_placeholders`.
+- `wait_for_upstream_lake`: run or select the upstream collectors shown in
+  `requires_upstream`, then provide the resulting Lake `events.jsonl` path.
 - `use_soulmirror_runner`: hand the request to the SoulMirror-managed runner
   instead of treating the catalog command as a shell command.
 
 SoulMirror-owned collectors such as TickTick report `runner=soulmirror` and
 `blocked_reason=soulmirror_runner_required`, so the product does not treat them
-as ordinary shell commands.
+as ordinary shell commands. Lens collectors with missing upstream inputs report
+`next_action=wait_for_upstream_lake`, so the product does not ask the user to
+upload arbitrary files when it should first run the upstream Lake collector.
 
 ## Package Gate
 

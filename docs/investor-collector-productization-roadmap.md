@@ -2389,6 +2389,31 @@ Findings:
   incomplete collector commands. It does not claim new real-account validation
   for any collector.
 
+### Wave AI - FinClaw Catalog Readiness Doctor
+
+Validation record:
+
+- `docs/validations/finclaw-catalog-doctor-validation-2026-07-08.md`
+
+Findings:
+
+- Added `tools/finclaw_catalog.py doctor` for batch product readiness reporting.
+- `doctor --out-dir-root ... --json` renders every selected catalog entry with
+  per-collector output paths, command readiness, missing placeholders, upstream
+  requirements, user steps, preflight, and failure states.
+- Doctor summaries group collectors by priority, category, runner, and
+  `next_action` so FinClaw can render setup and authorization checklists.
+- Added `next_action=wait_for_upstream_lake` for lens commands whose upstream
+  Lake input is missing.
+- Kept `fill_placeholders` for direct user-provided files/folders and
+  `use_soulmirror_runner` for SoulMirror-managed collectors.
+- Simplified the default `wechat-investment-dialogue` catalog command so
+  optional chat/sender policy flags are not treated as mandatory placeholders.
+- Added tests for doctor summaries, priority filters, all-ready failure, and
+  lens upstream-Lake routing.
+- This improves FinClaw product orchestration across the P0/P1/P2 matrix. It
+  does not claim new real-account validation for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

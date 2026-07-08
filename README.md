@@ -72,10 +72,10 @@ Operational docs:
 - `tools/validate_collector_package.py` validates a collector output directory
   before FinClaw ingests it into Lake or runs Wiki distillation.
 - `tools/finclaw_catalog.py` gives FinClaw a stable CLI for listing catalog
-  entries, inspecting authorization/preflight details, and rendering invocation
-  plans from the catalog plus invocation contracts. Product runners should use
-  `plan --require-ready` to fail fast when placeholders are missing or a
-  collector must be executed through a SoulMirror-managed runner.
+  entries, inspecting authorization/preflight details, rendering invocation
+  plans, and producing a batch readiness matrix from the catalog plus
+  invocation contracts. Product runners should use `doctor` for setup screens
+  and `plan --require-ready` before executing a single collector.
 - `tools/validate_investor_wiki_evidence.py` validates
   `finclaw.investor_wiki_evidence.v1` packages before SoulMirror/FinClaw writes
   the final investor Wiki.
@@ -183,7 +183,8 @@ The suite currently checks:
 - no `.DS_Store` files
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
-- FinClaw catalog helper CLI, invocation-plan tests, and ready-to-run gate
+- FinClaw catalog helper CLI, invocation-plan tests, readiness doctor, and
+  ready-to-run gate
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets

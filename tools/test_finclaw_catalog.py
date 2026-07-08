@@ -108,12 +108,58 @@ def test_soulmirror_plan_is_not_plain_command() -> None:
     assert plan["failure_state"] == "ticktick_auth_required"
 
 
+def test_lens_plan_waits_for_upstream_lake() -> None:
+    proc = run_proc("plan", "email-research", "--out-dir", "/tmp/collectorx-out", "--json", "--require-ready")
+    assert proc.returncode == 2
+    plan = json.loads(proc.stdout)
+    assert plan["ready_to_run"] is False
+    assert plan["next_action"] == "wait_for_upstream_lake"
+    assert plan["blocked_reason"] == "requires_upstream:email"
+    assert plan["missing_placeholders"] == ["email-events-jsonl"]
+    assert plan["requires_upstream"] == ["email"]
+
+
 def test_require_ready_rejects_soulmirror_plan() -> None:
     proc = run_proc("plan", "ticktick", "--json", "--require-ready")
     assert proc.returncode == 2
     plan = json.loads(proc.stdout)
     assert plan["runner"] == "soulmirror"
     assert plan["next_action"] == "use_soulmirror_runner"
+
+
+def test_doctor_reports_batch_readiness_summary() -> None:
+    report = run_json("doctor", "--out-dir-root", "/tmp/collectorx-out", "--json")
+    assert report["schema"] == "collectorx.finclaw_catalog_doctor.v1"
+    assert report["total"] >= 20
+    assert report["ready_to_run"] > 0
+    assert report["not_ready"] > 0
+    assert report["summary"]["by_next_action"]["run_command"] > 0
+    assert report["summary"]["by_next_action"]["fill_placeholders"] > 0
+    assert report["summary"]["by_next_action"]["use_soulmirror_runner"] > 0
+    assert report["summary"]["by_next_action"]["wait_for_upstream_lake"] > 0
+    by_id = {item["id"]: item for item in report["items"]}
+    assert by_id["eastmoney-portfolio"]["ready_to_run"] is True
+    assert by_id["eastmoney-portfolio"]["next_action"] == "run_command"
+    assert "/tmp/collectorx-out/eastmoney-portfolio" in by_id["eastmoney-portfolio"]["command"]
+    assert by_id["ths-watchlist"]["next_action"] == "fill_placeholders"
+    assert by_id["ths-watchlist"]["missing_placeholders"] == ["authorized-ths-watchlist-export"]
+    assert by_id["wechat-investment-dialogue"]["next_action"] == "wait_for_upstream_lake"
+    assert by_id["wechat-investment-dialogue"]["missing_placeholders"] == ["wechat-events-jsonl"]
+    assert by_id["ticktick"]["next_action"] == "use_soulmirror_runner"
+
+
+def test_doctor_filters_priority() -> None:
+    report = run_json("doctor", "--priority", "P0", "--out-dir-root", "/tmp/collectorx-out", "--json")
+    assert report["total"] > 0
+    assert all(item["priority"] == "P0" for item in report["items"])
+    assert report["summary"]["by_priority"] == {"P0": report["total"]}
+
+
+def test_doctor_require_all_ready_fails_when_any_entry_is_blocked() -> None:
+    proc = run_proc("doctor", "--out-dir-root", "/tmp/collectorx-out", "--json", "--require-all-ready")
+    assert proc.returncode == 2
+    report = json.loads(proc.stdout)
+    assert report["not_ready"] > 0
 
 
 def main() -> int:
@@ -123,7 +169,11 @@ def main() -> int:
     test_plan_reports_missing_placeholders_and_require_ready_fails()
     test_require_ready_allows_ready_command_plan()
     test_soulmirror_plan_is_not_plain_command()
+    test_lens_plan_waits_for_upstream_lake()
     test_require_ready_rejects_soulmirror_plan()
+    test_doctor_reports_batch_readiness_summary()
+    test_doctor_filters_priority()
+    test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
     print("finclaw catalog tests passed.")
     return 0
 

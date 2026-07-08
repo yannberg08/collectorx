@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import json
 import re
 import shlex
@@ -99,9 +100,12 @@ def parse_set_values(values: list[str]) -> dict[str, str]:
     return replacements
 
 
-def plan_status(runner: str, placeholders: list[str]) -> tuple[str, str | None]:
+def plan_status(runner: str, placeholders: list[str], contract: dict[str, Any]) -> tuple[str, str | None]:
     if runner == "soulmirror":
         return "use_soulmirror_runner", "soulmirror_runner_required"
+    upstream = contract.get("requires_upstream") or []
+    if placeholders and contract.get("authorization_mode") == "lake-lens" and upstream:
+        return "wait_for_upstream_lake", f"requires_upstream:{','.join(upstream)}"
     if placeholders:
         return "fill_placeholders", f"missing_placeholders:{','.join(placeholders)}"
     return "run_command", None
@@ -113,8 +117,8 @@ def build_plan(entry: dict[str, Any], *, replacements: dict[str, str]) -> dict[s
         command = command.replace(f"<{key}>", shlex.quote(value))
     placeholders = sorted(set(re.findall(r"<([^<>]+)>", command)))
     runner = "soulmirror" if command.startswith("SoulMirror") else "command"
-    next_action, blocked_reason = plan_status(runner, placeholders)
     contract = entry.get("invocation_contract") or {}
+    next_action, blocked_reason = plan_status(runner, placeholders, contract)
     return {
         "id": entry["id"],
         "runner": runner,
@@ -200,6 +204,119 @@ def cmd_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def filtered_entries(args: argparse.Namespace) -> list[dict[str, Any]]:
+    entries = merged_entries()
+    if args.priority:
+        entries = [entry for entry in entries if entry["priority"] == args.priority]
+    if args.category:
+        entries = [entry for entry in entries if entry["category"] == args.category]
+    if args.readiness:
+        entries = [entry for entry in entries if entry["readiness"] == args.readiness]
+    return entries
+
+
+def doctor_item(entry: dict[str, Any], plan: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": entry["id"],
+        "priority": entry["priority"],
+        "category": entry["category"],
+        "skill": entry["skill"],
+        "readiness": entry["readiness"],
+        "gate": entry["gate"],
+        "product_surface": plan["product_surface"],
+        "authorization_mode": plan["authorization_mode"],
+        "evidence_role": plan["evidence_role"],
+        "runner": plan["runner"],
+        "ready_to_run": plan["ready_to_run"],
+        "next_action": plan["next_action"],
+        "blocked_reason": plan["blocked_reason"],
+        "missing_placeholders": plan["missing_placeholders"],
+        "requires_upstream": plan["requires_upstream"],
+        "failure_state": plan["failure_state"],
+        "user_step": plan["user_step"],
+        "preflight": plan["preflight"],
+        "command": plan["command"],
+    }
+
+
+def build_doctor_report(
+    entries: list[dict[str, Any]], *, replacements: dict[str, str], out_dir_root: str | None
+) -> dict[str, Any]:
+    items: list[dict[str, Any]] = []
+    for entry in entries:
+        entry_replacements = dict(replacements)
+        if out_dir_root:
+            entry_replacements["out-dir"] = str(Path(out_dir_root) / entry["id"])
+        plan = build_plan(entry, replacements=entry_replacements)
+        items.append(doctor_item(entry, plan))
+
+    by_next_action = Counter(item["next_action"] for item in items)
+    by_runner = Counter(item["runner"] for item in items)
+    by_priority = Counter(item["priority"] for item in items)
+    by_category = Counter(item["category"] for item in items)
+    ready_count = sum(1 for item in items if item["ready_to_run"])
+    return {
+        "schema": "collectorx.finclaw_catalog_doctor.v1",
+        "total": len(items),
+        "ready_to_run": ready_count,
+        "not_ready": len(items) - ready_count,
+        "summary": {
+            "by_next_action": dict(sorted(by_next_action.items())),
+            "by_runner": dict(sorted(by_runner.items())),
+            "by_priority": dict(sorted(by_priority.items())),
+            "by_category": dict(sorted(by_category.items())),
+        },
+        "items": items,
+    }
+
+
+def print_human_doctor(report: dict[str, Any]) -> None:
+    print(f"total: {report['total']}")
+    print(f"ready_to_run: {report['ready_to_run']}")
+    print(f"not_ready: {report['not_ready']}")
+    items = report["items"]
+    if not items:
+        print("No entries matched.")
+        return
+
+    headers = ("id", "P", "category", "ready", "next_action", "missing/upstream", "failure")
+    rows = []
+    for item in items:
+        detail_values = item["missing_placeholders"] or item["requires_upstream"]
+        rows.append(
+            (
+                item["id"],
+                item["priority"],
+                item["category"],
+                str(item["ready_to_run"]).lower(),
+                item["next_action"],
+                ",".join(detail_values),
+                item["failure_state"] or "",
+            )
+        )
+    widths = [
+        max(len(str(value)) for value in column)
+        for column in zip(headers, *rows, strict=False)
+    ]
+    print("  ".join(str(value).ljust(width) for value, width in zip(headers, widths, strict=False)))
+    print("  ".join("-" * width for width in widths))
+    for row in rows:
+        print("  ".join(str(value).ljust(width) for value, width in zip(row, widths, strict=False)))
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    replacements = parse_set_values(args.set_values or [])
+    report = build_doctor_report(entries, replacements=replacements, out_dir_root=args.out_dir_root)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_doctor(report)
+    if args.require_all_ready and report["not_ready"]:
+        return 2
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect FinClaw investor collector catalog.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -234,6 +351,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 2 unless the rendered plan is ready for ordinary command execution.",
     )
     plan_parser.set_defaults(func=cmd_plan)
+
+    doctor_parser = subparsers.add_parser("doctor", help="Summarize FinClaw collector readiness.")
+    doctor_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    doctor_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    doctor_parser.add_argument("--readiness")
+    doctor_parser.add_argument(
+        "--out-dir-root",
+        help="Replace <out-dir> with <out-dir-root>/<collector-id> for each catalog entry.",
+    )
+    doctor_parser.add_argument(
+        "--set",
+        dest="set_values",
+        action="append",
+        default=[],
+        metavar="PLACEHOLDER=VALUE",
+        help="Replace an arbitrary command placeholder across all plans.",
+    )
+    doctor_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    doctor_parser.add_argument(
+        "--require-all-ready",
+        action="store_true",
+        help="Exit with status 2 unless every selected entry is ready for ordinary command execution.",
+    )
+    doctor_parser.set_defaults(func=cmd_doctor)
     return parser
 
 
