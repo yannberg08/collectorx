@@ -16,7 +16,22 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`xueqiu-watchlist` and `ths-watchlist` now emit standard Investor Wiki evidence
+CollectorX now has a package-level FinClaw ingestion gate:
+
+- Added `tools/validate_collector_package.py` to validate an output directory
+  before FinClaw adds it to durable Lake or runs Wiki distillation.
+- The gate checks `manifest.json`, `lake/<collector-id>/events.jsonl`,
+  `collectorx.event.v1` required fields, privacy booleans, raw refs, and
+  optional `investor_wiki_evidence.v1.json` contract validity.
+- Added `tools/test_collector_package_validator.py` and wired the validator into
+  project validation.
+- `tools/run_first_investor_loop.py` now writes `manifest.json`, and the
+  project smoke test validates the first-loop package with
+  `--require-evidence`.
+- This improves product integration safety; it does not claim new real-account
+  validation for any individual collector.
+
+The prior completed wave: `xueqiu-watchlist` and `ths-watchlist` now emit standard Investor Wiki evidence
 packages for attention-universe signals:
 
 - `xueqiu_query.py collect --input <authorized-watchlist-export> --out-dir

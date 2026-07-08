@@ -1765,6 +1765,34 @@ Findings:
   generation, contract dimensions, non-strong-trade policy, source audit, ZIP
   provenance for Xueqiu, and gap behavior.
 
+### Wave AA: FinClaw package ingestion gate
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/finclaw-package-ingestion-gate-validation-2026-07-08.md`
+
+Findings:
+
+- Added `tools/validate_collector_package.py` so FinClaw can validate any
+  collector output directory before durable Lake ingestion or investor Wiki
+  distillation.
+- The validator checks `manifest.json`, `lake/<collector-id>/events.jsonl`,
+  event JSONL readability, `collectorx.event.v1` required fields, privacy
+  booleans, `raw_ref`, `data`, collector-id consistency, and optional
+  `investor_wiki_evidence.v1.json` contract validity.
+- Added a machine-readable `--json` mode for product/job-runner integration and
+  a `--require-evidence` mode for vertical collectors or lenses that must
+  produce Wiki evidence.
+- Updated `tools/run_first_investor_loop.py` to write `manifest.json`; the
+  project smoke test now validates that first-loop package with
+  `--require-evidence`.
+- Updated the integration guide and productization control board so package
+  validation is an explicit FinClaw gate before Wiki distillation.
+- This wave improves production gating across P0/P1/P2, but does not claim new
+  real-account or real-device validation for individual collectors.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

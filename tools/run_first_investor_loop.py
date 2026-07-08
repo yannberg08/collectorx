@@ -62,6 +62,19 @@ def main() -> int:
 
     lake_events = out_dir / "lake" / "ths-portfolio" / "events.jsonl"
     _write_jsonl(lake_events, events)
+    manifest_path = out_dir / "manifest.json"
+    _write_json(
+        manifest_path,
+        {
+            "schema": "collectorx.first_investor_loop.manifest.v1",
+            "collector": "ths-portfolio",
+            "collected_at": args.collected_at,
+            "input_csv": str(input_csv),
+            "event_count": len(events),
+            "lake_event_file": str(lake_events),
+            "package_role": "deterministic_first_investor_loop_fixture",
+        },
+    )
 
     wiki_root = out_dir / "wiki" / "vertical" / "investor"
     stats = calculate_stats(records)
@@ -89,6 +102,7 @@ def main() -> int:
         "records": len(records),
         "events": len(events),
         "lake": str(lake_events),
+        "manifest": str(manifest_path),
         "evidence": str(evidence_path),
         "wiki": str(wiki_root),
         "maturity": str(maturity_path),
@@ -299,6 +313,7 @@ def _write_summary(
         "  -> ths parser",
         "  -> collectorx.event.v1 JSONL",
         "  -> lake/ths-portfolio/events.jsonl",
+        "  -> manifest.json",
         "  -> investor_wiki_evidence.v1.json",
         "  -> deterministic investor organize step",
         "  -> wiki/vertical/investor/*.md",

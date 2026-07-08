@@ -66,6 +66,8 @@ Operational docs:
   is still a placeholder or lens.
 - `docs/finclaw-integration-guide.md` describes how FinClaw should discover,
   authorize, call, and gate collectors.
+- `tools/validate_collector_package.py` validates a collector output directory
+  before FinClaw ingests it into Lake or runs Wiki distillation.
 - `tools/validate_investor_wiki_evidence.py` validates
   `finclaw.investor_wiki_evidence.v1` packages before SoulMirror/FinClaw writes
   the final investor Wiki.
@@ -173,6 +175,7 @@ The suite currently checks:
 - no `.DS_Store` files
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
+- package-level validation for standard CollectorX outputs
 - parser unit tests for portfolio/watchlist collectors
 - investor lens classifier tests for matched and non-matched evidence
 - event example shape
@@ -195,6 +198,8 @@ This produces:
 ```text
 .tmp/first-investor-loop/
 ├── lake/ths-portfolio/events.jsonl
+├── manifest.json
+├── investor_wiki_evidence.v1.json
 ├── wiki/vertical/investor/record-review/决策日志.md
 ├── wiki/vertical/investor/risk-portfolio/组合约束.md
 ├── wiki/vertical/investor/competence-circle/公司能力圈.md

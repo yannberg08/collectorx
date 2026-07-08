@@ -27,12 +27,15 @@ FinClaw 应按下面顺序调用：
 2. 读取 `collectors/generic/*.yaml`、`collectors/vertical/*.yaml`、
    `collectors/lenses/*.yaml`，确认 `armed`、`scope.collects` 和 `scope.excludes`。
 3. 只有在用户完成授权后，才运行 catalog 中的 `cli`。
-4. 采集结果必须先进入 `collectorx.event.v1` lake，再进入
+4. 采集完成后先运行
+   `python3 tools/validate_collector_package.py <out-dir> --collector <collector-id>`；
+   事件包、manifest 或隐私字段未通过时，不能进入持久 Lake。
+5. 采集结果必须先进入 `collectorx.event.v1` lake，再进入
    `finclaw.investor_wiki_evidence.v1`，最终 Wiki 由 FinClaw/SoulMirror distill 层写入。
-5. 如果采集器输出 `investor_wiki_evidence.v1.json`，FinClaw 必须先运行
+6. 如果采集器输出 `investor_wiki_evidence.v1.json`，FinClaw 必须先运行
    `python3 tools/validate_investor_wiki_evidence.py <path>`；未通过 7 大维度/20 子维度
    合同校验的证据包不能进入投资分身 Wiki distill。
-6. 如果 `manifest.json` 表示 gap、缺平台、缺字段、无真实账号验证，产品层展示为
+7. 如果 `manifest.json` 表示 gap、缺平台、缺字段、无真实账号验证，产品层展示为
    “未完成采集/证据不足”，不能把它当成个人事实。
 
 ## 展示闸门
@@ -83,10 +86,11 @@ FinClaw 应按下面顺序调用：
 2. 无私人数据的 fixture 测试。
 3. `collectorx.event.v1` 输出。
 4. `manifest.json` 中的覆盖率、来源审计、证据边界。
-5. 必要时输出 `finclaw.investor_wiki_evidence.v1.json`。
-6. `docs/validations/*.md` 验证记录。
-7. 绿色的 `PYTHON=.venv/bin/python bash test_collectors.sh`。
-8. Git commit 和 push。
+5. 采集包通过 `tools/validate_collector_package.py`。
+6. 必要时输出 `finclaw.investor_wiki_evidence.v1.json`。
+7. `docs/validations/*.md` 验证记录。
+8. 绿色的 `PYTHON=.venv/bin/python bash test_collectors.sh`。
+9. Git commit 和 push。
 
 ## 下一阶段
 

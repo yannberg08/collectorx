@@ -57,6 +57,40 @@ one or more of:
 The minimum useful output is `events.jsonl`, where each line is a
 `collectorx.event.v1` object.
 
+## Package Gate
+
+After any collector finishes, FinClaw should validate the output directory
+before adding it to the durable Lake or running a downstream lens:
+
+```bash
+python3 tools/validate_collector_package.py \
+  <out-dir> \
+  --collector <collector-id>
+```
+
+For vertical collectors or investor lenses that are expected to produce Wiki
+evidence, require the evidence package at the same gate:
+
+```bash
+python3 tools/validate_collector_package.py \
+  <out-dir> \
+  --collector <collector-id> \
+  --require-evidence
+```
+
+The package gate checks:
+
+- `manifest.json` is present and readable.
+- `lake/<collector-id>/events.jsonl` exists and contains valid JSONL.
+- Every event uses `collectorx.event.v1` and has the required event, privacy,
+  raw-reference, and data fields.
+- If `investor_wiki_evidence.v1.json` is present, it passes the Investor Wiki
+  evidence contract.
+
+FinClaw should treat a failed package gate as "collection incomplete" and show
+the user the next action from `manifest.json` when available. It should not
+silently distill a failed package into the investor Wiki.
+
 ## Investor Wiki Evidence Contract
 
 If a collector emits `investor_wiki_evidence.v1.json`, FinClaw should validate

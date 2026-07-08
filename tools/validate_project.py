@@ -19,10 +19,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from collectorx.investor_wiki import validate_evidence_file
+from tools.validate_collector_package import validate_package
 
 PY_COMPILE_EXCLUDES = {".git", ".venv", "__pycache__", ".pytest_cache"}
 
 CLI_HELP_TARGETS = [
+    "tools/validate_collector_package.py",
     "tools/validate_investor_wiki_evidence.py",
     "skills/wechat-export/scripts/wechat_query.py",
     "skills/feishu/scripts/feishu_api.py",
@@ -50,6 +52,7 @@ CLI_HELP_TARGETS = [
 ]
 
 PARSER_TESTS = [
+    "tools/test_collector_package_validator.py",
     "tools/test_investor_wiki_contract.py",
     "skills/email-collector/tests/test_events.py",
     "skills/feishu/tests/test_feishu_collect.py",
@@ -262,6 +265,7 @@ def run_first_loop_smoke_test() -> None:
         out = Path(tmp)
         required = [
             out / "lake" / "ths-portfolio" / "events.jsonl",
+            out / "manifest.json",
             out / "wiki" / "vertical" / "investor" / "record-review" / "决策日志.md",
             out / "wiki" / "vertical" / "investor" / "risk-portfolio" / "组合约束.md",
             out / "investor_wiki_evidence.v1.json",
@@ -278,6 +282,11 @@ def run_first_loop_smoke_test() -> None:
         evidence_errors = validate_evidence_file(out / "investor_wiki_evidence.v1.json")
         if evidence_errors:
             raise SystemExit(f"First investor loop evidence contract failed: {evidence_errors}")
+        package_summary, package_errors = validate_package(out, collector="ths-portfolio", require_evidence=True)
+        if package_errors:
+            raise SystemExit(f"First investor loop package validation failed: {package_errors}")
+        if package_summary["event_count"] != 4:
+            raise SystemExit(f"First investor loop package expected 4 events, got {package_summary['event_count']}")
 
 
 def main() -> int:
