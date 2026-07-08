@@ -37,6 +37,16 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --include-content \
   --out-dir ~/Desktop/research-content-investor-collect
 
+# 投研文档产品化入口：先按用户授权的格式、路径、文件名、解析器、主题和关键词收窄，再做投资证据筛选
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source research-documents \
+  --input ~/Documents/research \
+  --allow-extension "pdf,xlsx,md" \
+  --allow-path "投资研究" \
+  --allow-research-surface "valuation_model,financial_statement,research_report" \
+  --deny-keyword "私人" \
+  --out-dir ~/Desktop/research-scoped-investor-collect
+
 # 从微信通用 collector 的授权导出里筛选投资讨论
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source wechat-investment-dialogue \
@@ -128,7 +138,7 @@ P2 必做：
 - 记录 `source_policy`：`--allow-chat`、`--deny-chat`、`--allow-sender`、`--deny-sender` 的配置和过滤数量。这个策略只收窄来源范围，不把普通聊天强行变成投资证据。
 - 对 `wechat-investment-dialogue` 输出 `wechat_dialogue_boundary_proof` 与对话面谱：汇总聊天/发送者范围、来源策略、本人/他人发言、群聊/私聊、交易意图、买卖理由、仓位、风险情绪、咨询网络、研究讨论和复盘线索；不声明完整微信历史或完整上下文。
 - 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM/XLS/PPTX 正文、表格或幻灯片读取必须显式传入 `--include-content`；`.xls` 会区分 XML Spreadsheet、HTML table、delimited/plain text、renamed OOXML 和 binary BIFF，经 `parser_counts` 写入 manifest；binary BIFF 需要 `xlrd`，不可用时必须记录 `xlrd-biff` / `extract_failed`，不能伪造内容；截图/图片默认只保留元数据；若用户显式传入 `--include-image-ocr` 且本机有 tesseract，才读取图片文字；OCR 不可用时必须在 manifest/path_results 中写明降级原因。
-- 对 `research-documents` 额外输出 `research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描。
+- 对 `research-documents` 额外输出 `document_scope_policy`、`research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、扩展名/路径/文件名/解析器/研究主题/关键词授权范围、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描。
 - 对 `investment-notes` 输出 `investment_note_boundary_proof`：汇总授权输入、来源应用、预览/全文、标签/路径/URL、候选/命中/过滤数量和投资笔记类型面谱，并明确不声明完整笔记库或完整上下文。
 - 对 `task-calendar-investor` 输出 `task_calendar_boundary_proof`：汇总授权输入、上游任务/日历来源、候选/命中/过滤数量、时间/提醒/会议链接/日程质量面谱，并明确不声明完整任务清单、完整日历或完整上下文。
 - 对 `meeting-minutes` 输出 `meeting_minutes_boundary_proof`：汇总授权输入、上游会议/协作来源、候选/命中/过滤数量、参会人、会议链接、附件/录制指针和时间覆盖，并明确不声明完整会议历史、完整工作区或默认采集录制正文。
@@ -149,7 +159,7 @@ P2 必做：
 - 默认阈值是 `--min-score 0.30`。
 - `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
 - 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。
-- 如果所有候选都被来源范围策略排除，输出 `source_policy_filtered_all` 缺口事件，提示检查联系人/群/发送者白名单和黑名单。
+- 如果所有候选都被来源范围策略或投研文档授权范围策略排除，输出 `source_policy_filtered_all` 缺口事件，提示检查本次白名单和黑名单。
 
 `vertical` 类型的数据源是金融原生通道，默认视为投资证据，但仍会附分类元数据。后续每个 vertical collector 还必须做真实账号/平台验证。
 

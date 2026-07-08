@@ -108,8 +108,8 @@
       "readiness": "baseline+audit",
       "gate": "G2-partial",
       "finclaw_action": "run-after-filesystem-or-notes-with-explicit-content-authorization",
-      "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source research-documents --input <authorized-research-folder-or-events> --include-content --out-dir <out-dir>",
-      "collects": "Research reports, financial statements, valuation models, announcement notes, explicit XLS/XLSX/PPTX/DOCX/PDF content extraction, legacy XLS parser-variant audit, binary XLS xlrd availability/failure audit, path-level source audit, skipped reasons, screenshot metadata-only evidence, research document surface summary, and research corpus boundary proof.",
+      "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source research-documents --input <authorized-research-folder-or-events> --include-content --out-dir <out-dir> [--allow-extension <ext>] [--allow-path <pattern>] [--allow-file-name <pattern>] [--allow-parser <parser>] [--allow-research-surface <surface>] [--allow-keyword <keyword>]",
+      "collects": "Research reports, financial statements, valuation models, announcement notes, explicit XLS/XLSX/PPTX/DOCX/PDF content extraction, legacy XLS parser-variant audit, binary XLS xlrd availability/failure audit, extension/path/file-name/parser/research-surface/keyword authorization scope-policy audit, filtered-all readiness, path-level source audit, skipped reasons, screenshot metadata-only evidence, research document surface summary, and research corpus boundary proof.",
       "must_not_collect": "Public report database crawls, unrelated private files, screenshot OCR without separate user authorization and adapter, or generic file bodies without explicit authorization.",
       "production_gap": "More real PDF/XLS/XLSX/DOCX/PPTX samples, optional screenshot OCR adapter decision, real binary .xls with xlrd validation, and Wiki backtest against trades/reviews."
     },

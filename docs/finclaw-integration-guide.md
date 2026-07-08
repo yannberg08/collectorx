@@ -415,6 +415,8 @@ Boundary:
 python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
   --source research-documents \
   --input <authorized-research-folder> \
+  --allow-extension "pdf,xlsx,md" \
+  --allow-research-surface "research_report,financial_statement,valuation_model" \
   --include-content \
   --include-image-ocr \
   --out-dir <out-dir>
@@ -434,10 +436,15 @@ Current status:
   parse results, candidate counts, filtered counts, skipped reasons, extension
   coverage, parser counts, content-read counts, limit truncation, and the active
   content policy.
+- Optional document scope-policy filters can narrow authorized records by
+  extension, path, file name, parser, research surface, and keyword before
+  evidence reaches the Lake. The manifest records configured allow/deny rules,
+  filtered candidate count, reason counts, and filtered-all status.
 - `manifest.research_corpus_boundary_proof` and `manifest.lens_surface_summary`
   summarize which authorized research corpus was actually covered, including
   report/financial-statement/valuation/announcement/review/screenshot/table
-  surfaces, parser coverage, metadata-only files, content reads, and OCR reads.
+  surfaces, parser coverage, authorization scope, metadata-only files, content
+  reads, and OCR reads.
 - Screenshots/images stay metadata-only by default. OCR is performed only when
   `--include-image-ocr` is explicitly supplied and a local `tesseract` engine is
   available through `PATH` or `COLLECTORX_TESSERACT_CMD`.

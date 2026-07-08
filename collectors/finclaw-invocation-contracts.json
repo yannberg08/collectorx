@@ -100,8 +100,8 @@
         "filesystem",
         "notes"
       ],
-      "user_step": "Run on authorized research folders or upstream file/note Lake events; content extraction requires explicit flags.",
-      "preflight": "Research inputs are user-selected, and body/OCR extraction choices are explicit.",
+      "user_step": "Run on authorized research folders or upstream file/note Lake events; optionally narrow by extension, path, file name, parser, research surface, or keyword; content extraction requires explicit flags.",
+      "preflight": "Research inputs are user-selected, optional document scope-policy allow/deny rules are explicit when used, and body/OCR extraction choices are explicit.",
       "failure_state": "needs_authorized_research_input"
     },
     {

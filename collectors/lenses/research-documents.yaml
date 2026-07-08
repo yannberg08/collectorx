@@ -30,6 +30,8 @@ scope:
     - optional_image_ocr_policy
     - research_document_surface_summary
     - research_corpus_boundary_proof
+    - extension_path_file_name_parser_surface_keyword_scope_policy
+    - scope_policy_filtered_all_readiness
   excludes:
     - whole_disk_scan
     - unrelated_private_files

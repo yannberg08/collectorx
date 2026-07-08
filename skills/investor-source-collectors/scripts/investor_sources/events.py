@@ -199,7 +199,7 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
         "source_input_missing": "No authorized input was provided; collector did not fabricate source data.",
         "no_readable_input": "Authorized input was provided, but no readable records were found.",
         "no_investment_evidence_matched": "Authorized input was scanned, but no investment-related evidence matched the lens rules.",
-        "source_policy_filtered_all": "Authorized input was scanned, but every candidate was excluded by the configured source allow/deny policy.",
+        "source_policy_filtered_all": "Authorized input was scanned, but every candidate was excluded by the configured authorization scope policy.",
     }.get(reason, "Collector could not produce source evidence for this run.")
     record = {
         "signal_type": "collector_preflight_gap",
@@ -356,6 +356,7 @@ def build_research_corpus_boundary_proof(
 ) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
     policy = audit.get("content_extraction_policy") if isinstance(audit.get("content_extraction_policy"), dict) else {}
+    document_scope_policy = audit.get("document_scope_policy") if isinstance(audit.get("document_scope_policy"), dict) else {}
     surface = research_document_surface_summary(usable_events)
     return {
         "source_type": "user_selected_research_files_or_upstream_file_events",
@@ -378,6 +379,25 @@ def build_research_corpus_boundary_proof(
             "extension_counts": audit.get("extension_counts", {}),
             "skipped_extension_counts": audit.get("skipped_extension_counts", {}),
             "parser_counts": audit.get("parser_counts", {}),
+        },
+        "authorization_scope_boundary": {
+            "enabled": document_scope_policy.get("enabled", False),
+            "allow_extensions": document_scope_policy.get("allow_extensions", []),
+            "deny_extensions": document_scope_policy.get("deny_extensions", []),
+            "allow_paths": document_scope_policy.get("allow_paths", []),
+            "deny_paths": document_scope_policy.get("deny_paths", []),
+            "allow_file_names": document_scope_policy.get("allow_file_names", []),
+            "deny_file_names": document_scope_policy.get("deny_file_names", []),
+            "allow_parsers": document_scope_policy.get("allow_parsers", []),
+            "deny_parsers": document_scope_policy.get("deny_parsers", []),
+            "allow_research_surfaces": document_scope_policy.get("allow_research_surfaces", []),
+            "deny_research_surfaces": document_scope_policy.get("deny_research_surfaces", []),
+            "allow_keywords": document_scope_policy.get("allow_keywords", []),
+            "deny_keywords": document_scope_policy.get("deny_keywords", []),
+            "filtered_candidate_count": document_scope_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": document_scope_policy.get("filter_reason_counts", {}),
+            "filtered_all": document_scope_policy.get("filtered_all", False),
+            "policy_does_not_assert_investment_relevance": document_scope_policy.get("policy_does_not_assert_investment_relevance", True),
         },
         "content_boundary": {
             "include_content_enabled": policy.get("include_content_enabled", False),
@@ -416,6 +436,15 @@ def research_corpus_proof_level(
         if status == "source_policy_filtered_all":
             return "source_policy_filtered_all"
         return "no_usable_research_evidence_after_filter"
+    document_scope_policy = audit.get("document_scope_policy") if isinstance(audit.get("document_scope_policy"), dict) else {}
+    if document_scope_policy.get("enabled"):
+        if int(audit.get("image_ocr_event_count") or 0) > 0:
+            return "authorized_research_corpus_with_scope_policy_and_image_ocr"
+        if int(audit.get("content_read_event_count") or 0) > 0:
+            return "authorized_research_corpus_with_scope_policy_and_content"
+        if int(audit.get("metadata_only_file_count") or 0) > 0:
+            return "authorized_research_corpus_with_scope_policy_metadata_only"
+        return "authorized_research_corpus_with_scope_policy"
     if int(audit.get("image_ocr_event_count") or 0) > 0:
         return "authorized_research_corpus_with_image_ocr"
     if int(audit.get("content_read_event_count") or 0) > 0:
@@ -2425,7 +2454,7 @@ def next_action_for_status(status: str) -> str:
         "needs_source_authorization_or_input": "提供用户授权的源数据或连接器输入后重跑。",
         "no_readable_input": "检查输入路径、文件格式和导出内容后重跑。",
         "no_investment_evidence_matched": "输入已读取，但未命中投资证据；可降低阈值、补充白名单或确认这批数据不属于投资分身。",
-        "source_policy_filtered_all": "输入已读取，但全部被来源范围策略排除；请检查联系人/群/发送者白名单和黑名单。",
+        "source_policy_filtered_all": "输入已读取，但全部被授权范围策略排除；请检查本次配置的白名单和黑名单。",
         "events_collected": "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
     }.get(status, "检查 manifest 后决定下一步。")
 

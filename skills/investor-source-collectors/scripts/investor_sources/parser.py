@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 from .classifier import classify_record, should_keep_event
-from .events import build_event, build_gap_event
+from .events import build_event, build_gap_event, classify_research_document_surfaces
 from .profiles import get_profile
 
 
@@ -65,6 +65,18 @@ def collect_events(
     deny_chats: Optional[Sequence[str]] = None,
     allow_senders: Optional[Sequence[str]] = None,
     deny_senders: Optional[Sequence[str]] = None,
+    allow_extensions: Optional[Sequence[str]] = None,
+    deny_extensions: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_file_names: Optional[Sequence[str]] = None,
+    deny_file_names: Optional[Sequence[str]] = None,
+    allow_parsers: Optional[Sequence[str]] = None,
+    deny_parsers: Optional[Sequence[str]] = None,
+    allow_research_surfaces: Optional[Sequence[str]] = None,
+    deny_research_surfaces: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
 ) -> List[Dict[str, Any]]:
     return collect_events_with_audit(
         source_id,
@@ -79,6 +91,18 @@ def collect_events(
         deny_chats=deny_chats,
         allow_senders=allow_senders,
         deny_senders=deny_senders,
+        allow_extensions=allow_extensions,
+        deny_extensions=deny_extensions,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_file_names=allow_file_names,
+        deny_file_names=deny_file_names,
+        allow_parsers=allow_parsers,
+        deny_parsers=deny_parsers,
+        allow_research_surfaces=allow_research_surfaces,
+        deny_research_surfaces=deny_research_surfaces,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
     ).events
 
 
@@ -96,6 +120,18 @@ def collect_events_with_audit(
     deny_chats: Optional[Sequence[str]] = None,
     allow_senders: Optional[Sequence[str]] = None,
     deny_senders: Optional[Sequence[str]] = None,
+    allow_extensions: Optional[Sequence[str]] = None,
+    deny_extensions: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_file_names: Optional[Sequence[str]] = None,
+    deny_file_names: Optional[Sequence[str]] = None,
+    allow_parsers: Optional[Sequence[str]] = None,
+    deny_parsers: Optional[Sequence[str]] = None,
+    allow_research_surfaces: Optional[Sequence[str]] = None,
+    deny_research_surfaces: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
 ) -> CollectionResult:
     get_profile(source_id)
     input_list = list(inputs)
@@ -107,6 +143,21 @@ def collect_events_with_audit(
         allow_senders=allow_senders,
         deny_senders=deny_senders,
     )
+    document_scope_policy = build_document_scope_policy(
+        source_id,
+        allow_extensions=allow_extensions,
+        deny_extensions=deny_extensions,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_file_names=allow_file_names,
+        deny_file_names=deny_file_names,
+        allow_parsers=allow_parsers,
+        deny_parsers=deny_parsers,
+        allow_research_surfaces=allow_research_surfaces,
+        deny_research_surfaces=deny_research_surfaces,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     audit = initial_collection_audit(
         source_id,
         input_list,
@@ -117,6 +168,7 @@ def collect_events_with_audit(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        document_scope_policy=document_scope_policy,
         input_resolution=input_resolution,
     )
     if not paths:
@@ -139,6 +191,7 @@ def collect_events_with_audit(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         parsed_count += len(parsed.candidates)
@@ -156,9 +209,10 @@ def collect_events_with_audit(
             return CollectionResult(events=events, audit=audit)
     if not events:
         source_policy_filtered = int((audit.get("source_policy") or {}).get("filtered_candidate_count") or 0)
+        document_scope_filtered = int((audit.get("document_scope_policy") or {}).get("filtered_candidate_count") or 0)
         if parsed_count == 0:
             reason = "no_readable_input"
-        elif source_policy_filtered >= parsed_count:
+        elif source_policy_filtered + document_scope_filtered >= parsed_count:
             reason = "source_policy_filtered_all"
         else:
             reason = "no_investment_evidence_matched"
@@ -221,6 +275,7 @@ def parse_path(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]] = None,
 ) -> "ParseResult":
     suffix = path.suffix.lower()
@@ -241,6 +296,7 @@ def parse_path(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         record_path_parse_result(audit, path, parsed, parser="csv")
@@ -253,6 +309,7 @@ def parse_path(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         record_path_parse_result(audit, path, parsed, parser="json")
@@ -266,6 +323,7 @@ def parse_path(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         parsed = ParseResult(candidates=[path], events=[event] if event else [])
@@ -279,6 +337,7 @@ def parse_path(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         parsed = ParseResult(candidates=[path], events=[event] if event else [])
@@ -293,6 +352,7 @@ def parse_path(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         parsed = ParseResult(candidates=[path], events=[event] if event else [])
@@ -306,6 +366,7 @@ def parse_path(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        document_scope_policy=document_scope_policy,
         audit=audit,
     )
     parsed = ParseResult(candidates=[path], events=[event] if event else [])
@@ -330,6 +391,7 @@ def initial_collection_audit(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     input_resolution: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     input_resolution = input_resolution or {}
@@ -370,6 +432,12 @@ def initial_collection_audit(
             "deny_chats": (source_policy or {}).get("deny_chats", []),
             "allow_senders": (source_policy or {}).get("allow_senders", []),
             "deny_senders": (source_policy or {}).get("deny_senders", []),
+            "filtered_candidate_count": 0,
+            "filter_reason_counts": {},
+            "policy_does_not_assert_investment_relevance": True,
+        },
+        "document_scope_policy": {
+            **(document_scope_policy or {"enabled": False}),
             "filtered_candidate_count": 0,
             "filter_reason_counts": {},
             "policy_does_not_assert_investment_relevance": True,
@@ -425,6 +493,12 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
     source_policy = audit.get("source_policy") or {}
     if isinstance(source_policy.get("filter_reason_counts"), Counter):
         source_policy["filter_reason_counts"] = dict(sorted(source_policy["filter_reason_counts"].items()))
+    document_scope_policy = audit.get("document_scope_policy") or {}
+    if isinstance(document_scope_policy.get("filter_reason_counts"), Counter):
+        document_scope_policy["filter_reason_counts"] = dict(sorted(document_scope_policy["filter_reason_counts"].items()))
+    document_filtered_count = int(document_scope_policy.get("filtered_candidate_count") or 0)
+    document_scope_policy["filtered_all"] = parsed_count > 0 and document_filtered_count >= parsed_count
+    audit["document_scope_policy_filtered_all"] = bool(document_scope_policy.get("filtered_all"))
 
 
 def content_extraction_policy(source_id: str, include_content: bool, include_image_ocr: bool = False) -> Dict[str, Any]:
@@ -503,7 +577,7 @@ def record_path_parse_result(audit: Optional[Dict[str, Any]], path: Path, parsed
             "emitted_event_count": len(parsed.events),
         }
     )
-    if parser == "metadata":
+    if parser == "metadata" and parsed.events:
         audit["metadata_only_file_count"] = int(audit.get("metadata_only_file_count") or 0) + 1
     if suffix in IMAGE_METADATA_ONLY_EXTENSIONS:
         ocr_performed = any((event.get("raw_ref") or {}).get("image_ocr_performed") for event in parsed.events)
@@ -534,6 +608,7 @@ def parse_table(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]],
 ) -> ParseResult:
     delimiter = "\t" if path.suffix.lower() == ".tsv" else ","
@@ -553,6 +628,7 @@ def parse_table(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         if event:
@@ -568,6 +644,7 @@ def parse_json_like(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]],
 ) -> ParseResult:
     text = path.read_text(encoding="utf-8-sig").strip()
@@ -605,6 +682,7 @@ def parse_json_like(
             min_score=min_score,
             include_non_matches=include_non_matches,
             source_policy=source_policy,
+            document_scope_policy=document_scope_policy,
             audit=audit,
         )
         if event:
@@ -621,6 +699,7 @@ def parse_text_file(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -642,6 +721,7 @@ def parse_text_file(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        document_scope_policy=document_scope_policy,
         audit=audit,
     )
 
@@ -654,6 +734,7 @@ def parse_content_file(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     extracted = extract_document_text(path)
@@ -692,6 +773,7 @@ def parse_content_file(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        document_scope_policy=document_scope_policy,
         audit=audit,
     )
 
@@ -704,6 +786,7 @@ def parse_metadata_file(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     record = {
@@ -723,6 +806,7 @@ def parse_metadata_file(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        document_scope_policy=document_scope_policy,
         audit=audit,
     )
 
@@ -735,6 +819,7 @@ def parse_image_ocr_file(
     min_score: float,
     include_non_matches: bool,
     source_policy: Optional[Dict[str, Any]],
+    document_scope_policy: Optional[Dict[str, Any]],
     audit: Optional[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     extracted = extract_image_ocr_text(path)
@@ -779,6 +864,7 @@ def parse_image_ocr_file(
         min_score=min_score,
         include_non_matches=include_non_matches,
         source_policy=source_policy,
+        document_scope_policy=document_scope_policy,
         audit=audit,
     )
 
@@ -1114,6 +1200,7 @@ def candidate_to_event(
     event_kind: Optional[str] = None,
     event_time: Optional[str] = None,
     source_policy: Optional[Dict[str, Any]] = None,
+    document_scope_policy: Optional[Dict[str, Any]] = None,
     audit: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     allowed, policy_match = source_policy_match(record, source_label=source_label, source_policy=source_policy)
@@ -1121,6 +1208,17 @@ def candidate_to_event(
         record_source_policy_filter(audit, policy_match.get("reason", "source_policy_filtered"))
         return None
     classification = classify_record(source_id, record)
+    document_allowed, document_policy_match = document_scope_policy_match(
+        source_id,
+        record,
+        source_label=source_label,
+        raw_ref=raw_ref,
+        classification=classification,
+        document_scope_policy=document_scope_policy,
+    )
+    if not document_allowed:
+        record_document_scope_policy_filter(audit, document_policy_match.get("reason", "document_scope_policy_filtered"))
+        return None
     if not should_keep_event(source_id, classification, min_score=min_score, include_non_matches=include_non_matches):
         return None
     event = build_event(
@@ -1135,6 +1233,8 @@ def candidate_to_event(
     )
     if source_policy_enabled(source_policy):
         event["data"]["source_policy"] = policy_match
+    if document_scope_policy_enabled(document_scope_policy):
+        event["data"]["document_scope_policy"] = document_policy_match
     return event
 
 
@@ -1151,6 +1251,60 @@ def build_source_policy(
         "allow_senders": split_patterns(allow_senders),
         "deny_senders": split_patterns(deny_senders),
     }
+
+
+def build_document_scope_policy(
+    source_id: str,
+    *,
+    allow_extensions: Optional[Sequence[str]],
+    deny_extensions: Optional[Sequence[str]],
+    allow_paths: Optional[Sequence[str]],
+    deny_paths: Optional[Sequence[str]],
+    allow_file_names: Optional[Sequence[str]],
+    deny_file_names: Optional[Sequence[str]],
+    allow_parsers: Optional[Sequence[str]],
+    deny_parsers: Optional[Sequence[str]],
+    allow_research_surfaces: Optional[Sequence[str]],
+    deny_research_surfaces: Optional[Sequence[str]],
+    allow_keywords: Optional[Sequence[str]],
+    deny_keywords: Optional[Sequence[str]],
+) -> Dict[str, Any]:
+    if source_id != "research-documents":
+        return {"enabled": False, "applies_to": "research-documents"}
+    policy = {
+        "enabled": False,
+        "applies_to": "research-documents",
+        "allow_extensions": normalize_extension_terms(allow_extensions),
+        "deny_extensions": normalize_extension_terms(deny_extensions),
+        "allow_paths": split_patterns(allow_paths),
+        "deny_paths": split_patterns(deny_paths),
+        "allow_file_names": split_patterns(allow_file_names),
+        "deny_file_names": split_patterns(deny_file_names),
+        "allow_parsers": normalize_lower_terms(allow_parsers),
+        "deny_parsers": normalize_lower_terms(deny_parsers),
+        "allow_research_surfaces": normalize_surface_terms(allow_research_surfaces),
+        "deny_research_surfaces": normalize_surface_terms(deny_research_surfaces),
+        "allow_keywords": split_patterns(allow_keywords),
+        "deny_keywords": split_patterns(deny_keywords),
+    }
+    policy["enabled"] = any(
+        policy[key]
+        for key in (
+            "allow_extensions",
+            "deny_extensions",
+            "allow_paths",
+            "deny_paths",
+            "allow_file_names",
+            "deny_file_names",
+            "allow_parsers",
+            "deny_parsers",
+            "allow_research_surfaces",
+            "deny_research_surfaces",
+            "allow_keywords",
+            "deny_keywords",
+        )
+    )
+    return policy
 
 
 def split_patterns(values: Optional[Sequence[str]]) -> List[str]:
@@ -1174,10 +1328,33 @@ def stable_unique(values: Iterable[str]) -> List[str]:
     return out
 
 
+def normalize_extension_terms(values: Optional[Sequence[str]]) -> List[str]:
+    out: List[str] = []
+    for value in split_patterns(values):
+        normalized = value.lower().strip()
+        if normalized and not normalized.startswith("."):
+            normalized = f".{normalized}"
+        if normalized:
+            out.append(normalized)
+    return stable_unique(out)
+
+
+def normalize_lower_terms(values: Optional[Sequence[str]]) -> List[str]:
+    return stable_unique(value.lower().strip() for value in split_patterns(values) if value.strip())
+
+
+def normalize_surface_terms(values: Optional[Sequence[str]]) -> List[str]:
+    return stable_unique(value.lower().strip().replace("-", "_") for value in split_patterns(values) if value.strip())
+
+
 def source_policy_enabled(source_policy: Optional[Dict[str, Any]]) -> bool:
     if not source_policy:
         return False
     return any(source_policy.get(key) for key in ("allow_chats", "deny_chats", "allow_senders", "deny_senders"))
+
+
+def document_scope_policy_enabled(document_scope_policy: Optional[Dict[str, Any]]) -> bool:
+    return bool(document_scope_policy and document_scope_policy.get("enabled"))
 
 
 def source_policy_match(record: Dict[str, Any], *, source_label: str, source_policy: Optional[Dict[str, Any]]) -> tuple[bool, Dict[str, Any]]:
@@ -1220,6 +1397,132 @@ def source_policy_match(record: Dict[str, Any], *, source_label: str, source_pol
     }
 
 
+def document_scope_policy_match(
+    source_id: str,
+    record: Dict[str, Any],
+    *,
+    source_label: str,
+    raw_ref: Dict[str, Any],
+    classification: Dict[str, Any],
+    document_scope_policy: Optional[Dict[str, Any]],
+) -> tuple[bool, Dict[str, Any]]:
+    if source_id != "research-documents" or not document_scope_policy_enabled(document_scope_policy):
+        return True, {"enabled": False}
+
+    path_value = str(raw_ref.get("path") or record.get("path") or "")
+    file_name = str(record.get("file_name") or record.get("name") or (Path(path_value).name if path_value else record.get("title") or ""))
+    extension = str(record.get("extension") or (Path(path_value).suffix if path_value else "")).lower()
+    parser = str(raw_ref.get("parser") or record.get("parser") or "").lower()
+    probe_event = {"data": {"payload": record, "classification": classification}, "raw_ref": raw_ref}
+    research_surfaces = classify_research_document_surfaces(probe_event)
+    research_surface_set = set(research_surfaces)
+    path_surface = "\n".join(part for part in (source_label, path_value) if part).lower()
+    name_surface = file_name.lower()
+    keyword_surface = document_scope_keyword_surface(record, source_label=source_label, raw_ref=raw_ref, classification=classification)
+
+    deny_extension = extension if extension in document_scope_policy.get("deny_extensions", []) else None
+    if deny_extension:
+        return False, {"enabled": True, "allowed": False, "reason": "extension_denied", "matched_extension": deny_extension}
+    allow_extensions = document_scope_policy.get("allow_extensions", [])
+    if allow_extensions and extension not in allow_extensions:
+        return False, {"enabled": True, "allowed": False, "reason": "extension_not_allowed", "extension": extension}
+
+    deny_parser = parser if parser in document_scope_policy.get("deny_parsers", []) else None
+    if deny_parser:
+        return False, {"enabled": True, "allowed": False, "reason": "parser_denied", "matched_parser": deny_parser}
+    allow_parsers = document_scope_policy.get("allow_parsers", [])
+    if allow_parsers and parser not in allow_parsers:
+        return False, {"enabled": True, "allowed": False, "reason": "parser_not_allowed", "parser": parser}
+
+    deny_path = first_pattern_hit(document_scope_policy.get("deny_paths", []), path_surface)
+    if deny_path:
+        return False, {"enabled": True, "allowed": False, "reason": "path_denied", "matched_pattern": deny_path}
+    allow_paths = document_scope_policy.get("allow_paths", [])
+    path_hit = first_pattern_hit(allow_paths, path_surface)
+    if allow_paths and not path_hit:
+        return False, {"enabled": True, "allowed": False, "reason": "path_not_allowed"}
+
+    deny_file_name = first_pattern_hit(document_scope_policy.get("deny_file_names", []), name_surface)
+    if deny_file_name:
+        return False, {"enabled": True, "allowed": False, "reason": "file_name_denied", "matched_pattern": deny_file_name}
+    allow_file_names = document_scope_policy.get("allow_file_names", [])
+    file_name_hit = first_pattern_hit(allow_file_names, name_surface)
+    if allow_file_names and not file_name_hit:
+        return False, {"enabled": True, "allowed": False, "reason": "file_name_not_allowed"}
+
+    deny_surface = first_surface_hit(document_scope_policy.get("deny_research_surfaces", []), research_surface_set)
+    if deny_surface:
+        return False, {"enabled": True, "allowed": False, "reason": "research_surface_denied", "matched_research_surface": deny_surface}
+    allow_surfaces = document_scope_policy.get("allow_research_surfaces", [])
+    surface_hit = first_surface_hit(allow_surfaces, research_surface_set)
+    if allow_surfaces and not surface_hit:
+        return False, {"enabled": True, "allowed": False, "reason": "research_surface_not_allowed", "research_surfaces": research_surfaces}
+
+    deny_keyword = first_pattern_hit(document_scope_policy.get("deny_keywords", []), keyword_surface)
+    if deny_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "keyword_denied", "matched_pattern": deny_keyword}
+    allow_keywords = document_scope_policy.get("allow_keywords", [])
+    keyword_hit = first_pattern_hit(allow_keywords, keyword_surface)
+    if allow_keywords and not keyword_hit:
+        return False, {"enabled": True, "allowed": False, "reason": "keyword_not_allowed"}
+
+    return True, {
+        "enabled": True,
+        "allowed": True,
+        "matched_allow_path": path_hit,
+        "matched_allow_file_name": file_name_hit,
+        "matched_allow_research_surface": surface_hit,
+        "matched_allow_keyword": keyword_hit,
+        "extension": extension,
+        "parser": parser,
+        "research_surfaces": research_surfaces,
+        "policy_does_not_assert_investment_relevance": True,
+    }
+
+
+def first_surface_hit(patterns: Iterable[str], surfaces: set[str]) -> Optional[str]:
+    for pattern in patterns:
+        if pattern in surfaces:
+            return pattern
+    return None
+
+
+def document_scope_keyword_surface(
+    record: Dict[str, Any],
+    *,
+    source_label: str,
+    raw_ref: Dict[str, Any],
+    classification: Dict[str, Any],
+) -> str:
+    parts = [source_label]
+    flatten_policy_surface(record, parts)
+    flatten_policy_surface(raw_ref, parts)
+    flatten_policy_surface(classification.get("matched_terms", []), parts)
+    flatten_policy_surface(classification.get("matched_symbols", []), parts)
+    return "\n".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def flatten_policy_surface(value: Any, parts: List[str]) -> None:
+    if value in (None, ""):
+        return
+    if isinstance(value, str):
+        parts.append(value)
+        return
+    if isinstance(value, (int, float, bool)):
+        parts.append(str(value))
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if str(key).lower() in {"password", "token", "cookie", "authorization", "session", "secret"}:
+                continue
+            parts.append(str(key))
+            flatten_policy_surface(item, parts)
+        return
+    if isinstance(value, (list, tuple, set)):
+        for item in list(value)[:80]:
+            flatten_policy_surface(item, parts)
+
+
 def searchable_field_surface(record: Dict[str, Any], source_label: str, keys: Iterable[str]) -> str:
     parts = [source_label]
     for key in keys:
@@ -1240,6 +1543,20 @@ def record_source_policy_filter(audit: Optional[Dict[str, Any]], reason: str) ->
     if not audit:
         return
     policy = audit.get("source_policy")
+    if not isinstance(policy, dict):
+        return
+    policy["filtered_candidate_count"] = int(policy.get("filtered_candidate_count") or 0) + 1
+    counts = policy.get("filter_reason_counts")
+    if not isinstance(counts, Counter):
+        counts = Counter(counts or {})
+        policy["filter_reason_counts"] = counts
+    counts[reason] += 1
+
+
+def record_document_scope_policy_filter(audit: Optional[Dict[str, Any]], reason: str) -> None:
+    if not audit:
+        return
+    policy = audit.get("document_scope_policy")
     if not isinstance(policy, dict):
         return
     policy["filtered_candidate_count"] = int(policy.get("filtered_candidate_count") or 0) + 1

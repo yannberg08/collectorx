@@ -36,6 +36,10 @@ def test_list_sources_contains_all_priorities() -> None:
     wechat_profile = next(profile for profile in profiles if profile["id"] == "wechat-investment-dialogue")
     assert wechat_profile["source_policy"]["supports_allow_chat"] is True
     assert wechat_profile["source_policy"]["policy_does_not_assert_investment_relevance"] is True
+    research_profile = next(profile for profile in profiles if profile["id"] == "research-documents")
+    assert research_profile["document_scope_policy"]["supports_allow_extension"] is True
+    assert research_profile["document_scope_policy"]["supports_allow_keyword"] is True
+    assert research_profile["document_scope_policy"]["policy_does_not_assert_investment_relevance"] is True
     priorities = {profile["priority"] for profile in profiles}
     assert {"P0", "P1", "P2"}.issubset(priorities)
     classes = {profile["collector_class"] for profile in profiles}
@@ -969,6 +973,147 @@ def test_research_documents_filters_broad_titles_and_skips_unsupported_files() -
         assert proof["content_boundary"]["screenshot_metadata_only_file_count"] == 1
         assert manifest["lens_surface_summary"]["event_count"] == 0
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+
+
+def test_research_documents_scope_policy_filters_authorized_surface() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        authorized = root / "authorized"
+        blocked = root / "blocked-path"
+        authorized.mkdir()
+        blocked.mkdir()
+        out_dir = root / "out"
+
+        (authorized / "keep-valuation.md").write_text("半导体 DCF 估值 买入理由 风险提示", encoding="utf-8")
+        (authorized / "keep-denied.pdf").write_bytes(b"%PDF-1.4 fake")
+        (authorized / "keep-extension.docx").write_bytes(b"fake docx")
+        (authorized / "keep-table.csv").write_text(
+            "title,content\n半导体估值表,半导体 DCF 估值 买入理由 风险提示\n",
+            encoding="utf-8",
+        )
+        (blocked / "keep-path.md").write_text("半导体 DCF 估值 买入理由 风险提示", encoding="utf-8")
+        (authorized / "outside-name.md").write_text("半导体 DCF 估值 买入理由 风险提示", encoding="utf-8")
+        (authorized / "keep-screen.png").write_bytes(b"fake screenshot")
+        (authorized / "keep-keyword.md").write_text("半导体 DCF 估值 禁止采集", encoding="utf-8")
+        (authorized / "keep-other.md").write_text("白酒 DCF 估值 买入理由 风险提示", encoding="utf-8")
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(root),
+            "--out-dir",
+            str(out_dir),
+            "--allow-extension",
+            "md,csv,png",
+            "--deny-extension",
+            "pdf",
+            "--allow-parser",
+            "text,metadata",
+            "--allow-path",
+            "authorized",
+            "--deny-path",
+            "blocked-path",
+            "--allow-file-name",
+            "keep",
+            "--allow-research-surface",
+            "valuation_model",
+            "--deny-research-surface",
+            "screenshot_or_image",
+            "--allow-keyword",
+            "半导体",
+            "--deny-keyword",
+            "禁止采集",
+            "--collected-at",
+            "2026-07-09T10:00:00+08:00",
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 1
+        assert events[0]["data"]["payload"]["title"] == "keep-valuation"
+        assert events[0]["data"]["document_scope_policy"]["allowed"] is True
+        assert events[0]["data"]["document_scope_policy"]["matched_allow_research_surface"] == "valuation_model"
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        audit = manifest["collection_audit"]
+        assert audit["candidate_record_count"] == 9
+        assert audit["matched_event_count"] == 1
+        assert audit["filtered_candidate_count"] == 8
+        policy = audit["document_scope_policy"]
+        assert policy["enabled"] is True
+        assert policy["allow_extensions"] == [".md", ".csv", ".png"]
+        assert policy["deny_extensions"] == [".pdf"]
+        assert policy["allow_parsers"] == ["text", "metadata"]
+        assert policy["allow_research_surfaces"] == ["valuation_model"]
+        assert policy["deny_research_surfaces"] == ["screenshot_or_image"]
+        assert policy["filtered_candidate_count"] == 8
+        assert policy["filtered_all"] is False
+        assert policy["filter_reason_counts"] == {
+            "extension_denied": 1,
+            "extension_not_allowed": 1,
+            "file_name_not_allowed": 1,
+            "keyword_denied": 1,
+            "keyword_not_allowed": 1,
+            "parser_not_allowed": 1,
+            "path_denied": 1,
+            "research_surface_denied": 1,
+        }
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "authorized_research_corpus_with_scope_policy"
+        assert proof["authorization_scope_boundary"]["enabled"] is True
+        assert proof["authorization_scope_boundary"]["filtered_candidate_count"] == 8
+        assert proof["authorization_scope_boundary"]["filtered_all"] is False
+        assert proof["can_enter_finclaw"] is True
+
+
+def test_research_documents_scope_policy_filtered_all_has_explicit_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "keep-valuation.md"
+        out_dir = root / "out"
+        source_path.write_text("半导体 DCF 估值 买入理由 风险提示", encoding="utf-8")
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-keyword",
+            "新能源",
+            "--collected-at",
+            "2026-07-09T10:10:00+08:00",
+        )
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "source_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["collection_audit"]
+        assert audit["candidate_record_count"] == 1
+        assert audit["document_scope_policy_filtered_all"] is True
+        policy = audit["document_scope_policy"]
+        assert policy["enabled"] is True
+        assert policy["allow_keywords"] == ["新能源"]
+        assert policy["filtered_candidate_count"] == 1
+        assert policy["filtered_all"] is True
+        assert policy["filter_reason_counts"] == {"keyword_not_allowed": 1}
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "source_policy_filtered_all"
+        assert proof["event_count"] == 0
+        assert proof["authorization_scope_boundary"]["filtered_all"] is True
+        assert proof["can_enter_finclaw"] is False
+        event = json.loads((out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["data"]["payload"]["gap"] == "source_policy_filtered_all"
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
 
 
@@ -2299,6 +2444,8 @@ if __name__ == "__main__":
     test_research_documents_binary_xls_without_xlrd_records_explicit_failure()
     test_research_documents_without_include_content_keeps_binary_metadata_only()
     test_research_documents_filters_broad_titles_and_skips_unsupported_files()
+    test_research_documents_scope_policy_filters_authorized_surface()
+    test_research_documents_scope_policy_filtered_all_has_explicit_gap()
     test_research_documents_image_ocr_requires_explicit_adapter_authorization()
     test_research_documents_image_ocr_extracts_when_explicitly_authorized()
     test_research_documents_limit_records_path_truncation()

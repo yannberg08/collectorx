@@ -50,6 +50,18 @@ def collect(args: argparse.Namespace) -> int:
         deny_chats=args.deny_chat,
         allow_senders=args.allow_sender,
         deny_senders=args.deny_sender,
+        allow_extensions=args.allow_extension,
+        deny_extensions=args.deny_extension,
+        allow_paths=args.allow_path,
+        deny_paths=args.deny_path,
+        allow_file_names=args.allow_file_name,
+        deny_file_names=args.deny_file_name,
+        allow_parsers=args.allow_parser,
+        deny_parsers=args.deny_parser,
+        allow_research_surfaces=args.allow_research_surface,
+        deny_research_surfaces=args.deny_research_surface,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
     )
     events = result.events
 
@@ -108,6 +120,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--deny-chat", action="append", help="Drop records whose chat/source contains this name. Repeat or comma-separate.")
     p_collect.add_argument("--allow-sender", action="append", help="Only keep records whose sender/author contains this name. Repeat or comma-separate.")
     p_collect.add_argument("--deny-sender", action="append", help="Drop records whose sender/author contains this name. Repeat or comma-separate.")
+    p_collect.add_argument("--allow-extension", action="append", help="Research documents: only keep matching file extensions, e.g. pdf, xlsx, md.")
+    p_collect.add_argument("--deny-extension", action="append", help="Research documents: exclude matching file extensions.")
+    p_collect.add_argument("--allow-path", action="append", help="Research documents: only keep records whose path/source contains this pattern.")
+    p_collect.add_argument("--deny-path", action="append", help="Research documents: exclude records whose path/source contains this pattern.")
+    p_collect.add_argument("--allow-file-name", action="append", help="Research documents: only keep records whose file name contains this pattern.")
+    p_collect.add_argument("--deny-file-name", action="append", help="Research documents: exclude records whose file name contains this pattern.")
+    p_collect.add_argument("--allow-parser", action="append", help="Research documents: only keep records parsed by this parser, e.g. text, openpyxl, pdfplumber.")
+    p_collect.add_argument("--deny-parser", action="append", help="Research documents: exclude records parsed by this parser.")
+    p_collect.add_argument("--allow-research-surface", action="append", help="Research documents: only keep matching surfaces, e.g. valuation_model, financial_statement.")
+    p_collect.add_argument("--deny-research-surface", action="append", help="Research documents: exclude matching research surfaces.")
+    p_collect.add_argument("--allow-keyword", action="append", help="Research documents: only keep records whose metadata/content contains this keyword.")
+    p_collect.add_argument("--deny-keyword", action="append", help="Research documents: exclude records whose metadata/content contains this keyword.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
     p_collect.set_defaults(func=collect)
     return parser

@@ -19,7 +19,7 @@
 | `wechat` | `wechat-export` | generic：微信聊天原始通道 |
 | `wechat-investment-dialogue` | `investor-source-collectors` | lens：微信投资讨论、理由、咨询对象、情绪 |
 | `filesystem`/`notes` | daemon/`notes-collector` | generic：本地文件和笔记原始通道 |
-| `research-documents` | `investor-source-collectors` | lens：研报、财报、公告批注、估值表 |
+| `research-documents` | `investor-source-collectors` | lens：研报、财报、公告批注、估值表；支持文档授权范围策略 |
 | `xueqiu-investor-activity` | `xueqiu-watchlist` -> dedicated skill | vertical：雪球自选、关注、发帖、评论、收藏、组合 |
 | `china-wealth-assets` | dedicated skill | vertical：支付宝、天天基金、蛋卷、且慢、银行理财 |
 | `email` | `email-collector` | generic：邮箱原始通道 |
