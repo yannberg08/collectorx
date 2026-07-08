@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import re
+import sys
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,15 @@ try:
     import openpyxl
 except ImportError:  # pragma: no cover - optional dependency for runtime installs
     openpyxl = None
+
+try:
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
 
 
 COLLECTOR = "hk-us-brokerage"
@@ -58,6 +68,97 @@ RECOMMENDED_STRONG_FIELDS = (
     "ex_date",
     "pay_date",
 )
+INVESTOR_WIKI_SUBDIMENSION_RULES = {
+    "inv-risk-view": {
+        "support_level": "strong",
+        "route_targets": [
+            "investor.risk_portfolio.current_assets",
+            "investor.risk_portfolio.current_positions",
+            "investor.risk_portfolio.portfolio_constraints",
+            "external.capital.assets",
+            "external.capital.cashflows",
+        ],
+        "signals": ["资产、持仓、现金、保证金、费用和税费字段可支撑真实风险暴露画像。"],
+        "gaps": ["完整账户边界仍需真实券商账号验证，资产暴露不等于风险信念。"],
+    },
+    "inv-value-preference": {
+        "support_level": "medium",
+        "route_targets": ["investor.risk_portfolio.current_positions", "external.capital.assets"],
+        "signals": ["港美股持仓、币种和市场分布可作为价值偏好侧影。"],
+        "gaps": ["偏好原因需要研究文档、笔记或对话解释。"],
+    },
+    "inv-style-profile": {
+        "support_level": "strong",
+        "route_targets": [
+            "investor.risk_portfolio.current_assets",
+            "investor.risk_portfolio.current_positions",
+            "investor.record_review.decision_log",
+            "investor.execution.orders",
+        ],
+        "signals": ["持仓、成交、委托和资金流水可分析频率、集中度、换手和跨市场风格。"],
+        "gaps": ["交易行为不能直接说明策略意图。"],
+    },
+    "inv-buy-framework": {
+        "support_level": "medium",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders"],
+        "data_matches": {"side": ["buy", "BUY", "买入"]},
+        "signals": ["买入成交与委托可形成买入框架回测入口。"],
+        "gaps": ["缺少买入触发条件、估值假设和备选方案。"],
+    },
+    "inv-sell-framework": {
+        "support_level": "medium",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders"],
+        "data_matches": {"side": ["sell", "SELL", "卖出"]},
+        "signals": ["卖出成交与委托可形成卖出纪律回测入口。"],
+        "gaps": ["缺少止盈、止损、换仓或风险释放理由。"],
+    },
+    "inv-cognitive-bias": {
+        "support_level": "weak",
+        "route_targets": ["investor.record_review.decision_log"],
+        "signals": ["交易序列可后验观察追涨杀跌、频繁交易等偏差候选。"],
+        "gaps": ["不能仅凭交易记录定性偏差，需要行情背景和用户解释。"],
+    },
+    "inv-decision-adaptation-style": {
+        "support_level": "medium",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders", "external.capital.cashflows"],
+        "signals": ["跨币种、跨市场、调仓和资金变化可观察决策适应方式。"],
+        "gaps": ["缺少用户如何调整假设的文本过程。"],
+    },
+    "inv-decision-log": {
+        "support_level": "strong",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders", "external.capital.cashflows"],
+        "signals": ["成交、委托、分红、资金流水和换汇可形成强决策时间线。"],
+        "gaps": ["时间线仍需交易理由和复盘补充。"],
+    },
+    "inv-portfolio-preference": {
+        "support_level": "strong",
+        "route_targets": [
+            "investor.risk_portfolio.current_assets",
+            "investor.risk_portfolio.current_positions",
+            "investor.risk_portfolio.portfolio_constraints",
+            "external.capital.assets",
+        ],
+        "signals": ["账户、市场、币种、持仓和资产价值可支撑组合偏好画像。"],
+        "gaps": ["完整组合边界需纳入 A 股、基金、现金和银行理财等其他账户。"],
+    },
+    "inv-execution-discipline": {
+        "support_level": "strong",
+        "route_targets": [
+            "investor.execution.orders",
+            "investor.behavior.execution_discipline",
+            "investor.record_review.decision_log",
+            "external.capital.cashflows",
+        ],
+        "signals": ["委托、成交、撤单状态、费用和结算字段可分析执行纪律。"],
+        "gaps": ["缺少计划单和目标价，不能单独评估是否遵守计划。"],
+    },
+    "inv-time-preference": {
+        "support_level": "medium",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders", "external.capital.cashflows"],
+        "signals": ["交易日期、结算日期、分红和持仓变化能提供期限偏好线索。"],
+        "gaps": ["需结合持仓周期和交易意图区分主动偏好与被动持有。"],
+    },
+}
 SECTION_SUBTYPES = {
     "assets": "asset_snapshot",
     "balances": "asset_snapshot",
@@ -1039,7 +1140,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         usable_events += 1
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
-    return {
+    evidence = {
         "schema": "finclaw.investor_wiki_evidence.v1",
         "generated_at": generated_at or now_iso(),
         "generated_from": {
@@ -1064,6 +1165,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
+    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

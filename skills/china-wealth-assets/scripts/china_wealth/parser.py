@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import re
+import sys
 import tempfile
 import zipfile
 from collections import Counter, defaultdict
@@ -14,6 +15,15 @@ from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
+
+try:
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
 
 
 COLLECTOR = "china-wealth-assets"
@@ -60,6 +70,60 @@ VALUE_FIELDS = ("market_value", "total_asset", "transaction_amount", "available_
 EXPECTED_ASSET_SURFACES = ("asset_snapshot", "fund_holding", "wealth_holding", "cash_management", "fund_transaction")
 HOLDING_SUBTYPES = {"fund_holding", "wealth_holding", "cash_management"}
 TRADE_SUBTYPES = {"fund_transaction"}
+INVESTOR_WIKI_SUBDIMENSION_RULES = {
+    "inv-risk-view": {
+        "support_level": "strong",
+        "route_targets": [
+            "investor.risk_portfolio.current_assets",
+            "investor.risk_portfolio.current_positions",
+            "investor.risk_portfolio.portfolio_constraints",
+            "external.capital.assets",
+        ],
+        "signals": ["基金、理财和现金类资产的金额、账户和持仓能支撑风险暴露画像。"],
+        "gaps": ["资产暴露不是风险信念本身，仍需规则、笔记和复盘解释风险边界。"],
+    },
+    "inv-value-preference": {
+        "support_level": "medium",
+        "route_targets": ["investor.risk_portfolio.current_positions", "external.capital.assets"],
+        "signals": ["基金、理财、现金管理产品结构可侧写收益/波动偏好。"],
+        "gaps": ["产品选择原因仍需研究材料、笔记或对话补充。"],
+    },
+    "inv-style-profile": {
+        "support_level": "medium",
+        "route_targets": ["investor.risk_portfolio.current_positions", "investor.risk_portfolio.current_assets", "external.capital.assets"],
+        "signals": ["持仓类型、金额和申赎行为能形成基金/理财风格画像。"],
+        "gaps": ["无法单独区分主动风格与被动配置。"],
+    },
+    "inv-decision-log": {
+        "support_level": "strong",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders", "external.capital.cashflows"],
+        "signals": ["申购、赎回和资金流水可形成资产配置决策时间线。"],
+        "gaps": ["交易理由和事后评价需要其他解释性采集器补足。"],
+    },
+    "inv-portfolio-preference": {
+        "support_level": "strong",
+        "route_targets": [
+            "investor.risk_portfolio.current_assets",
+            "investor.risk_portfolio.current_positions",
+            "investor.risk_portfolio.portfolio_constraints",
+            "external.capital.assets",
+        ],
+        "signals": ["账户、产品、币种和金额能支撑组合管理偏好。"],
+        "gaps": ["完整资产边界必须经过真实账户或多平台导出验证。"],
+    },
+    "inv-execution-discipline": {
+        "support_level": "medium",
+        "route_targets": ["investor.execution.orders", "external.capital.cashflows", "investor.record_review.decision_log"],
+        "signals": ["申赎节奏、金额和费用可用于观察执行纪律。"],
+        "gaps": ["缺计划单、目标仓位和计划 vs 实际对比。"],
+    },
+    "inv-time-preference": {
+        "support_level": "medium",
+        "route_targets": ["investor.record_review.decision_log", "investor.execution.orders", "external.capital.cashflows"],
+        "signals": ["申赎日期和持有资产类型能提供期限偏好线索。"],
+        "gaps": ["长期/短期偏好需要结合持有周期和用户目标确认。"],
+    },
+}
 
 
 def now_iso() -> str:
@@ -477,7 +541,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
     for event in events:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
-    return {
+    evidence = {
         "schema": "finclaw.investor_wiki_evidence.v1",
         "generated_at": generated_at or now_iso(),
         "generated_from": {
@@ -504,6 +568,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "complete_asset_boundary_claimed": False,
         },
     }
+    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def platform_coverage(platform_counts: Counter) -> Dict[str, Any]:

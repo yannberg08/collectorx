@@ -288,6 +288,16 @@ def test_manifest_reports_account_asset_currency_and_transaction_boundaries() ->
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["account_boundary_summary"]["observed_named_account_group_count"] == 5
         assert evidence["coverage_summary"]["asset_surface_summary"]["missing_expected_asset_surfaces"] == []
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        portfolio_preference = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-portfolio-preference"
+        )
+        assert portfolio_preference["support_level"] == "strong"
+        assert portfolio_preference["evidence_count"] == 4
 
 
 if __name__ == "__main__":

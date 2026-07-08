@@ -1712,6 +1712,35 @@ Findings:
   surface summaries, source audit, ZIP provenance, unsafe ZIP member skipping,
   and preview-only content policy.
 
+### Wave Y: Investor Wiki evidence contract pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-wiki-evidence-contract-validation-2026-07-08.md`
+
+Findings:
+
+- Added `collectorx.investor_wiki` as the shared FinClaw/SoulMirror evidence
+  contract helper for `external.investor / 7 dimensions / 20 subdimensions`.
+- Added `tools/validate_investor_wiki_evidence.py` and
+  `tools/test_investor_wiki_contract.py`, and wired the contract test plus
+  first-loop evidence validation into `tools/validate_project.py`.
+- Connected canonical dimension coverage to evidence packages emitted by
+  `eastmoney-portfolio`, `xueqiu-investor-activity`, `china-wealth-assets`,
+  `hk-us-brokerage`, `pro-terminal-usage`, and `financial-news-usage`.
+- Preserved conservative evidence semantics: strong trade/asset facts can
+  support portfolio/execution/risk/decision-log dimensions, while Snowball,
+  terminal, and finance-news usage remain attention/workflow/information-source
+  evidence.
+- Fixture validation now asserts concrete Wiki subdimension support for
+  Snowball industry-circle, China wealth portfolio preference, HK/US brokerage
+  execution discipline, professional-terminal analysis ability, finance-news
+  information source, and EastMoney 7/20 coverage.
+- This wave improves Wiki consumability and FinClaw gating; it does not claim
+  new real-account validation.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

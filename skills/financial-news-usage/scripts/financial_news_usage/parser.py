@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import sys
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -15,6 +16,15 @@ from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 from urllib.parse import urlparse
+
+try:
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
 
 
 COLLECTOR = "financial-news-usage"
@@ -46,6 +56,50 @@ FINANCIAL_NEWS_DOMAINS = {
 }
 EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS = ("cls", "wallstreetcn", "gelonghui")
 EXPECTED_FINANCIAL_NEWS_ACTIONS = ("read", "favorite", "search", "subscribe", "alert")
+INVESTOR_WIKI_SUBDIMENSION_RULES = {
+    "inv-market-view": {
+        "support_level": "weak",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.capability_circle.attention_universe"],
+        "signals": ["阅读、收藏、搜索和订阅主题可作为市场关注线索。"],
+        "gaps": ["资讯消费不等于市场观，必须避免把公共新闻当成用户结论。"],
+    },
+    "inv-risk-view": {
+        "support_level": "weak",
+        "data_matches": {"usage_topics": ["risk_event"]},
+        "signals": ["风险事件阅读和提醒可提示用户关注的风险类型。"],
+        "gaps": ["阅读风险新闻不等于用户风险红线，需要组合和复盘交叉验证。"],
+    },
+    "inv-industry-circle": {
+        "support_level": "weak",
+        "data_matches": {"usage_topics": ["industry_theme", "company_fundamental"]},
+        "signals": ["行业、公司基本面阅读痕迹可侧写关注行业。"],
+        "gaps": ["关注行业不等于能力圈，需研究笔记/终端/交易记录验证。"],
+    },
+    "inv-information-learning-style": {
+        "support_level": "medium",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.research_consumption.workflow"],
+        "signals": ["阅读、收藏、搜索、订阅和提醒动作可刻画信息摄入方式。"],
+        "gaps": ["仍缺少用户如何筛选、吸收和纠错的过程证据。"],
+    },
+    "inv-rules-library": {
+        "support_level": "weak",
+        "route_targets": ["investor.decision_framework.monitoring_rules", "investor.execution.watchlist_alerts"],
+        "signals": ["资讯提醒和订阅栏目可作为监控规则候选。"],
+        "gaps": ["需要确认提醒是用户主动配置，而非平台默认推送。"],
+    },
+    "inv-execution-discipline": {
+        "support_level": "weak",
+        "route_targets": ["investor.execution.watchlist_alerts", "investor.decision_framework.monitoring_rules"],
+        "signals": ["自选提醒和事件提醒可作为执行前监控线索。"],
+        "gaps": ["资讯提醒不是下单执行，需券商委托/成交验证。"],
+    },
+    "inv-information-source": {
+        "support_level": "medium",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.research_consumption.workflow"],
+        "signals": ["财联社、华尔街见闻、格隆汇的阅读和订阅可明确个人信息源。"],
+        "gaps": ["只采个人使用痕迹，不把公共新闻全文写入个人 Wiki。"],
+    },
+}
 SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
 SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 TEXT_PREVIEW_MAX_CHARS = 1200
@@ -1122,7 +1176,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         usable_events += 1
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
-    return {
+    evidence = {
         "schema": "finclaw.investor_wiki_evidence.v1",
         "generated_at": generated_at or now_iso(),
         "generated_from": {
@@ -1158,6 +1212,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
+    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def classify_usage_topics(

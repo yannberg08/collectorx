@@ -96,6 +96,16 @@ def test_collect_terminal_workflow_exports() -> None:
         assert evidence["coverage_summary"]["licensed_content_mirrored"] is False
         assert evidence["coverage_summary"]["workflow_surface_summary"]["events_with_workflow_topics"] == 5
         assert evidence["generated_from"]["event_count"] == 5
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        analysis_ability = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-analysis-ability"
+        )
+        assert analysis_ability["support_level"] == "medium"
+        assert analysis_ability["evidence_count"] >= 2
 
 
 def test_collect_nested_sections_workbook_and_sanitizes() -> None:
@@ -263,6 +273,8 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert evidence["coverage_summary"]["workflow_metadata_only"] is True
         assert evidence["coverage_summary"]["vendor_database_mirror"] is False
         assert evidence["coverage_summary"]["workflow_surface_summary"]["missing_expected_workflow_topics"] == []
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
 
 
 def test_collect_zip_limit_counts_only_emitted_records() -> None:

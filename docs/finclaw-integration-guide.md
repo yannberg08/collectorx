@@ -57,6 +57,31 @@ one or more of:
 The minimum useful output is `events.jsonl`, where each line is a
 `collectorx.event.v1` object.
 
+## Investor Wiki Evidence Contract
+
+If a collector emits `investor_wiki_evidence.v1.json`, FinClaw should validate
+it before running the investor-portrait distillation step:
+
+```bash
+python3 tools/validate_investor_wiki_evidence.py \
+  <out-dir>/investor_wiki_evidence.v1.json
+```
+
+Strict validation requires:
+
+- schema `finclaw.investor_wiki_evidence.v1`
+- `wiki_write_policy.collector_writes_wiki_directly=false`
+- `wiki_write_policy.raw_json_writes_wiki_directly=false`
+- the required flow `collectorx.event.v1 -> finclaw.investor_wiki_evidence.v1
+  -> SoulMirror investor-portrait distill/organize`
+- canonical `external.investor / 7 dimensions / 20 subdimensions` coverage
+- per-subdimension support level, evidence count, route targets, signals, gaps,
+  and privacy metadata
+
+Collectors may still enter the Lake with only `events.jsonl`, but route-only
+evidence packages should not be distilled into the investor Wiki unless they
+pass this contract or are explicitly run with a migration exception.
+
 ## Current Runnable Examples
 
 ### 东方财富

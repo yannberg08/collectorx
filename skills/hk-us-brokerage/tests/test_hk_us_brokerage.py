@@ -94,6 +94,16 @@ def test_collect_brokerage_exports() -> None:
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["strong_trade_source"] is True
         assert evidence["generated_from"]["event_count"] == 5
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        execution_discipline = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-execution-discipline"
+        )
+        assert execution_discipline["support_level"] == "strong"
+        assert execution_discipline["evidence_count"] == 3
 
 
 def test_collect_nested_sections_and_workbook() -> None:
@@ -280,6 +290,8 @@ def test_collect_nested_sections_and_workbook() -> None:
         assert evidence["coverage_summary"]["order_side_effects_allowed"] is False
         assert evidence["coverage_summary"]["account_boundary_summary"]["full_surface_account_candidates"] == ["tiger:T-888"]
         assert evidence["coverage_summary"]["currency_market_summary"]["multi_currency_observed"] is True
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
 
 
 def test_collect_zip_limit_counts_only_emitted_records() -> None:

@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import re
+import sys
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -19,6 +20,15 @@ try:
     import openpyxl
 except ImportError:  # pragma: no cover - optional dependency for runtime installs
     openpyxl = None
+
+try:
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
 
 
 COLLECTOR = "pro-terminal-usage"
@@ -46,6 +56,68 @@ SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "cred
 CONTENT_KEY_FRAGMENTS = ("content", "body", "正文", "全文", "payload", "result")
 EXPECTED_PRO_TERMINALS = ("wind", "choice", "ifind", "bloomberg")
 EXPECTED_TERMINAL_ACTIVITY_TYPES = ("workspace", "watchlist", "search", "download", "model_template", "factor_attention")
+INVESTOR_WIKI_SUBDIMENSION_RULES = {
+    "inv-market-view": {
+        "support_level": "weak",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.research_consumption.workflow"],
+        "signals": ["终端搜索、下载和工作区主题可作为市场关注线索。"],
+        "gaps": ["终端使用痕迹不等于用户市场信念，需要笔记/对话/复盘解释。"],
+    },
+    "inv-industry-circle": {
+        "support_level": "medium",
+        "route_targets": ["investor.capability_circle.attention_universe", "investor.capability_circle.factor_attention"],
+        "data_matches": {"workflow_topics": ["industry_theme", "company_fundamental"]},
+        "signals": ["自选、行业/公司主题、因子与数据集使用可刻画关注宇宙。"],
+        "gaps": ["关注某行业或数据集不等于真正能力圈，需要研究产物验证。"],
+    },
+    "inv-analysis-ability": {
+        "support_level": "medium",
+        "route_targets": [
+            "investor.capability_circle.analysis_ability",
+            "investor.capability_circle.factor_attention",
+            "investor.decision_framework.strategy_rules",
+            "investor.decision_framework.monitoring_rules",
+        ],
+        "signals": ["函数、模板、因子、字段和数据集使用能描述分析工具栈。"],
+        "gaps": ["工具使用不能直接证明分析质量或结论正确性。"],
+    },
+    "inv-information-learning-style": {
+        "support_level": "medium",
+        "route_targets": ["investor.research_consumption.workflow", "investor.information_sources.news_consumption"],
+        "signals": ["搜索、下载、工作区和模板记录可刻画信息处理流程。"],
+        "gaps": ["缺少用户如何吸收、验证和更新观点的文本证据。"],
+    },
+    "inv-style-profile": {
+        "support_level": "weak",
+        "route_targets": ["investor.capability_circle.factor_attention", "investor.decision_framework.strategy_rules"],
+        "signals": ["模型模板、因子关注和自选结构可作为风格侧影。"],
+        "gaps": ["终端配置可能是工作默认环境，不能单独证明投资风格。"],
+    },
+    "inv-rules-library": {
+        "support_level": "medium",
+        "route_targets": ["investor.decision_framework.strategy_rules", "investor.decision_framework.monitoring_rules"],
+        "signals": ["模型模板、监控规则、字段和因子组合可形成规则库候选。"],
+        "gaps": ["需要区分用户主动规则和软件/机构默认模板。"],
+    },
+    "inv-review-record": {
+        "support_level": "weak",
+        "route_targets": ["investor.record_review.review_record", "investor.research_consumption.workflow"],
+        "signals": ["下载和工作流记录可作为复盘材料来源。"],
+        "gaps": ["终端导出本身不是复盘结论，仍需笔记或会议纪要。"],
+    },
+    "inv-execution-discipline": {
+        "support_level": "weak",
+        "route_targets": ["investor.execution.watchlist_alerts", "investor.decision_framework.monitoring_rules"],
+        "signals": ["自选提醒、监控规则和终端工作流可作为执行前监控线索。"],
+        "gaps": ["专业终端不提供真实下单执行结果，需要券商数据验证。"],
+    },
+    "inv-information-source": {
+        "support_level": "medium",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.research_consumption.workflow"],
+        "signals": ["终端、数据集、栏目、函数和下载记录可明确专业信息源。"],
+        "gaps": ["厂商内容许可边界必须保留，不镜像数据库或研报全文。"],
+    },
+}
 SOURCE_ARCHIVE_KEY = "_collectorx_source_archive"
 SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 CONTENT_PREVIEW_MAX_CHARS = 800
@@ -1051,7 +1123,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         usable_events += 1
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
-    return {
+    evidence = {
         "schema": "finclaw.investor_wiki_evidence.v1",
         "generated_at": generated_at or now_iso(),
         "generated_from": {
@@ -1073,6 +1145,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
+    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def classify_workflow_topics(

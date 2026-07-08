@@ -66,6 +66,9 @@ Operational docs:
   is still a placeholder or lens.
 - `docs/finclaw-integration-guide.md` describes how FinClaw should discover,
   authorize, call, and gate collectors.
+- `tools/validate_investor_wiki_evidence.py` validates
+  `finclaw.investor_wiki_evidence.v1` packages before SoulMirror/FinClaw writes
+  the final investor Wiki.
 - `docs/investor-collector-productization-roadmap.md` tracks the P0/P1/P2
   productization waves and Git discipline.
 - `docs/soulmirror-migration-policy.md` records the rule for copying existing
@@ -80,7 +83,7 @@ Operational docs:
 | `filesystem` | `filesystem-collector` | Metadata-only generic file collector aligned with SoulMirror driver boundary; manifest includes source audit, skip reasons, per-root results, and macOS/Windows/Linux default-root plan; investor routing is handled by lenses |
 | `wechat` | `wechat-export` | WeChat 4.x local query baseline with `--collect --out-dir` CollectorX package output, field/filter/source audit manifest, and generic-to-lens boundary; real-source validation still requires authorized keys/platform setup |
 | `feishu` | `feishu` | Legacy OAuth/API tool plus authorized local/ZIP export package baseline for Feishu messages, documents, file refs, folders, meetings, recordings, source audit, ZIP skip reasons, and path-level parse results; real account API validation pending |
-| `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus authorized JSON/ZIP event-conversion baseline; manifest reports TickTick/Dida source coverage, source audit, ZIP skip reasons, and path-level parse results; real OAuth validation pending |
+| `ticktick` | `ticktick-cli` | SoulMirror-style collector YAML + AgentRunner + skill path; live collection returns a JSON array through `collect_for_soulmirror.py`, while `ticktick_events.py` remains an offline authorized-export conversion helper; managed OAuth validation pending |
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
 | `email` | `email-collector` | Multi-account IMAP and authorized local EML/MBOX/JSON/CSV/ZIP package output with account/folder audit, per-input import audit, skipped file/ZIP-member reasons, field coverage, body/attachment policy, and generic-to-lens boundary; real mailbox validation still pending |
 | `qq` | `qq-export` | Real macOS QQ NT store discovery; decrypt-ready adapters for contacts/groups/messages; current machine blocks LLDB passphrase capture |

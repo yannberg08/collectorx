@@ -109,3 +109,7 @@ skill-name/
 4. 能输出 `collectorx.event.v1`。
 5. 文档说明授权方式、平台状态、限制和错误降级。
 6. 明确映射到通用 Wiki 或垂直 Wiki 的哪些维度。
+7. 若输出 `investor_wiki_evidence.v1.json`，必须通过
+   `python3 tools/validate_investor_wiki_evidence.py <path>`；严格模式要求
+   `external.investor / 7 dimensions / 20 subdimensions`、证据强度、缺口和
+   “采集器不直接写 Wiki”的策略元数据齐全。

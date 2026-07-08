@@ -170,6 +170,10 @@ def test_trade_export_detail_fixture():
     assert manifest["collection_readiness"]["status"] == "ready_for_investor_avatar"
     assert manifest["collection_readiness"]["can_claim_complete_trade_collection"] is True
     assert (output / "investor_wiki_evidence.v1.json").exists()
+    evidence = json.loads((output / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+    assert evidence["coverage_summary"]["dimension_count"] == 7
+    assert evidence["coverage_summary"]["subdimension_count"] == 20
+    assert evidence["generated_from"]["soulmirror_target_schema"] == "external.investor / 7 dimensions / 20 subdimensions"
     assert manifest["validation"]["ok"] is True
 
 

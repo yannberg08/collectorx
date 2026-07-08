@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import re
+import sys
 import tempfile
 import zipfile
 from collections import Counter, defaultdict
@@ -20,6 +21,15 @@ try:
 except ImportError:  # pragma: no cover - optional dependency for runtime installs
     openpyxl = None
 
+try:
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import augment_evidence_with_dimensions
+
 
 COLLECTOR = "xueqiu-investor-activity"
 CN_TZ = timezone(timedelta(hours=8))
@@ -27,6 +37,68 @@ SUPPORTED_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".xlsx", "
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 EXPECTED_ACTIVITY_TYPES = ("watchlist", "follow_user", "follow_portfolio", "portfolio_activity", "comment", "favorite", "post")
+INVESTOR_WIKI_SUBDIMENSION_RULES = {
+    "inv-market-view": {
+        "support_level": "weak",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.opportunity_watchlist.watchlist"],
+        "signals": ["雪球关注、自选、收藏和发帖可作为市场关注面的弱证据。"],
+        "gaps": ["雪球不是券商强交易事实，市场观仍需聊天、笔记或复盘解释。"],
+    },
+    "inv-value-preference": {
+        "support_level": "weak",
+        "route_targets": ["investor.opportunity_watchlist.watchlist", "investor.risk_portfolio.portfolio_constraints"],
+        "signals": ["自选、关注组合和组合活动可侧面反映偏好的资产或主题。"],
+        "gaps": ["关注不等于真实持仓或价值信念，需要券商/基金账户和研究理由交叉验证。"],
+    },
+    "inv-industry-circle": {
+        "support_level": "medium",
+        "route_targets": ["investor.capability_circle.attention_universe", "investor.opportunity_watchlist.watchlist"],
+        "signals": ["雪球自选和关注对象可形成用户注意力宇宙。"],
+        "gaps": ["注意力宇宙不等于能力圈，需要研究文档、笔记和复盘验证。"],
+    },
+    "inv-information-learning-style": {
+        "support_level": "medium",
+        "route_targets": ["investor.information_sources.news_consumption", "investor.research_consumption.workflow"],
+        "signals": ["收藏、保存页、关注用户和组合能描述信息输入习惯。"],
+        "gaps": ["仍缺少用户如何筛选、验证和反思信息的过程证据。"],
+    },
+    "inv-style-profile": {
+        "support_level": "weak",
+        "route_targets": ["investor.risk_portfolio.portfolio_constraints", "investor.decision_framework.strategy_rules"],
+        "signals": ["关注组合和组合活动可以作为风格侧影。"],
+        "gaps": ["雪球组合不等于真实券商持仓，不能单独形成投资风格结论。"],
+    },
+    "inv-emotion-pattern": {
+        "support_level": "weak",
+        "route_targets": ["investor.behavior.emotion_pattern", "investor.network_collaboration.discussions"],
+        "signals": ["评论和发帖文本可能包含情绪表达线索。"],
+        "gaps": ["短文本容易误判，需要交易前后语境和多源交叉验证。"],
+    },
+    "inv-review-record": {
+        "support_level": "medium",
+        "route_targets": ["investor.record_review.review_record"],
+        "signals": ["个人发帖或保存页中的复盘内容可进入复盘证据池。"],
+        "gaps": ["需要区分原创复盘和转发/收藏材料。"],
+    },
+    "inv-rules-library": {
+        "support_level": "weak",
+        "route_targets": ["investor.decision_framework.strategy_rules"],
+        "signals": ["组合活动和发帖中的规则表达可作为规则库候选。"],
+        "gaps": ["需验证是否为用户自己的稳定规则，而非临时观点或他人策略。"],
+    },
+    "inv-information-source": {
+        "support_level": "medium",
+        "route_targets": ["investor.information_sources.news_consumption"],
+        "signals": ["关注用户、收藏和阅读痕迹可明确用户的信息来源。"],
+        "gaps": ["信息来源影响力需要和真实决策时间线回测。"],
+    },
+    "inv-consultation-network": {
+        "support_level": "medium",
+        "route_targets": ["investor.network_collaboration.discussions"],
+        "signals": ["关注用户、评论和讨论可以形成投资人际网络线索。"],
+        "gaps": ["平台互动不等于真实咨询关系，需要微信/会议/邮件等强关系证据。"],
+    },
+}
 
 
 def now_iso() -> str:
@@ -550,7 +622,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
     for event in events:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
-    return {
+    evidence = {
         "schema": "finclaw.investor_wiki_evidence.v1",
         "generated_at": generated_at or now_iso(),
         "generated_from": {
@@ -570,6 +642,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "evidence_role": "attention_network_opinion_and_model_portfolio_only",
         },
     }
+    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:

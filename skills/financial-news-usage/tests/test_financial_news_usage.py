@@ -165,6 +165,16 @@ def test_collect_usage_exports() -> None:
         assert evidence["coverage_summary"]["personal_usage_only"] is True
         assert evidence["coverage_summary"]["public_news_content_mirror"] is False
         assert evidence["coverage_summary"]["usage_surface_summary"]["usage_topic_counts"]["industry_theme"] == 3
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        information_source = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-information-source"
+        )
+        assert information_source["support_level"] == "medium"
+        assert information_source["evidence_count"] > 0
 
 
 def test_collect_chromium_browser_history() -> None:

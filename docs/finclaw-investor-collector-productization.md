@@ -29,7 +29,10 @@ FinClaw 应按下面顺序调用：
 3. 只有在用户完成授权后，才运行 catalog 中的 `cli`。
 4. 采集结果必须先进入 `collectorx.event.v1` lake，再进入
    `finclaw.investor_wiki_evidence.v1`，最终 Wiki 由 FinClaw/SoulMirror distill 层写入。
-5. 如果 `manifest.json` 表示 gap、缺平台、缺字段、无真实账号验证，产品层展示为
+5. 如果采集器输出 `investor_wiki_evidence.v1.json`，FinClaw 必须先运行
+   `python3 tools/validate_investor_wiki_evidence.py <path>`；未通过 7 大维度/20 子维度
+   合同校验的证据包不能进入投资分身 Wiki distill。
+6. 如果 `manifest.json` 表示 gap、缺平台、缺字段、无真实账号验证，产品层展示为
    “未完成采集/证据不足”，不能把它当成个人事实。
 
 ## 展示闸门

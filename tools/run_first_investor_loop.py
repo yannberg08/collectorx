@@ -23,6 +23,7 @@ THS_SCRIPTS = ROOT / "skills" / "ths-portfolio" / "scripts"
 sys.path.insert(0, str(THS_SCRIPTS))
 
 from ths.events import records_to_events  # noqa: E402
+from ths.package import build_investor_wiki_evidence  # noqa: E402
 from ths.parser import parse_portfolio_csv  # noqa: E402
 from ths.stats import calculate_stats, calculate_stock_stats  # noqa: E402
 
@@ -66,6 +67,15 @@ def main() -> int:
     stats = calculate_stats(records)
     stock_stats = calculate_stock_stats(records)
     _write_investor_wiki(wiki_root, records, events, stats, stock_stats)
+    evidence_path = out_dir / "investor_wiki_evidence.v1.json"
+    _write_json(
+        evidence_path,
+        build_investor_wiki_evidence(
+            events,
+            generated_at=args.collected_at,
+            source_event_file=str(lake_events),
+        ),
+    )
 
     maturity = _maturity_summary(events, records)
     maturity_path = out_dir / "wiki" / "vertical" / "investor_maturity.json"
@@ -79,6 +89,7 @@ def main() -> int:
         "records": len(records),
         "events": len(events),
         "lake": str(lake_events),
+        "evidence": str(evidence_path),
         "wiki": str(wiki_root),
         "maturity": str(maturity_path),
         "summary": str(summary_path),
@@ -288,6 +299,7 @@ def _write_summary(
         "  -> ths parser",
         "  -> collectorx.event.v1 JSONL",
         "  -> lake/ths-portfolio/events.jsonl",
+        "  -> investor_wiki_evidence.v1.json",
         "  -> deterministic investor organize step",
         "  -> wiki/vertical/investor/*.md",
         "  -> investor_maturity.json",

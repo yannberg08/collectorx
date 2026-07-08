@@ -15,10 +15,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 MIN_PYTHON = (3, 10)
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from collectorx.investor_wiki import validate_evidence_file
 
 PY_COMPILE_EXCLUDES = {".git", ".venv", "__pycache__", ".pytest_cache"}
 
 CLI_HELP_TARGETS = [
+    "tools/validate_investor_wiki_evidence.py",
     "skills/wechat-export/scripts/wechat_query.py",
     "skills/feishu/scripts/feishu_api.py",
     "skills/ticktick-cli/scripts/ticktick_cli.py",
@@ -45,6 +50,7 @@ CLI_HELP_TARGETS = [
 ]
 
 PARSER_TESTS = [
+    "tools/test_investor_wiki_contract.py",
     "skills/email-collector/tests/test_events.py",
     "skills/feishu/tests/test_feishu_collect.py",
     "skills/filesystem-collector/tests/test_filesystem_collector.py",
@@ -54,6 +60,7 @@ PARSER_TESTS = [
     "skills/qq-export/tests/test_parser.py",
     "skills/notes-collector/tests/test_notes_collector.py",
     "skills/ticktick-cli/scripts/test_ticktick_events.py",
+    "skills/ticktick-cli/scripts/test_collect_for_soulmirror.py",
     "skills/calendar-collector/tests/test_calendar_collector.py",
     "skills/collaboration-exports/tests/test_collaboration_exports.py",
     "skills/ths-portfolio/tests/test_parser.py",
@@ -257,6 +264,7 @@ def run_first_loop_smoke_test() -> None:
             out / "lake" / "ths-portfolio" / "events.jsonl",
             out / "wiki" / "vertical" / "investor" / "record-review" / "决策日志.md",
             out / "wiki" / "vertical" / "investor" / "risk-portfolio" / "组合约束.md",
+            out / "investor_wiki_evidence.v1.json",
             out / "wiki" / "vertical" / "investor_maturity.json",
             out / "SUMMARY.md",
         ]
@@ -267,6 +275,9 @@ def run_first_loop_smoke_test() -> None:
         events = (out / "lake" / "ths-portfolio" / "events.jsonl").read_text(encoding="utf-8").strip().splitlines()
         if len(events) != 4:
             raise SystemExit(f"Expected 4 first-loop events, got {len(events)}")
+        evidence_errors = validate_evidence_file(out / "investor_wiki_evidence.v1.json")
+        if evidence_errors:
+            raise SystemExit(f"First investor loop evidence contract failed: {evidence_errors}")
 
 
 def main() -> int:

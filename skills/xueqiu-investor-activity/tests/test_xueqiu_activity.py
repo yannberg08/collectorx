@@ -36,6 +36,16 @@ def test_collect_watchlist_csv() -> None:
         assert event["data"]["symbols"] == ["SH600519"]
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["xueqiu_is_strong_trade_source"] is False
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
+        industry_circle = next(
+            child
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+            if child["subdimension_id"] == "inv-industry-circle"
+        )
+        assert industry_circle["support_level"] == "medium"
+        assert industry_circle["evidence_count"] == 1
 
 
 def test_collect_posts_json() -> None:

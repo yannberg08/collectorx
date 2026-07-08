@@ -24,6 +24,15 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from eastmoney.trade_export import discover_export_files, parse_trade_export_file
 from eastmoney.ui_collect import TradeUISnapshot, collect_trade_ui_snapshot
 
+try:
+    from collectorx.investor_wiki import SOULMIRROR_TARGET_SCHEMA, coverage_summary_for_dimensions
+except ModuleNotFoundError:  # pragma: no cover - supports direct script execution outside repo cwd
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "collectorx").exists():
+            sys.path.insert(0, str(parent))
+            break
+    from collectorx.investor_wiki import SOULMIRROR_TARGET_SCHEMA, coverage_summary_for_dimensions
+
 
 COLLECTOR = "eastmoney-investor-v2"
 EVENT_SCHEMA = "collectorx.event.v1"
@@ -2135,6 +2144,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], generated_at: str
             "event_count": len(events),
             "source_kind_counts": dict(sorted(counts.items())),
             "lake_kind_counts": dict(sorted(lake_kinds.items())),
+            "soulmirror_target_schema": SOULMIRROR_TARGET_SCHEMA,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -2153,6 +2163,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], generated_at: str
         },
         "collection_readiness": build_collection_readiness(events),
         "dimensions": dimensions,
+        "coverage_summary": coverage_summary_for_dimensions(dimensions),
     }
 
 

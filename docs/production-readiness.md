@@ -16,8 +16,29 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`research-documents` now has stronger path-level collection audit coverage for
-authorized research files and folders:
+Investor Wiki evidence packages now have a shared 7-dimension/20-subdimension
+contract and validator:
+
+- Added `collectorx.investor_wiki` as the shared FinClaw/SoulMirror evidence
+  contract helper. It defines `external.investor / 7 dimensions / 20
+  subdimensions`, conservative support levels, Wiki write policy checks, and
+  reusable validation for `finclaw.investor_wiki_evidence.v1`.
+- Added `tools/validate_investor_wiki_evidence.py` so FinClaw, CI, or a human
+  reviewer can reject route-only evidence packages before distillation.
+- Connected the shared dimension contract to `eastmoney-portfolio`,
+  `xueqiu-investor-activity`, `china-wealth-assets`, `hk-us-brokerage`,
+  `pro-terminal-usage`, and `financial-news-usage`. `ths-portfolio` and
+  `investor-source-collectors` already emitted the canonical dimension tree and
+  are now covered by the stricter project smoke test.
+- Strong trade/asset collectors can support portfolio, execution, decision-log,
+  risk-exposure, and time-preference subdimensions. Snowball, financial-news,
+  and professional-terminal traces remain attention, information-source,
+  workflow, or weak-process evidence and do not become standalone trade facts.
+- This improves FinClaw Wiki consumability and product gating, but it does not
+  claim new real-account validation.
+
+The prior completed wave: `research-documents` now has stronger path-level
+collection audit coverage for authorized research files and folders:
 
 - `investor_sources.py collect --source research-documents --input
   <authorized-research-folder> --out-dir <dir>` records requested inputs,
