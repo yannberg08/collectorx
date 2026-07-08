@@ -165,6 +165,9 @@ Boundary:
 - This collector is metadata-only. It records path, extension, size, and mtime.
 - It does not read file content. Research content reading belongs to the
   explicit `research-documents` lens step below.
+- `manifest.source_audit` records requested/resolved roots, scanned/emitted
+  file counts, extension coverage, skipped file/directory counts, skipped
+  reasons, size policy, ignored directories, and per-root scan results.
 - The manifest records the macOS/Windows/Linux default-root plan for product
   preflight, but FinClaw should still pass explicit user-authorized roots when
   possible.

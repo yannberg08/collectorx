@@ -1,5 +1,5 @@
 {
   "slug": "filesystem-collector",
-  "version": "0.2.0",
-  "description": "Local filesystem metadata collector aligned with SoulMirror driver=filesystem: metadata only, no content reads."
+  "version": "0.3.0",
+  "description": "Local filesystem metadata collector aligned with SoulMirror driver=filesystem: metadata only, no content reads, with source audit and skip-reason manifest."
 }

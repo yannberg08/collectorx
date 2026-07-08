@@ -8,20 +8,22 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from filesystem_collector.scanner import default_roots, platform_default_root_plan, scan_files, write_json, write_jsonl
+from filesystem_collector.scanner import default_roots, platform_default_root_plan, scan_files_with_audit, write_json, write_jsonl
 
 
 def collect(args: argparse.Namespace) -> int:
     roots = [Path(root).expanduser() for root in args.root] if args.root else default_roots()
     extensions = set(args.extension or []) or None
     ignore_dirs = set(args.ignore_dir or []) or None
-    events = scan_files(
+    events, source_audit = scan_files_with_audit(
         roots,
         extensions=extensions,
         ignore_dirs=ignore_dirs,
         max_size_mb=args.max_size_mb,
         limit=args.limit,
     )
+    extension_counts = Counter((event.get("data") or {}).get("extension") or "<none>" for event in events)
+    total_size_bytes = sum(int((event.get("data") or {}).get("size_bytes") or 0) for event in events)
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if out_dir:
         lake_path = out_dir / "lake" / "filesystem" / "events.jsonl"
@@ -32,6 +34,14 @@ def collect(args: argparse.Namespace) -> int:
             "event_count": len(events),
             "roots": [str(root) for root in roots],
             "kind_counts": dict(Counter(event["kind"] for event in events)),
+            "extension_counts": dict(sorted(extension_counts.items())),
+            "file_surface_summary": {
+                "metadata_event_count": len(events),
+                "content_read_event_count": 0,
+                "total_size_bytes": total_size_bytes,
+                "extension_counts": dict(sorted(extension_counts.items())),
+            },
+            "source_audit": source_audit,
             "content_read": False,
             "metadata_only": True,
             "platform_default_root_plan": platform_default_root_plan(),
@@ -39,6 +49,7 @@ def collect(args: argparse.Namespace) -> int:
                 "status": "events_collected" if events else "no_matching_files",
                 "can_enter_finclaw": bool(events),
                 "source_collection_scope": "authorized_roots",
+                "source_audit_status": "available",
                 "content_read": False,
                 "next_action": "Feed lake/filesystem/events.jsonl into research-documents lens.",
             },
@@ -50,6 +61,8 @@ def collect(args: argparse.Namespace) -> int:
                     "# 本地文件元数据采集包",
                     "",
                     f"- 事件数：{len(events)}",
+                    f"- 扫描文件数：{source_audit.get('scanned_file_count', 0)}",
+                    f"- 跳过文件数：{source_audit.get('skipped_file_count', 0)}",
                     "- 内容读取：false",
                     "- 边界：只采路径、大小、mtime、扩展名等元数据。",
                 ]
@@ -61,7 +74,17 @@ def collect(args: argparse.Namespace) -> int:
     if args.format == "json":
         print(json.dumps(events, ensure_ascii=False, indent=2, sort_keys=True))
     else:
-        print(json.dumps({"event_count": len(events), "content_read": False}, ensure_ascii=False, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "event_count": len(events),
+                    "content_read": False,
+                    "skipped_file_count": source_audit.get("skipped_file_count", 0),
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
     return 0
 
 

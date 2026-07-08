@@ -66,7 +66,7 @@ skill-name/
 | collaboration-exports | 7+ | 钉钉/企业微信通用协作导出采集器 baseline；支持授权 JSON/CSV/HTML/文本/ZIP、消息/联系人/文件/会议指针、ZIP 跳过审计和逐文件解析 manifest，仍需真实账号/API 验证 |
 | wechat-favorites | 7+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、动作覆盖 manifest 和凭证字段过滤，仍需真实微信收藏/公众号阅读库验证 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
-| filesystem-collector | 7+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界 |
+| filesystem-collector | 8+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界；manifest 记录授权根、扩展覆盖、跳过原因和逐根目录结果，仍保持 metadata-only |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
 | xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计和字段覆盖已测试，仍需真实账号/分页验证 |

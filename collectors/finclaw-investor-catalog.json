@@ -76,7 +76,7 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-root-metadata-scan",
       "cli": "python3 skills/filesystem-collector/scripts/filesystem_query.py collect --root <authorized-root> --out-dir <out-dir>",
-      "collects": "Authorized local file metadata: path, extension, size, and modified time.",
+      "collects": "Authorized local file metadata: path, extension, size, modified time, source audit, extension coverage, skipped reason counts, and per-root scan results.",
       "must_not_collect": "File bodies by default, whole-disk scans, credentials, or investment conclusions.",
       "production_gap": "Real Windows/Linux device validation and broader private file-sample review."
     },

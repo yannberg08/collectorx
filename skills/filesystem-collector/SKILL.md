@@ -45,4 +45,9 @@ python <SKILL_DIR>/scripts/filesystem_query.py collect \
 Linux 默认候选根目录的代码级路径计划。无论哪个平台，默认边界仍是：
 metadata-only、用户授权根目录、正文不读取。
 
+`manifest.source_audit` 会记录授权根目录是否存在、扫描文件数、产出事件数、
+跳过文件/目录数、扩展名覆盖、跳过原因、大小上限、忽略目录和逐根目录结果。
+这让 FinClaw 能判断本次本地文件采集是否只是“没有文件”，还是因为目录缺失、
+扩展名不支持、文件过大、隐藏文件或缓存目录被跳过。
+
 投资分身不直接消费全量本地文件；`research-documents` lens 从 `filesystem` lake 中筛选研报、财报、公告批注、估值表等投研文件。

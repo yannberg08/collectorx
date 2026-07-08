@@ -16,6 +16,9 @@ scope:
     - extension
     - size
     - mtime
+    - source_audit_manifest
+    - skipped_reason_counts
+    - root_results
   excludes:
     - file_content_by_default
     - whole_disk_scan
@@ -32,3 +35,5 @@ description: |
   本地文件通用采集器。对齐 SoulMirror driver=filesystem 的已验证边界：
   默认只采用户授权目录中的文档元数据，不读正文。投资分身需要的研报、
   财报、PDF、Excel、估值表，由 research-documents lens 从 filesystem lake 中筛选。
+  manifest.source_audit 会记录授权根、扩展名覆盖、跳过原因和逐根目录结果，
+  便于 FinClaw 判断本次本地文件材料采集覆盖面。

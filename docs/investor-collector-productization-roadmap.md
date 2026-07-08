@@ -800,6 +800,30 @@ Findings:
 - This is not a real Windows/Linux device validation claim; it closes the
   code-level simulation gap.
 
+### Wave O2: P0 filesystem source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-filesystem-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Added `scan_files_with_audit` while keeping the existing `scan_files` API
+  compatible.
+- `filesystem_query.py collect --out-dir` now writes
+  `manifest.source_audit` with requested/resolved roots, missing roots,
+  scanned/emitted file counts, extension coverage, skipped file/directory
+  counts, skipped reasons, size policy, ignored directories, limit status, and
+  per-root scan results.
+- The collector remains metadata-only and does not route every local file into
+  investor Wiki evidence; `research-documents` still owns investment filtering
+  and explicit content extraction.
+- Fixture validation covers unsupported extensions, hidden files, ignored
+  directories, missing roots, package output, and cross-platform default-root
+  planning.
+
 ### Wave P: P0 China wealth platform coverage pass 1
 
 Status: `completed-baseline`
