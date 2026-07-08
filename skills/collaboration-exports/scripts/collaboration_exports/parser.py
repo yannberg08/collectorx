@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 from urllib.parse import urlparse
 
 
@@ -67,9 +67,38 @@ def collect_from_inputs(
     platform: str,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_source_platforms: Optional[Iterable[str]] = None,
+    deny_source_platforms: Optional[Iterable[str]] = None,
+    allow_record_kinds: Optional[Iterable[str]] = None,
+    deny_record_kinds: Optional[Iterable[str]] = None,
+    allow_chats: Optional[Iterable[str]] = None,
+    deny_chats: Optional[Iterable[str]] = None,
+    allow_senders: Optional[Iterable[str]] = None,
+    deny_senders: Optional[Iterable[str]] = None,
+    allow_participants: Optional[Iterable[str]] = None,
+    deny_participants: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
 ) -> List[Dict[str, Any]]:
     platform = normalize_platform(platform)
-    events, _audit = collect_from_inputs_with_audit(inputs, platform=platform, collected_at=collected_at, limit=limit)
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        platform=platform,
+        collected_at=collected_at,
+        limit=limit,
+        allow_source_platforms=allow_source_platforms,
+        deny_source_platforms=deny_source_platforms,
+        allow_record_kinds=allow_record_kinds,
+        deny_record_kinds=deny_record_kinds,
+        allow_chats=allow_chats,
+        deny_chats=deny_chats,
+        allow_senders=allow_senders,
+        deny_senders=deny_senders,
+        allow_participants=allow_participants,
+        deny_participants=deny_participants,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -79,10 +108,36 @@ def collect_from_inputs_with_audit(
     platform: str,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_source_platforms: Optional[Iterable[str]] = None,
+    deny_source_platforms: Optional[Iterable[str]] = None,
+    allow_record_kinds: Optional[Iterable[str]] = None,
+    deny_record_kinds: Optional[Iterable[str]] = None,
+    allow_chats: Optional[Iterable[str]] = None,
+    deny_chats: Optional[Iterable[str]] = None,
+    allow_senders: Optional[Iterable[str]] = None,
+    deny_senders: Optional[Iterable[str]] = None,
+    allow_participants: Optional[Iterable[str]] = None,
+    deny_participants: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     platform = normalize_platform(platform)
     input_list = list(inputs)
     paths = list(iter_paths(input_list))
+    collaboration_scope_policy = build_collaboration_scope_policy(
+        allow_source_platforms=allow_source_platforms,
+        deny_source_platforms=deny_source_platforms,
+        allow_record_kinds=allow_record_kinds,
+        deny_record_kinds=deny_record_kinds,
+        allow_chats=allow_chats,
+        deny_chats=deny_chats,
+        allow_senders=allow_senders,
+        deny_senders=deny_senders,
+        allow_participants=allow_participants,
+        deny_participants=deny_participants,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     audit = {
         "source_type": f"authorized_local_{platform}_collaboration_export",
         "input_count": len(input_list),
@@ -93,11 +148,14 @@ def collect_from_inputs_with_audit(
         "skipped_archive_member_count": 0,
         "skipped_archive_member_extension_counts": {},
         "skipped_archive_member_reason_counts": {},
+        "candidate_record_count": 0,
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "limit": limit,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
+        "collaboration_scope_policy": collaboration_scope_policy,
+        "collaboration_scope_policy_filtered_all": False,
         "path_results": [],
     }
     if not paths:
@@ -110,22 +168,40 @@ def collect_from_inputs_with_audit(
         path_result = {
             "path": str(path),
             "extension": path.suffix.lower() or "<none>",
+            "candidate_record_count": 0,
             "parsed_record_count": 0,
             "emitted_event_count": 0,
+            "scope_policy_filtered_record_count": 0,
             "status": "parsed",
         }
         audit["path_results"].append(path_result)
         increment_counter(audit, "extension_counts", path_result["extension"])
         records = parse_path(path, audit=audit)
+        path_result["candidate_record_count"] = len(records)
         path_result["parsed_record_count"] = len(records)
+        audit["candidate_record_count"] += len(records)
         audit["parsed_record_count"] += len(records)
         for row, record in enumerate(records, start=1):
-            events.append(record_to_event(record, path=path, row=row, platform=platform, collected_at=collected_at))
+            event = record_to_event(record, path=path, row=row, platform=platform, collected_at=collected_at)
+            filter_reason = collaboration_scope_policy_filter_reason(event, collaboration_scope_policy)
+            if filter_reason:
+                collaboration_scope_policy["filtered_record_count"] += 1
+                reason_counts = collaboration_scope_policy.setdefault("filter_reason_counts", {})
+                reason_counts[filter_reason] = int(reason_counts.get(filter_reason, 0)) + 1
+                path_result["scope_policy_filtered_record_count"] += 1
+                continue
+            events.append(event)
             path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
                 audit["emitted_event_count"] = len(events[:limit])
                 finalize_audit(audit)
                 return events[:limit], audit
+        if path_result["candidate_record_count"] and path_result["scope_policy_filtered_record_count"] == path_result["candidate_record_count"]:
+            path_result["status"] = "filtered_by_scope_policy"
+    if not events and audit["candidate_record_count"] and collaboration_scope_policy.get("enabled"):
+        audit["emitted_event_count"] = 0
+        finalize_audit(audit)
+        return events, audit
     if not events:
         events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_records_empty")]
     audit["emitted_event_count"] = len(events)
@@ -229,7 +305,178 @@ def finalize_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
         "skipped_archive_member_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    finalize_collaboration_scope_policy_audit(audit)
     return audit
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    terms: List[str] = []
+    for value in values or []:
+        for item in re.split(r"[,，;；|\n]+", str(value)):
+            cleaned = item.strip()
+            if cleaned:
+                terms.append(cleaned)
+    return terms
+
+
+def build_collaboration_scope_policy(
+    *,
+    allow_source_platforms: Optional[Iterable[str]] = None,
+    deny_source_platforms: Optional[Iterable[str]] = None,
+    allow_record_kinds: Optional[Iterable[str]] = None,
+    deny_record_kinds: Optional[Iterable[str]] = None,
+    allow_chats: Optional[Iterable[str]] = None,
+    deny_chats: Optional[Iterable[str]] = None,
+    allow_senders: Optional[Iterable[str]] = None,
+    deny_senders: Optional[Iterable[str]] = None,
+    allow_participants: Optional[Iterable[str]] = None,
+    deny_participants: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_source_platforms": split_policy_terms(allow_source_platforms),
+        "deny_source_platforms": split_policy_terms(deny_source_platforms),
+        "allow_record_kinds": split_policy_terms(allow_record_kinds),
+        "deny_record_kinds": split_policy_terms(deny_record_kinds),
+        "allow_chats": split_policy_terms(allow_chats),
+        "deny_chats": split_policy_terms(deny_chats),
+        "allow_senders": split_policy_terms(allow_senders),
+        "deny_senders": split_policy_terms(deny_senders),
+        "allow_participants": split_policy_terms(allow_participants),
+        "deny_participants": split_policy_terms(deny_participants),
+        "allow_keywords": split_policy_terms(allow_keywords),
+        "deny_keywords": split_policy_terms(deny_keywords),
+        "filtered_record_count": 0,
+        "filter_reason_counts": {},
+        "policy_does_not_assert_investment_relevance": True,
+    }
+    policy["enabled"] = any(
+        policy[key]
+        for key in (
+            "allow_source_platforms",
+            "deny_source_platforms",
+            "allow_record_kinds",
+            "deny_record_kinds",
+            "allow_chats",
+            "deny_chats",
+            "allow_senders",
+            "deny_senders",
+            "allow_participants",
+            "deny_participants",
+            "allow_keywords",
+            "deny_keywords",
+        )
+    )
+    return policy
+
+
+def collaboration_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy or not policy.get("enabled"):
+        return None
+    if policy.get("deny_source_platforms") and policy_hit(policy["deny_source_platforms"], collaboration_platform_surface(event)):
+        return "source_platform_denied"
+    if policy.get("allow_source_platforms") and not policy_hit(policy["allow_source_platforms"], collaboration_platform_surface(event)):
+        return "source_platform_not_allowed"
+    if policy.get("deny_record_kinds") and policy_hit(policy["deny_record_kinds"], collaboration_record_kind_surface(event)):
+        return "record_kind_denied"
+    if policy.get("allow_record_kinds") and not policy_hit(policy["allow_record_kinds"], collaboration_record_kind_surface(event)):
+        return "record_kind_not_allowed"
+    if policy.get("deny_chats") and policy_hit(policy["deny_chats"], collaboration_chat_surface(event)):
+        return "chat_denied"
+    if policy.get("allow_chats") and not policy_hit(policy["allow_chats"], collaboration_chat_surface(event)):
+        return "chat_not_allowed"
+    if policy.get("deny_senders") and policy_hit(policy["deny_senders"], collaboration_sender_surface(event)):
+        return "sender_denied"
+    if policy.get("allow_senders") and not policy_hit(policy["allow_senders"], collaboration_sender_surface(event)):
+        return "sender_not_allowed"
+    if policy.get("deny_participants") and policy_hit(policy["deny_participants"], collaboration_participant_surface(event)):
+        return "participant_denied"
+    if policy.get("allow_participants") and not policy_hit(policy["allow_participants"], collaboration_participant_surface(event)):
+        return "participant_not_allowed"
+    if policy.get("deny_keywords") and policy_hit(policy["deny_keywords"], collaboration_keyword_surface(event)):
+        return "keyword_denied"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], collaboration_keyword_surface(event)):
+        return "keyword_not_allowed"
+    return None
+
+
+def finalize_collaboration_scope_policy_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
+    policy = audit.get("collaboration_scope_policy") or {}
+    if policy:
+        policy["filter_reason_counts"] = dict(sorted((policy.get("filter_reason_counts") or {}).items()))
+    candidate_count = int(audit.get("candidate_record_count") or 0)
+    emitted_count = int(audit.get("emitted_event_count") or 0)
+    audit["collaboration_scope_policy_filtered_all"] = bool(policy.get("enabled") and candidate_count > 0 and emitted_count == 0)
+    return audit
+
+
+def collaboration_platform_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    return [data.get("platform"), raw_ref.get("platform"), event.get("collector")]
+
+
+def collaboration_record_kind_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    return [data.get("record_kind"), event.get("kind")]
+
+
+def collaboration_chat_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    return [data.get("chat"), data.get("chat_id"), data.get("title"), data.get("source_section")]
+
+
+def collaboration_sender_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    return [data.get("sender"), data.get("sender_id"), data.get("receiver"), data.get("department")]
+
+
+def collaboration_participant_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    return list(data.get("participants") or [])
+
+
+def collaboration_keyword_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    surface: List[Any] = [
+        data.get("title"),
+        data.get("content_preview"),
+        data.get("file_name"),
+        data.get("file_type"),
+        data.get("url"),
+        data.get("meeting_url"),
+        raw_ref.get("path"),
+        raw_ref.get("archive_member"),
+    ]
+    surface.extend(flatten_policy_surface(data.get("tags")))
+    return surface
+
+
+def flatten_policy_surface(value: Any) -> List[Any]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, dict):
+        surface: List[Any] = []
+        for item in value.values():
+            surface.extend(flatten_policy_surface(item))
+        return surface
+    if isinstance(value, list):
+        surface = []
+        for item in value:
+            surface.extend(flatten_policy_surface(item))
+        return surface
+    return [value]
+
+
+def policy_hit(terms: Sequence[str], surfaces: Iterable[Any]) -> bool:
+    haystacks = [str(surface).lower() for surface in surfaces if surface not in (None, "", [], {})]
+    for term in terms:
+        needle = str(term).lower()
+        if needle and any(needle in haystack for haystack in haystacks):
+            return True
+    return False
 
 
 def parse_json(path: Path) -> List[Dict[str, Any]]:
@@ -433,6 +680,7 @@ def build_manifest(
     kind_counts = Counter(event["kind"] for event in events)
     record_counts = Counter((event.get("data") or {}).get("record_kind", "unknown") for event in events)
     gap_only = bool(events) and set(record_counts) == {"collector_gap"}
+    scope_policy_filtered_all = bool((collection_audit or {}).get("collaboration_scope_policy_filtered_all"))
     return {
         "schema": "collectorx.collaboration_exports.manifest.v1",
         "collector": platform,
@@ -451,13 +699,56 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": f"needs_{platform}_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": collaboration_readiness_status(
+                events,
+                platform=platform,
+                gap_only=gap_only,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_investment_collaboration": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
-            "next_action": "Provide authorized collaboration export." if gap_only else "Feed generic events into relevant investor lenses.",
+            "source_collection_scope": collaboration_source_collection_scope(
+                gap_only=gap_only,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "next_action": collaboration_next_action(
+                gap_only=gap_only,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
     }
+
+
+def collaboration_readiness_status(
+    events: List[Dict[str, Any]],
+    *,
+    platform: str,
+    gap_only: bool,
+    scope_policy_filtered_all: bool,
+) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only:
+        return f"needs_{platform}_authorized_input"
+    if not events:
+        return "records_empty"
+    return "events_collected"
+
+
+def collaboration_source_collection_scope(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only:
+        return "none"
+    return "partial_authorized_input"
+
+
+def collaboration_next_action(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden collaboration scope policy or provide authorized collaboration exports inside the allowed scope."
+    if gap_only:
+        return "Provide authorized collaboration export."
+    return "Feed generic events into relevant investor lenses."
 
 
 def write_json(path: Path, payload: Any) -> None:

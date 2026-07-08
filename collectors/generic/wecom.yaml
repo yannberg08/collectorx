@@ -26,6 +26,13 @@ scope:
     - field_coverage_manifest
     - collaboration_surface_summary
     - source_audit_manifest
+    - collaboration_scope_policy_audit
+    - source_platform_allow_deny_filters
+    - record_kind_allow_deny_filters
+    - chat_allow_deny_filters
+    - sender_allow_deny_filters
+    - participant_allow_deny_filters
+    - keyword_allow_deny_filters
     - archive_member_provenance
     - archive_member_skip_audit
     - path_level_collection_audit
@@ -40,4 +47,4 @@ scope:
 
 description: |
   企业微信通用通信采集器。它只负责用户授权的企业微信消息、会话、联系人、文件指针和会议指针。
-  manifest 会记录字段覆盖、协作面、ZIP 来源审计、跳过成员原因和逐文件解析结果；投资讨论、调研协作和会议纪要分别由 investor lens 从 lake 中筛选。
+  manifest 会记录字段覆盖、协作面、授权范围过滤、ZIP 来源审计、跳过成员原因和逐文件解析结果；投资讨论、调研协作和会议纪要分别由 investor lens 从 lake 中筛选。

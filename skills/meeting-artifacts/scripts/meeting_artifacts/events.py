@@ -8,7 +8,7 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 
 COLLECTOR = "meeting-artifacts"
@@ -38,6 +38,137 @@ MEETING_RECOMMENDED_FIELDS = (
     "mentioned_symbols",
     "time",
 )
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    terms: List[str] = []
+    for value in values or []:
+        for item in re.split(r"[,，;；|\n]+", str(value)):
+            cleaned = item.strip()
+            if cleaned:
+                terms.append(cleaned)
+    return terms
+
+
+def build_meeting_scope_policy(
+    *,
+    allow_source_platforms: Optional[Iterable[str]] = None,
+    deny_source_platforms: Optional[Iterable[str]] = None,
+    allow_participants: Optional[Iterable[str]] = None,
+    deny_participants: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_source_platforms": split_policy_terms(allow_source_platforms),
+        "deny_source_platforms": split_policy_terms(deny_source_platforms),
+        "allow_participants": split_policy_terms(allow_participants),
+        "deny_participants": split_policy_terms(deny_participants),
+        "allow_keywords": split_policy_terms(allow_keywords),
+        "deny_keywords": split_policy_terms(deny_keywords),
+        "filtered_record_count": 0,
+        "filter_reason_counts": {},
+        "policy_does_not_assert_investment_relevance": True,
+    }
+    policy["enabled"] = any(
+        policy[key]
+        for key in (
+            "allow_source_platforms",
+            "deny_source_platforms",
+            "allow_participants",
+            "deny_participants",
+            "allow_keywords",
+            "deny_keywords",
+        )
+    )
+    return policy
+
+
+def meeting_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy or not policy.get("enabled"):
+        return None
+    if policy.get("deny_source_platforms") and policy_hit(policy["deny_source_platforms"], meeting_platform_surface(event)):
+        return "source_platform_denied"
+    if policy.get("allow_source_platforms") and not policy_hit(policy["allow_source_platforms"], meeting_platform_surface(event)):
+        return "source_platform_not_allowed"
+    if policy.get("deny_participants") and policy_hit(policy["deny_participants"], meeting_participant_surface(event)):
+        return "participant_denied"
+    if policy.get("allow_participants") and not policy_hit(policy["allow_participants"], meeting_participant_surface(event)):
+        return "participant_not_allowed"
+    if policy.get("deny_keywords") and policy_hit(policy["deny_keywords"], meeting_keyword_surface(event)):
+        return "keyword_denied"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], meeting_keyword_surface(event)):
+        return "keyword_not_allowed"
+    return None
+
+
+def finalize_meeting_scope_policy_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
+    policy = audit.get("meeting_scope_policy") or {}
+    if policy:
+        policy["filter_reason_counts"] = dict(sorted((policy.get("filter_reason_counts") or {}).items()))
+    candidate_count = int(audit.get("candidate_record_count") or 0)
+    emitted_count = int(audit.get("emitted_event_count") or 0)
+    audit["meeting_scope_policy_filtered_all"] = bool(policy.get("enabled") and candidate_count > 0 and emitted_count == 0)
+    return audit
+
+
+def meeting_platform_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    return [data.get("platform"), raw_ref.get("platform"), event.get("collector")]
+
+
+def meeting_participant_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    surface: List[Any] = [data.get("organizer")]
+    surface.extend(data.get("participants") or [])
+    for ref in data.get("participant_refs") or []:
+        if isinstance(ref, dict):
+            surface.extend([ref.get("name"), ref.get("role")])
+        else:
+            surface.append(ref)
+    return surface
+
+
+def meeting_keyword_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    surface: List[Any] = [
+        data.get("artifact_type"),
+        data.get("title"),
+        data.get("meeting_url"),
+        data.get("text_preview"),
+        raw_ref.get("path"),
+        raw_ref.get("archive_member"),
+    ]
+    for key in ("action_items", "decision_points", "risk_items", "mentioned_symbols", "attachment_refs", "recording_refs"):
+        surface.extend(flatten_policy_surface(data.get(key)))
+    return surface
+
+
+def flatten_policy_surface(value: Any) -> List[Any]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, dict):
+        surface: List[Any] = []
+        for item in value.values():
+            surface.extend(flatten_policy_surface(item))
+        return surface
+    if isinstance(value, list):
+        surface = []
+        for item in value:
+            surface.extend(flatten_policy_surface(item))
+        return surface
+    return [value]
+
+
+def policy_hit(terms: Sequence[str], surfaces: Iterable[Any]) -> bool:
+    haystacks = [str(surface).lower() for surface in surfaces if surface not in (None, "", [], {})]
+    for term in terms:
+        needle = str(term).lower()
+        if needle and any(needle in haystack for haystack in haystacks):
+            return True
+    return False
 
 
 def now_iso() -> str:
@@ -154,6 +285,7 @@ def build_manifest(
     type_counts = Counter((event.get("data") or {}).get("artifact_type", "unknown") for event in events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    scope_policy_filtered_all = bool((collection_audit or {}).get("meeting_scope_policy_filtered_all"))
     observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
     observed_expected = [platform for platform in EXPECTED_P1_MEETING_PLATFORMS if platform_counts.get(platform)]
     missing_expected = [platform for platform in EXPECTED_P1_MEETING_PLATFORMS if not platform_counts.get(platform)]
@@ -190,14 +322,40 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_meeting_artifact_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": meeting_readiness_status(events, gap_only=gap_only, scope_policy_filtered_all=scope_policy_filtered_all),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_investment_meeting_minutes": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": meeting_source_collection_scope(gap_only=gap_only, scope_policy_filtered_all=scope_policy_filtered_all),
             "platform_coverage_status": platform_coverage_status(events, missing_expected),
-            "next_action": "Provide authorized meeting minutes/transcript files." if gap_only else "Feed events into meeting-minutes lens.",
+            "next_action": meeting_next_action(gap_only=gap_only, scope_policy_filtered_all=scope_policy_filtered_all),
         },
     }
+
+
+def meeting_readiness_status(events: List[Dict[str, Any]], *, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only:
+        return "needs_meeting_artifact_input"
+    if not events:
+        return "records_empty"
+    return "events_collected"
+
+
+def meeting_source_collection_scope(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only:
+        return "none"
+    return "partial_authorized_input"
+
+
+def meeting_next_action(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden meeting scope policy or provide authorized meeting artifacts inside the allowed scope."
+    if gap_only:
+        return "Provide authorized meeting minutes/transcript files."
+    return "Feed events into meeting-minutes lens."
 
 
 def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:

@@ -32,6 +32,10 @@ scope:
     - field_coverage_manifest
     - meeting_surface_summary
     - source_audit_manifest
+    - meeting_scope_policy_audit
+    - source_platform_allow_deny_filters
+    - participant_allow_deny_filters
+    - keyword_allow_deny_filters
     - archive_member_provenance
     - archive_member_skip_audit
     - path_level_collection_audit
@@ -49,4 +53,6 @@ description: |
   通用证据进入 lake；本采集器支持本地文件、平台导出和 ZIP 授权包，并在
   manifest 中报告平台覆盖、字段覆盖、会议面、参会人角色、行动项、决策点、风险点、
   附件/录制引用、请求输入、缺失路径、不支持扩展名、ZIP 来源审计、跳过成员原因和
-  逐文件解析结果。meeting-minutes lens 再筛选路演、调研、投委会和投资复盘。
+  逐文件解析结果。可选来源平台、参会人和关键词授权范围过滤在写入 Lake 前执行，
+  manifest 会记录 meeting_scope_policy 和 filtered-all 状态。meeting-minutes lens
+  再筛选路演、调研、投委会和投资复盘。

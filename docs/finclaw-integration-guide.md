@@ -835,6 +835,8 @@ Current status:
 python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
   --platform dingtalk \
   --input <authorized-dingtalk-export> \
+  --allow-chat <authorized-investment-chat-or-group> \
+  --deny-keyword <out-of-scope-keyword> \
   --out-dir <out-dir>
 ```
 
@@ -842,6 +844,8 @@ python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
 python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
   --platform wecom \
   --input <authorized-wecom-export> \
+  --allow-chat <authorized-investment-chat-or-group> \
+  --deny-keyword <out-of-scope-keyword> \
   --out-dir <out-dir>
 ```
 
@@ -852,6 +856,11 @@ Current status:
 - Captures messages, chats, contacts, file refs, meeting refs, sender, receiver,
   department, participants, meeting links, file names, tags, and content
   previews.
+- Optional source-platform, record-kind, chat, sender, participant, and keyword
+  allow/deny filters run before Lake output. `manifest.source_audit`
+  includes `collaboration_scope_policy`, candidate count, filtered count,
+  reason counts, and `scope_policy_filtered_all` when all candidates are
+  outside the authorized scope.
 - Writes `manifest.field_coverage`, `collaboration_surface_summary`,
   `source_audit`, and `evidence_policy` so FinClaw can inspect message/meeting/
   file/contact coverage, ZIP provenance, total/skipped ZIP members, skip
@@ -868,6 +877,8 @@ Current status:
 ```bash
 python3 skills/meeting-artifacts/scripts/meeting_artifacts.py collect \
   --input <authorized-meeting-minutes-transcript-folder-or-zip> \
+  --allow-source-platform <feishu|dingtalk|wecom|tencent-meeting> \
+  --allow-keyword <authorized-investment-meeting-keyword> \
   --out-dir <out-dir>
 ```
 
@@ -882,6 +893,11 @@ Current status:
   links, start/end time, text preview, participant-role hints, action items,
   decision points, risk items, mentioned symbols, attachment refs, and
   recording refs where present.
+- Optional source-platform, participant, and keyword allow/deny filters run
+  before Lake output. `manifest.source_audit` includes
+  `meeting_scope_policy`, candidate count, filtered count, reason counts, and
+  `scope_policy_filtered_all` when every candidate meeting is outside the
+  authorized scope.
 - Writes `manifest.platform_coverage` with expected P1 meeting platforms,
   observed platforms, missing platforms, event counts, and
   `real_account_validation`.

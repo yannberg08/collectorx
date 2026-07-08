@@ -1,1 +1,1 @@
-{"collector":"collaboration-exports","class":"generic","version":"0.2.0","status":"baseline+audit","description":"Shared authorized local export collector for DingTalk and WeCom collaboration activity with source-audit manifest."}
+{"collector":"collaboration-exports","class":"generic","version":"0.2.1","status":"baseline+audit","description":"Shared authorized local export collector for DingTalk and WeCom collaboration activity with source-audit and source-platform/record-kind/chat/sender/participant/keyword scope-policy manifests."}

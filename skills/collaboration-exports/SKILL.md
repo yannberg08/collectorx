@@ -15,6 +15,9 @@ description: 钉钉/企业微信通用协作导出采集器。采集用户授权
 - `manifest.field_coverage`、`collaboration_surface_summary`、`source_audit`
   和 `evidence_policy`，用于判断消息/会议/文件/联系人覆盖、每个输入文件的
   解析结果、ZIP 成员总数、跳过成员数量/原因、ZIP 来源和 generic/lens 边界。
+- 可选授权范围过滤：来源平台、记录类型、群聊/会话、发送人/接收人、参会人和关键词。
+  过滤发生在事件写入 Lake 前，`manifest.source_audit.collaboration_scope_policy`
+  记录候选记录数、过滤数量、原因计数和 `policy_does_not_assert_investment_relevance=true`。
 
 不采集：
 
@@ -29,6 +32,9 @@ description: 钉钉/企业微信通用协作导出采集器。采集用户授权
 python3 skills/collaboration-exports/scripts/collaboration_exports.py collect \
   --platform dingtalk \
   --input /path/to/authorized/dingtalk-export \
+  --allow-chat 投研讨论群 \
+  --allow-sender 研究员A \
+  --deny-keyword 买菜 \
   --out-dir /path/to/out
 ```
 

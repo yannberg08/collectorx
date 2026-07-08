@@ -27,6 +27,18 @@ def collect(args: argparse.Namespace) -> int:
         platform=platform,
         collected_at=collected_at,
         limit=args.limit,
+        allow_source_platforms=args.allow_source_platform,
+        deny_source_platforms=args.deny_source_platform,
+        allow_record_kinds=args.allow_record_kind,
+        deny_record_kinds=args.deny_record_kind,
+        allow_chats=args.allow_chat,
+        deny_chats=args.deny_chat,
+        allow_senders=args.allow_sender,
+        deny_senders=args.deny_sender,
+        allow_participants=args.allow_participant,
+        deny_participants=args.deny_participant,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
     )
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
@@ -50,6 +62,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")
     p_collect.add_argument("--collected-at", help="Override collection timestamp.")
+    p_collect.add_argument("--allow-source-platform", action="append", help="Only keep records whose normalized source platform matches this term.")
+    p_collect.add_argument("--deny-source-platform", action="append", help="Drop records whose normalized source platform matches this term.")
+    p_collect.add_argument("--allow-record-kind", action="append", help="Only keep records whose kind matches this term, such as message, meeting, file, chat, or contact.")
+    p_collect.add_argument("--deny-record-kind", action="append", help="Drop records whose kind matches this term.")
+    p_collect.add_argument("--allow-chat", action="append", help="Only keep records whose chat/conversation surface matches this term.")
+    p_collect.add_argument("--deny-chat", action="append", help="Drop records whose chat/conversation surface matches this term.")
+    p_collect.add_argument("--allow-sender", action="append", help="Only keep records whose sender/receiver surface matches this term.")
+    p_collect.add_argument("--deny-sender", action="append", help="Drop records whose sender/receiver surface matches this term.")
+    p_collect.add_argument("--allow-participant", action="append", help="Only keep records whose participant surface matches this term.")
+    p_collect.add_argument("--deny-participant", action="append", help="Drop records whose participant surface matches this term.")
+    p_collect.add_argument("--allow-keyword", action="append", help="Only keep records whose title/content/file/link/tag surface matches this term.")
+    p_collect.add_argument("--deny-keyword", action="append", help="Drop records whose title/content/file/link/tag surface matches this term.")
     p_collect.set_defaults(func=collect)
     return parser
 

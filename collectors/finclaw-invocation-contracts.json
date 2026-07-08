@@ -157,8 +157,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Provide authorized meeting minutes, transcripts, subtitles, platform exports, or ZIP packages.",
-      "preflight": "Meeting artifact files are user-selected and attachment/recording bodies are not assumed.",
+      "user_step": "Provide authorized meeting minutes, transcripts, subtitles, platform exports, or ZIP packages; optionally choose source-platform, participant, and keyword allow/deny scope filters.",
+      "preflight": "Meeting artifact files are user-selected; optional scope filters are applied before Lake output; attachment/recording bodies are not assumed.",
       "failure_state": "needs_authorized_meeting_export"
     },
     {
@@ -166,8 +166,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Provide authorized DingTalk collaboration exports or ZIP packages.",
-      "preflight": "Input is user-authorized and excludes credentials or file bodies unless explicitly handled by another collector.",
+      "user_step": "Provide authorized DingTalk collaboration exports or ZIP packages; optionally choose source-platform, record-kind, chat, sender, participant, and keyword allow/deny scope filters.",
+      "preflight": "Input is user-authorized; optional scope filters are applied before Lake output; credentials and file bodies are excluded unless explicitly handled by another collector.",
       "failure_state": "needs_authorized_dingtalk_export"
     },
     {
@@ -175,8 +175,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Provide authorized WeCom collaboration exports or ZIP packages.",
-      "preflight": "Input is user-authorized and excludes credentials or file bodies unless explicitly handled by another collector.",
+      "user_step": "Provide authorized WeCom collaboration exports or ZIP packages; optionally choose source-platform, record-kind, chat, sender, participant, and keyword allow/deny scope filters.",
+      "preflight": "Input is user-authorized; optional scope filters are applied before Lake output; credentials and file bodies are excluded unless explicitly handled by another collector.",
       "failure_state": "needs_authorized_wecom_export"
     },
     {

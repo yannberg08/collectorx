@@ -155,7 +155,133 @@ def test_collect_wecom_csv_and_gap() -> None:
         assert gap_manifest["source_audit"]["emitted_event_count"] == 1
 
 
+def test_collect_collaboration_scope_policy_filters_platform_chat_sender_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "dingtalk-export.json"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                {
+                    "messages": [
+                        {
+                            "platform": "钉钉",
+                            "chat": "投研讨论群",
+                            "sender": "研究员A",
+                            "time": "2026-07-08T09:00:00+08:00",
+                            "content": "讨论半导体订单和估值。",
+                        },
+                        {
+                            "platform": "钉钉",
+                            "chat": "投研讨论群",
+                            "sender": "研究员A",
+                            "time": "2026-07-08T09:05:00+08:00",
+                            "content": "买菜安排。",
+                        },
+                        {
+                            "platform": "企业微信",
+                            "chat": "投研讨论群",
+                            "sender": "研究员A",
+                            "time": "2026-07-08T09:10:00+08:00",
+                            "content": "讨论半导体仓位。",
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--platform",
+                "dingtalk",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--allow-source-platform",
+                "dingtalk",
+                "--allow-chat",
+                "投研讨论群",
+                "--allow-sender",
+                "研究员A",
+                "--deny-keyword",
+                "买菜",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = read_events(out, "dingtalk")
+        assert len(events) == 1
+        assert events[0]["data"]["content_preview"] == "讨论半导体订单和估值。"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        policy = manifest["source_audit"]["collaboration_scope_policy"]
+        assert manifest["source_audit"]["candidate_record_count"] == 3
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert policy["enabled"] is True
+        assert policy["filtered_record_count"] == 2
+        assert policy["filter_reason_counts"] == {"keyword_denied": 1, "source_platform_not_allowed": 1}
+        assert manifest["source_audit"]["collaboration_scope_policy_filtered_all"] is False
+        assert manifest["source_audit"]["path_results"][0]["scope_policy_filtered_record_count"] == 2
+
+
+def test_collect_collaboration_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "dingtalk-export.json"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                {
+                    "messages": [
+                        {
+                            "platform": "钉钉",
+                            "chat": "投研讨论群",
+                            "sender": "研究员A",
+                            "content": "讨论半导体订单。",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--platform",
+                "dingtalk",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--allow-chat",
+                "不存在的群",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events_path = out / "lake" / "dingtalk" / "events.jsonl"
+        assert events_path.read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["collaboration_scope_policy"]["filter_reason_counts"] == {"chat_not_allowed": 1}
+        assert manifest["source_audit"]["collaboration_scope_policy_filtered_all"] is True
+
+
 if __name__ == "__main__":
     test_collect_dingtalk_package()
     test_collect_wecom_csv_and_gap()
+    test_collect_collaboration_scope_policy_filters_platform_chat_sender_and_keyword()
+    test_collect_collaboration_scope_policy_filtered_all_status()
     print("collaboration-exports tests passed.")

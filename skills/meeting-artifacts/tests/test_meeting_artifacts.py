@@ -176,7 +176,115 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
 
 
+def test_collect_meeting_scope_policy_filters_platform_participant_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "meetings.json"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                {
+                    "meetings": [
+                        {
+                            "platform": "钉钉",
+                            "title": "投委会讨论半导体",
+                            "summary": "决策点：保留仓位；行动项：研究员A 更新模型。",
+                            "participants": [{"name": "研究员A"}],
+                        },
+                        {
+                            "platform": "钉钉",
+                            "title": "行政例会",
+                            "summary": "讨论牙医报销和团建安排。",
+                            "participants": [{"name": "研究员A"}],
+                        },
+                        {
+                            "platform": "企业微信",
+                            "title": "投委会复盘",
+                            "summary": "讨论半导体仓位。",
+                            "participants": [{"name": "研究员A"}],
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--allow-source-platform",
+                "dingtalk",
+                "--allow-participant",
+                "研究员A",
+                "--deny-keyword",
+                "牙医",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "meeting-artifacts" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["title"] == "投委会讨论半导体"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        policy = manifest["source_audit"]["meeting_scope_policy"]
+        assert manifest["source_audit"]["candidate_record_count"] == 3
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert policy["enabled"] is True
+        assert policy["filtered_record_count"] == 2
+        assert policy["filter_reason_counts"] == {"keyword_denied": 1, "source_platform_not_allowed": 1}
+        assert manifest["source_audit"]["meeting_scope_policy_filtered_all"] is False
+        assert manifest["source_audit"]["path_results"][0]["scope_policy_filtered_record_count"] == 2
+
+
+def test_collect_meeting_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "meetings.json"
+        out = root / "out"
+        package.write_text(
+            json.dumps(
+                [{"platform": "钉钉", "title": "投委会讨论", "summary": "讨论组合回撤。", "participants": ["研究员A"]}],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--allow-participant",
+                "不存在的参会人",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events_path = out / "lake" / "meeting-artifacts" / "events.jsonl"
+        assert events_path.read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["meeting_scope_policy"]["filter_reason_counts"] == {"participant_not_allowed": 1}
+        assert manifest["source_audit"]["meeting_scope_policy_filtered_all"] is True
+
+
 if __name__ == "__main__":
     test_collect_minutes_and_transcript_events()
     test_collect_platform_exports_and_sanitizes_raw()
+    test_collect_meeting_scope_policy_filters_platform_participant_and_keyword()
+    test_collect_meeting_scope_policy_filtered_all_status()
     print("meeting-artifacts tests passed.")
