@@ -929,6 +929,9 @@ Current status:
 ```bash
 python3 skills/wechat-favorites/scripts/wechat_favorites.py collect \
   --input <authorized-wechat-favorites-saved-article-folder-or-zip> \
+  --allow-source-account <authorized-public-account-or-author> \
+  --allow-domain mp.weixin.qq.com \
+  --deny-keyword <out-of-scope-keyword> \
   --out-dir <out-dir>
 ```
 
@@ -943,6 +946,11 @@ Current status:
   `manifest.content_policy`, and `manifest.evidence_policy` so Lake can see
   which article/source/behavior fields are actually present before the investor
   lens runs.
+- Optional source-account, source-account-type, action, tag, domain, and
+  keyword allow/deny filters run before Lake output. `manifest.source_audit`
+  includes `wechat_favorites_scope_policy`, candidate count, filtered count,
+  reason counts, and `scope_policy_filtered_all` when every candidate record
+  is outside the authorized scope.
 - `manifest.source_audit` records requested inputs, missing inputs,
   per-file parse results, extension coverage, skipped file reasons, ZIP member
   counts, skipped ZIP member reasons, and path-safety flags.

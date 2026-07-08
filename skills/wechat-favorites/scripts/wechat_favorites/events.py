@@ -8,7 +8,7 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 from urllib.parse import parse_qs, urlparse
 
 
@@ -38,6 +38,190 @@ WECHAT_FAVORITE_RECOMMENDED_FIELDS = (
     "time",
 )
 TEXT_PREVIEW_MAX_CHARS = 2000
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    terms: List[str] = []
+    for value in values or []:
+        for item in re.split(r"[,，;；|\n]+", str(value)):
+            cleaned = item.strip()
+            if cleaned:
+                terms.append(cleaned)
+    return terms
+
+
+def build_wechat_favorites_scope_policy(
+    *,
+    allow_source_accounts: Optional[Iterable[str]] = None,
+    deny_source_accounts: Optional[Iterable[str]] = None,
+    allow_source_account_types: Optional[Iterable[str]] = None,
+    deny_source_account_types: Optional[Iterable[str]] = None,
+    allow_actions: Optional[Iterable[str]] = None,
+    deny_actions: Optional[Iterable[str]] = None,
+    allow_tags: Optional[Iterable[str]] = None,
+    deny_tags: Optional[Iterable[str]] = None,
+    allow_domains: Optional[Iterable[str]] = None,
+    deny_domains: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_source_accounts": split_policy_terms(allow_source_accounts),
+        "deny_source_accounts": split_policy_terms(deny_source_accounts),
+        "allow_source_account_types": split_policy_terms(allow_source_account_types),
+        "deny_source_account_types": split_policy_terms(deny_source_account_types),
+        "allow_actions": split_policy_terms(allow_actions),
+        "deny_actions": split_policy_terms(deny_actions),
+        "allow_tags": split_policy_terms(allow_tags),
+        "deny_tags": split_policy_terms(deny_tags),
+        "allow_domains": split_policy_terms(allow_domains),
+        "deny_domains": split_policy_terms(deny_domains),
+        "allow_keywords": split_policy_terms(allow_keywords),
+        "deny_keywords": split_policy_terms(deny_keywords),
+        "filtered_record_count": 0,
+        "filter_reason_counts": {},
+        "policy_does_not_assert_investment_relevance": True,
+    }
+    policy["enabled"] = any(
+        policy[key]
+        for key in (
+            "allow_source_accounts",
+            "deny_source_accounts",
+            "allow_source_account_types",
+            "deny_source_account_types",
+            "allow_actions",
+            "deny_actions",
+            "allow_tags",
+            "deny_tags",
+            "allow_domains",
+            "deny_domains",
+            "allow_keywords",
+            "deny_keywords",
+        )
+    )
+    return policy
+
+
+def wechat_favorites_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy or not policy.get("enabled"):
+        return None
+    if policy.get("deny_source_accounts") and policy_hit(policy["deny_source_accounts"], wechat_account_surface(event)):
+        return "source_account_denied"
+    if policy.get("allow_source_accounts") and not policy_hit(policy["allow_source_accounts"], wechat_account_surface(event)):
+        return "source_account_not_allowed"
+    if policy.get("deny_source_account_types") and policy_hit(policy["deny_source_account_types"], wechat_account_type_surface(event)):
+        return "source_account_type_denied"
+    if policy.get("allow_source_account_types") and not policy_hit(policy["allow_source_account_types"], wechat_account_type_surface(event)):
+        return "source_account_type_not_allowed"
+    if policy.get("deny_actions") and policy_hit(policy["deny_actions"], wechat_action_surface(event)):
+        return "action_denied"
+    if policy.get("allow_actions") and not policy_hit(policy["allow_actions"], wechat_action_surface(event)):
+        return "action_not_allowed"
+    if policy.get("deny_tags") and policy_hit(policy["deny_tags"], wechat_tag_surface(event)):
+        return "tag_denied"
+    if policy.get("allow_tags") and not policy_hit(policy["allow_tags"], wechat_tag_surface(event)):
+        return "tag_not_allowed"
+    if policy.get("deny_domains") and policy_hit(policy["deny_domains"], wechat_domain_surface(event)):
+        return "domain_denied"
+    if policy.get("allow_domains") and not policy_hit(policy["allow_domains"], wechat_domain_surface(event)):
+        return "domain_not_allowed"
+    if policy.get("deny_keywords") and policy_hit(policy["deny_keywords"], wechat_keyword_surface(event)):
+        return "keyword_denied"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], wechat_keyword_surface(event)):
+        return "keyword_not_allowed"
+    return None
+
+
+def finalize_wechat_favorites_scope_policy_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
+    policy = audit.get("wechat_favorites_scope_policy") or {}
+    if policy:
+        policy["filter_reason_counts"] = dict(sorted((policy.get("filter_reason_counts") or {}).items()))
+    candidate_count = int(audit.get("candidate_record_count") or 0)
+    emitted_count = int(audit.get("emitted_event_count") or 0)
+    audit["wechat_favorites_scope_policy_filtered_all"] = bool(
+        policy.get("enabled") and candidate_count > 0 and emitted_count == 0
+    )
+    return audit
+
+
+def wechat_account_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    return [data.get("source_account"), raw_ref.get("source_account")]
+
+
+def wechat_account_type_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    return [data.get("source_account_type"), raw_ref.get("source_account_type")]
+
+
+def wechat_action_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    return [data.get("action_type"), data.get("item_type")]
+
+
+def wechat_tag_surface(event: Dict[str, Any]) -> List[Any]:
+    return list((event.get("data") or {}).get("tags") or [])
+
+
+def wechat_domain_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    return [host_for(data.get("url")), host_for(raw_ref.get("url"))]
+
+
+def wechat_keyword_surface(event: Dict[str, Any]) -> List[Any]:
+    data = event.get("data") or {}
+    raw_ref = event.get("raw_ref") or {}
+    surface: List[Any] = [
+        data.get("title"),
+        data.get("source_account"),
+        data.get("url"),
+        data.get("article_id"),
+        data.get("favorite_reason"),
+        data.get("share_target"),
+        data.get("text_preview"),
+        raw_ref.get("path"),
+        raw_ref.get("archive_member"),
+    ]
+    for key in ("tags", "symbols", "engagement"):
+        surface.extend(flatten_policy_surface(data.get(key)))
+    return surface
+
+
+def flatten_policy_surface(value: Any) -> List[Any]:
+    if value in (None, "", [], {}):
+        return []
+    if isinstance(value, dict):
+        surface: List[Any] = []
+        for item in value.values():
+            surface.extend(flatten_policy_surface(item))
+        return surface
+    if isinstance(value, list):
+        surface = []
+        for item in value:
+            surface.extend(flatten_policy_surface(item))
+        return surface
+    return [value]
+
+
+def policy_hit(terms: Sequence[str], surfaces: Iterable[Any]) -> bool:
+    haystacks = [str(surface).lower() for surface in surfaces if surface not in (None, "", [], {})]
+    for term in terms:
+        needle = str(term).lower()
+        if needle and any(needle in haystack for haystack in haystacks):
+            return True
+    return False
+
+
+def host_for(url: Optional[str]) -> Optional[str]:
+    if not url:
+        return None
+    host = urlparse(str(url)).netloc.lower()
+    if "@" in host:
+        host = host.rsplit("@", 1)[-1]
+    return host.split(":", 1)[0] or None
 
 
 def now_iso() -> str:
@@ -162,6 +346,7 @@ def build_manifest(
         if (event.get("data") or {}).get("source_account")
     }
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    scope_policy_filtered_all = bool((collection_audit or {}).get("wechat_favorites_scope_policy_filtered_all"))
     observed_actions = sorted(action for action, count in action_counts.items() if count and action != "unknown")
     observed_expected = [action for action in EXPECTED_WECHAT_ACTIONS if action_counts.get(action)]
     missing_expected = [action for action in EXPECTED_WECHAT_ACTIONS if not action_counts.get(action)]
@@ -202,14 +387,55 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_wechat_favorites_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": wechat_favorites_readiness_status(
+                events,
+                gap_only=gap_only,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_investment_article_favorites": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": wechat_favorites_source_collection_scope(
+                gap_only=gap_only,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
             "action_coverage_status": action_coverage_status(events, missing_expected),
-            "next_action": "Provide authorized WeChat favorites or public-account article exports." if gap_only else "Feed events into wechat-article-favorites lens.",
+            "next_action": wechat_favorites_next_action(
+                gap_only=gap_only,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
     }
+
+
+def wechat_favorites_readiness_status(
+    events: List[Dict[str, Any]],
+    *,
+    gap_only: bool,
+    scope_policy_filtered_all: bool,
+) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only:
+        return "needs_wechat_favorites_input"
+    if not events:
+        return "records_empty"
+    return "events_collected"
+
+
+def wechat_favorites_source_collection_scope(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only:
+        return "none"
+    return "partial_authorized_input"
+
+
+def wechat_favorites_next_action(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden WeChat favorites scope policy or provide authorized article records inside the allowed scope."
+    if gap_only:
+        return "Provide authorized WeChat favorites or public-account article exports."
+    return "Feed events into wechat-article-favorites lens."
 
 
 def action_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:

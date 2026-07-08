@@ -210,7 +210,150 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
 
 
+def test_collect_scope_policy_filters_account_action_tag_domain_and_keyword() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "favorites.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "favorites": [
+                        {
+                            "title": "半导体行业景气跟踪",
+                            "author": "某券商研究",
+                            "url": "https://mp.weixin.qq.com/s/investment",
+                            "action": "收藏",
+                            "tags": ["投资"],
+                            "summary": "讨论估值和风险。",
+                        },
+                        {
+                            "title": "周末买菜清单",
+                            "author": "某券商研究",
+                            "url": "https://mp.weixin.qq.com/s/life",
+                            "action": "收藏",
+                            "tags": ["投资"],
+                        },
+                        {
+                            "title": "半导体观察",
+                            "author": "生活号",
+                            "url": "https://mp.weixin.qq.com/s/life-account",
+                            "action": "收藏",
+                            "tags": ["投资"],
+                        },
+                        {
+                            "title": "估值框架阅读",
+                            "author": "某券商研究",
+                            "url": "https://mp.weixin.qq.com/s/read",
+                            "action": "阅读",
+                            "tags": ["投资"],
+                        },
+                        {
+                            "title": "外部网页收藏",
+                            "author": "某券商研究",
+                            "url": "https://example.com/article",
+                            "action": "收藏",
+                            "tags": ["投资"],
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-source-account",
+                "某券商研究",
+                "--allow-action",
+                "favorite",
+                "--allow-tag",
+                "投资",
+                "--allow-domain",
+                "mp.weixin.qq.com",
+                "--deny-keyword",
+                "买菜",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "wechat-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["title"] == "半导体行业景气跟踪"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        policy = manifest["source_audit"]["wechat_favorites_scope_policy"]
+        assert manifest["source_audit"]["candidate_record_count"] == 5
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert policy["enabled"] is True
+        assert policy["filtered_record_count"] == 4
+        assert policy["filter_reason_counts"] == {
+            "action_not_allowed": 1,
+            "domain_not_allowed": 1,
+            "keyword_denied": 1,
+            "source_account_not_allowed": 1,
+        }
+        assert manifest["source_audit"]["wechat_favorites_scope_policy_filtered_all"] is False
+        assert manifest["source_audit"]["path_results"][0]["scope_policy_filtered_record_count"] == 4
+
+
+def test_collect_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "favorites.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                [
+                    {
+                        "title": "半导体行业景气跟踪",
+                        "author": "某券商研究",
+                        "url": "https://mp.weixin.qq.com/s/investment",
+                        "action": "收藏",
+                        "tags": ["投资"],
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-tag",
+                "不存在的标签",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events_path = out / "lake" / "wechat-favorites" / "events.jsonl"
+        assert events_path.read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["wechat_favorites_scope_policy"]["filter_reason_counts"] == {"tag_not_allowed": 1}
+        assert manifest["source_audit"]["wechat_favorites_scope_policy_filtered_all"] is True
+
+
 if __name__ == "__main__":
     test_collect_json_and_html_events()
     test_collect_missing_input_writes_gap_audit()
+    test_collect_scope_policy_filters_account_action_tag_domain_and_keyword()
+    test_collect_scope_policy_filtered_all_status()
     print("wechat-favorites tests passed.")

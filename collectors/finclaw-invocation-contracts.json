@@ -260,8 +260,8 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Provide authorized WeChat favorites, saved article files, folders, or ZIP packages.",
-      "preflight": "Input is user-selected and does not imply public-account platform-wide scraping.",
+      "user_step": "Provide authorized WeChat favorites, saved article files, folders, or ZIP packages; optionally choose source-account, account-type, action, tag, domain, and keyword allow/deny scope filters.",
+      "preflight": "Input is user-selected; optional scope filters are applied before Lake output and do not imply public-account platform-wide scraping.",
       "failure_state": "needs_authorized_wechat_favorites_export"
     },
     {
