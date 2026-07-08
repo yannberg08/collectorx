@@ -87,9 +87,9 @@
       "authorization_mode": "local-scan-readonly",
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
-      "user_step": "Select an authorized root folder for metadata-only scanning.",
-      "preflight": "Root exists and the user understands file bodies are not read by the generic collector.",
-      "failure_state": "needs_authorized_root"
+      "user_step": "Select an authorized root folder for metadata-only scanning; optionally narrow by extension, path, file name, directory name, or metadata keyword.",
+      "preflight": "Root exists, optional filesystem scope-policy allow/deny rules are explicit when used, and the user understands file bodies are not read by the generic collector.",
+      "failure_state": "needs_authorized_root_or_scope_policy_retained_files"
     },
     {
       "id": "research-documents",

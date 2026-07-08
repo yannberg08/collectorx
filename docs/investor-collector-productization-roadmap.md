@@ -3464,12 +3464,37 @@ Findings:
 - Fixture validation covers partial retention by sender-domain/folder/surface/
   keyword/attachment and filtered-all readiness.
 
+### Wave AU - P0 Filesystem Scope Policy Audit
+
+Status: `completed-baseline`
+
+Validation record:
+
+- `docs/validations/investor-p0-filesystem-scope-policy-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `filesystem-collector` to `0.3.1`.
+- Added extension, path, file-name, directory, and metadata-keyword allow/deny
+  filters to the metadata-only local filesystem collector.
+- Added `source_audit.filesystem_scope_policy` with candidate file count,
+  retained event count, filtered file count, filter reason counts, and
+  filtered-all status.
+- Added `filesystem_boundary_proof.authorization_scope_boundary` so FinClaw can
+  inspect the exact user authorization boundary before filesystem metadata feeds
+  `research-documents`.
+- Added filtered-all readiness: when every candidate file is outside the
+  configured authorization policy, the package marks
+  `collection_readiness.status=scope_policy_filtered_all`.
+- Kept the SoulMirror filesystem boundary unchanged: metadata only, no file
+  content, no whole-disk scan claim, and no investment relevance claim.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, and generic-to-lens evidence policy; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
-| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all readiness, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
+| 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; filesystem metadata scope-policy audit with extension/path/file-name/directory/keyword filters, filtered-all readiness, and filesystem boundary proof; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all readiness, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, email-research sender-domain/folder/mailbox/subject/attachment/email-surface/keyword authorization scope-policy audit, filtered-all readiness, authorization scope boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist local-scan plus import path with standard Lake output, manifest, local-scan provenance, path-level source audit, ZIP provenance, skipped-reason accounting, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all readiness, authorization scope boundary, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun local-store validation, default app path validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
 | 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, copied Chromium/Safari browser-history support with Xueqiu-domain filtering, visit/typed counts, browser transition types, watchlist/activity authorization scope-policy audit, filtered-all readiness, watchlist/activity authorization boundary proof, activity-boundary proof, browser-history boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR/browser-history samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |

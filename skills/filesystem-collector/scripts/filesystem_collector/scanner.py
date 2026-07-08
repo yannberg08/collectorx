@@ -9,7 +9,7 @@ import platform
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple
 
 
 COLLECTOR = "filesystem"
@@ -48,6 +48,18 @@ DEFAULT_IGNORE_DIRS = {
     "Library",
     "Caches",
 }
+FILESYSTEM_SCOPE_POLICY_KEYS = (
+    "allow_extensions",
+    "deny_extensions",
+    "allow_paths",
+    "deny_paths",
+    "allow_file_names",
+    "deny_file_names",
+    "allow_directories",
+    "deny_directories",
+    "allow_keywords",
+    "deny_keywords",
+)
 
 
 def now_iso() -> str:
@@ -79,6 +91,16 @@ def scan_files(
     *,
     extensions: Optional[Set[str]] = None,
     ignore_dirs: Optional[Set[str]] = None,
+    allow_extensions: Optional[Sequence[str]] = None,
+    deny_extensions: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_file_names: Optional[Sequence[str]] = None,
+    deny_file_names: Optional[Sequence[str]] = None,
+    allow_directories: Optional[Sequence[str]] = None,
+    deny_directories: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
     max_size_mb: int = 50,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
@@ -86,6 +108,16 @@ def scan_files(
         roots,
         extensions=extensions,
         ignore_dirs=ignore_dirs,
+        allow_extensions=allow_extensions,
+        deny_extensions=deny_extensions,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_file_names=allow_file_names,
+        deny_file_names=deny_file_names,
+        allow_directories=allow_directories,
+        deny_directories=deny_directories,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
         max_size_mb=max_size_mb,
         limit=limit,
     )
@@ -97,11 +129,36 @@ def scan_files_with_audit(
     *,
     extensions: Optional[Set[str]] = None,
     ignore_dirs: Optional[Set[str]] = None,
+    allow_extensions: Optional[Sequence[str]] = None,
+    deny_extensions: Optional[Sequence[str]] = None,
+    allow_paths: Optional[Sequence[str]] = None,
+    deny_paths: Optional[Sequence[str]] = None,
+    allow_file_names: Optional[Sequence[str]] = None,
+    deny_file_names: Optional[Sequence[str]] = None,
+    allow_directories: Optional[Sequence[str]] = None,
+    deny_directories: Optional[Sequence[str]] = None,
+    allow_keywords: Optional[Sequence[str]] = None,
+    deny_keywords: Optional[Sequence[str]] = None,
     max_size_mb: int = 50,
     limit: Optional[int] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     events: List[Dict[str, Any]] = []
-    allowed = {ext.lower().lstrip(".") for ext in (extensions or DEFAULT_EXTENSIONS)}
+    legacy_allow_extensions = sorted({ext.lower().lstrip(".") for ext in (extensions or set()) if ext})
+    scope_policy = build_filesystem_scope_policy(
+        allow_extensions=[*legacy_allow_extensions, *list(allow_extensions or [])],
+        deny_extensions=deny_extensions,
+        allow_paths=allow_paths,
+        deny_paths=deny_paths,
+        allow_file_names=allow_file_names,
+        deny_file_names=deny_file_names,
+        allow_directories=allow_directories,
+        deny_directories=deny_directories,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
+    allowed = set(DEFAULT_EXTENSIONS)
+    allowed.update(scope_policy.get("allow_extensions", []))
+    allowed.update(scope_policy.get("deny_extensions", []))
     ignored = set(DEFAULT_IGNORE_DIRS)
     if ignore_dirs:
         ignored.update(ignore_dirs)
@@ -134,6 +191,7 @@ def scan_files_with_audit(
         "skipped_directory_count": 0,
         "limit_reached": False,
         "root_results": [],
+        "filesystem_scope_policy": scope_policy,
     }
 
     def finish_root(result: Dict[str, Any]) -> None:
@@ -164,6 +222,16 @@ def scan_files_with_audit(
         skipped_reason_counts[reason] += 1
         skipped_extension_counts[ext] += 1
 
+    def record_scope_filtered_file(result: Dict[str, Any], reason: str, ext: str) -> None:
+        record_skipped_file(result, reason, ext)
+        policy = audit["filesystem_scope_policy"]
+        policy["filtered_file_count"] = int(policy.get("filtered_file_count") or 0) + 1
+        counts = policy.get("filter_reason_counts")
+        if not isinstance(counts, Counter):
+            counts = Counter(counts or {})
+            policy["filter_reason_counts"] = counts
+        counts[reason] += 1
+
     def record_skipped_directory(result: Dict[str, Any], reason: str) -> None:
         audit["skipped_directory_count"] += 1
         result["skipped_directory_count"] += 1
@@ -191,7 +259,16 @@ def scan_files_with_audit(
         if stat.st_size > max_bytes:
             record_skipped_file(result, "over_max_size", ext)
             return True
-        events.append(file_event(path, stat, collected_at=collected_at))
+        policy = audit["filesystem_scope_policy"]
+        policy["candidate_file_count"] = int(policy.get("candidate_file_count") or 0) + 1
+        policy_allowed, policy_match = filesystem_scope_policy_match(path, ext=ext, source_policy=policy)
+        if not policy_allowed:
+            record_scope_filtered_file(result, str(policy_match.get("reason") or "scope_policy_filtered"), ext)
+            return True
+        event = file_event(path, stat, collected_at=collected_at)
+        if policy.get("enabled"):
+            event["data"]["filesystem_scope_policy"] = policy_match
+        events.append(event)
         result["emitted_event_count"] += 1
         emitted_extension_counts[ext] += 1
         return True
@@ -243,11 +320,165 @@ def scan_files_with_audit(
     audit["emitted_extension_counts"] = dict(sorted(emitted_extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    policy = audit["filesystem_scope_policy"]
+    if isinstance(policy.get("filter_reason_counts"), Counter):
+        policy["filter_reason_counts"] = dict(sorted(policy["filter_reason_counts"].items()))
+    policy["retained_event_count"] = len(events)
+    policy["filtered_all"] = bool(policy.get("candidate_file_count")) and int(policy.get("filtered_file_count") or 0) >= int(
+        policy.get("candidate_file_count") or 0
+    )
+    audit["filesystem_scope_policy_filtered_all"] = bool(policy.get("filtered_all"))
     audit["unvisited_root_count_due_limit"] = max(
         0,
         audit["root_count"] - len(audit["root_results"]),
     )
     return events, audit
+
+
+def split_patterns(values: Optional[Sequence[str]]) -> List[str]:
+    out: List[str] = []
+    for value in values or []:
+        for part in str(value).split(","):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return stable_unique(out)
+
+
+def stable_unique(values: Iterable[str]) -> List[str]:
+    seen = set()
+    out: List[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        out.append(value)
+    return out
+
+
+def normalize_extension_terms(values: Optional[Sequence[str]]) -> List[str]:
+    out: List[str] = []
+    for value in split_patterns(values):
+        normalized = value.lower().strip().lstrip(".")
+        if normalized:
+            out.append(normalized)
+    return stable_unique(out)
+
+
+def build_filesystem_scope_policy(
+    *,
+    allow_extensions: Optional[Sequence[str]],
+    deny_extensions: Optional[Sequence[str]],
+    allow_paths: Optional[Sequence[str]],
+    deny_paths: Optional[Sequence[str]],
+    allow_file_names: Optional[Sequence[str]],
+    deny_file_names: Optional[Sequence[str]],
+    allow_directories: Optional[Sequence[str]],
+    deny_directories: Optional[Sequence[str]],
+    allow_keywords: Optional[Sequence[str]],
+    deny_keywords: Optional[Sequence[str]],
+) -> Dict[str, Any]:
+    policy = {
+        "enabled": False,
+        "allow_extensions": normalize_extension_terms(allow_extensions),
+        "deny_extensions": normalize_extension_terms(deny_extensions),
+        "allow_paths": split_patterns(allow_paths),
+        "deny_paths": split_patterns(deny_paths),
+        "allow_file_names": split_patterns(allow_file_names),
+        "deny_file_names": split_patterns(deny_file_names),
+        "allow_directories": split_patterns(allow_directories),
+        "deny_directories": split_patterns(deny_directories),
+        "allow_keywords": split_patterns(allow_keywords),
+        "deny_keywords": split_patterns(deny_keywords),
+        "candidate_file_count": 0,
+        "retained_event_count": 0,
+        "filtered_file_count": 0,
+        "filter_reason_counts": {},
+        "filtered_all": False,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
+        "metadata_only": True,
+    }
+    policy["enabled"] = any(policy.get(key) for key in FILESYSTEM_SCOPE_POLICY_KEYS)
+    return policy
+
+
+def filesystem_scope_policy_match(path: Path, *, ext: str, source_policy: Dict[str, Any]) -> tuple[bool, Dict[str, Any]]:
+    if not source_policy.get("enabled"):
+        return True, {"enabled": False}
+
+    path_surface = str(path).lower()
+    file_name_surface = path.name.lower()
+    directory_surface = "\n".join(str(part).lower() for part in path.parent.parts)
+    keyword_surface = "\n".join([path_surface, file_name_surface, ext.lower()])
+
+    deny_extension = first_exact_hit(source_policy.get("deny_extensions", []), ext)
+    if deny_extension:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_extension", "matched_pattern": deny_extension}
+    allow_extensions = source_policy.get("allow_extensions", [])
+    allow_extension = first_exact_hit(allow_extensions, ext)
+    if allow_extensions and not allow_extension:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_extension_not_matched"}
+
+    deny_path = first_pattern_hit(source_policy.get("deny_paths", []), path_surface)
+    if deny_path:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_path", "matched_pattern": deny_path}
+    allow_paths = source_policy.get("allow_paths", [])
+    allow_path = first_pattern_hit(allow_paths, path_surface)
+    if allow_paths and not allow_path:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_path_not_matched"}
+
+    deny_file_name = first_pattern_hit(source_policy.get("deny_file_names", []), file_name_surface)
+    if deny_file_name:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_file_name", "matched_pattern": deny_file_name}
+    allow_file_names = source_policy.get("allow_file_names", [])
+    allow_file_name = first_pattern_hit(allow_file_names, file_name_surface)
+    if allow_file_names and not allow_file_name:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_file_name_not_matched"}
+
+    deny_directory = first_pattern_hit(source_policy.get("deny_directories", []), directory_surface)
+    if deny_directory:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_directory", "matched_pattern": deny_directory}
+    allow_directories = source_policy.get("allow_directories", [])
+    allow_directory = first_pattern_hit(allow_directories, directory_surface)
+    if allow_directories and not allow_directory:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_directory_not_matched"}
+
+    deny_keyword = first_pattern_hit(source_policy.get("deny_keywords", []), keyword_surface)
+    if deny_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "deny_keyword", "matched_pattern": deny_keyword}
+    allow_keywords = source_policy.get("allow_keywords", [])
+    allow_keyword = first_pattern_hit(allow_keywords, keyword_surface)
+    if allow_keywords and not allow_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "allow_keyword_not_matched"}
+
+    return True, {
+        "enabled": True,
+        "allowed": True,
+        "matched_allow_extension": allow_extension,
+        "matched_allow_path": allow_path,
+        "matched_allow_file_name": allow_file_name,
+        "matched_allow_directory": allow_directory,
+        "matched_allow_keyword": allow_keyword,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
+        "metadata_only": True,
+    }
+
+
+def first_exact_hit(patterns: Iterable[str], value: str) -> Optional[str]:
+    normalized = value.lower().strip().lstrip(".")
+    for pattern in patterns:
+        if pattern.lower().strip().lstrip(".") == normalized:
+            return pattern
+    return None
+
+
+def first_pattern_hit(patterns: Iterable[str], surface: str) -> Optional[str]:
+    for pattern in patterns:
+        if pattern.lower() in surface:
+            return pattern
+    return None
 
 
 def iter_files(roots: Iterable[Path], ignored: Set[str]) -> Iterator[Path]:

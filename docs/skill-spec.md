@@ -70,7 +70,7 @@ skill-name/
 | collaboration-exports | 7+ | 钉钉/企业微信通用协作导出采集器 baseline；支持授权 JSON/CSV/HTML/文本/ZIP、消息/联系人/文件/会议指针、来源平台/记录类型/会话/发送人/参会人/关键词 scope-policy 审计、ZIP 跳过审计和逐文件解析 manifest，仍需真实账号/API 验证 |
 | wechat-favorites | 8+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、公众号/来源类型/动作/标签/域名/关键词 scope-policy 审计、动作覆盖、行为字段、文章 ID、标的线索、逐输入来源审计、跳过原因和凭证字段过滤；`wechat-article-favorites` lens 已汇总文章面谱、动作、来源类型、阅读/收藏/分享行为边界和文章边界证明，仍需真实微信收藏/公众号阅读库验证 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |
-| filesystem-collector | 8+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界；manifest 记录授权根、扩展覆盖、跳过原因和逐根目录结果，仍保持 metadata-only |
+| filesystem-collector | 8+ | 本地文件元数据开源实现，对齐 SoulMirror driver=filesystem 边界；manifest 记录授权根、扩展/路径/文件名/目录/关键词 scope-policy 审计、filtered-all 状态、文件边界证明、扩展覆盖、跳过原因和逐根目录结果，仍保持 metadata-only |
 | ths-portfolio | 9 | 草稿实现，CSV parser 已有基础测试 |
 | eastmoney-portfolio | 9+ | macOS 本机与授权完整交易事实本地 Lake Beta，强交易表需账户解锁真机验证 |
 | xueqiu-watchlist | 9+ | 雪球关注池垂直采集器；授权导入、ZIP、来源审计、symbol/market/group/industry/tag/keyword scope-policy 审计、filtered-all readiness、字段覆盖、关注池边界证明和 7/20 Wiki 证据包已测试，仍需真实账号/分页验证 |

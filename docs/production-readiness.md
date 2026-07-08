@@ -16,8 +16,41 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`email` now supports explicit email authorization scope filters before IMAP,
-local-scan, or local-import messages enter the Lake:
+`filesystem` now supports explicit metadata authorization scope filters before
+local file metadata enters the Lake:
+
+- `filesystem_query.py collect` accepts extension, path, file-name, directory,
+  and metadata-keyword allow/deny filters.
+- Manifest `source_audit.filesystem_scope_policy` records configured filters,
+  candidate file count, retained event count, filtered file count, reason
+  counts, and whether every candidate was excluded by policy.
+- If every candidate file is filtered by policy, readiness reports
+  `scope_policy_filtered_all` instead of pretending the authorized root was
+  empty.
+- `filesystem_boundary_proof.authorization_scope_boundary` gives FinClaw a
+  stable place to inspect the exact metadata authorization boundary before
+  filesystem events feed `research-documents`.
+- The generic filesystem collector remains metadata-only: no file body reading,
+  no whole-disk claim, and no investment relevance claim.
+
+The prior completed wave: `email-research` now supports explicit mailbox
+research authorization scope filters before generic email Lake events become
+Investor Wiki research evidence:
+
+- `investor_sources.py collect --source email-research` accepts sender,
+  sender-domain, folder, mailbox, subject, attachment filename, email-surface,
+  and keyword allow/deny filters.
+- Manifest `collection_audit.email_research_scope_policy` records configured
+  filters, filtered candidate count, reason counts, and filtered-all state.
+- If every candidate email-research record is filtered by policy, readiness
+  reports `scope_policy_filtered_all` and the lens emits an explicit
+  `email_research_scope_policy_filtered_all` gap.
+- `email_research_boundary_proof.authorization_scope_boundary` gives FinClaw a
+  stable place to inspect the exact mailbox-research authorization boundary
+  before evidence enters the Investor Wiki.
+
+The prior completed wave: `email` now supports explicit email authorization
+scope filters before IMAP, local-scan, or local-import messages enter the Lake:
 
 - `email_api.py collect` and `email_api.py import` accept mailbox, folder,
   sender, sender-domain, recipient, subject, attachment-name, and keyword

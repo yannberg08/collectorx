@@ -56,6 +56,11 @@ def test_collect_metadata_only() -> None:
         assert manifest["collection_readiness"]["content_read"] is False
         assert manifest["file_surface_summary"]["metadata_event_count"] == 1
         assert manifest["file_surface_summary"]["content_read_event_count"] == 0
+        proof = manifest["filesystem_boundary_proof"]
+        assert proof["metadata_only"] is True
+        assert proof["file_content_collected"] is False
+        assert proof["whole_disk_scan_claimed"] is False
+        assert proof["investment_relevance_claimed"] is False
         assert manifest["extension_counts"] == {"md": 1}
         audit = manifest["source_audit"]
         assert audit["metadata_only"] is True
@@ -78,6 +83,108 @@ def test_collect_metadata_only() -> None:
         assert audit["root_results"][0]["status"] == "events_collected"
         assert audit["root_results"][0]["emitted_event_count"] == 1
         assert set(manifest["platform_default_root_plan"]) == {"macos", "windows", "linux"}
+
+
+def test_filesystem_scope_policy_filters_metadata_only() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        research = root / "research"
+        personal = root / "personal"
+        research.mkdir()
+        personal.mkdir()
+        (research / "半导体估值.xlsx").write_text("not read", encoding="utf-8")
+        (personal / "半导体估值.xlsx").write_text("not read", encoding="utf-8")
+        (research / "私人半导体估值.xlsx").write_text("not read", encoding="utf-8")
+        (research / "半导体复盘.pdf").write_text("not read", encoding="utf-8")
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--root",
+                str(root),
+                "--out-dir",
+                str(out),
+                "--allow-extension",
+                "xlsx",
+                "--allow-path",
+                "research",
+                "--allow-keyword",
+                "半导体",
+                "--deny-keyword",
+                "私人",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        lines = (out / "lake" / "filesystem" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        assert len(lines) == 1
+        event = json.loads(lines[0])
+        assert event["data"]["name"] == "半导体估值.xlsx"
+        assert event["data"]["metadata_only"] is True
+        assert event["data"]["content_read"] is False
+        policy_match = event["data"]["filesystem_scope_policy"]
+        assert policy_match["allowed"] is True
+        assert policy_match["matched_allow_extension"] == "xlsx"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        audit = manifest["source_audit"]
+        policy = audit["filesystem_scope_policy"]
+        assert policy["enabled"] is True
+        assert policy["allow_extensions"] == ["xlsx"]
+        assert policy["allow_paths"] == ["research"]
+        assert policy["allow_keywords"] == ["半导体"]
+        assert policy["deny_keywords"] == ["私人"]
+        assert policy["candidate_file_count"] == 4
+        assert policy["retained_event_count"] == 1
+        assert policy["filtered_file_count"] == 3
+        assert policy["filtered_all"] is False
+        assert policy["filter_reason_counts"] == {
+            "allow_extension_not_matched": 1,
+            "allow_path_not_matched": 1,
+            "deny_keyword": 1,
+        }
+        assert audit["filesystem_scope_policy_filtered_all"] is False
+        proof = manifest["filesystem_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["filtered_file_count"] == 3
+        assert proof["authorization_scope_boundary"]["policy_does_not_assert_investment_relevance"] is True
+
+
+def test_filesystem_scope_policy_filtered_all_status() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "research.md").write_text("not read", encoding="utf-8")
+        out = root / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--root",
+                str(root),
+                "--out-dir",
+                str(out),
+                "--allow-file-name",
+                "估值",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        assert (out / "lake" / "filesystem" / "events.jsonl").read_text(encoding="utf-8") == ""
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["filesystem_scope_policy_filtered_all"] is True
+        policy = manifest["source_audit"]["filesystem_scope_policy"]
+        assert policy["candidate_file_count"] == 1
+        assert policy["filtered_file_count"] == 1
+        assert policy["filtered_all"] is True
+        assert policy["filter_reason_counts"] == {"allow_file_name_not_matched": 1}
+        assert manifest["filesystem_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
 
 
 def test_collect_missing_root_has_source_audit() -> None:
@@ -142,6 +249,8 @@ def test_default_roots_cross_platform_plan() -> None:
 
 if __name__ == "__main__":
     test_collect_metadata_only()
+    test_filesystem_scope_policy_filters_metadata_only()
+    test_filesystem_scope_policy_filtered_all_status()
     test_collect_missing_root_has_source_audit()
     test_default_roots_cross_platform_plan()
     print("filesystem-collector tests passed.")

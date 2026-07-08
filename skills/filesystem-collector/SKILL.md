@@ -29,6 +29,10 @@ python <SKILL_DIR>/scripts/filesystem_query.py collect \
 
 python <SKILL_DIR>/scripts/filesystem_query.py collect \
   --root ~/Documents/research \
+  --allow-extension pdf \
+  --allow-extension xlsx \
+  --allow-path research \
+  --deny-keyword private \
   --event-export ~/Desktop/filesystem-events.jsonl
 ```
 
@@ -47,6 +51,13 @@ metadata-only、用户授权根目录、正文不读取。
 
 `manifest.source_audit` 会记录授权根目录是否存在、扫描文件数、产出事件数、
 跳过文件/目录数、扩展名覆盖、跳过原因、大小上限、忽略目录和逐根目录结果。
+`manifest.source_audit.filesystem_scope_policy` 会记录可选的扩展名、路径、
+文件名、目录名和元数据关键词 allow/deny 范围；这只是用户授权边界，
+不代表投资相关性判断。
+
+`manifest.filesystem_boundary_proof` 会把授权根、metadata-only 状态、
+跳过统计和授权范围边界汇总给 FinClaw。该证明明确保持：
+不读正文、不声明全盘扫描、不直接判断投资结论。
 这让 FinClaw 能判断本次本地文件采集是否只是“没有文件”，还是因为目录缺失、
 扩展名不支持、文件过大、隐藏文件或缓存目录被跳过。
 

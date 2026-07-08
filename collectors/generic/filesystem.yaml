@@ -19,6 +19,9 @@ scope:
     - source_audit_manifest
     - skipped_reason_counts
     - root_results
+    - filesystem_scope_policy
+    - scope_policy_filtered_all
+    - filesystem_boundary_proof
   excludes:
     - file_content_by_default
     - whole_disk_scan
@@ -36,4 +39,6 @@ description: |
   默认只采用户授权目录中的文档元数据，不读正文。投资分身需要的研报、
   财报、PDF、Excel、估值表，由 research-documents lens 从 filesystem lake 中筛选。
   manifest.source_audit 会记录授权根、扩展名覆盖、跳过原因和逐根目录结果，
-  便于 FinClaw 判断本次本地文件材料采集覆盖面。
+  便于 FinClaw 判断本次本地文件材料采集覆盖面。可选 filesystem_scope_policy
+  支持按扩展名、路径、文件名、目录名和元数据关键词收窄用户授权范围；
+  filesystem_boundary_proof 汇总 metadata-only、非全盘扫描和授权边界证明。
