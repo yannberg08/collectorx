@@ -16,7 +16,27 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw now has a catalog helper readiness doctor, runbook, compact batch
+`ths-watchlist` now has an authorized local-scan path in addition to export
+imports:
+
+- `skills/ths-watchlist/scripts/ths_watchlist.py collect --local-scan` can scan
+  a user-authorized Tonghuashun root for likely watchlist files.
+- `--platform auto|mac|windows|linux|generic`, `--container-root`, and
+  `--probe-export` give FinClaw a product-safe preflight and execution path.
+- The scan limits itself to likely watchlist filenames and supported local
+  formats, then still applies normal symbol filtering before emitting events.
+- Manifest `collection_audit` records local-scan platform, roots, candidate
+  files, candidate-selection rules, and local-scan event counts.
+- `ths_watchlist_boundary_proof.local_scan_boundary` keeps the collector inside
+  the attention-universe role and explicitly avoids holdings, executions,
+  orders, fund flows, credentials, cookies, tokens, and sessions.
+- The FinClaw catalog and invocation contract now prefer an authorized local
+  scan root, with `--input` exports remaining as a fallback path.
+- This reduces manual export dependence for a P0 source, but it does not claim
+  real Tonghuashun local-store validation or complete attention-universe
+  coverage until real device samples are tested.
+
+The prior completed wave: FinClaw now has a catalog helper readiness doctor, runbook, compact batch
 manifest, and dry-run-first batch runner for product-side discovery and
 invocation planning:
 
@@ -710,7 +730,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- |
 | `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; Windows/Linux are code-level simulations or fallback paths |
 | `ths-portfolio` | `deep-beta`; strong local package and GUI snapshot design exists, but needs broader real-device validation to claim production |
-| `ths-watchlist` | `baseline+audit`; authorized local export/package collector for same-channel watchlist/attention-universe evidence with path-level source audit, ZIP provenance, field coverage, ths_watchlist_boundary_proof, and standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
+| `ths-watchlist` | `baseline+audit`; authorized local-scan plus export/package collector for same-channel watchlist/attention-universe evidence with local-scan provenance, path-level source audit, ZIP provenance, field coverage, ths_watchlist_boundary_proof, and standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
 | `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow plus standard package output, manifest/summary, field/filter audit, gap packages, and fixture package validation exist; current machine still has LLDB/passphrase capture limitation for real encrypted NT messages |
 
 ## Product Rule

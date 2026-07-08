@@ -165,7 +165,88 @@ def test_gap_event() -> None:
         assert manifest["ths_watchlist_boundary_proof"]["proof_level"] == "no_authorized_ths_watchlist_input"
 
 
+def test_local_scan_discovers_watchlist_candidates() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        local_root = root / "AppData" / "Roaming" / "10jqka" / "users" / "13800138000"
+        local_root.mkdir(parents=True)
+        (local_root / "自选股.csv").write_text(
+            "代码,名称,分组\n600036,招商银行,银行观察\n",
+            encoding="utf-8",
+        )
+        (local_root / "watchlist-extra.json").write_text(
+            json.dumps({"watchlist": [{"code": "300760", "name": "迈瑞医疗", "group": "医疗器械"}]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        (local_root / "ordinary.csv").write_text("代码,名称\n600000,浦发银行\n", encoding="utf-8")
+        (local_root / "watchlist-secret.cookie").write_text("cookie=must-not-read", encoding="utf-8")
+        out = root / "out"
+        probe = root / "probe.json"
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--local-scan",
+                "--platform",
+                "windows",
+                "--container-root",
+                str(local_root),
+                "--probe-export",
+                str(probe),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = read_events(out)
+        assert len(events) == 2
+        assert {event["data"]["symbol"] for event in events} == {"600036", "300760"}
+        assert all(event["source"] == "同花顺自选股用户授权本机扫描" for event in events)
+        assert all(event["data"]["local_scan"] is True for event in events)
+        assert all(event["data"]["source_platform"] == "windows" for event in events)
+        assert all(event["raw_ref"]["local_scan"] is True for event in events)
+        assert all(event["raw_ref"]["source_platform"] == "windows" for event in events)
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "13800138000" not in serialized
+        assert "must-not-read" not in serialized
+        assert "ordinary.csv" not in serialized
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["local_scan_event_count"] == 2
+        assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input_or_local_scan"
+        audit = manifest["collection_audit"]
+        assert audit["source_type"] == "authorized_local_ths_watchlist_export_or_local_scan"
+        assert audit["input_count"] == 0
+        assert audit["resolved_input_file_count"] == 2
+        assert audit["local_scan_requested"] is True
+        assert audit["local_scan_platform"]["resolved"] == "windows"
+        assert audit["local_scan_candidate_file_count"] == 2
+        assert audit["local_scan_event_count"] == 2
+        assert all("13800138000" not in path for path in audit["local_scan_candidate_files"])
+        assert "13800138000" not in json.dumps(manifest, ensure_ascii=False)
+        proof = manifest["ths_watchlist_boundary_proof"]
+        assert proof["proof_level"] == "authorized_ths_local_scan_partial"
+        assert proof["local_scan_boundary"]["local_scan_event_count"] == 2
+        assert proof["local_scan_boundary"]["credentials_read"] is False
+        assert proof["strong_trade_boundary"]["holdings_collected"] is False
+
+        probe_payload = json.loads(probe.read_text(encoding="utf-8"))
+        assert probe_payload["probe_type"] == "ths_watchlist_local_scan"
+        assert probe_payload["platform"]["resolved"] == "windows"
+        assert probe_payload["watchlist_candidates"]["file_count"] == 2
+        assert probe_payload["privacy_policy"]["credentials"] == "not_read"
+        assert "13800138000" not in json.dumps(probe_payload, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     test_collect_ths_watchlist_exports()
     test_gap_event()
+    test_local_scan_discovers_watchlist_candidates()
     print("ths-watchlist tests passed.")

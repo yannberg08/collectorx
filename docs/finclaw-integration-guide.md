@@ -93,7 +93,7 @@ python3 tools/run_finclaw_batch.py \
   --out-dir-root /path/to/run \
   --json
 python3 tools/finclaw_catalog.py plan ths-watchlist \
-  --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
+  --set authorized-ths-watchlist-root=/path/to/tonghuashun/root \
   --out-dir /path/to/out \
   --json \
   --require-ready
@@ -288,21 +288,23 @@ Preconditions:
 
 ```bash
 python3 skills/ths-watchlist/scripts/ths_watchlist.py collect \
-  --input <authorized-ths-watchlist-export-or-folder> \
+  --local-scan \
+  --container-root <authorized-ths-watchlist-root> \
   --out-dir <out-dir>
 ```
 
 Current status:
 
-- Converts authorized Tonghuashun watchlist exports into `ths-watchlist`
-  `watchlist` events.
+- Converts authorized Tonghuashun local watchlist files or exports into
+  `ths-watchlist` `watchlist` events.
 - Supports CSV/TSV, JSON/JSONL/NDJSON, XLSX/XLSM, HTML, Markdown, TXT, and ZIP
-  packages.
+  packages through `--input`, and local discovery through `--local-scan`.
 - Captures symbol, name, market, group, industry, tags, note/reason, and
   added time when present.
 - `manifest.collection_audit` records requested inputs, missing inputs,
-  resolved files, skipped files, skipped reasons, path-level parse results,
-  ZIP member provenance, unsafe ZIP member skips, and limit truncation.
+  resolved files, local-scan platform/root/candidate files, skipped files,
+  skipped reasons, path-level parse results, ZIP member provenance, unsafe ZIP
+  member skips, and limit truncation.
 - `manifest.field_coverage` and `manifest.ths_watchlist_boundary_proof` tell
   FinClaw what watchlist fields are present and explicitly keep holdings,
   executions, orders, fund flows, and complete attention-universe claims false.

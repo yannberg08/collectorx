@@ -54,7 +54,7 @@ def test_plan_replaces_placeholders() -> None:
         "--out-dir",
         "/tmp/collectorx-out",
         "--set",
-        "authorized-ths-watchlist-export=/tmp/watch.csv",
+        "authorized-ths-watchlist-root=/tmp/ths-root",
         "--json",
     )
     assert plan["ready_to_run"] is True
@@ -62,7 +62,7 @@ def test_plan_replaces_placeholders() -> None:
     assert plan["blocked_reason"] is None
     assert plan["missing_placeholders"] == []
     assert "<out-dir>" not in plan["command"]
-    assert "<authorized-ths-watchlist-export>" not in plan["command"]
+    assert "<authorized-ths-watchlist-root>" not in plan["command"]
     assert "skills/ths-watchlist/scripts/ths_watchlist.py" in plan["command"]
     assert plan["argv"][:3] == ["python3", "skills/ths-watchlist/scripts/ths_watchlist.py", "collect"]
     assert plan["argv"][-1] == "/tmp/collectorx-out"
@@ -88,12 +88,12 @@ def test_plan_argv_preserves_paths_with_spaces_without_shell_quotes() -> None:
         "--out-dir",
         "/tmp/collectorx out",
         "--set",
-        "authorized-ths-watchlist-export=/tmp/watch list.csv",
+        "authorized-ths-watchlist-root=/tmp/ths root",
         "--json",
     )
     assert plan["ready_to_run"] is True
-    assert "'/tmp/watch list.csv'" in plan["command"]
-    assert plan["argv"][plan["argv"].index("--input") + 1] == "/tmp/watch list.csv"
+    assert "'/tmp/ths root'" in plan["command"]
+    assert plan["argv"][plan["argv"].index("--container-root") + 1] == "/tmp/ths root"
     assert plan["argv"][plan["argv"].index("--out-dir") + 1] == "/tmp/collectorx out"
 
 
@@ -110,8 +110,8 @@ def test_plan_reports_missing_placeholders_and_require_ready_fails() -> None:
     plan = json.loads(proc.stdout)
     assert plan["ready_to_run"] is False
     assert plan["next_action"] == "fill_placeholders"
-    assert plan["blocked_reason"] == "missing_placeholders:authorized-ths-watchlist-export"
-    assert plan["missing_placeholders"] == ["authorized-ths-watchlist-export"]
+    assert plan["blocked_reason"] == "missing_placeholders:authorized-ths-watchlist-root"
+    assert plan["missing_placeholders"] == ["authorized-ths-watchlist-root"]
     assert plan["package_validation"]["ready"] is True
 
 
@@ -122,7 +122,7 @@ def test_require_ready_allows_ready_command_plan() -> None:
         "--out-dir",
         "/tmp/collectorx-out",
         "--set",
-        "authorized-ths-watchlist-export=/tmp/watch.csv",
+        "authorized-ths-watchlist-root=/tmp/ths-root",
         "--json",
         "--require-ready",
     )
@@ -201,7 +201,7 @@ def test_doctor_reports_batch_readiness_summary() -> None:
     assert email_validation["require_evidence"] is False
     assert "--require-evidence" not in email_validation["argv"]
     assert by_id["ths-watchlist"]["next_action"] == "fill_placeholders"
-    assert by_id["ths-watchlist"]["missing_placeholders"] == ["authorized-ths-watchlist-export"]
+    assert by_id["ths-watchlist"]["missing_placeholders"] == ["authorized-ths-watchlist-root"]
     assert by_id["wechat-investment-dialogue"]["next_action"] == "wait_for_upstream_lake"
     assert by_id["wechat-investment-dialogue"]["missing_placeholders"] == ["wechat-events-jsonl"]
     wechat_lens_validation = by_id["wechat-investment-dialogue"]["package_validation"]

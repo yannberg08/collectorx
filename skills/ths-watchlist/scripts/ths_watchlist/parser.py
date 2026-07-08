@@ -51,6 +51,35 @@ SUPPORTED_EXTENSIONS = {
 }
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
+SUPPORTED_LOCAL_SCAN_PLATFORMS = {"auto", "mac", "windows", "linux", "generic"}
+DEFAULT_MAC_SCAN_ROOTS = (
+    Path.home() / "Library" / "Containers" / "cn.com.10jqka.macstockPro" / "Data",
+    Path.home() / "Library" / "Application Support" / "同花顺",
+    Path.home() / "Library" / "Application Support" / "10jqka",
+)
+DEFAULT_WINDOWS_SCAN_ROOTS = (
+    Path.home() / "AppData" / "Roaming" / "10jqka",
+    Path.home() / "AppData" / "Local" / "10jqka",
+    Path.home() / "Documents" / "同花顺",
+)
+DEFAULT_LINUX_SCAN_ROOTS = (
+    Path.home() / ".config" / "10jqka",
+    Path.home() / ".local" / "share" / "10jqka",
+    Path.home() / "Documents" / "同花顺",
+)
+LOCAL_SCAN_FILENAME_HINTS = (
+    "自选",
+    "自选股",
+    "watchlist",
+    "watch_list",
+    "zixuan",
+    "zxg",
+    "my_stock",
+    "mystock",
+    "stockblock",
+    "portfolio",
+)
+LOCAL_SCAN_MAX_FILES = 20000
 INVESTOR_WIKI_SUBDIMENSION_RULES = {
     "inv-market-view": {
         "support_level": "weak",
@@ -110,14 +139,31 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    local_scan: bool = False,
+    platform: str = "auto",
+    container_root: Optional[str] = None,
 ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
-    input_resolution = resolve_input_paths(input_list)
+    local_scan_paths = find_local_watchlist_files(container_root=container_root, platform=platform) if local_scan else []
+    local_scan_report = build_local_scan_report(
+        platform=platform,
+        container_root=container_root,
+        files=local_scan_paths,
+    ) if local_scan else None
+    local_scan_meta = {
+        path_key(path): {
+            "local_scan": True,
+            "source_platform": (local_scan_report or {}).get("platform", {}).get("resolved"),
+            "source_path_label": local_file_label(path),
+        }
+        for path in local_scan_paths
+    }
+    input_resolution = resolve_input_paths([*input_list, *(str(path) for path in local_scan_paths)])
     paths = input_resolution["paths"]
     audit = {
-        "source_type": "authorized_local_ths_watchlist_export",
+        "source_type": "authorized_local_ths_watchlist_export_or_local_scan" if local_scan else "authorized_local_ths_watchlist_export",
         "input_count": len(input_list),
-        "requested_inputs": input_resolution["requested_inputs"],
+        "requested_inputs": requested_input_labels(input_list, local_scan_paths),
         "resolved_input_file_count": len(paths),
         "input_missing_count": input_resolution["input_missing_count"],
         "skipped_file_count": input_resolution["skipped_file_count"],
@@ -138,6 +184,13 @@ def collect_from_inputs_with_audit(
         "limit_reached": False,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "archive_member_supported_extensions": sorted(ARCHIVE_MEMBER_EXTENSIONS),
+        "local_scan_requested": local_scan,
+        "local_scan_platform": (local_scan_report or {}).get("platform"),
+        "local_scan_roots": (local_scan_report or {}).get("scan_roots", []),
+        "local_scan_candidate_file_count": len(local_scan_paths),
+        "local_scan_candidate_files": [local_file_label(path) for path in local_scan_paths],
+        "local_scan_candidate_selection": (local_scan_report or {}).get("candidate_selection", {}),
+        "local_scan_event_count": 0,
         "real_account_adapter_used": False,
         "broker_trade_source": False,
         "path_results": list(input_resolution["path_results"]),
@@ -154,9 +207,10 @@ def collect_from_inputs_with_audit(
             audit["limit_reached"] = True
             break
         extension = path.suffix.lower() or "<none>"
+        source_meta = local_scan_meta.get(path_key(path))
         increment_counter(audit, "extension_counts", extension)
         path_result = {
-            "path": str(path),
+            "path": source_meta.get("source_path_label") if source_meta else str(path),
             "extension": extension,
             "parser": parser_name_for_path(path),
             "status": "parsed",
@@ -180,8 +234,11 @@ def collect_from_inputs_with_audit(
                 path_result["filtered_record_count"] += 1
                 audit["filtered_record_count"] += 1
                 continue
-            events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+            annotated_record = annotate_local_scan_record(record, path=path, source_meta=source_meta)
+            events.append(record_to_event(annotated_record, path=path, row=row, collected_at=collected_at))
             path_result["emitted_event_count"] += 1
+            if source_meta:
+                audit["local_scan_event_count"] += 1
             if limit is not None and len(events) >= limit:
                 audit["limit_reached"] = True
                 audit["emitted_event_count"] = len(events[:limit])
@@ -192,6 +249,131 @@ def collect_from_inputs_with_audit(
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
+
+
+def resolve_local_scan_platform(platform: str = "auto") -> str:
+    if platform not in SUPPORTED_LOCAL_SCAN_PLATFORMS:
+        raise ValueError(f"Unsupported Tonghuashun watchlist scan platform: {platform}")
+    if platform != "auto":
+        return platform
+    if sys.platform == "darwin":
+        return "mac"
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    return "generic"
+
+
+def local_scan_roots(container_root: Optional[str] = None, *, platform: str = "auto") -> List[Path]:
+    if container_root:
+        return [Path(container_root).expanduser()]
+    resolved = resolve_local_scan_platform(platform)
+    if resolved == "mac":
+        return list(DEFAULT_MAC_SCAN_ROOTS)
+    if resolved == "windows":
+        return list(DEFAULT_WINDOWS_SCAN_ROOTS)
+    if resolved == "linux":
+        return list(DEFAULT_LINUX_SCAN_ROOTS)
+    return []
+
+
+def find_local_watchlist_files(
+    container_root: Optional[str] = None,
+    *,
+    platform: str = "auto",
+) -> List[Path]:
+    """Find likely Tonghuashun watchlist files under user-authorized local roots."""
+    found: List[Path] = []
+    for root in local_scan_roots(container_root, platform=platform):
+        if not root.exists():
+            continue
+        scanned = 0
+        try:
+            iterator = root.rglob("*") if root.is_dir() else iter([root])
+            for path in iterator:
+                if not path.is_file():
+                    continue
+                scanned += 1
+                if scanned > LOCAL_SCAN_MAX_FILES:
+                    break
+                if is_local_watchlist_candidate(path):
+                    found.append(path)
+        except OSError:
+            continue
+    return _dedupe_paths(found)
+
+
+def build_local_scan_report(
+    *,
+    platform: str = "auto",
+    container_root: Optional[str] = None,
+    files: Optional[Iterable[Path]] = None,
+) -> Dict[str, Any]:
+    resolved = resolve_local_scan_platform(platform)
+    file_list = _dedupe_paths(files if files is not None else find_local_watchlist_files(container_root=container_root, platform=platform))
+    roots = local_scan_roots(container_root, platform=platform)
+    return {
+        "probe_type": "ths_watchlist_local_scan",
+        "platform": {
+            "requested": platform,
+            "resolved": resolved,
+            "structure_status": (
+                "verified_on_current_mac"
+                if resolved == "mac" and sys.platform == "darwin"
+                else "candidate_rules_need_real_machine_verification"
+            ),
+        },
+        "scan_roots": [safe_path_label(root) for root in roots],
+        "watchlist_candidates": {
+            "file_count": len(file_list),
+            "files": [local_file_label(path) for path in file_list],
+            "status": "available" if file_list else "not_found",
+        },
+        "candidate_selection": {
+            "filename_hints": list(LOCAL_SCAN_FILENAME_HINTS),
+            "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
+            "max_scan_files_per_root": LOCAL_SCAN_MAX_FILES,
+        },
+        "privacy_policy": {
+            "credentials": "not_read",
+            "cookies_tokens_sessions": "not_read",
+            "full_account_ids_in_paths": "masked_in_probe_and_local_scan_refs",
+            "broker_trade_data": "not_collected_by_this_collector",
+        },
+    }
+
+
+def is_local_watchlist_candidate(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if path.name.startswith(".") or suffix not in SUPPORTED_EXTENSIONS:
+        return False
+    text = str(path).lower()
+    return any(hint.lower() in text for hint in LOCAL_SCAN_FILENAME_HINTS)
+
+
+def annotate_local_scan_record(
+    record: Dict[str, Any],
+    *,
+    path: Path,
+    source_meta: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    if not source_meta:
+        return record
+    annotated = dict(record)
+    annotated["_collectorx_local_scan"] = True
+    annotated["_collectorx_source_platform"] = source_meta.get("source_platform")
+    annotated["_collectorx_source_path_label"] = source_meta.get("source_path_label") or local_file_label(path)
+    raw_ref = dict(annotated.get("_collectorx_raw_ref") or {})
+    raw_ref["path"] = str(raw_ref.get("path") or annotated["_collectorx_source_path_label"])
+    raw_ref["path"] = raw_ref["path"].replace(str(path), annotated["_collectorx_source_path_label"])
+    if "archive" in raw_ref:
+        raw_ref["archive"] = str(raw_ref["archive"]).replace(str(path), annotated["_collectorx_source_path_label"])
+    raw_ref["local_scan"] = True
+    raw_ref["source_platform"] = annotated["_collectorx_source_platform"]
+    raw_ref["source_path_label"] = annotated["_collectorx_source_path_label"]
+    annotated["_collectorx_raw_ref"] = raw_ref
+    return annotated
 
 
 def resolve_input_paths(inputs: Iterable[str]) -> Dict[str, Any]:
@@ -235,6 +417,10 @@ def resolve_input_paths(inputs: Iterable[str]) -> Dict[str, Any]:
         "skipped_extension_counts": skipped_extension_counts,
         "path_results": path_results,
     }
+
+
+def requested_input_labels(raw_inputs: Iterable[str], local_scan_paths: Iterable[Path]) -> List[str]:
+    return [str(Path(raw).expanduser()) for raw in raw_inputs] + [local_file_label(path) for path in local_scan_paths]
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -424,6 +610,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     name = first(record, ["name", "stock_name", "security_name", "证券名称", "名称"]) or ""
     group = first(record, ["group", "group_name", "folder", "watchlist", "分组", "自选分组"]) or first(record, ["sheet"])
     added_at = first(record, ["added_at", "created_at", "time", "date", "加入时间", "添加时间", "日期"])
+    source_platform = first(record, ["_collectorx_source_platform"])
+    local_scan = bool(first_raw(record, "_collectorx_local_scan"))
     data = {
         "symbol": symbol,
         "name": name,
@@ -433,6 +621,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "industry": first(record, ["industry", "sector", "行业", "板块"]),
         "tags": list_values(record, ["tags", "labels", "标签"]),
         "added_at": added_at,
+        "source_platform": source_platform,
+        "local_scan": local_scan or None,
         "source_section": first(record, ["source_section", "sheet"]),
         "raw": sanitized(record),
         "broker_confirmed_trade": False,
@@ -451,7 +641,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, symbol, group, added_at),
         "collector": COLLECTOR,
-        "source": "同花顺自选股用户授权导出",
+        "source": "同花顺自选股用户授权本机扫描" if local_scan else "同花顺自选股用户授权导出",
         "owner_scope": "personal",
         "kind": "watchlist",
         "time": added_at,
@@ -482,7 +672,7 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
         "collected_at": collected_at or now_iso(),
         "data": {
             "gap": reason,
-            "message": "No user-authorized Tonghuashun watchlist export was provided.",
+            "message": "No user-authorized Tonghuashun watchlist input or local-scan candidate was available.",
         },
         "raw_ref": {"preflight": True},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio"]},
@@ -502,6 +692,10 @@ def build_manifest(
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
     field_coverage = build_watchlist_field_coverage(events)
     audit = collection_audit or {}
+    local_scan_event_count = sum(1 for event in events if (event.get("raw_ref") or {}).get("local_scan"))
+    source_collection_scope = "none" if gap_only else "partial_authorized_input"
+    if local_scan_event_count:
+        source_collection_scope = "partial_authorized_input_or_local_scan"
     return {
         "schema": "collectorx.ths_watchlist.manifest.v1",
         "collector": COLLECTOR,
@@ -511,6 +705,7 @@ def build_manifest(
         "market_counts": dict(sorted(market_counts.items())),
         "group_counts": dict(sorted(group_counts.items())),
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "local_scan_event_count": local_scan_event_count,
         "field_coverage": field_coverage,
         "evidence_policy": {
             "ths_watchlist_is_strong_trade_source": False,
@@ -522,8 +717,8 @@ def build_manifest(
             "status": "needs_ths_watchlist_authorized_input" if gap_only else "events_collected",
             "can_enter_finclaw": bool(events) and not gap_only,
             "can_claim_complete_ths_attention_universe": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
-            "next_action": "Provide authorized Tonghuashun watchlist export." if gap_only else "Use as attention-universe evidence; corroborate with trades and research.",
+            "source_collection_scope": source_collection_scope,
+            "next_action": "Provide authorized Tonghuashun watchlist export or run authorized local scan." if gap_only else "Use as attention-universe evidence; corroborate with trades and research.",
         },
         "collection_audit": audit,
         "ths_watchlist_boundary_proof": build_watchlist_boundary_proof(
@@ -599,12 +794,14 @@ def build_watchlist_boundary_proof(
     gap_only = bool(events) and not usable_events
     if not events or gap_only:
         proof_level = "no_authorized_ths_watchlist_input"
+    elif int(collection_audit.get("local_scan_event_count") or 0) > 0:
+        proof_level = "authorized_ths_local_scan_partial"
     elif int(collection_audit.get("archive_member_imported_record_count") or 0) > 0:
         proof_level = "authorized_ths_watchlist_package_partial"
     else:
         proof_level = "authorized_ths_watchlist_partial"
     return {
-        "source_type": "authorized_local_ths_watchlist_export",
+        "source_type": collection_audit.get("source_type", "authorized_local_ths_watchlist_export"),
         "proof_level": proof_level,
         "event_count": len(usable_events),
         "parsed_record_count": collection_audit.get("parsed_record_count", 0),
@@ -630,11 +827,23 @@ def build_watchlist_boundary_proof(
             "skipped_archive_member_count": collection_audit.get("skipped_archive_member_count", 0),
             "skipped_archive_member_reason_counts": collection_audit.get("skipped_archive_member_reason_counts", {}),
         },
+        "local_scan_boundary": {
+            "local_scan_requested": collection_audit.get("local_scan_requested", False),
+            "local_scan_platform": collection_audit.get("local_scan_platform"),
+            "local_scan_roots": collection_audit.get("local_scan_roots", []),
+            "local_scan_candidate_file_count": collection_audit.get("local_scan_candidate_file_count", 0),
+            "local_scan_candidate_files": collection_audit.get("local_scan_candidate_files", []),
+            "local_scan_event_count": collection_audit.get("local_scan_event_count", 0),
+            "candidate_selection": collection_audit.get("local_scan_candidate_selection", {}),
+            "credentials_read": False,
+            "cookies_tokens_sessions_read": False,
+        },
         "watchlist_surface": {
             "market_counts": dict(sorted(market_counts.items())),
             "group_counts": dict(sorted(group_counts.items())),
             "field_coverage": field_coverage,
             "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
+            "local_scan_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("local_scan")),
         },
         "strong_trade_boundary": {
             "broker_confirmed_trade_collection": False,
@@ -647,6 +856,7 @@ def build_watchlist_boundary_proof(
         },
         "complete_attention_universe_claimed": False,
         "direct_tonghuashun_account_reconnect": False,
+        "local_scan_without_trade_password": True,
         "collector_writes_wiki_directly": False,
         "can_enter_finclaw": bool(usable_events),
     }
@@ -836,3 +1046,33 @@ def strip_tags(value: str) -> str:
 def stable_id(*parts: Any) -> str:
     digest = hashlib.sha256("|".join(str(part) for part in parts).encode("utf-8")).hexdigest()[:24]
     return f"{COLLECTOR}:{digest}"
+
+
+def _dedupe_paths(paths: Iterable[Path]) -> List[Path]:
+    seen: set[str] = set()
+    result: List[Path] = []
+    for path in paths:
+        key = path_key(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(path)
+    return result
+
+
+def path_key(path: Path) -> str:
+    try:
+        return str(path.expanduser().resolve())
+    except OSError:
+        return str(path.expanduser().absolute())
+
+
+def safe_path_label(path: Path) -> str:
+    text = str(path.expanduser())
+    text = re.sub(r"(?<!\d)\d{6,}(?!\d)", "<digits>", text)
+    text = re.sub(r"([A-Za-z0-9._%+-]{2})[A-Za-z0-9._%+-]*(@)", r"\1***\2", text)
+    return text
+
+
+def local_file_label(path: Path) -> str:
+    return safe_path_label(path)

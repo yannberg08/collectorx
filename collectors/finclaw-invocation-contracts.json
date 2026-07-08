@@ -54,12 +54,12 @@
     },
     {
       "id": "ths-watchlist",
-      "authorization_mode": "authorized-local-export",
+      "authorization_mode": "local-scan-readonly",
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
-      "user_step": "Provide an authorized Tonghuashun watchlist export, folder, workbook, or text file.",
-      "preflight": "The input is a user-owned watchlist export and not a trade, holding, order, or fund-flow file.",
-      "failure_state": "needs_authorized_ths_watchlist_export"
+      "user_step": "Authorize a local Tonghuashun data root for read-only watchlist scanning; exported files can still be imported through --input as a fallback.",
+      "preflight": "The root or export is user-owned Tonghuashun watchlist evidence and not a trade, holding, order, or fund-flow source.",
+      "failure_state": "needs_authorized_ths_watchlist_root_or_export"
     },
     {
       "id": "wechat",

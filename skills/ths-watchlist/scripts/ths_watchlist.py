@@ -7,12 +7,35 @@ import argparse
 import json
 from pathlib import Path
 
-from ths_watchlist.parser import build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso, write_json, write_jsonl, write_summary
+from ths_watchlist.parser import (
+    build_evidence,
+    build_local_scan_report,
+    build_manifest,
+    collect_from_inputs_with_audit,
+    find_local_watchlist_files,
+    now_iso,
+    write_json,
+    write_jsonl,
+    write_summary,
+)
 
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    local_scan_files = find_local_watchlist_files(container_root=args.container_root, platform=args.platform) if args.local_scan else []
+    if args.probe_export:
+        write_json(
+            Path(args.probe_export).expanduser(),
+            build_local_scan_report(platform=args.platform, container_root=args.container_root, files=local_scan_files),
+        )
+    events, audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        local_scan=args.local_scan,
+        platform=args.platform,
+        container_root=args.container_root,
+    )
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
     if args.out_dir:
@@ -27,10 +50,14 @@ def collect(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Collect user-authorized Tonghuashun watchlist exports into CollectorX events.")
+    parser = argparse.ArgumentParser(description="Collect user-authorized Tonghuashun watchlist exports or local watchlist files into CollectorX events.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p_collect = sub.add_parser("collect", help="Parse local Tonghuashun watchlist exports.")
+    p_collect = sub.add_parser("collect", help="Parse local Tonghuashun watchlist exports or run an authorized local scan.")
     p_collect.add_argument("--input", action="append", help="Authorized watchlist export file or folder.")
+    p_collect.add_argument("--local-scan", action="store_true", help="Scan authorized local Tonghuashun roots for likely watchlist files.")
+    p_collect.add_argument("--platform", choices=["auto", "mac", "windows", "linux", "generic"], default="auto", help="Local scan platform adapter.")
+    p_collect.add_argument("--container-root", help="Authorized local scan root; defaults to known Tonghuashun app data roots for the platform.")
+    p_collect.add_argument("--probe-export", help="Write a local scan probe report JSON path.")
     p_collect.add_argument("--out-dir", help="Output package directory.")
     p_collect.add_argument("--event-export", help="Output CollectorX Event JSONL path.")
     p_collect.add_argument("--limit", type=int, help="Maximum events to write.")

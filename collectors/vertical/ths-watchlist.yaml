@@ -21,6 +21,8 @@ scope:
     - watchlist_tags
     - watchlist_notes
     - added_time
+    - authorized_local_scan
+    - local_scan_provenance
     - path_level_source_audit
     - zip_member_provenance
     - skipped_file_reason_counts
@@ -38,18 +40,20 @@ scope:
     - fund_flows
 
 description: |
-  同花顺自选股是投资垂直关注池源。它采集用户授权导出的自选列表，
+  同花顺自选股是投资垂直关注池源。它采集用户授权本机目录或导出的自选列表，
   用于 FinClaw 判断关注宇宙和机会池；不能替代 `ths-portfolio` 的持仓、
   成交、委托、资金流水等强交易数据。
 
 prompt: |
   运行：
     python3 skills/ths-watchlist/scripts/ths_watchlist.py collect \
-      --input <用户授权的同花顺自选股导出文件或目录> \
+      --local-scan \
+      --container-root <用户授权的同花顺本机数据目录> \
       --out-dir <输出目录>
 
+  也可以用 --input <用户授权的同花顺自选股导出文件或目录> 导入现成导出。
   输入支持 CSV/TSV、JSON/JSONL/NDJSON、XLSX/XLSM、HTML、Markdown、TXT、ZIP。
   输出 collectorx.event.v1 到 lake/ths-watchlist/events.jsonl，并写入 manifest.json、
-  investor_wiki_evidence.v1.json、逐输入 source audit、ZIP 成员 provenance、
+  investor_wiki_evidence.v1.json、本机扫描审计、逐输入 source audit、ZIP 成员 provenance、
   field_coverage 和 ths_watchlist_boundary_proof。自选股只作为 attention-universe
   证据，后续必须与交易、持仓、笔记、研报和复盘数据交叉验证。
