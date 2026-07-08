@@ -624,6 +624,34 @@ Findings:
 - This improves authorized export compatibility, but real
   Alipay/Tiantian/Danjuan/Qieman/bank account validation remains pending.
 
+### Wave B4h: P0 China wealth PDF statement pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-pdf-statement-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `china-wealth-assets` to `0.4.5`.
+- Added user-authorized PDF statement support through local `pdfplumber`
+  extraction. This targets fund, bank-wealth, and platform official statements
+  that users can save as PDFs.
+- PDF tables become structured asset records when the statement exposes
+  headers such as platform, account, product, market value, total asset, date,
+  and transaction amount.
+- PDF text fallback attempts key-value and text-table extraction before
+  retaining a statement snapshot; it does not fabricate numeric asset facts
+  from unstructured text.
+- Manifest `collection_audit` now records PDF parser availability, file count,
+  page count, table count, table-record count, text-record count, parse errors,
+  and `pdf_text_ocr_used=false`.
+- Fixture validation generates a real PDF table and confirms exact bank-wealth
+  `market_value=20000.5`, Alipay `total_asset=12345.67`, raw PDF page/table
+  provenance, asset value summary, and conservative partial asset-boundary
+  proof.
+
 ### Wave B5: P0 Email IMAP package and audit pass
 
 Status: `completed-baseline+audit`
@@ -3066,7 +3094,7 @@ Findings:
 | 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist local-scan plus import path with standard Lake output, manifest, local-scan provenance, path-level source audit, ZIP provenance, skipped-reason accounting, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun local-store validation, default app path validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
 | 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, copied Chromium/Safari browser-history support with Xueqiu-domain filtering, visit/typed counts, browser transition types, activity-boundary proof, browser-history boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR/browser-history samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
-| 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, legacy `.xls`/Excel XML/HTML-table export parsing, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
+| 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, PDF statement parsing/audit, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, legacy `.xls`/Excel XML/HTML-table export parsing, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth PDF/HAR/export samples, per-platform adapters, complete account-boundary proof |
 
 ## P1 Work Queue
 

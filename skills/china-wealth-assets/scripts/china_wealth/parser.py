@@ -46,6 +46,7 @@ SUPPORTED_EXTENSIONS = {
     ".txt",
     ".md",
     ".markdown",
+    ".pdf",
     ".har",
     ".zip",
 }
@@ -217,6 +218,16 @@ def collect_from_inputs_with_audit(
         "har_secret_material_stripped_count": 0,
         "har_query_string_stripped_count": 0,
         "har_secret_material_policy": "request_headers_cookies_authorization_query_strings_are_never_written_to_events_or_manifest",
+        "pdf_import_supported": True,
+        "pdf_parser": "pdfplumber",
+        "pdf_parser_available": None,
+        "pdf_text_ocr_used": False,
+        "pdf_file_count": 0,
+        "pdf_page_count": 0,
+        "pdf_table_count": 0,
+        "pdf_table_record_count": 0,
+        "pdf_text_record_count": 0,
+        "pdf_parse_error_count": 0,
         "limit": limit,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
@@ -279,6 +290,8 @@ def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Di
         return parse_json(path)
     if suffix in {".html", ".htm"}:
         return parse_html(path)
+    if suffix == ".pdf":
+        return parse_pdf(path, audit=audit)
     if suffix == ".har":
         return parse_har(path, audit=audit)
     if suffix == ".zip":
@@ -586,6 +599,164 @@ def parse_html(path: Path) -> List[Dict[str, Any]]:
         "url": first_url(html),
         "path": str(path),
     }]
+
+
+def parse_pdf(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    if audit is not None:
+        audit["pdf_file_count"] += 1
+    try:
+        import pdfplumber  # type: ignore
+    except ModuleNotFoundError:
+        if audit is not None:
+            audit["pdf_parser_available"] = False
+            audit["pdf_parse_error_count"] += 1
+        return []
+
+    if audit is not None:
+        audit["pdf_parser_available"] = True
+    records: List[Dict[str, Any]] = []
+    text_chunks: List[str] = []
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            if audit is not None:
+                audit["pdf_page_count"] += len(pdf.pages)
+            for page_index, page in enumerate(pdf.pages, start=1):
+                table_index = 0
+                try:
+                    tables = page.extract_tables() or []
+                except Exception:
+                    tables = []
+                for table in tables:
+                    rows = normalize_pdf_table_rows(table)
+                    table_records = rows_to_records(rows, source_sheet=f"pdf_page_{page_index}_table_{table_index + 1}")
+                    if table_records:
+                        table_index += 1
+                        if audit is not None:
+                            audit["pdf_table_count"] += 1
+                            audit["pdf_table_record_count"] += len(table_records)
+                        for row_index, record in enumerate(table_records, start=1):
+                            record["_collectorx_raw_ref"] = {
+                                "path": str(path),
+                                "parser": "pdfplumber",
+                                "pdf_page": page_index,
+                                "pdf_table": table_index,
+                                "pdf_table_row": row_index,
+                            }
+                        records.extend(table_records)
+                try:
+                    text = page.extract_text() or ""
+                except Exception:
+                    text = ""
+                if text.strip():
+                    text_chunks.append(text)
+    except Exception:
+        if audit is not None:
+            audit["pdf_parse_error_count"] += 1
+        return []
+
+    if records:
+        return records
+
+    text = "\n".join(text_chunks).strip()
+    text_records = parse_pdf_text_records(text, path=path)
+    if text_records:
+        if audit is not None:
+            audit["pdf_text_record_count"] += len(text_records)
+        return text_records
+    if text:
+        if audit is not None:
+            audit["pdf_text_record_count"] += 1
+        return [pdf_text_snapshot(path, text)]
+    return []
+
+
+def normalize_pdf_table_rows(table: List[List[Any]]) -> List[List[str]]:
+    rows: List[List[str]] = []
+    for raw_row in table or []:
+        row = ["" if cell is None else re.sub(r"\s+", " ", str(cell)).strip() for cell in raw_row]
+        if any(row):
+            rows.append(row)
+    return rows
+
+
+def parse_pdf_text_records(text: str, *, path: Path) -> List[Dict[str, Any]]:
+    if not text.strip():
+        return []
+    rows: List[List[str]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if "," in stripped or "\t" in stripped or "|" in stripped:
+            rows.append([cell.strip() for cell in re.split(r"\t|,|\|", stripped) if cell.strip()])
+        else:
+            rows.append([cell.strip() for cell in re.split(r"\s{2,}", stripped) if cell.strip()])
+    table_records = rows_to_records(rows, source_sheet="pdf_text_table")
+    if table_records and any(record_has_wealth_signal(record) for record in table_records):
+        for row_index, record in enumerate(table_records, start=1):
+            record["_collectorx_raw_ref"] = {
+                "path": str(path),
+                "parser": "pdfplumber_text",
+                "pdf_text_row": row_index,
+            }
+        return table_records
+
+    kv_record = parse_pdf_key_value_record(text)
+    if kv_record and record_has_wealth_signal(kv_record):
+        kv_record["source_sheet"] = "pdf_key_value"
+        kv_record["_collectorx_raw_ref"] = {"path": str(path), "parser": "pdfplumber_key_value"}
+        return [kv_record]
+    return []
+
+
+def parse_pdf_key_value_record(text: str) -> Dict[str, Any]:
+    record: Dict[str, Any] = {}
+    patterns = {
+        "平台": r"(?:平台|渠道|机构|来源|Platform)[:：]\s*([^\n]+)",
+        "账户名称": r"(?:账户名称|账户|账号|理财账号|基金账号|Account)[:：]\s*([^\n]+)",
+        "类型": r"(?:类型|资产类型|产品类型|Type)[:：]\s*([^\n]+)",
+        "产品代码": r"(?:产品代码|基金代码|代码|Code)[:：]\s*([A-Za-z0-9_.-]+)",
+        "产品名称": r"(?:产品名称|基金名称|名称|Name)[:：]\s*([^\n]+)",
+        "总资产": r"(?:总资产|资产总额|Total Asset)[:：]\s*([0-9,.\-￥¥元]+)",
+        "持仓金额": r"(?:持仓金额|持有金额|当前市值|Market Value)[:：]\s*([0-9,.\-￥¥元]+)",
+        "持有份额": r"(?:持有份额|份额|Shares)[:：]\s*([0-9,.\-]+)",
+        "单位净值": r"(?:单位净值|净值|NAV)[:：]\s*([0-9,.\-]+)",
+        "持仓成本": r"(?:持仓成本|成本|Cost)[:：]\s*([0-9,.\-￥¥元]+)",
+        "持有收益": r"(?:持有收益|收益|Profit|Pnl)[:：]\s*([0-9,.\-￥¥元]+)",
+        "确认金额": r"(?:确认金额|交易金额|申购金额|赎回金额|Amount)[:：]\s*([0-9,.\-￥¥元]+)",
+        "交易类型": r"(?:交易类型|操作|业务类型|Side)[:：]\s*([^\n]+)",
+        "日期": r"(?:日期|确认日期|更新时间|Date)[:：]\s*([0-9:/.\- 年月日]+)",
+    }
+    for key, pattern in patterns.items():
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            record[key] = match.group(1).strip()
+    return record
+
+
+def record_has_wealth_signal(record: Dict[str, Any]) -> bool:
+    keys = set(record)
+    if keys & {"平台", "platform", "账户", "账户名称", "account", "产品代码", "基金代码", "product_code", "fund_code", "产品名称", "基金名称", "product_name", "fund_name"}:
+        return True
+    if keys & {"总资产", "持仓金额", "持有金额", "当前市值", "确认金额", "交易金额", "market_value", "total_asset", "amount"}:
+        return True
+    text = json.dumps(sanitized(record), ensure_ascii=False).lower()
+    return any(token in text for token in ["支付宝", "天天基金", "蛋卷", "且慢", "银行理财", "alipay", "fund", "bank wealth"])
+
+
+def pdf_text_snapshot(path: Path, text: str) -> Dict[str, Any]:
+    return {
+        "record_type": "screen_snapshot",
+        "title": infer_title(path, text),
+        "content": text[:5000],
+        "path": str(path),
+        "source_sheet": "pdf_text_snapshot",
+        "_collectorx_raw_ref": {
+            "path": str(path),
+            "parser": "pdfplumber_text_snapshot",
+            "pdf_text_snapshot": True,
+        },
+    }
 
 
 def legacy_text_snapshot(path: Path, text: str) -> Dict[str, Any]:

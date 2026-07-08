@@ -351,6 +351,82 @@ def test_collects_legacy_xls_html_and_xml_exports() -> None:
         }
 
 
+def test_collects_pdf_statement_tables_with_pdf_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+
+        root = Path(tmp)
+        pdf_path = root / "bank-wealth-statement.pdf"
+        out = root / "out"
+
+        doc = SimpleDocTemplate(str(pdf_path), pagesize=A4)
+        table = Table(
+            [
+                ["platform", "account", "type", "product_code", "product_name", "market_value", "total_asset", "date"],
+                ["bank", "cmb-001", "bank wealth", "CMB008", "Stable Wealth", "20000.50", "", "2026-07-09"],
+                ["alipay", "ali-main", "asset snapshot", "", "", "", "12345.67", "2026-07-09"],
+            ]
+        )
+        table.setStyle(
+            TableStyle(
+                [
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.lightgrey),
+                ]
+            )
+        )
+        doc.build([table])
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(pdf_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T10:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert [event["data"]["platform"] for event in events] == ["bank-wealth", "alipay"]
+        assert [event["data"]["subtype"] for event in events] == ["wealth_holding", "asset_snapshot"]
+        assert events[0]["data"]["account"] == "cmb-001"
+        assert events[0]["data"]["product_code"] == "CMB008"
+        assert events[0]["data"]["market_value"] == 20000.5
+        assert events[1]["data"]["account"] == "ali-main"
+        assert events[1]["data"]["total_asset"] == 12345.67
+        assert events[0]["raw_ref"]["parser"] == "pdfplumber"
+        assert events[0]["raw_ref"]["pdf_page"] == 1
+        assert events[0]["raw_ref"]["pdf_table"] == 1
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["extension_counts"] == {".pdf": 1}
+        assert audit["pdf_parser_available"] is True
+        assert audit["pdf_file_count"] == 1
+        assert audit["pdf_page_count"] == 1
+        assert audit["pdf_table_count"] == 1
+        assert audit["pdf_table_record_count"] == 2
+        assert audit["pdf_text_ocr_used"] is False
+        assert audit["pdf_parse_error_count"] == 0
+        assert manifest["asset_value_summary"] == {
+            "alipay": {"total_asset": 12345.67},
+            "bank-wealth": {"market_value": 20000.5},
+        }
+        proof = manifest["asset_boundary_proof"]
+        assert proof["overall_proof_level"] == "medium_partial_asset_boundary"
+        assert proof["complete_asset_boundary_claimed"] is False
+
+
 def test_syncs_package_to_soulmirror_lake() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -565,6 +641,7 @@ if __name__ == "__main__":
     test_collects_har_network_export_with_platform_audit_and_credential_stripping()
     test_collects_xlsx_exports()
     test_collects_legacy_xls_html_and_xml_exports()
+    test_collects_pdf_statement_tables_with_pdf_audit()
     test_syncs_package_to_soulmirror_lake()
     test_manifest_reports_expected_platform_coverage()
     test_collects_zip_package_with_value_summary()

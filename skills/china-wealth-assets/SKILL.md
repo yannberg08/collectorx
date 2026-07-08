@@ -32,19 +32,26 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
 python <SKILL_DIR>/scripts/china_wealth.py collect \
   --input ~/Downloads/china-wealth-network.har \
   --out-dir ~/Desktop/china-wealth-collect
+
+python <SKILL_DIR>/scripts/china_wealth.py collect \
+  --input ~/Downloads/bank-wealth-statement.pdf \
+  --out-dir ~/Desktop/china-wealth-collect
 ```
 
-支持 CSV/TSV/JSON/JSONL/Excel/旧式 `.xls`/HTML 表格/TXT/Markdown/HAR/ZIP。
+支持 CSV/TSV/JSON/JSONL/Excel/旧式 `.xls`/HTML 表格/PDF 官方账单/TXT/Markdown/HAR/ZIP。
 解析器会归一化支付宝、天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
 成本、收益等数字字段，并剔除 cookie、token、password 等凭据类字段。
+PDF 账单通过本地 `pdfplumber` 读取文本和表格，不做远程 OCR；能提取表格时会保留页码、表格号、
+行号和 PDF parser 审计，无法结构化时只作为授权账单快照，不伪造资产数字。
 HAR 是用户已登录对应平台后、明确授权选择的浏览器网络导出文件。采集器只读取
 支付宝/天天基金/蛋卷/且慢/银行理财域名白名单内的响应体，按域名推断平台，
 并记录接口路径、状态、平台覆盖和跳过原因；请求头、Cookie、Authorization 和
 URL 查询串不会写入事件、manifest 或 Wiki evidence。
 
-ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manifest 会记录
+ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员，ZIP 内也可包含 PDF 官方账单。
+manifest 会记录
 输入文件数、扩展名覆盖、HAR 网络包覆盖、ZIP 成员/跳过成员、解析记录数、
-发出事件数和路径级结果。
+PDF 文件数、页数、表格数、PDF 表格记录数、发出事件数和路径级结果。
 没有授权输入时，只输出缺口事件。
 
 ## 完整性口径
