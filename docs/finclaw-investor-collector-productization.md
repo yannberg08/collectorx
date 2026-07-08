@@ -73,7 +73,7 @@ FinClaw 应按下面顺序调用：
 | --- | --- | --- | --- |
 | `notes` + `investment-notes` | Obsidian、Notion、有道云、印象笔记和投资笔记 lens | `baseline+audit`；generic notes manifest 记录平台覆盖、字段覆盖、CSV/TSV 表格导入审计、逐输入解析结果、跳过文件/ZIP 成员原因、内容策略和 generic-to-lens 边界；investment-notes lens 记录复盘/规则库/checklist/估值假设/研究记录子类型面谱、来源应用、预览/全文边界和投资笔记边界证明 | Notion/有道/印象真实账号、Windows/Linux vault、真实笔记语料误判回测 |
 | `ticktick` + `calendar` + `task-calendar-investor` | 任务、日历、交易计划、复盘提醒；TickTick 主路径对齐 SoulMirror YAML + AgentRunner + skill，输出任务快照数组并由 daemon 写 `lake/ticktick/events.jsonl`；离线导出 helper 只写 `exports/ticktick/events.jsonl`；calendar 记录时长、跨天、异常时间段和同日历冲突；lens 汇总研究任务、交易计划、复盘提醒、财报日程、调研会议、风险检查、时间质量面谱和任务日历边界证明 | `baseline+audit` | 部署托管 TickTick OAuth Broker、真实账号 recurring/timezone 回测、Apple/Google/Outlook/飞书等真实日历 |
-| `feishu` + `meeting-artifacts` + `dingtalk` + `wecom` + `meeting-minutes` | 飞书/会议纪要、协作导出、投研会议 lens，含 ZIP 跳过成员审计、逐文件解析结果、路演/调研/投委会/专家会/业绩会/风险/后续行动面谱和会议边界证明 | `baseline+audit` | 飞书/钉钉/企业微信/腾讯会议真实账号 API 和导出、参会人归一化、附件/录制指针验证 |
+| `feishu` + `meeting-artifacts` + `dingtalk` + `wecom` + `meeting-minutes` | 飞书/会议纪要、协作导出、投研会议 lens，含缺失输入/不支持扩展名审计、ZIP 跳过成员审计、逐文件解析结果、路演/调研/投委会/专家会/业绩会/风险/后续行动面谱和会议边界证明 | `baseline+audit` | 飞书/钉钉/企业微信/腾讯会议真实账号 API 和导出、参会人归一化、附件/录制指针验证 |
 | `wechat-favorites` + `wechat-article-favorites` | 微信收藏、公众号文章动作和投资文章 lens | `baseline+audit`；generic manifest 记录动作覆盖、字段覆盖、逐输入解析结果、跳过文件/ZIP 成员原因、内容策略和 generic-to-lens 边界；lens 记录收藏/阅读/保存/转发动作、公众号来源类型、券商研究/基本面/策略/行业/估值/组合/风险/宏观文章面谱和文章边界证明 | 真实微信收藏库、公众号阅读动作、标签 allowlist、误判回测 |
 | `financial-news-usage` | 华尔街见闻、财联社、格隆汇阅读/收藏/订阅/搜索/提醒 | `baseline+audit`；manifest 记录平台/动作/主题覆盖、字段覆盖、逐输入解析结果、跳过文件/ZIP 成员原因、浏览器历史来源、个人使用痕迹边界和使用边界证明；主题面谱覆盖宏观、策略、行业、基本面、港美股、风险、机会和自选提醒 | App 缓存、账号 API、订阅提醒、多浏览器历史和主题误判回测 |
 

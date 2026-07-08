@@ -32,19 +32,82 @@ SOURCE_MEMBER_KEY = "_collectorx_archive_member"
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
-    for raw in inputs:
-        path = Path(raw).expanduser()
-        if path.is_dir():
-            for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
-                    yield child
-        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
-            yield path
+    paths, _audit = resolve_input_paths(inputs)
+    yield from paths
 
 
-def new_collection_audit(inputs: Iterable[str], paths: List[Path], *, limit: Optional[int] = None) -> Dict[str, Any]:
+def resolve_input_paths(inputs: Iterable[str]) -> tuple[List[Path], Dict[str, Any]]:
     input_list = list(inputs)
-    return {
+    paths: List[Path] = []
+    audit = {
+        "requested_inputs": input_list,
+        "input_missing_count": 0,
+        "skipped_file_count": 0,
+        "skipped_reason_counts": {},
+        "skipped_extension_counts": {},
+        "input_results": [],
+        "skipped_file_samples": [],
+    }
+    for raw in input_list:
+        path = Path(raw).expanduser()
+        result = {
+            "input": raw,
+            "path": str(path),
+            "status": "pending",
+            "resolved_file_count": 0,
+            "skipped_file_count": 0,
+        }
+        audit["input_results"].append(result)
+        if not path.exists():
+            result["status"] = "missing"
+            audit["input_missing_count"] += 1
+            continue
+        if path.is_dir():
+            result["status"] = "directory"
+            for child in sorted(path.rglob("*")):
+                if not child.is_file():
+                    continue
+                if child.suffix.lower() in SUPPORTED_EXTENSIONS:
+                    paths.append(child)
+                    result["resolved_file_count"] += 1
+                else:
+                    record_skipped_file(audit, result, child, "unsupported_extension")
+            continue
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            result["status"] = "file"
+            paths.append(path)
+            result["resolved_file_count"] = 1
+            continue
+        result["status"] = "unsupported_file"
+        record_skipped_file(audit, result, path, "unsupported_extension")
+    finalize_input_audit(audit)
+    return paths, audit
+
+
+def record_skipped_file(audit: Dict[str, Any], input_result: Dict[str, Any], path: Path, reason: str) -> None:
+    suffix = path.suffix.lower() or "<none>"
+    audit["skipped_file_count"] += 1
+    input_result["skipped_file_count"] += 1
+    increment_counter(audit, "skipped_reason_counts", reason)
+    increment_counter(audit, "skipped_extension_counts", suffix)
+    if len(audit["skipped_file_samples"]) < 50:
+        audit["skipped_file_samples"].append({"path": str(path), "extension": suffix, "reason": reason})
+
+
+def finalize_input_audit(audit: Dict[str, Any]) -> None:
+    audit["skipped_reason_counts"] = dict(sorted((audit.get("skipped_reason_counts") or {}).items()))
+    audit["skipped_extension_counts"] = dict(sorted((audit.get("skipped_extension_counts") or {}).items()))
+
+
+def new_collection_audit(
+    inputs: Iterable[str],
+    paths: List[Path],
+    *,
+    limit: Optional[int] = None,
+    input_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    input_list = list(inputs)
+    audit = {
         "source_type": "authorized_local_meeting_artifacts",
         "input_count": len(input_list),
         "resolved_input_file_count": len(paths),
@@ -61,6 +124,10 @@ def new_collection_audit(inputs: Iterable[str], paths: List[Path], *, limit: Opt
         "real_account_adapter_used": False,
         "path_results": [],
     }
+    audit.update(input_audit or {})
+    audit["input_count"] = len(input_list)
+    audit["resolved_input_file_count"] = len(paths)
+    return audit
 
 
 def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -254,6 +321,8 @@ def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
 def finalize_collection_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
     for key in (
         "extension_counts",
+        "skipped_reason_counts",
+        "skipped_extension_counts",
         "archive_member_extension_counts",
         "skipped_archive_member_extension_counts",
         "skipped_archive_member_reason_counts",

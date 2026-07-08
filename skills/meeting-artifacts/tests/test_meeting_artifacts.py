@@ -20,9 +20,12 @@ def test_collect_minutes_and_transcript_events() -> None:
         root = Path(tmp)
         minutes = root / "roadshow.md"
         transcript = root / "meeting.vtt"
+        unsupported = root / "recording.mp4"
+        missing = root / "missing.srt"
         out = root / "out"
         minutes.write_text("# 半导体公司路演纪要\n参会人：研究员A，基金经理B\n讨论财报、估值和风险点。\n", encoding="utf-8")
         transcript.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n今天讨论买入框架。\n", encoding="utf-8")
+        unsupported.write_bytes(b"not-collected")
         subprocess.run(
             [
                 sys.executable,
@@ -30,6 +33,8 @@ def test_collect_minutes_and_transcript_events() -> None:
                 "collect",
                 "--input",
                 str(root),
+                "--input",
+                str(missing),
                 "--out-dir",
                 str(out),
                 "--collected-at",
@@ -52,8 +57,13 @@ def test_collect_minutes_and_transcript_events() -> None:
         assert manifest["field_coverage"]["field_counts"]["artifact_type"] == 2
         assert manifest["meeting_surface_summary"]["events_with_text"] == 2
         assert manifest["meeting_surface_summary"]["events_with_participants"] == 1
-        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["input_count"] == 2
         assert manifest["source_audit"]["resolved_input_file_count"] == 2
+        assert manifest["source_audit"]["input_missing_count"] == 1
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".mp4": 1}
+        assert manifest["source_audit"]["skipped_file_samples"][0]["path"] == str(unsupported)
         assert manifest["source_audit"]["extension_counts"] == {".md": 1, ".vtt": 1}
         assert manifest["source_audit"]["parsed_record_count"] == 2
         assert manifest["source_audit"]["emitted_event_count"] == 2

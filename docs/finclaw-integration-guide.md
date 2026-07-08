@@ -818,9 +818,10 @@ Current status:
   `real_account_validation`.
 - Writes `manifest.field_coverage`, `meeting_surface_summary`, `source_audit`,
   and `evidence_policy` so FinClaw can inspect text, participants, organizer,
-  meeting URL, attachments, duration, start/end time, ZIP provenance,
-  total/skipped ZIP members, skip reasons, per-input parse results, and the
-  required `meeting-minutes` lens boundary.
+  meeting URL, attachments, duration, start/end time, requested inputs, missing
+  paths, unsupported file extensions, ZIP provenance, total/skipped ZIP
+  members, skip reasons, per-input parse results, and the required
+  `meeting-minutes` lens boundary.
 - Filters credential-like raw keys such as password, cookie, token, session,
   secret, authorization, and credential.
 - Does not claim investment-meeting status directly.

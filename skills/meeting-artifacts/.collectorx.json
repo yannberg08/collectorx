@@ -1,1 +1,1 @@
-{"slug": "meeting-artifacts", "version": "0.3.0", "description": "Generic meeting minutes/transcript artifact collector for user-authorized local files, ZIP packages, and platform exports with coverage and source-audit manifest."}
+{"slug": "meeting-artifacts", "version": "0.3.1", "description": "Generic meeting minutes/transcript artifact collector for user-authorized local files, ZIP packages, and platform exports with coverage, missing/unsupported input audit, ZIP skip audit, and source-audit manifest."}

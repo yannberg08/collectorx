@@ -18,15 +18,15 @@ from meeting_artifacts.events import (
     write_jsonl,
     write_summary,
 )
-from meeting_artifacts.parser import finalize_collection_audit, iter_paths, new_collection_audit, parse_path
+from meeting_artifacts.parser import finalize_collection_audit, new_collection_audit, parse_path, resolve_input_paths
 
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
     events = []
     inputs = args.input or []
-    paths = list(iter_paths(inputs))
-    collection_audit = new_collection_audit(inputs, paths, limit=args.limit)
+    paths, input_audit = resolve_input_paths(inputs)
+    collection_audit = new_collection_audit(inputs, paths, limit=args.limit, input_audit=input_audit)
     if not paths:
         events = [gap_event(collected_at=collected_at, reason="meeting_artifact_input_missing")]
     else:
