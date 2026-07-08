@@ -31,7 +31,25 @@ def write_jsonl(path: Path, events: list[dict]) -> None:
 
 def collect(args: argparse.Namespace) -> int:
     collected_at = args.collected_at or now_iso()
-    events, collection_audit = collect_from_inputs_with_audit(args.input or [], collected_at=collected_at, limit=args.limit)
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+        allow_terminals=args.allow_terminal,
+        deny_terminals=args.deny_terminal,
+        allow_activities=args.allow_activity,
+        deny_activities=args.deny_activity,
+        allow_workspaces=args.allow_workspace,
+        deny_workspaces=args.deny_workspace,
+        allow_projects=args.allow_project,
+        deny_projects=args.deny_project,
+        allow_datasets=args.allow_dataset,
+        deny_datasets=args.deny_dataset,
+        allow_fields=args.allow_field,
+        deny_fields=args.deny_field,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
+    )
     if args.out_dir:
         out = Path(args.out_dir).expanduser()
         write_jsonl(out / "lake" / COLLECTOR / "events.jsonl", events)
@@ -52,6 +70,9 @@ def collect(args: argparse.Namespace) -> int:
                     f"- missing_activities：`{', '.join(manifest['activity_coverage']['missing_expected_activities']) or 'none'}`",
                     f"- workflow_boundary_proof：`{manifest['workflow_boundary_proof']['proof_level']}`",
                     f"- licensed_content_mirrored：`{manifest['workflow_boundary_proof']['license_boundary']['licensed_content_mirrored']}`",
+                    f"- scope_policy_enabled：{manifest['source_audit']['pro_terminal_scope_policy'].get('enabled', False)}",
+                    f"- scope_policy_filtered：{manifest['source_audit'].get('scope_policy_filtered_record_count', 0)} / "
+                    f"{manifest['source_audit'].get('candidate_record_count', manifest['source_audit'].get('parsed_record_count', 0))}",
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
                     f"- skipped_archive_members：{manifest['source_audit'].get('skipped_archive_member_count', 0)}",
                     f"- source_section_events：{manifest['source_audit']['source_section_event_count']}",
@@ -76,6 +97,20 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--event-export")
     p.add_argument("--limit", type=int)
     p.add_argument("--collected-at")
+    p.add_argument("--allow-terminal", action="append", help="Only collect matching terminals, e.g. wind, choice, ifind, bloomberg.")
+    p.add_argument("--deny-terminal", action="append", help="Exclude matching terminals.")
+    p.add_argument("--allow-activity", action="append", help="Only collect matching workflow activities, e.g. workspace, watchlist, search, download, model_template, factor_attention.")
+    p.add_argument("--deny-activity", action="append", help="Exclude matching workflow activities.")
+    p.add_argument("--allow-workspace", action="append", help="Only collect matching workspace names.")
+    p.add_argument("--deny-workspace", action="append", help="Exclude matching workspace names.")
+    p.add_argument("--allow-project", action="append", help="Only collect matching project, strategy, or portfolio names.")
+    p.add_argument("--deny-project", action="append", help="Exclude matching project, strategy, or portfolio names.")
+    p.add_argument("--allow-dataset", action="append", help="Only collect records with matching datasets.")
+    p.add_argument("--deny-dataset", action="append", help="Exclude records with matching datasets.")
+    p.add_argument("--allow-field", action="append", help="Only collect records with matching terminal fields or indicators.")
+    p.add_argument("--deny-field", action="append", help="Exclude records with matching terminal fields or indicators.")
+    p.add_argument("--allow-keyword", action="append", help="Only collect records whose workflow metadata contains a keyword.")
+    p.add_argument("--deny-keyword", action="append", help="Exclude records whose workflow metadata contains a keyword.")
     p.set_defaults(func=collect)
     return parser
 

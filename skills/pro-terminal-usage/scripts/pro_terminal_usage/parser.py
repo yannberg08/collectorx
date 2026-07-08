@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath, PureWindowsPath
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 try:
     import openpyxl
@@ -306,6 +306,33 @@ SECTION_ACTIVITY_TYPES = {
     "factors": "factor_attention",
     "indicators": "factor_attention",
 }
+ACTIVITY_SCOPE_ALIASES = {
+    "workspace": "workspace",
+    "workspaces": "workspace",
+    "dashboard": "workspace",
+    "dashboards": "workspace",
+    "watchlist": "watchlist",
+    "watchlists": "watchlist",
+    "search": "search",
+    "searches": "search",
+    "query": "search",
+    "queries": "search",
+    "download": "download",
+    "downloads": "download",
+    "export": "download",
+    "exports": "download",
+    "model": "model_template",
+    "models": "model_template",
+    "template": "model_template",
+    "templates": "model_template",
+    "model_template": "model_template",
+    "model_templates": "model_template",
+    "factor": "factor_attention",
+    "factors": "factor_attention",
+    "indicator": "factor_attention",
+    "indicators": "factor_attention",
+    "factor_attention": "factor_attention",
+}
 VENDOR_TERMS = {
     "wind": ("wind", "万得"),
     "choice": ("choice", "东方财富choice"),
@@ -318,8 +345,45 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
-def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
+def collect_from_inputs(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    limit: Optional[int] = None,
+    allow_terminals: Optional[Iterable[str]] = None,
+    deny_terminals: Optional[Iterable[str]] = None,
+    allow_activities: Optional[Iterable[str]] = None,
+    deny_activities: Optional[Iterable[str]] = None,
+    allow_workspaces: Optional[Iterable[str]] = None,
+    deny_workspaces: Optional[Iterable[str]] = None,
+    allow_projects: Optional[Iterable[str]] = None,
+    deny_projects: Optional[Iterable[str]] = None,
+    allow_datasets: Optional[Iterable[str]] = None,
+    deny_datasets: Optional[Iterable[str]] = None,
+    allow_fields: Optional[Iterable[str]] = None,
+    deny_fields: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> List[Dict[str, Any]]:
+    events, _audit = collect_from_inputs_with_audit(
+        inputs,
+        collected_at=collected_at,
+        limit=limit,
+        allow_terminals=allow_terminals,
+        deny_terminals=deny_terminals,
+        allow_activities=allow_activities,
+        deny_activities=deny_activities,
+        allow_workspaces=allow_workspaces,
+        deny_workspaces=deny_workspaces,
+        allow_projects=allow_projects,
+        deny_projects=deny_projects,
+        allow_datasets=allow_datasets,
+        deny_datasets=deny_datasets,
+        allow_fields=allow_fields,
+        deny_fields=deny_fields,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     return events
 
 
@@ -328,6 +392,20 @@ def collect_from_inputs_with_audit(
     *,
     collected_at: Optional[str] = None,
     limit: Optional[int] = None,
+    allow_terminals: Optional[Iterable[str]] = None,
+    deny_terminals: Optional[Iterable[str]] = None,
+    allow_activities: Optional[Iterable[str]] = None,
+    deny_activities: Optional[Iterable[str]] = None,
+    allow_workspaces: Optional[Iterable[str]] = None,
+    deny_workspaces: Optional[Iterable[str]] = None,
+    allow_projects: Optional[Iterable[str]] = None,
+    deny_projects: Optional[Iterable[str]] = None,
+    allow_datasets: Optional[Iterable[str]] = None,
+    deny_datasets: Optional[Iterable[str]] = None,
+    allow_fields: Optional[Iterable[str]] = None,
+    deny_fields: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     input_list = list(inputs)
     events: List[Dict[str, Any]] = []
@@ -335,6 +413,25 @@ def collect_from_inputs_with_audit(
     skipped_extension_counts: Counter[str] = Counter()
     skipped_reason_counts: Counter[str] = Counter()
     skipped_archive_member_reason_counts: Counter[str] = Counter()
+    scope_policy_filter_reason_counts: Counter[str] = Counter()
+    candidate_record_count = 0
+    scope_policy_filtered_record_count = 0
+    policy = build_pro_terminal_scope_policy(
+        allow_terminals=allow_terminals,
+        deny_terminals=deny_terminals,
+        allow_activities=allow_activities,
+        deny_activities=deny_activities,
+        allow_workspaces=allow_workspaces,
+        deny_workspaces=deny_workspaces,
+        allow_projects=allow_projects,
+        deny_projects=deny_projects,
+        allow_datasets=allow_datasets,
+        deny_datasets=deny_datasets,
+        allow_fields=allow_fields,
+        deny_fields=deny_fields,
+        allow_keywords=allow_keywords,
+        deny_keywords=deny_keywords,
+    )
     audit: Dict[str, Any] = {
         "source_type": "authorized_pro_terminal_usage_export",
         "input_count": len(input_list),
@@ -355,6 +452,11 @@ def collect_from_inputs_with_audit(
         "skipped_archive_member_reason_counts": {},
         "archive_path_traversal_members_collected": False,
         "windows_drive_archive_members_collected": False,
+        "candidate_record_count": 0,
+        "scope_policy_filtered_record_count": 0,
+        "scope_policy_filter_reason_counts": {},
+        "pro_terminal_scope_policy": policy,
+        "pro_terminal_scope_policy_filtered_all": False,
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "path_results": [],
@@ -395,7 +497,8 @@ def collect_from_inputs_with_audit(
             result = path_result(path, status="pending")
             try:
                 if path.suffix.lower() == ".zip":
-                    parsed, archive_audit = parse_zip_with_audit(path, limit=remaining_limit(limit, events))
+                    zip_limit = None if policy["enabled"] else remaining_limit(limit, events)
+                    parsed, archive_audit = parse_zip_with_audit(path, limit=zip_limit)
                     merge_archive_audit(audit, archive_audit, skipped_archive_member_reason_counts)
                     result.update(
                         {
@@ -423,31 +526,244 @@ def collect_from_inputs_with_audit(
                 result.update({"status": "parse_error", "reason": "parse_error", "parsed_record_count": 0})
             audit["path_results"].append(result)
             row = 0
+            path_candidate_count = 0
+            path_filtered_count = 0
+            path_emitted_count = 0
             for record in parsed:
                 if not isinstance(record, dict):
                     continue
                 row += 1
-                events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
+                candidate_record_count += 1
+                path_candidate_count += 1
+                event = record_to_event(record, path=path, row=row, collected_at=collected_at)
+                filter_reason = pro_terminal_scope_policy_filter_reason(event, policy)
+                if filter_reason:
+                    scope_policy_filtered_record_count += 1
+                    path_filtered_count += 1
+                    scope_policy_filter_reason_counts[filter_reason] += 1
+                    continue
+                events.append(event)
+                path_emitted_count += 1
                 if limit is not None and len(events) >= limit:
                     audit["limit_reached"] = True
                     break
+            if path_candidate_count:
+                result["candidate_record_count"] = path_candidate_count
+                result["scope_policy_filtered_record_count"] = path_filtered_count
+                result["emitted_record_count"] = path_emitted_count
+                if policy["enabled"] and path_filtered_count == path_candidate_count and path_emitted_count == 0:
+                    result["status"] = "filtered_by_scope_policy"
+                    result["reason"] = "scope_policy_excluded_all_records"
+                elif path_filtered_count:
+                    result["scope_policy_filter_status"] = "partially_filtered"
         if limit is not None and len(events) >= limit:
             break
 
-    if not events:
+    scope_policy_filtered_all = (
+        policy["enabled"]
+        and candidate_record_count > 0
+        and scope_policy_filtered_record_count == candidate_record_count
+        and not events
+    )
+    if not events and not scope_policy_filtered_all:
         reason = (
             "pro_terminal_usage_authorized_input_missing"
             if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
             else "pro_terminal_usage_records_empty"
         )
         events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["parsed_record_count"] = len(usable_terminal_events(events))
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
+    audit["pro_terminal_scope_policy_filtered_all"] = scope_policy_filtered_all
+    audit["parsed_record_count"] = candidate_record_count
     audit["emitted_event_count"] = len(events)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+    audit["archive_member_event_count"] = sum(1 for event in usable_terminal_events(events) if (event.get("raw_ref") or {}).get("archive_member"))
     return events, audit
+
+
+def build_pro_terminal_scope_policy(
+    *,
+    allow_terminals: Optional[Iterable[str]] = None,
+    deny_terminals: Optional[Iterable[str]] = None,
+    allow_activities: Optional[Iterable[str]] = None,
+    deny_activities: Optional[Iterable[str]] = None,
+    allow_workspaces: Optional[Iterable[str]] = None,
+    deny_workspaces: Optional[Iterable[str]] = None,
+    allow_projects: Optional[Iterable[str]] = None,
+    deny_projects: Optional[Iterable[str]] = None,
+    allow_datasets: Optional[Iterable[str]] = None,
+    deny_datasets: Optional[Iterable[str]] = None,
+    allow_fields: Optional[Iterable[str]] = None,
+    deny_fields: Optional[Iterable[str]] = None,
+    allow_keywords: Optional[Iterable[str]] = None,
+    deny_keywords: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    policy = {
+        "allow_terminals": normalize_scope_terms(allow_terminals, normalizer=normalize_terminal_scope_term),
+        "deny_terminals": normalize_scope_terms(deny_terminals, normalizer=normalize_terminal_scope_term),
+        "allow_activities": normalize_scope_terms(allow_activities, normalizer=normalize_activity_scope_term),
+        "deny_activities": normalize_scope_terms(deny_activities, normalizer=normalize_activity_scope_term),
+        "allow_workspaces": normalize_scope_terms(allow_workspaces),
+        "deny_workspaces": normalize_scope_terms(deny_workspaces),
+        "allow_projects": normalize_scope_terms(allow_projects),
+        "deny_projects": normalize_scope_terms(deny_projects),
+        "allow_datasets": normalize_scope_terms(allow_datasets),
+        "deny_datasets": normalize_scope_terms(deny_datasets),
+        "allow_fields": normalize_scope_terms(allow_fields),
+        "deny_fields": normalize_scope_terms(deny_fields),
+        "allow_keywords": normalize_scope_terms(allow_keywords, keep_case=True),
+        "deny_keywords": normalize_scope_terms(deny_keywords, keep_case=True),
+    }
+    policy["enabled"] = any(bool(values) for values in policy.values())
+    return policy
+
+
+def normalize_scope_terms(
+    values: Optional[Iterable[str]],
+    *,
+    normalizer: Optional[Any] = None,
+    keep_case: bool = False,
+) -> List[str]:
+    cleaned: List[str] = []
+    for term in split_policy_terms(values):
+        normalized = normalizer(term) if normalizer else term.strip()
+        if not normalized:
+            continue
+        cleaned.append(normalized if keep_case else normalized.lower())
+    return sorted(dict.fromkeys(cleaned))
+
+
+def split_policy_terms(values: Optional[Iterable[str]]) -> List[str]:
+    if values is None:
+        return []
+    if isinstance(values, str):
+        values = [values]
+    terms: List[str] = []
+    for value in values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, (list, tuple, set)):
+            terms.extend(split_policy_terms(value))
+            continue
+        terms.extend(item.strip() for item in re.split(r"[,，、;；|\n]+", str(value)) if item.strip())
+    return terms
+
+
+def normalize_terminal_scope_term(term: str) -> str:
+    inferred = infer_terminal({"terminal": term}, term)
+    return inferred if inferred != "unknown" else term.strip().lower()
+
+
+def normalize_activity_scope_term(term: str) -> str:
+    normalized = re.sub(r"[\s\-]+", "_", term.strip().lower())
+    return ACTIVITY_SCOPE_ALIASES.get(normalized, normalized)
+
+
+def pro_terminal_scope_policy_filter_reason(event: Dict[str, Any], policy: Dict[str, Any]) -> Optional[str]:
+    if not policy.get("enabled"):
+        return None
+    data = event.get("data") or {}
+    terminal = normalize_terminal_scope_term(str(data.get("terminal") or ""))
+    activity = normalize_activity_scope_term(str(data.get("activity_type") or ""))
+    workspace = str(data.get("workspace") or "").strip().lower()
+    project = str(data.get("project") or "").strip().lower()
+    datasets = normalize_policy_values(data.get("datasets") or [])
+    fields = normalize_policy_values(data.get("fields") or [])
+    if terminal and terminal in policy.get("deny_terminals", []):
+        return "terminal_denied"
+    if activity and activity in policy.get("deny_activities", []):
+        return "activity_denied"
+    if workspace and workspace in policy.get("deny_workspaces", []):
+        return "workspace_denied"
+    if project and project in policy.get("deny_projects", []):
+        return "project_denied"
+    if datasets and set(datasets).intersection(policy.get("deny_datasets", [])):
+        return "dataset_denied"
+    if fields and set(fields).intersection(policy.get("deny_fields", [])):
+        return "field_denied"
+    if policy_hit(policy.get("deny_keywords", []), flatten_pro_terminal_policy_surface(data)):
+        return "keyword_denied"
+    if policy.get("allow_terminals") and terminal not in policy["allow_terminals"]:
+        return "terminal_not_allowed"
+    if policy.get("allow_activities") and activity not in policy["allow_activities"]:
+        return "activity_not_allowed"
+    if policy.get("allow_workspaces") and workspace not in policy["allow_workspaces"]:
+        return "workspace_not_allowed"
+    if policy.get("allow_projects") and project not in policy["allow_projects"]:
+        return "project_not_allowed"
+    if policy.get("allow_datasets") and not set(datasets).intersection(policy["allow_datasets"]):
+        return "dataset_not_allowed"
+    if policy.get("allow_fields") and not set(fields).intersection(policy["allow_fields"]):
+        return "field_not_allowed"
+    if policy.get("allow_keywords") and not policy_hit(policy["allow_keywords"], flatten_pro_terminal_policy_surface(data)):
+        return "keyword_not_allowed"
+    return None
+
+
+def normalize_policy_values(value: Any) -> List[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, list):
+        values = value
+    else:
+        values = split_terms(str(value))
+    return sorted({str(item).strip().lower() for item in values if str(item).strip()})
+
+
+def policy_hit(needles: Sequence[str], values: Iterable[Any]) -> bool:
+    if not needles:
+        return False
+    haystack = "\n".join(str(value) for value in values if value not in (None, "", [], {})).lower()
+    return any(str(needle).lower() in haystack for needle in needles if str(needle).strip())
+
+
+def flatten_pro_terminal_policy_surface(data: Dict[str, Any]) -> List[Any]:
+    values: List[Any] = []
+    for key in (
+        "activity_type",
+        "terminal",
+        "workflow_topics",
+        "primary_workflow_topic",
+        "title",
+        "source_section",
+        "workspace",
+        "project",
+        "module",
+        "function_code",
+        "menu_path",
+        "query",
+        "query_terms",
+        "parameters",
+        "symbols",
+        "universe",
+        "industries",
+        "regions",
+        "factors",
+        "datasets",
+        "fields",
+        "workspace_id",
+        "template_name",
+        "template_id",
+        "frequency",
+        "date_range",
+        "download_format",
+        "file_name",
+        "export_path",
+        "lineage_ref",
+    ):
+        value = data.get(key)
+        if isinstance(value, list):
+            values.extend(value)
+        elif isinstance(value, dict):
+            values.append(json.dumps(value, ensure_ascii=False, sort_keys=True))
+        else:
+            values.append(value)
+    return values
 
 
 def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
@@ -969,7 +1285,10 @@ def build_manifest(
     kind_counts = Counter(event["kind"] for event in events)
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in events)
     terminal_counts = Counter((event.get("data") or {}).get("terminal", "unknown") for event in events)
+    collection_audit = collection_audit or {}
     gap_only = bool(events) and set(activity_counts) == {"collector_gap"}
+    scope_policy_filtered_all = bool(collection_audit.get("pro_terminal_scope_policy_filtered_all"))
+    no_events = not events
     observed_terminals = sorted(terminal for terminal, count in terminal_counts.items() if count and terminal != "unknown")
     observed_expected_terminals = [terminal for terminal in EXPECTED_PRO_TERMINALS if terminal_counts.get(terminal)]
     missing_expected_terminals = [terminal for terminal in EXPECTED_PRO_TERMINALS if not terminal_counts.get(terminal)]
@@ -1041,17 +1360,53 @@ def build_manifest(
             "real_account_validation": False,
         },
         "collection_readiness": {
-            "status": "needs_pro_terminal_usage_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": collection_readiness_status(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
+            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_complete_terminal_usage": False,
-            "source_collection_scope": "none" if gap_only else "partial_authorized_input",
+            "source_collection_scope": source_collection_scope_for_readiness(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
             "license_boundary": "workflow_metadata_only",
             "terminal_coverage_status": coverage_status(events, missing_expected_terminals, "terminal"),
             "activity_coverage_status": coverage_status(events, missing_expected_activities, "activity_type"),
             "workflow_field_coverage_status": coverage_status(events, missing_recommended_fields, "workflow_field"),
-            "next_action": "Provide authorized Wind/Choice/iFinD/Bloomberg workflow export." if gap_only else "Use as investor workflow evidence; continue licensed platform validation.",
+            "next_action": collection_next_action(
+                gap_only=gap_only,
+                no_events=no_events,
+                scope_policy_filtered_all=scope_policy_filtered_all,
+            ),
         },
     }
+
+
+def collection_readiness_status(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_filtered_all"
+    if gap_only or no_events:
+        return "needs_pro_terminal_usage_input"
+    return "events_collected"
+
+
+def source_collection_scope_for_readiness(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "scope_policy_excluded_all"
+    if gap_only or no_events:
+        return "none"
+    return "partial_authorized_input"
+
+
+def collection_next_action(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+    if scope_policy_filtered_all:
+        return "Broaden the user authorization scope or provide terminal workflow records that match the current policy."
+    if gap_only or no_events:
+        return "Provide authorized Wind/Choice/iFinD/Bloomberg workflow export."
+    return "Use as investor workflow evidence; continue licensed platform validation."
 
 
 def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], noun: str) -> str:
@@ -1238,7 +1593,9 @@ def workflow_boundary_proof(
     all_expected_activities = bool(observed_expected_activities) and not missing_expected_activities
     all_recommended_fields = bool(observed_recommended_fields) and not missing_recommended_fields
     all_expected_topics = bool(observed_topics) and not missing_topics
-    if not usable_events:
+    if audit.get("pro_terminal_scope_policy_filtered_all"):
+        proof_level = "scope_policy_filtered_all"
+    elif not usable_events:
         gap_reason = None
         if events:
             gap_reason = (events[0].get("data") or {}).get("gap")
@@ -1252,6 +1609,8 @@ def workflow_boundary_proof(
     blockers = []
     if not usable_events:
         blockers.append("authorized_terminal_workflow_export_missing")
+    if audit.get("pro_terminal_scope_policy_filtered_all"):
+        blockers.append("authorization_scope_excluded_all_records")
     if missing_expected_terminals:
         blockers.append("missing_expected_terminals:" + ",".join(missing_expected_terminals))
     if missing_expected_activities:
@@ -1347,6 +1706,13 @@ def workflow_boundary_proof(
             "path_level_audit_available": bool(audit.get("path_results")),
             "archive_path_traversal_members_collected": False,
             "windows_drive_archive_members_collected": False,
+        },
+        "authorization_scope_boundary": {
+            "policy": audit.get("pro_terminal_scope_policy", {}),
+            "candidate_record_count": audit.get("candidate_record_count", audit.get("parsed_record_count", len(usable_events))),
+            "scope_policy_filtered_record_count": audit.get("scope_policy_filtered_record_count", 0),
+            "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts", {}),
+            "pro_terminal_scope_policy_filtered_all": audit.get("pro_terminal_scope_policy_filtered_all", False),
         },
         "license_boundary": {
             "license_boundary": "workflow_metadata_only",

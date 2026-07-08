@@ -427,6 +427,222 @@ def test_collect_zip_limit_counts_only_emitted_records() -> None:
         assert source_audit["path_results"][0]["parsed_record_count"] == 1
 
 
+def test_collect_respects_authorization_scope_policy() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "terminal_scope.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "usage": [
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "project": "AI Infra",
+                            "dataset": "FA",
+                            "fields": "Revenue, EBITDA",
+                            "query": "AI capex revenue export",
+                            "row_count": 120,
+                        },
+                        {
+                            "terminal": "Choice",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "project": "AI Infra",
+                            "dataset": "FA",
+                            "fields": "Revenue",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "search",
+                            "workspace": "Macro Desk",
+                            "project": "AI Infra",
+                            "dataset": "FA",
+                            "fields": "Revenue",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "download",
+                            "workspace": "Other Desk",
+                            "project": "AI Infra",
+                            "dataset": "FA",
+                            "fields": "Revenue",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "project": "Rates",
+                            "dataset": "FA",
+                            "fields": "Revenue",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "project": "AI Infra",
+                            "dataset": "EDB",
+                            "fields": "Revenue",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "project": "AI Infra",
+                            "dataset": "FA",
+                            "fields": "PB",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "project": "AI Infra",
+                            "dataset": "FA",
+                            "fields": "Revenue",
+                            "title": "secret strategy export",
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-terminal",
+                "wind",
+                "--allow-activity",
+                "download",
+                "--allow-workspace",
+                "Macro Desk",
+                "--allow-project",
+                "AI Infra",
+                "--allow-dataset",
+                "FA",
+                "--allow-field",
+                "Revenue",
+                "--deny-keyword",
+                "secret strategy",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["terminal"] == "wind"
+        assert events[0]["data"]["activity_type"] == "download"
+        assert events[0]["data"]["workspace"] == "Macro Desk"
+        assert events[0]["data"]["project"] == "AI Infra"
+        assert events[0]["data"]["datasets"] == ["FA"]
+        assert "Revenue" in events[0]["data"]["fields"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        source_audit = manifest["source_audit"]
+        assert source_audit["candidate_record_count"] == 8
+        assert source_audit["parsed_record_count"] == 8
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["scope_policy_filtered_record_count"] == 7
+        assert source_audit["scope_policy_filter_reason_counts"] == {
+            "activity_not_allowed": 1,
+            "dataset_not_allowed": 1,
+            "field_not_allowed": 1,
+            "keyword_denied": 1,
+            "project_not_allowed": 1,
+            "terminal_not_allowed": 1,
+            "workspace_not_allowed": 1,
+        }
+        assert source_audit["pro_terminal_scope_policy"]["enabled"] is True
+        assert source_audit["pro_terminal_scope_policy"]["allow_terminals"] == ["wind"]
+        assert source_audit["pro_terminal_scope_policy"]["allow_activities"] == ["download"]
+        assert source_audit["pro_terminal_scope_policy"]["allow_workspaces"] == ["macro desk"]
+        assert source_audit["pro_terminal_scope_policy"]["allow_projects"] == ["ai infra"]
+        assert source_audit["pro_terminal_scope_policy"]["allow_datasets"] == ["fa"]
+        assert source_audit["pro_terminal_scope_policy"]["allow_fields"] == ["revenue"]
+        assert source_audit["path_results"][0]["scope_policy_filter_status"] == "partially_filtered"
+        proof = manifest["workflow_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["scope_policy_filtered_record_count"] == 7
+        assert proof["authorization_scope_boundary"]["pro_terminal_scope_policy_filtered_all"] is False
+        assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["authorization_scope_boundary"]["candidate_record_count"] == 8
+
+
+def test_collect_scope_policy_filtered_all_is_not_success() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        export = root / "choice_scope.json"
+        out = root / "out"
+        export.write_text(
+            json.dumps(
+                {
+                    "usage": [
+                        {
+                            "terminal": "Choice",
+                            "activity_type": "download",
+                            "workspace": "Macro Desk",
+                            "dataset": "EDB",
+                            "fields": "M2, CPI",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(export),
+                "--out-dir",
+                str(out),
+                "--allow-terminal",
+                "wind",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert events == []
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 0
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["workflow_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+        assert manifest["workflow_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert "authorization_scope_excluded_all_records" in manifest["workflow_boundary_proof"]["completion_blockers"]
+        source_audit = manifest["source_audit"]
+        assert source_audit["candidate_record_count"] == 1
+        assert source_audit["parsed_record_count"] == 1
+        assert source_audit["emitted_event_count"] == 0
+        assert source_audit["scope_policy_filtered_record_count"] == 1
+        assert source_audit["scope_policy_filter_reason_counts"] == {"terminal_not_allowed": 1}
+        assert source_audit["pro_terminal_scope_policy_filtered_all"] is True
+        assert source_audit["path_results"][0]["status"] == "filtered_by_scope_policy"
+        assert source_audit["path_results"][0]["reason"] == "scope_policy_excluded_all_records"
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+
+
 def test_collect_missing_input_writes_gap_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -470,5 +686,7 @@ if __name__ == "__main__":
     test_collect_terminal_workflow_exports()
     test_collect_nested_sections_workbook_and_sanitizes()
     test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_respects_authorization_scope_policy()
+    test_collect_scope_policy_filtered_all_is_not_success()
     test_collect_missing_input_writes_gap_audit()
     print("pro-terminal-usage tests passed.")

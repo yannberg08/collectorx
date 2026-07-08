@@ -1114,7 +1114,11 @@ Current status:
 ```bash
 python3 skills/pro-terminal-usage/scripts/pro_terminal_usage.py collect \
   --input <authorized-wind-choice-ifind-workflow-export-or-zip> \
-  --out-dir <out-dir>
+  --out-dir <out-dir> \
+  --allow-terminal wind \
+  --allow-activity download \
+  --allow-dataset FA \
+  --allow-field Revenue
 ```
 
 Current status:
@@ -1134,6 +1138,11 @@ Current status:
   query/filter parameters, export paths, row counts, workspace IDs, template
   IDs, securities/fields/datasets/factors counts, watchlist sizes, and stable
   lineage refs.
+- Optional scope filters can narrow Lake output by terminal, activity,
+  workspace, project, dataset, field, or keyword through allow/deny arguments.
+  `manifest.source_audit.pro_terminal_scope_policy` records the policy and
+  filtered counts; if every candidate record is excluded, readiness becomes
+  `scope_policy_filtered_all`.
 - Adds per-event `workflow_topics`, `primary_workflow_topic`, and
   `workflow_topic_terms` so FinClaw can map terminal behavior to macro,
   strategy, industry, fundamental, valuation, credit, factor, portfolio,
@@ -1147,9 +1156,10 @@ Current status:
   ZIP/section provenance, and license-safe boundaries before using the evidence.
 - `manifest.workflow_boundary_proof` gives FinClaw a single gate for authorized
   input presence, terminal/activity/field/topic coverage, workflow surfaces,
-  source audit, license safety, Wiki flow, and explicit false claims such as no
-  complete terminal history, no vendor database mirror, no licensed content body
-  mirror, no credentials, no license keys, and no direct Wiki write.
+  authorization scope, source audit, license safety, Wiki flow, and explicit
+  false claims such as no complete terminal history, no vendor database mirror,
+  no licensed content body mirror, no credentials, no license keys, and no
+  direct Wiki write.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.

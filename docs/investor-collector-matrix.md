@@ -46,7 +46,7 @@
 | Collector | Skill | 目标 |
 | --- | --- | --- |
 | `hk-us-brokerage` | `hk-us-brokerage` | vertical：富途、老虎、盈透等港美股资产、持仓、成交、委托、资金流水、分红、换汇，含授权 ZIP、券商/交易表/字段覆盖、账户边界、币种市场、费用税费保证金和券商/账户/交易表/标的/市场/币种/关键词授权范围 manifest |
-| `pro-terminal-usage` | `pro-terminal-usage` | vertical：Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作区、自选、搜索、下载、模板、因子、数据集、字段、函数代码、查询词、参数、导出路径、行数、工作区/模板 ID、对象计数，含授权 ZIP、终端/活动/字段覆盖、工作流主题面谱和强度摘要 manifest |
+| `pro-terminal-usage` | `pro-terminal-usage` | vertical：Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作区、自选、搜索、下载、模板、因子、数据集、字段、函数代码、查询词、参数、导出路径、行数、工作区/模板 ID、对象计数，含授权 ZIP、终端/活动/字段覆盖、工作流主题面谱、强度摘要和终端/活动/工作区/项目/数据集/字段/关键词授权范围 manifest |
 | `social-activity` | `social-activity` | generic：微博、B站、小红书用户关注/点赞/收藏/观看/评论/分享和浏览器历史访问，含授权 ZIP/浏览器历史副本、弱证据策略、平台/动作/字段覆盖、社交影响主题、浏览器来源审计和社交活动边界证明 manifest |
 | `social-investment-influence` | `investor-source-collectors` | lens：投资内容影响源、创作者、收藏/点赞/观看、社交影响主题和社交影响边界证明，只能作为弱证据 |
 

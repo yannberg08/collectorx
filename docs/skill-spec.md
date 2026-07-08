@@ -78,7 +78,7 @@ skill-name/
 | china-wealth-assets | 8+ | 中国基金理财资产垂直采集器；本地授权导入、PDF 官方账单、浏览器网络 HAR、ZIP、来源审计、平台/字段/账户/资产边界证明/资产面/币种覆盖和金额汇总已测试，仍需真实账号完整边界证明 |
 | financial-news-usage | 8+ | 财经资讯使用痕迹垂直采集器 baseline；支持授权文件/目录/ZIP/直接与 ZIP 内 Chromium/Safari 浏览器历史副本、平台/动作/主题覆盖、搜索/订阅/提醒/停留/访问行为覆盖、平台/动作/来源应用/域名/主题/关键词 scope-policy 审计、浏览器来源计数、逐输入来源审计、跳过原因、使用边界证明和凭证字段过滤，仍需真实财联社/华尔街见闻/格隆汇账号验证 |
 | hk-us-brokerage | 8+ | 港美股券商强交易垂直采集器 baseline；支持授权 CSV/JSON/Excel/ZIP、券商/交易表/字段覆盖、账户边界、币种市场、费用税费保证金、现金流活动、收益回报、订单执行、券商/账户/交易表/标的/市场/币种/关键词 scope-policy 审计、统一券商边界证明、逐输入来源审计、跳过原因和凭证字段过滤，仍需真实富途/老虎/盈透账号验证 |
-| pro-terminal-usage | 8+ | 专业终端使用痕迹垂直采集器 baseline；支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP、终端/活动/字段覆盖、工作流主题面谱、查询词/参数/导出路径/行数/工作区模板 ID/对象计数强度摘要、统一工作流边界证明、逐输入来源审计、跳过原因和凭证/许可字段过滤，仍需真实 Wind/Choice/iFinD/Bloomberg 账号验证 |
+| pro-terminal-usage | 8+ | 专业终端使用痕迹垂直采集器 baseline；支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP、终端/活动/字段覆盖、工作流主题面谱、查询词/参数/导出路径/行数/工作区模板 ID/对象计数强度摘要、终端/活动/工作区/项目/数据集/字段/关键词 scope-policy 审计、filtered-all 状态、统一工作流边界证明、逐输入来源审计、跳过原因和凭证/许可字段过滤，仍需真实 Wind/Choice/iFinD/Bloomberg 账号验证 |
 | social-activity | 8+ | 社交平台用户活动通用采集器 baseline；支持授权 JSON/CSV/Excel/HTML/TXT/ZIP/浏览器历史副本、弱证据策略、平台/动作/字段覆盖、社交影响主题、浏览器来源/访问/跳转方式审计、社交活动边界证明、逐输入来源审计、跳过原因、ZIP 成员审计和凭证字段过滤，仍需真实微博/B站/小红书账号验证 |
 | email-collector | 8+ | 多邮箱前置识别、IMAP 标准包、本地邮件导入、Apple Mail EMLX、Maildir、Thunderbird mbox、账户/文件夹审计、本机扫描根目录审计、逐输入导入审计、跳过文件/ZIP 成员原因、字段覆盖和邮箱边界证明已补齐，仍需真实邮箱验证与安全评审 |
 | qq-export | 9+ | 已发现真实 macOS QQ NT 联系人/群/消息库；支持 key 诊断、clean库准备、解密后联系人/群/消息读取；当前机器受 LLDB 权限限制 |

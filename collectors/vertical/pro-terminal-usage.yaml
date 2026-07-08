@@ -42,6 +42,8 @@ scope:
     - workflow_surface_summary
     - workflow_intensity_summary
     - workflow_boundary_proof
+    - terminal_activity_workspace_project_dataset_field_keyword_scope_policy
+    - scope_policy_filtered_all_readiness
     - source_audit_manifest
     - archive_member_provenance
     - path_level_collection_audit
@@ -58,5 +60,6 @@ scope:
 description: |
   专业终端是投资垂直工作流源。只采用户工作台、搜索、自选和模型使用痕迹，
   支持授权 CSV/JSON/Excel/HTML/TXT/LOG/ZIP 工作流包，并报告终端/活动/字段覆盖、
-  工作流主题面谱、工作流可用面、工作流强度与血缘摘要、统一工作流边界证明、逐输入来源审计、跳过原因和许可边界。
+  工作流主题面谱、工作流可用面、工作流强度与血缘摘要、终端/活动/工作区/项目/数据集/字段/关键词授权范围过滤、
+  filtered-all 状态、统一工作流边界证明、逐输入来源审计、跳过原因和许可边界。
   不复制厂商数据库内容。
