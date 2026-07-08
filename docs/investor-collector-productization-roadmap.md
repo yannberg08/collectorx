@@ -1368,6 +1368,29 @@ Findings:
   Chromium history, unsupported input files, unsafe ZIP members, missing input
   gap audit, credential filtering, and content/evidence policy.
 
+### Wave U4: P1 financial news usage topic surface pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-topic-surface-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `financial-news-usage` to `0.2.4`.
+- Added per-event `usage_topics`, `primary_usage_topic`, and
+  `usage_topic_terms`.
+- Added manifest/evidence usage topic summaries for macro policy, market
+  strategy, industry themes, company fundamentals, HK/US markets, risk events,
+  trading opportunities, and portfolio alerts.
+- Tightened topic terms during validation so `风险偏好` is not counted as a
+  risk event and a generic `电报` channel is not counted as a trading
+  opportunity.
+- Fixture validation covers platform/action/topic coverage, browser-history
+  domain filtering, ZIP alert provenance, unsafe ZIP member skipping, and
+  content/evidence policy.
+
 ### Wave V: P2 HK/US brokerage coverage pass 1
 
 Status: `completed-baseline`
@@ -1622,7 +1645,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, source audit, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, and reminder/time coverage; real account tokens/exports missing | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, source audit, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant normalization, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
-| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action coverage; manifests now include field coverage, usage surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps, ZIP provenance, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports |
+| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, Chromium/Safari browser-history copies, and platform/action/topic coverage; manifests now include field coverage, usage topic summary, usage surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps, ZIP provenance, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, Safari/Windows/Linux path validation, platform inference on noisy exports, topic false-positive review |
 
 ## P2 Work Queue
 

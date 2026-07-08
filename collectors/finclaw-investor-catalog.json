@@ -323,9 +323,9 @@
       "gate": "G2",
       "finclaw_action": "authorized-usage-export-or-browser-history-copy-import",
       "cli": "python3 skills/financial-news-usage/scripts/financial_news_usage.py collect --input <authorized-finance-news-usage-export> --out-dir <out-dir>",
-      "collects": "WallstreetCN, CLS, and Gelonghui read, favorite, subscribe, search, alert, browser-history, URL, domain, symbol, source-app traces, platform/action coverage, per-input source audit, skipped reasons, and ZIP member audit.",
+      "collects": "WallstreetCN, CLS, and Gelonghui read, favorite, subscribe, search, alert, browser-history, URL, domain, symbol, source-app traces, platform/action/topic coverage, macro policy, market strategy, industry theme, company fundamental, HK/US market, risk event, trading opportunity, portfolio alert surfaces, per-input source audit, skipped reasons, and ZIP member audit.",
       "must_not_collect": "Public news crawling, public article mirroring, or unrelated browser history.",
-      "production_gap": "Real app/account adapters, subscription stores, and Safari/Windows/Linux history validation."
+      "production_gap": "Real app/account adapters, subscription stores, Safari/Windows/Linux history validation, topic false-positive review, and platform inference on noisy exports."
     },
     {
       "id": "hk-us-brokerage",

@@ -37,7 +37,7 @@ def test_collect_usage_exports() -> None:
                         {
                             "platform": "财联社",
                             "action": "收藏",
-                            "title": "半导体产业链订单回暖",
+                            "title": "半导体产业链财报订单回暖",
                             "url": "https://www.cls.cn/detail/1",
                             "saved_at": "2026-07-08T08:30:00+08:00",
                             "channel": "电报",
@@ -77,7 +77,7 @@ def test_collect_usage_exports() -> None:
                             {
                                 "platform": "财联社",
                                 "action": "提醒",
-                                "title": "半导体自选提醒",
+                                "title": "半导体自选提醒：风险预警与交易机会",
                                 "url": "https://www.cls.cn/detail/alert",
                                 "time": "2026-07-08T09:20:00+08:00",
                             }
@@ -133,6 +133,17 @@ def test_collect_usage_exports() -> None:
         assert manifest["usage_surface_summary"]["events_with_domain"] == 3
         assert manifest["usage_surface_summary"]["events_with_query"] == 1
         assert manifest["usage_surface_summary"]["alert_event_count"] == 1
+        assert manifest["usage_surface_summary"]["events_with_usage_topics"] == 5
+        assert manifest["usage_surface_summary"]["missing_expected_usage_topics"] == []
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["macro_policy"] == 2
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["market_strategy"] == 1
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["industry_theme"] == 3
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["company_fundamental"] == 1
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["hk_us_market"] == 1
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["risk_event"] == 1
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["trading_opportunity"] == 1
+        assert manifest["usage_surface_summary"]["usage_topic_counts"]["portfolio_alert"] == 1
+        assert manifest["usage_surface_summary"]["platform_topic_counts"]["cls:portfolio_alert"] == 1
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_member_count"] == 4
         assert manifest["source_audit"]["skipped_archive_member_count"] == 3
@@ -153,6 +164,7 @@ def test_collect_usage_exports() -> None:
         assert evidence["coverage_summary"]["source_is_public_news_crawler"] is False
         assert evidence["coverage_summary"]["personal_usage_only"] is True
         assert evidence["coverage_summary"]["public_news_content_mirror"] is False
+        assert evidence["coverage_summary"]["usage_surface_summary"]["usage_topic_counts"]["industry_theme"] == 3
 
 
 def test_collect_chromium_browser_history() -> None:

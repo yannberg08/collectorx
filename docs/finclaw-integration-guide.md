@@ -542,6 +542,9 @@ Current status:
 - Captures user actions: read, favorite, subscribe, search, and alert.
 - Writes `manifest.platform_coverage` for CLS, WallstreetCN, and Gelonghui,
   plus `manifest.action_coverage` for expected user actions.
+- Writes usage-topic surfaces for macro policy, market strategy, industry
+  themes, company fundamentals, HK/US markets, risk events, trading
+  opportunities, and portfolio alerts.
 - Writes `manifest.field_coverage`, `manifest.usage_surface_summary`,
   `manifest.source_audit`, `manifest.content_policy`, and
   `manifest.evidence_policy` so Lake can tell which usage fields, browser

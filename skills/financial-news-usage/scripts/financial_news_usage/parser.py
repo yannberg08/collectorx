@@ -52,6 +52,8 @@ TEXT_PREVIEW_MAX_CHARS = 1200
 FINANCIAL_NEWS_RECOMMENDED_FIELDS = (
     "action_type",
     "platform",
+    "usage_topics",
+    "primary_usage_topic",
     "title",
     "url",
     "domain",
@@ -65,6 +67,96 @@ FINANCIAL_NEWS_RECOMMENDED_FIELDS = (
     "text_preview",
     "time",
 )
+FINANCIAL_NEWS_TOPIC_ORDER = (
+    "macro_policy",
+    "market_strategy",
+    "industry_theme",
+    "company_fundamental",
+    "hk_us_market",
+    "risk_event",
+    "trading_opportunity",
+    "portfolio_alert",
+    "unclassified_usage_topic",
+)
+FINANCIAL_NEWS_TOPIC_TERMS = {
+    "macro_policy": {
+        "宏观",
+        "政策",
+        "利率",
+        "央行",
+        "流动性",
+        "财政",
+        "美联储",
+        "降息",
+        "加息",
+    },
+    "market_strategy": {
+        "策略",
+        "A股",
+        "市场",
+        "仓位",
+        "风格",
+        "配置",
+        "择时",
+        "风险偏好",
+    },
+    "industry_theme": {
+        "行业",
+        "产业链",
+        "景气",
+        "主题",
+        "半导体",
+        "新能源",
+        "医药",
+        "创新药",
+        "AI",
+    },
+    "company_fundamental": {
+        "财报",
+        "业绩",
+        "订单",
+        "现金流",
+        "ROE",
+        "毛利率",
+        "基本面",
+        "公司",
+    },
+    "hk_us_market": {
+        "港股",
+        "美股",
+        "中概股",
+        "恒生",
+        "纳斯达克",
+        "海外",
+        "HK",
+        "US",
+    },
+    "risk_event": {
+        "预警",
+        "风险预警",
+        "下跌",
+        "回撤",
+        "违约",
+        "黑天鹅",
+        "监管",
+    },
+    "trading_opportunity": {
+        "机会",
+        "异动",
+        "突破",
+        "催化",
+        "快讯",
+        "交易机会",
+    },
+    "portfolio_alert": {
+        "自选",
+        "提醒",
+        "盯盘",
+        "推送",
+        "alert",
+        "watchlist",
+    },
+}
 
 
 def now_iso() -> str:
@@ -624,6 +716,16 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     domain = host_for(url)
     text = first(record, ["text", "content", "body", "summary", "abstract", "note", "正文", "内容", "摘要", "备注"]) or ""
     query = first(record, ["query", "keyword", "search", "搜索词", "关键词"])
+    tags = tags_for(record)
+    symbols = symbols_for(record)
+    usage_topics, usage_topic_terms = classify_usage_topics(
+        record,
+        title=title,
+        text=text,
+        query=query,
+        tags=tags,
+        symbols=symbols,
+    )
     event_time = first(
         record,
         [
@@ -644,6 +746,9 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     data = {
         "action_type": action_type,
         "platform": platform,
+        "usage_topics": usage_topics,
+        "primary_usage_topic": usage_topics[0] if usage_topics else "unclassified_usage_topic",
+        "usage_topic_terms": usage_topic_terms,
         "title": title,
         "url": url,
         "domain": domain,
@@ -651,8 +756,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source": first(record, ["source", "source_name", "publisher", "author", "来源", "作者"]),
         "channel": first(record, ["channel", "column", "category", "栏目", "频道", "分类"]),
         "query": query,
-        "symbols": symbols_for(record),
-        "tags": tags_for(record),
+        "symbols": symbols,
+        "tags": tags,
         "visit_count": first(record, ["visit_count", "访问次数"]),
         "typed_count": first(record, ["typed_count", "输入访问次数"]),
         "transition": first(record, ["transition", "访问方式"]),
@@ -908,10 +1013,30 @@ def usage_field_present(event: Dict[str, Any], field: str) -> bool:
     return value not in (None, "", [], {})
 
 
-def usage_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
+def usage_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     usage_events = usable_usage_events(events)
+    usage_topic_counts: Counter[str] = Counter()
+    primary_topic_counts: Counter[str] = Counter()
+    platform_topic_counts: Counter[str] = Counter()
+    for event in usage_events:
+        data = event.get("data") or {}
+        topics = data.get("usage_topics") if isinstance(data.get("usage_topics"), list) else []
+        if not topics:
+            topics = ["unclassified_usage_topic"]
+        for topic in topics:
+            usage_topic_counts[str(topic)] += 1
+            platform_topic_counts[f"{data.get('platform', 'unknown')}:{topic}"] += 1
+        primary_topic_counts[str(data.get("primary_usage_topic") or topics[0])] += 1
     return {
         "usage_event_count": len(usage_events),
+        "expected_usage_topics": list(FINANCIAL_NEWS_TOPIC_ORDER[:-1]),
+        "usage_topic_counts": ordered_counts(usage_topic_counts, FINANCIAL_NEWS_TOPIC_ORDER),
+        "primary_usage_topic_counts": ordered_counts(primary_topic_counts, FINANCIAL_NEWS_TOPIC_ORDER),
+        "missing_expected_usage_topics": [
+            topic for topic in FINANCIAL_NEWS_TOPIC_ORDER[:-1] if usage_topic_counts.get(topic, 0) == 0
+        ],
+        "platform_topic_counts": dict(sorted(platform_topic_counts.items())),
+        "events_with_usage_topics": sum(1 for event in usage_events if (event.get("data") or {}).get("usage_topics")),
         "events_with_url": sum(1 for event in usage_events if (event.get("data") or {}).get("url")),
         "events_with_domain": sum(1 for event in usage_events if (event.get("data") or {}).get("domain")),
         "events_with_source_app": sum(1 for event in usage_events if (event.get("data") or {}).get("source_app")),
@@ -1029,9 +1154,54 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
                     if (event.get("data") or {}).get("action_type") not in (None, "collector_gap")
                 }
             ),
+            "usage_surface_summary": usage_surface_summary(events),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
+
+
+def classify_usage_topics(
+    record: Dict[str, Any],
+    *,
+    title: str,
+    text: str,
+    query: Optional[str],
+    tags: List[str],
+    symbols: List[str],
+) -> Tuple[List[str], Dict[str, List[str]]]:
+    parts: List[str] = [title, text, query or "", " ".join(tags), " ".join(symbols)]
+    for key in ("source", "source_name", "publisher", "author", "来源", "作者", "channel", "column", "category", "栏目", "频道", "分类"):
+        value = record.get(key)
+        if value not in (None, ""):
+            parts.append(str(value))
+    searchable = "\n".join(parts)
+    lowered = searchable.lower()
+    matches: Dict[str, List[str]] = {}
+    for topic in FINANCIAL_NEWS_TOPIC_ORDER[:-1]:
+        hits = topic_term_hits(FINANCIAL_NEWS_TOPIC_TERMS[topic], searchable, lowered)
+        if hits:
+            matches[topic] = hits
+    topics = [topic for topic in FINANCIAL_NEWS_TOPIC_ORDER[:-1] if topic in matches]
+    return topics, {topic: matches[topic][:8] for topic in topics}
+
+
+def topic_term_hits(terms: Iterable[str], text: str, lowered: str) -> List[str]:
+    hits: List[str] = []
+    for term in sorted(terms):
+        if term.isascii():
+            if re.search(r"(?<![a-z0-9])" + re.escape(term.lower()) + r"(?![a-z0-9])", lowered):
+                hits.append(term)
+        elif term in text:
+            hits.append(term)
+    return hits
+
+
+def ordered_counts(counts: Counter[str], order: Iterable[str]) -> Dict[str, int]:
+    result = {key: counts[key] for key in order if counts.get(key)}
+    for key, value in sorted(counts.items()):
+        if key not in result:
+            result[key] = value
+    return result
 
 
 def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
