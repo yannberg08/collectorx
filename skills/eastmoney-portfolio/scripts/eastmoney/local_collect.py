@@ -21,6 +21,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
+from eastmoney.scope import (
+    default_eastmoney_scope_audit,
+    filter_events_with_scope,
+)
 from eastmoney.trade_export import discover_export_files, parse_trade_export_file
 from eastmoney.ui_collect import TradeUISnapshot, collect_trade_ui_snapshot
 
@@ -241,6 +245,7 @@ def collect_local(
     platform: str = "auto",
     trade_export_files: Optional[Iterable[Path]] = None,
     auto_trade_ui: bool = False,
+    scope_policy: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     output_dir = output_dir.expanduser().resolve()
     resolved_platform = resolve_platform(platform)
@@ -381,12 +386,15 @@ def collect_local(
     add_global_gap_events(events, collected_at, source_prefix=source_prefix)
 
     events = dedupe_events(events)
-    write_package(output_dir, events, sources, collected_at, eastmoney_home, platform_meta)
-    manifest = build_manifest(output_dir, events, sources, collected_at, platform_meta)
+    events, collection_audit = filter_events_with_scope(events, scope_policy)
+    if collection_audit.get("eastmoney_scope_policy_filtered_all"):
+        events = [scope_policy_filtered_all_event(collection_audit, collected_at, source_prefix=source_prefix)]
+    write_package(output_dir, events, sources, collected_at, eastmoney_home, platform_meta, collection_audit)
+    manifest = build_manifest(output_dir, events, sources, collected_at, platform_meta, collection_audit)
     write_json(output_dir / "manifest.json", manifest)
-    write_summary(output_dir, manifest, events)
+    write_summary(output_dir, manifest, events, collection_audit)
     write_wiki(output_dir, events)
-    write_investor_wiki_evidence(output_dir, events, collected_at)
+    write_investor_wiki_evidence(output_dir, events, collected_at, collection_audit)
     validation = validate_output(output_dir)
     manifest["validation"] = validation
     write_json(output_dir / "manifest.json", manifest)
@@ -1736,6 +1744,8 @@ def normalize_event_for_lake(event: Dict[str, Any]) -> Dict[str, Any]:
     if isinstance(data, dict):
         data.setdefault("source_kind", source_kind)
     normalized["kind"] = collectorx_kind_for_source(source_kind)
+    if not isinstance(normalized.get("time"), str) or not normalized.get("time"):
+        normalized["time"] = str(normalized.get("collected_at") or "")
     normalized["wiki_targets"] = canonical_wiki_targets(source_kind, normalized.get("wiki_targets") or [])
     return normalized
 
@@ -1764,6 +1774,36 @@ def gap_event(
     )
 
 
+def scope_policy_filtered_all_event(
+    collection_audit: Dict[str, Any],
+    collected_at: str,
+    source_prefix: str = "东方财富 Mac",
+) -> Dict[str, Any]:
+    policy = collection_audit.get("eastmoney_scope_policy") or {}
+    return make_event(
+        kind="data_gap",
+        data={
+            "gap": "eastmoney_scope_policy_filtered_all",
+            "status": "scope_policy_filtered_all",
+            "profile_type": "eastmoney_scope_policy_filtered_all",
+            "candidate_event_count": policy.get("candidate_event_count", 0),
+            "retained_event_count": policy.get("retained_event_count", 0),
+            "filtered_event_count": policy.get("filtered_event_count", 0),
+            "filter_reason_counts": policy.get("filter_reason_counts", {}),
+            "policy_is_user_authorization_scope": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "exact_business_numbers_preserved": True,
+            "read_only": True,
+            "note": "输入已读取，但全部被东方财富授权范围策略排除；未把任何业务事件写入 Lake。",
+        },
+        collected_at=collected_at,
+        source=f"{source_prefix} 授权范围策略",
+        privacy_contains=["portfolio"],
+        raw_ref={"scope_policy_enabled": True},
+        wiki_targets=["vertical/investor/profile"],
+    )
+
+
 def dedupe_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     seen = set()
     result = []
@@ -1782,6 +1822,7 @@ def write_package(
     collected_at: str,
     eastmoney_home: Path,
     platform_meta: Optional[Dict[str, Any]] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
 ) -> None:
     lake_dir = output_dir / "lake" / COLLECTOR
     lake_dir.mkdir(parents=True, exist_ok=True)
@@ -1789,7 +1830,7 @@ def write_package(
     with events_path.open("w", encoding="utf-8") as f:
         for event in events:
             f.write(json.dumps(normalize_event_for_lake(event), ensure_ascii=False, sort_keys=True) + "\n")
-    profile = build_profile(events, sources, collected_at, eastmoney_home, platform_meta)
+    profile = build_profile(events, sources, collected_at, eastmoney_home, platform_meta, collection_audit)
     write_json(output_dir / "structured_profile.json", profile)
 
 
@@ -1799,6 +1840,7 @@ def build_profile(
     collected_at: str,
     eastmoney_home: Path,
     platform_meta: Optional[Dict[str, Any]] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
     watch_groups: Dict[str, int] = Counter(
@@ -1851,7 +1893,8 @@ def build_profile(
         "collector": COLLECTOR,
         "collected_at": collected_at,
         "local_platform": platform_meta or {},
-        "collection_readiness": build_collection_readiness(events),
+        "collection_audit": collection_audit or default_eastmoney_scope_audit(events),
+        "collection_readiness": build_collection_readiness(events, collection_audit),
         "source_home_redacted": redacted_path(eastmoney_home),
         "event_counts": dict(sorted(counts.items())),
         "watch_groups": {
@@ -1876,8 +1919,11 @@ def build_manifest(
     sources: List[SourceFile],
     collected_at: str,
     platform_meta: Optional[Dict[str, Any]] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
+    audit = collection_audit or default_eastmoney_scope_audit(events)
+    readiness = build_collection_readiness(events, audit)
     return {
         "schema": MANIFEST_SCHEMA,
         "collector": COLLECTOR,
@@ -1934,7 +1980,21 @@ def build_manifest(
             "total_events": len(events),
             **dict(sorted(counts.items())),
         },
-        "collection_readiness": build_collection_readiness(events),
+        "collection_audit": audit,
+        "collection_readiness": readiness,
+        "eastmoney_portfolio_boundary_proof": {
+            "source_type": "broker_trade_asset_and_local_investment_behavior_evidence",
+            "event_count": len(events),
+            "source_kind_counts": dict(sorted(counts.items())),
+            "authorization_scope_boundary": audit.get("eastmoney_scope_policy") or {},
+            "read_only": True,
+            "exact_business_numbers_preserved": True,
+            "order_mutation_performed": False,
+            "credentials_collected": False,
+            "complete_trade_collection_claimed": bool(readiness.get("can_claim_complete_trade_collection")),
+            "complete_broker_history_claimed": False,
+            "policy_does_not_assert_investment_relevance": True,
+        },
         "sources": [s.manifest_entry() for s in sources],
         "outputs": {
             "events": str(output_dir / "lake" / COLLECTOR / "events.jsonl"),
@@ -1952,62 +2012,62 @@ INVESTOR_DIMENSION_CONTRACT = [
         "dimension_id": "inv-philosophy",
         "dimension_name": "投资哲学与信念",
         "children": [
-            ("market-view", "市场观", ["watchlist", "recent_stock", "stock_note"]),
-            ("risk-view", "风险观", ["broker_asset_snapshot", "broker_position_detail", "broker_trade_execution"]),
-            ("value-preference", "价值偏好", ["watchlist", "stock_note", "broker_position_detail"]),
+            ("inv-market-view", "市场观", ["watchlist", "recent_stock", "stock_note"]),
+            ("inv-risk-view", "风险观", ["broker_asset_snapshot", "broker_position_detail", "broker_trade_execution"]),
+            ("inv-value-preference", "价值偏好", ["watchlist", "stock_note", "broker_position_detail"]),
         ],
     },
     {
         "dimension_id": "inv-circle",
         "dimension_name": "能力圈定义",
         "children": [
-            ("industry-circle", "行业能力圈", ["watchlist", "recent_stock", "broker_position_detail", "broker_trade_execution"]),
-            ("analysis-ability", "分析能力", ["stock_note", "chart_drawing", "custom_panel"]),
-            ("information-learning-style", "信息处理与学习风格", ["recent_stock", "stock_note", "chart_drawing", "custom_panel"]),
+            ("inv-industry-circle", "行业能力圈", ["watchlist", "recent_stock", "broker_position_detail", "broker_trade_execution"]),
+            ("inv-analysis-ability", "分析能力", ["stock_note", "chart_drawing", "custom_panel"]),
+            ("inv-information-learning-style", "信息处理与学习风格", ["recent_stock", "stock_note", "chart_drawing", "custom_panel"]),
         ],
     },
     {
         "dimension_id": "inv-style",
         "dimension_name": "投资风格与策略",
         "children": [
-            ("style-profile", "风格画像", ["broker_trade_execution", "broker_position_detail", "broker_asset_snapshot"]),
-            ("buy-framework", "买入决策框架", ["broker_trade_execution", "broker_entrust_order", "stock_note"]),
-            ("sell-framework", "卖出决策框架", ["broker_trade_execution", "broker_entrust_order", "stock_note"]),
+            ("inv-style-profile", "风格画像", ["broker_trade_execution", "broker_position_detail", "broker_asset_snapshot"]),
+            ("inv-buy-framework", "买入决策框架", ["broker_trade_execution", "broker_entrust_order", "stock_note"]),
+            ("inv-sell-framework", "卖出决策框架", ["broker_trade_execution", "broker_entrust_order", "stock_note"]),
         ],
     },
     {
         "dimension_id": "inv-behavior",
         "dimension_name": "行为特征与偏差画像",
         "children": [
-            ("cognitive-bias", "认知偏差档案", ["broker_trade_execution", "broker_entrust_order"]),
-            ("emotion-pattern", "情绪模式", ["stock_note"]),
-            ("decision-adaptation-style", "决策与适应风格", ["broker_trade_execution", "broker_entrust_order", "trade_page_stock_context"]),
+            ("inv-cognitive-bias", "认知偏差档案", ["broker_trade_execution", "broker_entrust_order"]),
+            ("inv-emotion-pattern", "情绪模式", ["stock_note"]),
+            ("inv-decision-adaptation-style", "决策与适应风格", ["broker_trade_execution", "broker_entrust_order", "trade_page_stock_context"]),
         ],
     },
     {
         "dimension_id": "inv-review",
         "dimension_name": "决策记录与复盘系统",
         "children": [
-            ("decision-log", "决策日志", ["broker_trade_execution", "broker_entrust_order", "broker_fund_flow"]),
-            ("review-record", "复盘记录", ["stock_note"]),
-            ("rules-library", "投资规则库", ["stock_note", "chart_drawing", "custom_panel"]),
+            ("inv-decision-log", "决策日志", ["broker_trade_execution", "broker_entrust_order", "broker_fund_flow"]),
+            ("inv-review-record", "复盘记录", ["stock_note"]),
+            ("inv-rules-library", "投资规则库", ["stock_note", "chart_drawing", "custom_panel"]),
         ],
     },
     {
         "dimension_id": "inv-portfolio",
         "dimension_name": "组合与执行",
         "children": [
-            ("portfolio-preference", "组合管理偏好", ["broker_asset_snapshot", "broker_position_detail"]),
-            ("execution-discipline", "执行纪律", ["broker_trade_execution", "broker_entrust_order"]),
-            ("time-preference", "时间偏好", ["broker_trade_execution", "broker_entrust_order", "recent_stock"]),
+            ("inv-portfolio-preference", "组合管理偏好", ["broker_asset_snapshot", "broker_position_detail"]),
+            ("inv-execution-discipline", "执行纪律", ["broker_trade_execution", "broker_entrust_order"]),
+            ("inv-time-preference", "时间偏好", ["broker_trade_execution", "broker_entrust_order", "recent_stock"]),
         ],
     },
     {
         "dimension_id": "inv-network",
         "dimension_name": "信息网络与人脉",
         "children": [
-            ("information-source", "信息源", ["recent_stock", "stock_note", "custom_panel"]),
-            ("consultation-network", "咨询对象", ["investment_message", "research_meeting"]),
+            ("inv-information-source", "信息源", ["recent_stock", "stock_note", "custom_panel"]),
+            ("inv-consultation-network", "咨询对象", ["investment_message", "research_meeting"]),
         ],
     },
 ]
@@ -2030,13 +2090,54 @@ WEAK_INVESTOR_KINDS = {
 }
 
 
-def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+def build_collection_readiness(
+    events: List[Dict[str, Any]],
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
     gaps = {
         str(event["data"].get("gap"))
         for event in events
         if event["kind"] == "data_gap" and event["data"].get("gap")
     }
+    if collection_audit and collection_audit.get("eastmoney_scope_policy_filtered_all"):
+        policy = collection_audit.get("eastmoney_scope_policy") or {}
+        return {
+            "status": "scope_policy_filtered_all",
+            "finclaw_stage": "scope_policy_filtered_all",
+            "can_enter_finclaw": False,
+            "can_claim_complete_trade_collection": False,
+            "needs_manual_export": False,
+            "account_status": "unknown",
+            "required_strong_tables": {
+                "asset_snapshot": 0,
+                "position_detail": 0,
+                "trade_execution": 0,
+                "entrust_order": 0,
+                "fund_flow": 0,
+            },
+            "required_strong_table_statuses": {},
+            "required_strong_table_materialized": {
+                "asset_snapshot": False,
+                "position_detail": False,
+                "trade_execution": False,
+                "entrust_order": False,
+                "fund_flow": False,
+            },
+            "missing_required_strong_tables": [
+                "asset_snapshot",
+                "position_detail",
+                "trade_execution",
+                "entrust_order",
+                "fund_flow",
+            ],
+            "strong_trade_event_count": 0,
+            "gap_count": len(gaps),
+            "scope_policy_filtered_all": True,
+            "scope_policy_candidate_event_count": policy.get("candidate_event_count", 0),
+            "scope_policy_filtered_event_count": policy.get("filtered_event_count", 0),
+            "next_action": "输入已读取，但全部被东方财富授权范围策略排除；请检查事件类型、证券代码、账户、来源和关键词范围。",
+        }
     ui_status = next((event["data"] for event in events if event["kind"] == "broker_trade_ui_status"), {})
     account_status = ui_status.get("account_status") or "unknown"
     trade_ui_attempted = bool(ui_status) or any(gap.startswith("trade_ui_") for gap in gaps)
@@ -2097,11 +2198,16 @@ def build_collection_readiness(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "missing_required_strong_tables": missing_required,
         "strong_trade_event_count": strong_total,
         "gap_count": len(gaps),
+        "scope_policy_filtered_all": False,
         "next_action": next_action,
     }
 
 
-def build_investor_wiki_evidence(events: List[Dict[str, Any]], generated_at: str) -> Dict[str, Any]:
+def build_investor_wiki_evidence(
+    events: List[Dict[str, Any]],
+    generated_at: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
     lake_kinds = Counter(normalize_event_for_lake(event)["kind"] for event in events)
     dimensions = []
@@ -2145,6 +2251,7 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], generated_at: str
             "source_kind_counts": dict(sorted(counts.items())),
             "lake_kind_counts": dict(sorted(lake_kinds.items())),
             "soulmirror_target_schema": SOULMIRROR_TARGET_SCHEMA,
+            "authorization_scope_boundary": (collection_audit or {}).get("eastmoney_scope_policy") or {},
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -2161,14 +2268,22 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], generated_at: str
             "product_subdimension_count": 20,
             "schema_parent": "external.investor",
         },
-        "collection_readiness": build_collection_readiness(events),
+        "collection_readiness": build_collection_readiness(events, collection_audit),
         "dimensions": dimensions,
         "coverage_summary": coverage_summary_for_dimensions(dimensions),
     }
 
 
-def write_investor_wiki_evidence(output_dir: Path, events: List[Dict[str, Any]], generated_at: str) -> None:
-    write_json(output_dir / "investor_wiki_evidence.v1.json", build_investor_wiki_evidence(events, generated_at))
+def write_investor_wiki_evidence(
+    output_dir: Path,
+    events: List[Dict[str, Any]],
+    generated_at: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> None:
+    write_json(
+        output_dir / "investor_wiki_evidence.v1.json",
+        build_investor_wiki_evidence(events, generated_at, collection_audit),
+    )
 
 
 def investor_support_level(kinds: List[str]) -> str:
@@ -2201,12 +2316,12 @@ def investor_signals_for_subdimension(sub_id: str, kinds: List[str]) -> List[str
     if not kinds:
         return []
     signals_by_sub = {
-        "decision-log": "可形成交易时间线、委托状态和资金变化索引。",
-        "portfolio-preference": "可形成资产、持仓、集中度和现金暴露画像。",
-        "style-profile": "可从成交、持仓和资产结构观察交易频率、仓位和风格。",
-        "industry-circle": "可从自选、近期查看、持仓和成交标的观察关注宇宙。",
-        "execution-discipline": "可从成交与委托的数量、价格、状态观察执行纪律。",
-        "information-source": "可从近期查看、笔记和面板观察信息入口。",
+        "inv-decision-log": "可形成交易时间线、委托状态和资金变化索引。",
+        "inv-portfolio-preference": "可形成资产、持仓、集中度和现金暴露画像。",
+        "inv-style-profile": "可从成交、持仓和资产结构观察交易频率、仓位和风格。",
+        "inv-industry-circle": "可从自选、近期查看、持仓和成交标的观察关注宇宙。",
+        "inv-execution-discipline": "可从成交与委托的数量、价格、状态观察执行纪律。",
+        "inv-information-source": "可从近期查看、笔记和面板观察信息入口。",
     }
     return [signals_by_sub.get(sub_id, "已有东方财富个人证据可作为该节点的保守画像输入。")]
 
@@ -2215,14 +2330,19 @@ def investor_gaps_for_subdimension(sub_id: str, kinds: List[str]) -> List[str]:
     gaps = []
     if not kinds:
         gaps.append("当前东方财富采集未取得该子维度的直接个人证据。")
-    if sub_id in {"market-view", "risk-view", "value-preference", "emotion-pattern", "review-record", "consultation-network"}:
+    if sub_id in {"inv-market-view", "inv-risk-view", "inv-value-preference", "inv-emotion-pattern", "inv-review-record", "inv-consultation-network"}:
         gaps.append("需要结合投研笔记、聊天、会议纪要或盘后复盘补充原因层证据。")
-    if sub_id in {"decision-log", "portfolio-preference", "execution-discipline"} and not any(kind in STRONG_TRADE_KINDS for kind in kinds):
+    if sub_id in {"inv-decision-log", "inv-portfolio-preference", "inv-execution-discipline"} and not any(kind in STRONG_TRADE_KINDS for kind in kinds):
         gaps.append("需要解锁交易页后采集资产、持仓、成交、委托或资金流水强事实。")
     return gaps
 
 
-def write_summary(output_dir: Path, manifest: Dict[str, Any], events: List[Dict[str, Any]]) -> None:
+def write_summary(
+    output_dir: Path,
+    manifest: Dict[str, Any],
+    events: List[Dict[str, Any]],
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> None:
     counts = Counter(event["kind"] for event in events)
     watch_count = counts.get("watchlist", 0)
     group_count = len({
@@ -2257,7 +2377,8 @@ def write_summary(output_dir: Path, manifest: Dict[str, Any], events: List[Dict[
     structure_status = platform_meta.get("structure_status") or "unknown"
     source_prefix = LOCAL_SOURCE_PREFIX_BY_PLATFORM.get(resolved_platform, "东方财富本机")
     strong_trade_count = sum([asset_snapshot_count, position_detail_count, trade_execution_count, entrust_order_count, fund_flow_count])
-    readiness = build_collection_readiness(events)
+    readiness = build_collection_readiness(events, collection_audit)
+    scope_policy = (collection_audit or {}).get("eastmoney_scope_policy") or {}
     if strong_trade_count:
         trade_export_note = "交易接口状态日志、交易页自动只读采集或兼容明细输入形成的强明细事件；FinClaw 主路径仍是自动交易页。"
     elif trade_ui_status_count:
@@ -2283,6 +2404,7 @@ def write_summary(output_dir: Path, manifest: Dict[str, Any], events: List[Dict[
         f"- 资金流水：`{fund_flow_count}` 条",
         f"- FinClaw 状态：`{readiness['finclaw_stage']}` / `{readiness['status']}`",
         f"- 强交易表缺口：`{', '.join(readiness['missing_required_strong_tables']) or 'none'}`",
+        f"- 授权范围策略：`{'enabled' if scope_policy.get('enabled') else 'disabled'}`，保留 `{scope_policy.get('retained_event_count', len(events))}` / 候选 `{scope_policy.get('candidate_event_count', len(events))}`",
         "",
         "## 数据边界",
         "",

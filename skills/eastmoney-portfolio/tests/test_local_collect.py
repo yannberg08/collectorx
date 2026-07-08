@@ -21,6 +21,7 @@ from eastmoney.local_collect import (
     resolve_platform,
     scrub_value,
 )
+from eastmoney.scope import build_eastmoney_scope_policy
 from eastmoney.trade_export import parse_trade_export_file, parse_trade_export_text
 from eastmoney.ui_collect import parse_ax_trade_records, parse_ax_trade_state, parse_screen_trade_state
 
@@ -174,6 +175,85 @@ def test_trade_export_detail_fixture():
     assert evidence["coverage_summary"]["dimension_count"] == 7
     assert evidence["coverage_summary"]["subdimension_count"] == 20
     assert evidence["generated_from"]["soulmirror_target_schema"] == "external.investor / 7 dimensions / 20 subdimensions"
+    assert manifest["validation"]["ok"] is True
+
+
+def test_eastmoney_scope_policy_filters_strong_trade_package():
+    home_root = find_fixture_root("eastmoney-windows-simulated")
+    trade_export_root = find_fixture_root("eastmoney-trade-export-simulated")
+    homes = find_eastmoney_homes(str(home_root), platform="windows")
+    output = Path("/tmp/eastmoney_scope_policy_collect")
+    shutil.rmtree(output, ignore_errors=True)
+
+    policy = build_eastmoney_scope_policy(
+        allow_event_kinds=["broker_trade_execution"],
+        allow_symbols=["600519"],
+    )
+    manifest = collect_local(
+        output_dir=output,
+        eastmoney_home=homes[0],
+        user="alice",
+        platform="windows",
+        trade_export_files=[trade_export_root],
+        scope_policy=policy,
+    )
+    audit = manifest["collection_audit"]["eastmoney_scope_policy"]
+    assert audit["enabled"] is True
+    assert audit["retained_event_count"] == 1
+    assert audit["filtered_event_count"] > 0
+    assert manifest["source_counts"]["broker_trade_execution"] == 1
+    assert manifest["source_counts"]["total_events"] == 1
+    assert manifest["eastmoney_portfolio_boundary_proof"]["authorization_scope_boundary"]["retained_event_count"] == 1
+    assert manifest["eastmoney_portfolio_boundary_proof"]["exact_business_numbers_preserved"] is True
+    assert manifest["eastmoney_portfolio_boundary_proof"]["order_mutation_performed"] is False
+
+    events_path = output / "lake" / "eastmoney-investor-v2" / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+    assert len(events) == 1
+    event = events[0]
+    assert event["kind"] == "trade"
+    assert event["data"]["source_kind"] == "broker_trade_execution"
+    assert event["data"]["symbol"] == "600519"
+    assert event["data"]["amount"] == 150000.0
+    assert event["data"]["eastmoney_scope_policy"]["allowed"] is True
+    profile = json.loads((output / "structured_profile.json").read_text(encoding="utf-8"))
+    assert len(profile["trade_execution_sample"]) == 1
+    assert profile["asset_snapshot_sample"] == []
+    assert manifest["validation"]["ok"] is True
+
+
+def test_eastmoney_scope_policy_filtered_all_package_status():
+    home_root = find_fixture_root("eastmoney-windows-simulated")
+    trade_export_root = find_fixture_root("eastmoney-trade-export-simulated")
+    homes = find_eastmoney_homes(str(home_root), platform="windows")
+    output = Path("/tmp/eastmoney_scope_policy_filtered_all")
+    shutil.rmtree(output, ignore_errors=True)
+
+    policy = build_eastmoney_scope_policy(allow_symbols=["999999"])
+    manifest = collect_local(
+        output_dir=output,
+        eastmoney_home=homes[0],
+        user="alice",
+        platform="windows",
+        trade_export_files=[trade_export_root],
+        scope_policy=policy,
+    )
+    audit = manifest["collection_audit"]["eastmoney_scope_policy"]
+    assert audit["filtered_all"] is True
+    assert audit["retained_event_count"] == 0
+    assert manifest["collection_audit"]["eastmoney_scope_policy_filtered_all"] is True
+    assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+    assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+    assert manifest["source_counts"]["data_gap"] == 1
+    assert manifest["eastmoney_portfolio_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+
+    events_path = output / "lake" / "eastmoney-investor-v2" / "events.jsonl"
+    events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+    assert len(events) == 1
+    assert events[0]["kind"] == "profile"
+    assert events[0]["time"]
+    assert events[0]["data"]["source_kind"] == "data_gap"
+    assert events[0]["data"]["gap"] == "eastmoney_scope_policy_filtered_all"
     assert manifest["validation"]["ok"] is True
 
 
@@ -333,6 +413,8 @@ if __name__ == "__main__":
     test_windows_code_level_probe_fixture()
     test_linux_code_level_probe_fixture()
     test_trade_export_detail_fixture()
+    test_eastmoney_scope_policy_filters_strong_trade_package()
+    test_eastmoney_scope_policy_filtered_all_package_status()
     test_trade_ui_locked_state_parser()
     test_trade_ui_ax_record_parser_uses_same_row_value()
     test_trade_ui_unlocked_asset_field_parser()

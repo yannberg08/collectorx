@@ -3515,6 +3515,33 @@ Findings:
   preserved, the collector is read-only, and no order placement/cancellation or
   credential capture is performed.
 
+### Wave AW - P0 EastMoney Portfolio Scope Policy Audit
+
+Status: `completed-production-candidate`
+
+Validation record:
+
+- `docs/validations/investor-p0-eastmoney-scope-policy-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `eastmoney-portfolio` to `0.7.3`.
+- Added event-kind, symbol, account, source, and keyword allow/deny filters
+  before EastMoney production-candidate events enter Lake.
+- Added `collection_audit.eastmoney_scope_policy` with candidate event count,
+  retained event count, filtered event count, filter reason counts, and
+  filtered-all state.
+- Added `eastmoney_portfolio_boundary_proof.authorization_scope_boundary` so
+  FinClaw can inspect the exact user authorization boundary before strong trade
+  facts enter the investor Wiki pipeline.
+- Added filtered-all package behavior: when every candidate event is outside
+  the authorization policy, the package emits an
+  `eastmoney_scope_policy_filtered_all` gap event and marks readiness
+  `scope_policy_filtered_all` with `can_enter_finclaw=false`.
+- Kept the production-candidate boundary unchanged: exact business numbers are
+  preserved, the collector is read-only, and no password, token, order
+  placement, order cancellation, transfer, or raw network payload is collected.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

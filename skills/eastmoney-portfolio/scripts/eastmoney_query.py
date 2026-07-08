@@ -17,6 +17,7 @@ from eastmoney.local_collect import (
     sync_package_to_soulmirror,
 )
 from eastmoney.parser import parse_portfolio_csv
+from eastmoney.scope import build_eastmoney_scope_policy
 from eastmoney.stats import calculate_stats, calculate_stock_stats
 
 try:
@@ -43,8 +44,30 @@ def main():
     parser.add_argument("--sync-soulmirror", action="store_true", help="采集后把事件和投资证据包同步到 ~/.soulmirror/lake")
     parser.add_argument("--soulmirror-home", help="SoulMirror 根目录，默认 ~/.soulmirror")
     parser.add_argument("--user", help="指定东方财富本地用户目录名")
+    parser.add_argument("--allow-event-kind", action="append", help="只保留指定事件类型，如 broker_trade_execution/trade/holding/watchlist/profile")
+    parser.add_argument("--deny-event-kind", action="append", help="排除指定事件类型")
+    parser.add_argument("--allow-symbol", action="append", help="只保留指定证券代码，可重复或逗号分隔")
+    parser.add_argument("--deny-symbol", action="append", help="排除指定证券代码，可重复或逗号分隔")
+    parser.add_argument("--allow-account", action="append", help="只保留账户、资金账号、股东账号或账户标签命中的事件")
+    parser.add_argument("--deny-account", action="append", help="排除账户、资金账号、股东账号或账户标签命中的事件")
+    parser.add_argument("--allow-source", action="append", help="只保留来源面命中的事件，如 ui、export、watchlist、log")
+    parser.add_argument("--deny-source", action="append", help="排除来源面命中的事件")
+    parser.add_argument("--allow-keyword", action="append", help="只保留事件元数据命中关键词的事件")
+    parser.add_argument("--deny-keyword", action="append", help="排除事件元数据命中关键词的事件")
     
     args = parser.parse_args()
+    scope_policy = build_eastmoney_scope_policy(
+        allow_event_kinds=args.allow_event_kind,
+        deny_event_kinds=args.deny_event_kind,
+        allow_symbols=args.allow_symbol,
+        deny_symbols=args.deny_symbol,
+        allow_accounts=args.allow_account,
+        deny_accounts=args.deny_account,
+        allow_sources=args.allow_source,
+        deny_sources=args.deny_source,
+        allow_keywords=args.allow_keyword,
+        deny_keywords=args.deny_keyword,
+    )
     trade_export_inputs = [
         Path(path).expanduser()
         for path in [*args.trade_export, *args.trade_export_dir]
@@ -87,6 +110,7 @@ def main():
             platform=args.platform,
             trade_export_files=trade_export_inputs,
             auto_trade_ui=args.auto_trade_ui,
+            scope_policy=scope_policy,
         )
         validation = manifest.get("validation", {})
         print(f"采集完成: {manifest['source_counts']['total_events']} 条事件")

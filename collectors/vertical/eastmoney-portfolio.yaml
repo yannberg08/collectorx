@@ -62,6 +62,13 @@ readiness_gate:
     - fund_flow
   account_locked_behavior: emit_gap_no_password_request
   manual_export_required: false
+  authorization_scope_policy:
+    - event_kind
+    - symbol
+    - account
+    - source
+    - keyword
+  filtered_all_behavior: emit_scope_policy_gap
 
 skill: eastmoney-portfolio
 
@@ -79,4 +86,5 @@ description: |
   交易接口状态，以及东方财富 Mac 交易页自动只读采集的资产、持仓、成交、委托、
   资金流水。用户授权后的账户标识、股东账号、委托号、成交号、金额、数量、价格等
   业务字段会保留在本地 Lake；采集器不会读取或请求交易密码，不绕过账户锁定，不下单、
-  不撤单、不转账。
+  不撤单、不转账。可选授权范围策略按事件类型、证券代码、账户、来源或关键词缩小输出，
+  manifest 会记录 eastmoney_scope_policy 和 filtered-all 状态。

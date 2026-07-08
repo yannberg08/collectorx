@@ -29,11 +29,11 @@
       "skill": "eastmoney-portfolio",
       "readiness": "production-candidate",
       "gate": "G5",
-      "finclaw_action": "one-click-readonly-after-user-unlocks-trading-account",
+      "finclaw_action": "one-click-readonly-after-user-unlocks-trading-account-with-optional-event-scope-policy",
       "cli": "python3 skills/eastmoney-portfolio/scripts/eastmoney_query.py --collect-local --auto-trade-ui --sync-soulmirror --output <out-dir>",
-      "collects": "EastMoney assets, positions, executions, orders, fund flows, watchlists, notes, recent views, and local investment behavior evidence.",
+      "collects": "EastMoney assets, positions, executions, orders, fund flows, watchlists, notes, recent views, local investment behavior evidence, event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and eastmoney_portfolio_boundary_proof authorization boundary.",
       "must_not_collect": "Passwords, cookies, tokens, device fingerprints, order placement, order cancellation, or raw network payloads.",
-      "production_gap": "Broader Windows/Linux real-device validation."
+      "production_gap": "Broader Windows/Linux real-device validation and more account-state samples."
     },
     {
       "id": "ths-portfolio",

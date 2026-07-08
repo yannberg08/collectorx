@@ -16,8 +16,28 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`filesystem` now supports explicit metadata authorization scope filters before
-local file metadata enters the Lake:
+`eastmoney-portfolio` now supports event-level authorization scope filters
+before production-candidate strong trading evidence enters the Lake:
+
+- `eastmoney_query.py --collect-local` accepts event-kind, symbol, account,
+  source, and keyword allow/deny filters.
+- Manifest `collection_audit.eastmoney_scope_policy` records configured
+  filters, candidate event count, retained event count, filtered event count,
+  reason counts, and filtered-all state.
+- If every candidate event is filtered by policy, the package emits an
+  `eastmoney_scope_policy_filtered_all` gap event, readiness reports
+  `scope_policy_filtered_all`, and `can_enter_finclaw=false`.
+- `eastmoney_portfolio_boundary_proof.authorization_scope_boundary` gives
+  FinClaw a stable place to inspect the exact user authorization boundary
+  before assets, holdings, executions, orders, fund flows, watchlists, notes,
+  and recent-view evidence enter the investor Wiki pipeline.
+- The collector remains read-only and preserves exact retained business
+  numbers. No trading password, cookie, token, session, device fingerprint,
+  order placement, order cancellation, transfer, or raw network payload is
+  collected.
+
+The prior completed wave: `filesystem` now supports explicit metadata
+authorization scope filters before local file metadata enters the Lake:
 
 - `filesystem_query.py collect` accepts extension, path, file-name, directory,
   and metadata-keyword allow/deny filters.
@@ -1045,7 +1065,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Collector | Current status |
 | --- | --- |
-| `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; Windows/Linux are code-level simulations or fallback paths |
+| `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and strong trade boundary proof exist; Windows/Linux are code-level simulations or fallback paths |
 | `ths-portfolio` | `deep-beta`; strong local package, GUI snapshot design, event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and Wiki boundary proof exist, but broader real-device/multi-account validation is still required before production |
 | `ths-watchlist` | `baseline+audit`; authorized local-scan plus export/package collector for same-channel watchlist/attention-universe evidence with local-scan provenance, path-level source audit, ZIP provenance, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all readiness, field coverage, ths_watchlist_boundary_proof, and standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
 | `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow plus standard package output, manifest/summary, field/filter audit, gap packages, and fixture package validation exist; current machine still has LLDB/passphrase capture limitation for real encrypted NT messages |

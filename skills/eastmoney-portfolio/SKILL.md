@@ -103,6 +103,7 @@ wiki_targets:
 - 从交易页可访问文本中直接识别总资产、总市值、可用资金、可取资金、资金余额、冻结资金、盈亏和币种，形成资产快照强证据。
 - 解析东方财富交易页复制出的资产、持仓、成交、委托、资金流水明细表。
 - 保留交易明细文件和 CSV 交割单解析，作为兼容兜底，不是 FinClaw 一键采集主流程。
+- 支持事件级授权范围策略：按事件类型、证券代码、账户、来源和关键词 allow/deny 过滤，并把过滤审计写入 manifest。
 - 输出 `manifest.json`、`events.jsonl`、`structured_profile.json`、`investor_wiki_evidence.v1.json` 和投资 wiki 文档。
 
 ## 使用方法
@@ -113,6 +114,14 @@ python <SKILL_DIR>/scripts/eastmoney_query.py \
   --collect-local \
   --auto-trade-ui \
   --sync-soulmirror \
+  --output ~/Desktop/eastmoney-investor-v2-collect
+
+# 按用户授权范围缩小采集包：只保留指定证券的成交强事实
+python <SKILL_DIR>/scripts/eastmoney_query.py \
+  --collect-local \
+  --auto-trade-ui \
+  --allow-event-kind broker_trade_execution \
+  --allow-symbol 600519 \
   --output ~/Desktop/eastmoney-investor-v2-collect
 
 # 导出安全探测报告，不采集正文数据
@@ -245,6 +254,23 @@ python <SKILL_DIR>/scripts/eastmoney_query.py --file ~/Downloads/交割单.csv -
 - `auto_trade_ui_not_run`：本轮未启用交易页自动只读采集。
 - `partial_strong_trade_data`：已取得部分强交易事实，仍缺若干强表。
 - `strong_trade_data_missing`：交易页已尝试但没有形成强交易明细。
+- `scope_policy_filtered_all`：输入已读取，但全部被用户授权范围策略排除；本轮不会把业务事件送入 FinClaw。
+
+`manifest.json` 还包含：
+
+- `collection_audit.eastmoney_scope_policy`
+- `collection_audit.eastmoney_scope_policy_filtered_all`
+- `eastmoney_portfolio_boundary_proof.authorization_scope_boundary`
+
+授权范围参数包括：
+
+- `--allow-event-kind` / `--deny-event-kind`：内部事件类型或标准类型，如 `broker_trade_execution`、`broker_position_detail`、`trade`、`holding`、`watchlist`
+- `--allow-symbol` / `--deny-symbol`：证券代码
+- `--allow-account` / `--deny-account`：资金账号、股东账号、账户标签或账户后缀
+- `--allow-source` / `--deny-source`：来源面，如 `ui`、`export`、`watchlist`、`log`
+- `--allow-keyword` / `--deny-keyword`：事件元数据关键词
+
+该策略只代表用户授权边界，不判断投资相关性；保留下来的资产、持仓、成交、委托和资金流水数字仍按原值进入本地 Lake。
 
 `investor_wiki_evidence.v1.json` 是 FinClaw/SoulMirror 的投资分身中间证据包，按七大维度、20 个产品子维度列出证据强度、事件计数、路由建议和缺口。采集器不把这份 JSON 直接写入最终 Wiki；最终组织仍由 `investor-portrait` app 处理。
 

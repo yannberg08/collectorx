@@ -58,7 +58,7 @@ FinClaw 应按下面顺序调用：
 
 | Collector | 职责 | 当前状态 | 下一步真实验证 |
 | --- | --- | --- | --- |
-| `eastmoney-portfolio` | 东方财富资产、持仓、成交、委托、资金流水和本地投资行为 | `production-candidate` on current macOS | Windows/Linux 真机、更多账户样本 |
+| `eastmoney-portfolio` | 东方财富资产、持仓、成交、委托、资金流水和本地投资行为 | `production-candidate` on current macOS；已补事件类型/证券代码/账户/来源/关键词授权范围策略审计、filtered-all 状态、scope gap 事件和 `eastmoney_portfolio_boundary_proof.authorization_scope_boundary`；保留精确业务数字且只读不变更账户 | Windows/Linux 真机、更多账户样本和授权范围默认策略回测 |
 | `ths-portfolio` | 同花顺交易、持仓、元数据和只读 GUI 快照 | `deep-beta`；已补事件类型/证券代码/账户/来源/关键词授权范围策略审计、filtered-all 状态、sidecar 同步过滤和 `ths_portfolio_boundary_proof.authorization_scope_boundary`；保留精确交易数字但不做下单/撤单 | 多账户、多系统真机验证、GUI 当前快照字段覆盖回测 |
 | `ths-watchlist` | 同花顺自选股、关注池和机会池 | `baseline+audit`；已进入 FinClaw investor catalog，支持授权本机扫描和 CSV/JSON/Excel/text/ZIP 导入自选列表，输出标准 Lake、manifest、本机扫描审计、逐输入 source audit、ZIP provenance、symbol/market/group/industry/tag/keyword/source 授权范围策略审计、filtered-all 状态、field_coverage、ths_watchlist_boundary_proof 和 7/20 Wiki attention-universe 证据；不能替代持仓、成交、委托或资金流水 | 真实同花顺本地库验证、默认 App 路径验证、Windows/macOS/Linux 路径验证、和交易/研究交叉回测 |
 | `wechat` + `wechat-investment-dialogue` | 微信原始对话和投资讨论 lens | `baseline+audit`；generic wechat 输出标准包，lens 支持联系人/群/发送者来源策略、source-policy gap、微信对话边界证明和交易意图/买卖理由/仓位/风险情绪/咨询网络/研究讨论/复盘面谱 | WeChat 4.x key/平台路径、真实 lake、联系人/群/发送者 allowlist 和交易前后回测 |

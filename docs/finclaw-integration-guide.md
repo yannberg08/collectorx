@@ -264,6 +264,10 @@ Preconditions:
 - User has installed and logged into EastMoney.
 - For strong trade tables, the trading account must be manually unlocked by the user.
 - macOS Accessibility permission is required for read-only UI capture.
+- Optional authorization filters can narrow event kind, symbol, account,
+  source, or keyword. If every candidate is outside that scope, the package
+  emits an `eastmoney_scope_policy_filtered_all` gap and reports
+  `collection_readiness.status=scope_policy_filtered_all`.
 
 Do not ask for or store trading password, login password, cookie, token, session,
 signature, or device fingerprint.

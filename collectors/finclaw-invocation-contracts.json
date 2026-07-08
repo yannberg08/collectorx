@@ -39,9 +39,9 @@
       "authorization_mode": "local-ui-readonly",
       "product_surface": "guarded-production",
       "evidence_role": "strong-trade-asset-facts",
-      "user_step": "Log in to EastMoney and unlock the trading page; CollectorX reads local files and visible trading tables only.",
-      "preflight": "EastMoney is installed, the user is logged in, and the read-only trading UI can be reached.",
-      "failure_state": "needs_unlocked_trading_account"
+      "user_step": "Log in to EastMoney and unlock the trading page; CollectorX reads local files and visible trading tables only. Optional filters can narrow by event kind, symbol, account, source, or keyword.",
+      "preflight": "EastMoney is installed, the user is logged in, and the read-only trading UI can be reached; optional event scope filters are applied before Lake output and can return scope_policy_filtered_all.",
+      "failure_state": "needs_unlocked_trading_account_or_scope_policy_retained_events"
     },
     {
       "id": "ths-portfolio",

@@ -1,5 +1,5 @@
 {
   "slug": "eastmoney-portfolio",
-  "version": "0.7.2",
-  "description": "东方财富投资行为本机采集、授权完整交易事实本地 Lake、交易页 ApplicationServices 只读深采、强交易 readiness、投资分身证据包、SoulMirror Wiki 路由、平台探测与兼容交割单解析工具"
+  "version": "0.7.3",
+  "description": "东方财富投资行为本机采集、授权完整交易事实本地 Lake、事件级授权范围审计、交易页 ApplicationServices 只读深采、强交易 readiness、投资分身证据包、SoulMirror Wiki 路由、平台探测与兼容交割单解析工具"
 }
