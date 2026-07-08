@@ -120,8 +120,8 @@ def collect(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Collect user-authorized Xueqiu investor activity.")
     sub = parser.add_subparsers(dest="command", required=True)
-    p = sub.add_parser("collect", help="Parse local Xueqiu exports or saved activity files.")
-    p.add_argument("--input", action="append", help="Authorized Xueqiu export file/folder.")
+    p = sub.add_parser("collect", help="Parse local Xueqiu exports, saved activity files, HAR packages, or browser history copies.")
+    p.add_argument("--input", action="append", help="Authorized Xueqiu export file/folder, HAR file, ZIP package, or copied Chromium/Safari browser history.")
     p.add_argument("--out-dir")
     p.add_argument("--event-export")
     p.add_argument("--sync-soulmirror", action="store_true", help="采集后把事件和投资证据包同步到 ~/.soulmirror/lake/xueqiu-investor-activity")

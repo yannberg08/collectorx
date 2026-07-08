@@ -533,7 +533,7 @@ Current status for `xueqiu-watchlist`:
 
 ```bash
 python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect \
-  --input <authorized-xueqiu-export-or-folder> \
+  --input <authorized-xueqiu-export-har-or-browser-history-copy> \
   --out-dir <out-dir> \
   --sync-soulmirror
 ```
@@ -547,21 +547,26 @@ Current status:
   `xueqiu.com` response bodies. Request headers, cookies, Authorization values,
   and URL query strings are stripped before events, manifest, or Wiki evidence
   are written.
+- Also accepts user-authorized copied Chromium `History`, Safari `History.db`,
+  `.sqlite`, `.sqlite3`, or `.db` browser history files. Only `xueqiu.com` and
+  subdomain visits are emitted; source browser app, visit count, typed count,
+  and transition type are retained when present.
 - Normalizes Snowball-like `statuses/list/data/items/stocks/cubes` payloads,
   preserves ZIP member provenance, strips credential-like keys from retained raw
   metadata, and writes a standard `investor_wiki_evidence.v1.json`.
 - Manifest records source audit, extension coverage, ZIP member/skipped-member
-  counts, HAR entry/endpoint/skip-reason coverage, parsed records, pagination
-  marker fields, activity field coverage, source-surface coverage,
-  `activity_boundary_proof`, and pagination completeness.
+  counts, HAR entry/endpoint/skip-reason coverage, browser-history boundary
+  proof, parsed records, pagination marker fields, activity field coverage,
+  source-surface coverage, `activity_boundary_proof`, and pagination
+  completeness.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade
   evidence.
 - `activity_boundary_proof` reports whether watchlist, followed users,
   followed portfolios, portfolio activity, comments, favorites, posts, and saved
   pages were observed. Pagination completeness remains partial and never claims
   a complete timeline without real account validation.
-- Not yet a one-click login/session collector; the HAR path is an authorized
-  browser export baseline for real-account responses.
+- Not yet a one-click login/session collector; the HAR and browser-history
+  paths are authorized local baselines for user-owned account usage evidence.
 - Not a broker-confirmed trade source.
 
 ### 中国基金理财资产

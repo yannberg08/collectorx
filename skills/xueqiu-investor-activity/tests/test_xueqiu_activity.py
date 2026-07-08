@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,86 @@ import openpyxl
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "xueqiu_activity.py"
+
+
+def chromium_time(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> int:
+    from datetime import datetime, timezone
+
+    epoch = datetime(1601, 1, 1, tzinfo=timezone.utc)
+    value = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+    return int((value - epoch).total_seconds() * 1_000_000)
+
+
+def safari_time(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> float:
+    from datetime import datetime, timezone
+
+    epoch = datetime(2001, 1, 1, tzinfo=timezone.utc)
+    value = datetime(year, month, day, hour, minute, tzinfo=timezone.utc)
+    return (value - epoch).total_seconds()
+
+
+def write_chromium_history(path: Path, rows: list[tuple[int, str, str, int, int, int, int]]) -> None:
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE urls (
+              id INTEGER PRIMARY KEY,
+              url TEXT,
+              title TEXT,
+              visit_count INTEGER,
+              typed_count INTEGER
+            );
+            CREATE TABLE visits (
+              id INTEGER PRIMARY KEY,
+              url INTEGER,
+              visit_time INTEGER,
+              transition INTEGER
+            );
+            """
+        )
+        conn.executemany(
+            "INSERT INTO urls (id, url, title, visit_count, typed_count) VALUES (?, ?, ?, ?, ?)",
+            [(row[0], row[1], row[2], row[3], row[4]) for row in rows],
+        )
+        conn.executemany(
+            "INSERT INTO visits (id, url, visit_time, transition) VALUES (?, ?, ?, ?)",
+            [(row[5], row[0], row[6], row[7]) for row in rows],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def write_safari_history(path: Path, rows: list[tuple[int, str, str, int, int, float]]) -> None:
+    conn = sqlite3.connect(path)
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE history_items (
+              id INTEGER PRIMARY KEY,
+              url TEXT,
+              title TEXT,
+              visit_count INTEGER
+            );
+            CREATE TABLE history_visits (
+              id INTEGER PRIMARY KEY,
+              history_item INTEGER,
+              visit_time REAL
+            );
+            """
+        )
+        conn.executemany(
+            "INSERT INTO history_items (id, url, title, visit_count) VALUES (?, ?, ?, ?)",
+            [(row[0], row[1], row[2], row[3]) for row in rows],
+        )
+        conn.executemany(
+            "INSERT INTO history_visits (id, history_item, visit_time) VALUES (?, ?, ?)",
+            [(row[4], row[0], row[5]) for row in rows],
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def test_collect_watchlist_csv() -> None:
@@ -250,6 +331,169 @@ def test_collects_har_network_export_without_leaking_secrets() -> None:
         assert evidence["coverage_summary"]["activity_boundary_proof"]["pagination_completeness"]["completeness_level"] == "paginated_partial_export"
 
 
+def test_collects_browser_history_copy_filters_xueqiu_domains() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        history = root / "History"
+        out = root / "out"
+        write_chromium_history(
+            history,
+            [
+                (1, "https://xueqiu.com/S/SH600519", "贵州茅台讨论", 5, 1, 10, chromium_time(2026, 7, 8, 1, 0), 1),
+                (2, "https://xueqiu.com/u/123456", "价值研究员", 3, 0, 11, chromium_time(2026, 7, 8, 2, 0), 8),
+                (3, "https://example.com/not-xueqiu", "无关页面", 9, 0, 12, chromium_time(2026, 7, 8, 3, 0), 0),
+            ],
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(history),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T14:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 2
+        assert {event["source"] for event in events} == {"雪球用户授权浏览器历史"}
+        assert {event["data"]["source_surface"] for event in events} == {"browser_history"}
+        assert {event["data"]["source_app"] for event in events} == {"chromium_history"}
+        assert {event["data"]["activity_type"] for event in events} == {"saved_page"}
+        assert all(event["raw_ref"]["parser"] == "browser_history" for event in events)
+        assert all("xueqiu.com" in event["data"]["url"] for event in events)
+        assert "example.com" not in json.dumps(events, ensure_ascii=False)
+        first = next(event for event in events if event["data"]["url"].endswith("/S/SH600519"))
+        assert first["data"]["visit_count"] == 5
+        assert first["data"]["typed_count"] == 1
+        assert first["data"]["transition_type"] == "typed"
+        assert first["data"]["symbols"] == ["SH600519"]
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["extension_counts"] == {"<browser_history>": 1}
+        assert audit["browser_history_input_count"] == 1
+        assert audit["browser_history_event_count"] == 2
+        assert audit["browser_history_source_apps"] == ["chromium_history"]
+        assert audit["browser_history_domain_filtering"] is True
+        assert audit["path_results"][0]["parser"] == "browser_history"
+        proof = manifest["activity_boundary_proof"]
+        assert proof["browser_history_boundary"]["browser_history_event_count"] == 2
+        assert proof["browser_history_boundary"]["unrelated_browser_history_collected"] is False
+        assert proof["pagination_completeness"]["browser_history_event_count"] == 2
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["coverage_summary"]["activity_boundary_proof"]["browser_history_boundary"]["browser_history_domain_filtering"] is True
+
+
+def test_collects_zipped_browser_history_copy_from_spaced_path() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "space input"
+        root.mkdir()
+        history = root / "History"
+        package = root / "history package.zip"
+        out = root / "out"
+        write_chromium_history(
+            history,
+            [
+                (1, "https://xueqiu.com?source=home", "雪球首页", 2, 1, 10, chromium_time(2026, 7, 8, 4, 0), 1),
+                (2, "https://stock.xueqiu.com/v5/stock/chart/kline.json?symbol=SH600519", "行情接口", 4, 0, 11, chromium_time(2026, 7, 8, 5, 0), 0),
+                (3, "https://notxueqiu.com/?next=https://xueqiu.com", "伪装域名", 8, 0, 12, chromium_time(2026, 7, 8, 6, 0), 0),
+            ],
+        )
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.write(history, "Default/History")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T15:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 2
+        serialized = json.dumps(events, ensure_ascii=False)
+        assert "notxueqiu.com" not in serialized
+        assert any(event["data"]["url"] == "https://xueqiu.com?source=home" for event in events)
+        assert any(event["data"].get("symbols") == ["SH600519"] for event in events)
+        assert {event["raw_ref"]["archive_member"] for event in events} == {"Default/History"}
+        assert {event["raw_ref"]["parser"] for event in events} == {"browser_history"}
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["extension_counts"] == {".zip": 1}
+        assert audit["archive_member_extension_counts"] == {"<browser_history>": 1}
+        assert audit["browser_history_input_count"] == 1
+        assert audit["browser_history_event_count"] == 2
+        assert audit["path_results"][0]["parser"] == "zip"
+
+
+def test_collects_safari_history_copy_without_optional_load_successful() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        history = root / "History.db"
+        out = root / "out"
+        write_safari_history(
+            history,
+            [
+                (1, "https://xueqiu.com/S/SZ000001", "平安银行讨论", 7, 10, safari_time(2026, 7, 8, 7, 0)),
+                (2, "https://example.com/not-xueqiu", "无关页面", 9, 11, safari_time(2026, 7, 8, 8, 0)),
+            ],
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(history),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T16:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        event = events[0]
+        assert event["data"]["source_surface"] == "browser_history"
+        assert event["data"]["source_app"] == "safari_history"
+        assert event["data"]["url"] == "https://xueqiu.com/S/SZ000001"
+        assert event["data"]["visit_count"] == 7
+        assert event["data"]["symbols"] == ["SZ000001"]
+        assert "transition_type" not in event["data"]
+        assert "example.com" not in json.dumps(events, ensure_ascii=False)
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        audit = manifest["collection_audit"]
+        assert audit["extension_counts"] == {"<browser_history>": 1}
+        assert audit["browser_history_source_apps"] == ["safari_history"]
+        assert manifest["activity_boundary_proof"]["browser_history_boundary"]["browser_history_event_count"] == 1
+
+
 def test_collects_html_saved_page_and_manifest_audit() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -433,6 +677,9 @@ if __name__ == "__main__":
     test_collect_posts_json()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
     test_collects_har_network_export_without_leaking_secrets()
+    test_collects_browser_history_copy_filters_xueqiu_domains()
+    test_collects_zipped_browser_history_copy_from_spaced_path()
+    test_collects_safari_history_copy_without_optional_load_successful()
     test_collects_html_saved_page_and_manifest_audit()
     test_syncs_package_to_soulmirror_lake()
     test_collects_zip_excel_activity_package()

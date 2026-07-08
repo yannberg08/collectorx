@@ -397,6 +397,33 @@ Findings:
   but it does not claim a one-click real account adapter or complete timeline
   validation.
 
+### Wave B3f: P0 Xueqiu authorized browser-history pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-xueqiu-browser-history-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `xueqiu-investor-activity` to `0.3.3`.
+- Added read-only parsing for user-authorized copied Chromium `History`,
+  Safari `History.db`, `.sqlite`, `.sqlite3`, and `.db` browser history files.
+- Browser-history parsing is strictly domain-filtered to `xueqiu.com` and
+  subdomains; unrelated browsing records are not emitted.
+- Events retain browser-history metadata useful to the Investor Wiki:
+  `source_app`, URL, title/content preview, visit time, `visit_count`,
+  `typed_count`, and `transition_type`.
+- ZIP packages can include extensionless browser-history members such as
+  `Default/History`, preserving `archive.zip::member` provenance.
+- Manifest and Wiki evidence include `browser_history_boundary`,
+  `browser_history_event_count`, `browser_history_source_apps`, and explicit
+  `complete_account_activity_claimed_from_history: false`.
+- Fixture validation covers direct browser-history files, ZIP-packaged browser
+  history, spaced paths, Xueqiu subdomains/query URLs, unrelated-domain
+  filtering, and browser-history evidence propagation.
+
 ### Wave B4: P0 China wealth assets productization pass 2
 
 Status: `completed-baseline`
@@ -2985,7 +3012,7 @@ Findings:
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; extraction policy, per-input audit, skipped reasons, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text `.xls` extraction, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, binary `.xls`/`xlrd` validation where needed, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, skipped file/ZIP-member reasons, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real local mail roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist local-scan plus import path with standard Lake output, manifest, local-scan provenance, path-level source audit, ZIP provenance, skipped-reason accounting, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun local-store validation, default app path validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
-| 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, activity-boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
+| 5 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, copied Chromium/Safari browser-history support with Xueqiu-domain filtering, visit/typed counts, browser transition types, activity-boundary proof, browser-history boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR/browser-history samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |
 | 6 | `china-wealth-assets` | G1/G2 strengthened local export/package path with platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, asset surface summary, currency summary, transaction-side summary, asset value summary, HAR/ZIP provenance, credential/query stripping audit, raw sanitization, legacy `.xls`/Excel XML/HTML-table export parsing, and SoulMirror sync; no one-click real account adapter | G2/G3: real Alipay/Tiantian/Danjuan/Qieman/bank wealth HAR/export samples, per-platform adapters, complete account-boundary proof |
 
 ## P1 Work Queue

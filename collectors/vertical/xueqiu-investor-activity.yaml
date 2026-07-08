@@ -15,6 +15,7 @@ scope:
   channels:
     - xueqiu
     - authorized_browser_network_export_har
+    - authorized_browser_history_copy
     - authorized_export_zip
   collects:
     - watchlists
@@ -24,10 +25,15 @@ scope:
     - comments
     - favorites
     - owner_portfolio_rebalances
+    - browser_history_visits
+    - browser_history_source_apps
+    - visit_typed_counts
+    - browser_transition_types
     - archive_member_provenance
     - source_audit
     - pagination_marker_audit
     - browser_network_response_audit
+    - browser_history_domain_filtering_audit
     - field_coverage
     - activity_boundary_proof
     - pagination_completeness_summary
@@ -45,7 +51,9 @@ scope:
 description: |
   雪球是投资垂直采集器。它采用户自己的雪球活动和关注池，输出标准
   CollectorX lake 包与投资 Wiki 证据包；支持 JSON/CSV/Excel/HTML/TXT/HAR/ZIP
-  授权导出，HAR 只读取 xueqiu.com 响应体且不写入请求头、Cookie、Authorization
-  或 URL 查询串，ZIP 包保留 archive.zip::member 来源并跳过路径穿越成员。
-  manifest 记录输入、HAR、ZIP、分页标记、字段覆盖、活动面覆盖证明和分页完整性摘要。
+  授权导出，也支持用户授权复制的 Chromium/Safari 浏览器历史副本。HAR 只读取
+  xueqiu.com 响应体且不写入请求头、Cookie、Authorization 或 URL 查询串；浏览器历史
+  只保留 xueqiu.com 域名访问记录、来源浏览器、访问/输入次数和 transition 类型；ZIP
+  包保留 archive.zip::member 来源并跳过路径穿越成员。manifest 记录输入、HAR、浏览器
+  历史、ZIP、分页标记、字段覆盖、活动面覆盖证明和分页完整性摘要。
   不能当券商强交易事实，也不爬全站舆情。

@@ -139,9 +139,9 @@
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
-      "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, or browser-network export.",
-      "preflight": "Input belongs to the user and does not include login secrets or platform-wide public crawling.",
-      "failure_state": "needs_authorized_xueqiu_activity_export"
+      "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, browser-network HAR, or copied Chromium/Safari browser history file.",
+      "preflight": "Input belongs to the user; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com, and neither path is treated as broker trade evidence.",
+      "failure_state": "needs_authorized_xueqiu_activity_export_har_or_browser_history"
     },
     {
       "id": "china-wealth-assets",

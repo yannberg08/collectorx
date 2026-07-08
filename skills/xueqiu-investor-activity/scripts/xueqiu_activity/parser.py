@@ -8,6 +8,7 @@ import csv
 import hashlib
 import json
 import re
+import sqlite3
 import sys
 import tempfile
 import zipfile
@@ -36,6 +37,7 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 COLLECTOR = "xueqiu-investor-activity"
 CN_TZ = timezone(timedelta(hours=8))
+UTC = timezone.utc
 SUPPORTED_EXTENSIONS = {
     ".json",
     ".jsonl",
@@ -50,9 +52,13 @@ SUPPORTED_EXTENSIONS = {
     ".md",
     ".markdown",
     ".har",
+    ".sqlite",
+    ".sqlite3",
+    ".db",
     ".zip",
 }
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
+BROWSER_HISTORY_NAMES = {"History", "History.db"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
 EXPECTED_ACTIVITY_TYPES = ("watchlist", "follow_user", "follow_portfolio", "portfolio_activity", "comment", "favorite", "post", "saved_page")
 ACTIVITY_REQUIRED_FIELDS = {
@@ -171,6 +177,12 @@ def collect_from_inputs_with_audit(
         "har_secret_material_stripped_count": 0,
         "har_query_string_stripped_count": 0,
         "har_secret_material_policy": "request_headers_cookies_authorization_query_strings_are_never_written_to_events_or_manifest",
+        "browser_history_supported": True,
+        "browser_history_domain_filtering": True,
+        "browser_history_input_count": 0,
+        "browser_history_event_count": 0,
+        "browser_history_source_apps": [],
+        "browser_history_supported_names": sorted(BROWSER_HISTORY_NAMES),
         "limit": limit,
         "supported_extensions": sorted(SUPPORTED_EXTENSIONS),
         "real_account_adapter_used": False,
@@ -186,7 +198,8 @@ def collect_from_inputs_with_audit(
     for path in paths:
         path_result = {
             "path": str(path),
-            "extension": path.suffix.lower() or "<none>",
+            "extension": extension_label(path),
+            "parser": parser_name_for_path(path),
             "parsed_record_count": 0,
             "emitted_event_count": 0,
             "status": "parsed",
@@ -200,6 +213,8 @@ def collect_from_inputs_with_audit(
             record_pagination_markers(record, audit)
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
             path_result["emitted_event_count"] += 1
+            if (record.get("_collectorx_raw_ref") or {}).get("parser") == "browser_history":
+                audit["browser_history_event_count"] += 1
             if limit is not None and len(events) >= limit:
                 audit["emitted_event_count"] = len(events[:limit])
                 finalize_audit(audit)
@@ -216,14 +231,45 @@ def iter_paths(inputs: Iterable[str]) -> Iterator[Path]:
         path = Path(raw).expanduser()
         if path.is_dir():
             for child in sorted(path.rglob("*")):
-                if child.is_file() and child.suffix.lower() in SUPPORTED_EXTENSIONS:
+                if child.is_file() and is_supported_input_path(child):
                     yield child
-        elif path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+        elif path.is_file() and is_supported_input_path(path):
             yield path
+
+
+def is_supported_input_path(path: Path) -> bool:
+    return path.suffix.lower() in SUPPORTED_EXTENSIONS or path.name in BROWSER_HISTORY_NAMES
+
+
+def extension_label(path: Path) -> str:
+    if path.name in BROWSER_HISTORY_NAMES:
+        return "<browser_history>"
+    return path.suffix.lower() or "<none>"
+
+
+def parser_name_for_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if path.name in BROWSER_HISTORY_NAMES or suffix in {".sqlite", ".sqlite3", ".db"}:
+        return "browser_history"
+    if suffix == ".har":
+        return "har"
+    if suffix == ".zip":
+        return "zip"
+    if suffix in {".json", ".jsonl", ".ndjson"}:
+        return "json"
+    if suffix in {".csv", ".tsv"}:
+        return "table"
+    if suffix in {".xlsx", ".xlsm"}:
+        return "openpyxl"
+    if suffix in {".html", ".htm"}:
+        return "html"
+    return "text"
 
 
 def parse_path(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     suffix = path.suffix.lower()
+    if path.name in BROWSER_HISTORY_NAMES or suffix in {".sqlite", ".sqlite3", ".db"}:
+        return parse_browser_history(path, audit=audit)
     if suffix in {".json", ".jsonl", ".ndjson"}:
         return parse_json(path)
     if suffix in {".csv", ".tsv"}:
@@ -248,14 +294,16 @@ def parse_zip(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dic
                 continue
             member_name = info.filename.replace("\\", "/")
             member_path = PurePosixPath(member_name)
-            suffix = Path(member_name).suffix.lower()
+            member_fs_path = Path(member_name)
+            suffix = member_fs_path.suffix.lower()
+            extension = extension_label(member_fs_path)
             if audit is not None:
                 audit["archive_member_count"] += 1
-                increment_counter(audit, "archive_member_extension_counts", suffix or "<none>")
-            if not is_safe_archive_member(member_path) or suffix not in ARCHIVE_MEMBER_EXTENSIONS:
+                increment_counter(audit, "archive_member_extension_counts", extension)
+            if not is_safe_archive_member(member_path) or (suffix not in ARCHIVE_MEMBER_EXTENSIONS and member_fs_path.name not in BROWSER_HISTORY_NAMES):
                 if audit is not None:
                     audit["skipped_archive_member_count"] += 1
-                    increment_counter(audit, "skipped_archive_member_extension_counts", suffix or "<none>")
+                    increment_counter(audit, "skipped_archive_member_extension_counts", extension)
                 continue
             target = tmp_root.joinpath(*member_path.parts)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -411,6 +459,201 @@ def har_secret_material_count(entry: Dict[str, Any]) -> int:
                 if any(fragment in name for fragment in SECRET_KEY_FRAGMENTS):
                     count += 1
     return count
+
+
+def parse_browser_history(path: Path, *, audit: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    if audit is not None:
+        audit["browser_history_input_count"] += 1
+    uri = f"{path.expanduser().resolve().as_uri()}?mode=ro"
+    try:
+        conn = sqlite3.connect(uri, uri=True)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        return []
+    try:
+        names = table_names(conn)
+        try:
+            if {"urls", "visits"}.issubset(names):
+                records = parse_chromium_history(conn, path)
+            elif {"history_items", "history_visits"}.issubset(names):
+                records = parse_safari_history(conn, path)
+            else:
+                records = []
+        except sqlite3.Error:
+            records = []
+    finally:
+        conn.close()
+    if audit is not None:
+        source_apps = sorted({str(record.get("source_app")) for record in records if record.get("source_app")})
+        audit["browser_history_source_apps"] = sorted(set(audit.get("browser_history_source_apps") or []).union(source_apps))
+    return records
+
+
+def table_names(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    return {str(row["name"]) for row in rows}
+
+
+def table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row["name"]) for row in rows}
+
+
+def parse_chromium_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str, Any]]:
+    query = f"""
+        SELECT
+          urls.id AS url_id,
+          urls.url AS url,
+          urls.title AS title,
+          urls.visit_count AS visit_count,
+          urls.typed_count AS typed_count,
+          visits.id AS visit_id,
+          visits.visit_time AS visit_time,
+          visits.transition AS transition
+        FROM urls
+        JOIN visits ON visits.url = urls.id
+        WHERE {xueqiu_domain_where('urls.url')}
+        ORDER BY visits.visit_time ASC
+    """
+    records = []
+    for row in conn.execute(query):
+        records.append(
+            browser_history_record(
+                source_app="chromium_history",
+                path=path,
+                url=row["url"],
+                title=row["title"],
+                visit_id=row["visit_id"],
+                url_id=row["url_id"],
+                event_time=chromium_time_to_iso(row["visit_time"]),
+                visit_count=row["visit_count"],
+                typed_count=row["typed_count"],
+                transition=row["transition"],
+            )
+        )
+    return records
+
+
+def parse_safari_history(conn: sqlite3.Connection, path: Path) -> List[Dict[str, Any]]:
+    visit_columns = table_columns(conn, "history_visits")
+    load_successful_select = (
+        "history_visits.load_successful AS load_successful"
+        if "load_successful" in visit_columns
+        else "NULL AS load_successful"
+    )
+    query = f"""
+        SELECT
+          history_items.id AS url_id,
+          history_items.url AS url,
+          history_items.title AS title,
+          history_items.visit_count AS visit_count,
+          history_visits.id AS visit_id,
+          history_visits.visit_time AS visit_time,
+          {load_successful_select}
+        FROM history_items
+        JOIN history_visits ON history_visits.history_item = history_items.id
+        WHERE {xueqiu_domain_where('history_items.url')}
+        ORDER BY history_visits.visit_time ASC
+    """
+    records = []
+    for row in conn.execute(query):
+        load_successful = int_number(row["load_successful"])
+        records.append(
+            browser_history_record(
+                source_app="safari_history",
+                path=path,
+                url=row["url"],
+                title=row["title"],
+                visit_id=row["visit_id"],
+                url_id=row["url_id"],
+                event_time=safari_time_to_iso(row["visit_time"]),
+                visit_count=row["visit_count"],
+                typed_count=None,
+                transition=load_successful,
+                transition_type=safari_transition_type(load_successful),
+            )
+        )
+    return records
+
+
+def xueqiu_domain_where(column: str) -> str:
+    patterns = []
+    for scheme in ("https", "http"):
+        patterns.extend(
+            [
+                f"{column} = '{scheme}://xueqiu.com'",
+                f"{column} LIKE '{scheme}://xueqiu.com/%'",
+                f"{column} LIKE '{scheme}://xueqiu.com?%'",
+                f"{column} LIKE '{scheme}://xueqiu.com#%'",
+                f"{column} LIKE '{scheme}://%.xueqiu.com'",
+                f"{column} LIKE '{scheme}://%.xueqiu.com/%'",
+                f"{column} LIKE '{scheme}://%.xueqiu.com?%'",
+                f"{column} LIKE '{scheme}://%.xueqiu.com#%'",
+            ]
+        )
+    return "(" + " OR ".join(patterns) + ")"
+
+
+def browser_history_record(
+    *,
+    source_app: str,
+    path: Path,
+    url: str,
+    title: Optional[str],
+    visit_id: Any,
+    url_id: Any,
+    event_time: Optional[str],
+    visit_count: Any,
+    typed_count: Any,
+    transition: Any,
+    transition_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "activity_type": "saved_page",
+        "source_surface": "browser_history",
+        "title": title or url,
+        "content": title or url,
+        "url": url,
+        "time": event_time,
+        "source_app": source_app,
+        "visit_count": int_number(visit_count),
+        "typed_count": int_number(typed_count),
+        "transition": int_number(transition),
+        "transition_type": transition_type or browser_transition_type(transition),
+        "_collectorx_raw_ref": {
+            "path": str(path),
+            "parser": "browser_history",
+            "source_app": source_app,
+            "visit_id": visit_id,
+            "url_id": url_id,
+        },
+    }
+
+
+def chromium_time_to_iso(value: Any) -> Optional[str]:
+    try:
+        micros = int(value)
+    except (TypeError, ValueError):
+        return None
+    if micros <= 0:
+        return None
+    epoch = datetime(1601, 1, 1, tzinfo=UTC)
+    return (epoch + timedelta(microseconds=micros)).astimezone(CN_TZ).isoformat(timespec="seconds")
+
+
+def safari_time_to_iso(value: Any) -> Optional[str]:
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return None
+    epoch = datetime(2001, 1, 1, tzinfo=UTC)
+    return (epoch + timedelta(seconds=seconds)).astimezone(CN_TZ).isoformat(timespec="seconds")
+
+
+def safari_transition_type(load_successful: Optional[int]) -> Optional[str]:
+    if load_successful is None:
+        return None
+    return "load_successful" if load_successful else "load_unknown"
 
 
 def extract_records(loaded: Any) -> List[Any]:
@@ -576,6 +819,11 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "tags": tags_for(record),
         "metrics": metrics_for(record),
         "portfolio_changes": portfolio_changes_for(record),
+        "source_app": first(record, ["source_app"]),
+        "visit_count": int_number(first(record, ["visit_count"])),
+        "typed_count": int_number(first(record, ["typed_count"])),
+        "transition": int_number(first(record, ["transition"])),
+        "transition_type": first(record, ["transition_type"]),
         "raw": sanitized(record),
         "broker_confirmed_trade": False,
     }
@@ -590,7 +838,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, activity_type, event_time, symbol, name, url, json.dumps(sanitized(record), ensure_ascii=False, sort_keys=True)),
         "collector": COLLECTOR,
-        "source": "雪球用户授权投资活动",
+        "source": "雪球用户授权浏览器历史" if data.get("source_surface") == "browser_history" else "雪球用户授权投资活动",
         "owner_scope": "personal",
         "kind": kind,
         "time": event_time,
@@ -666,6 +914,9 @@ def infer_activity_type(record: Dict[str, Any], path: Optional[Path] = None) -> 
 
 
 def infer_source_surface(record: Dict[str, Any], path: Path) -> str:
+    explicit = first(record, ["source_surface"])
+    if explicit:
+        return explicit
     if first(record, ["activity_type", "type", "kind"]) == "saved_page" or path.suffix.lower() in {".html", ".htm"}:
         return "saved_page"
     text = json.dumps(sanitized(record), ensure_ascii=False).lower() + " " + str(path).lower()
@@ -774,6 +1025,10 @@ def build_activity_field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any
         "url",
         "tags",
         "metrics",
+        "source_app",
+        "visit_count",
+        "typed_count",
+        "transition_type",
     ]
     coverage: Dict[str, Dict[str, int]] = {}
     for field in fields:
@@ -871,6 +1126,15 @@ def activity_boundary_proof(
         "missing_expected_activity_types": missing,
         "activity_proof_level_counts": dict(sorted(Counter(proof["proof_level"] for proof in proofs).items())),
         "activity_proofs": proofs,
+        "browser_history_boundary": {
+            "browser_history_supported": audit.get("browser_history_supported", False),
+            "browser_history_domain_filtering": audit.get("browser_history_domain_filtering", False),
+            "browser_history_input_count": audit.get("browser_history_input_count", 0),
+            "browser_history_event_count": audit.get("browser_history_event_count", 0),
+            "browser_history_source_apps": audit.get("browser_history_source_apps", []),
+            "unrelated_browser_history_collected": False,
+            "complete_account_activity_claimed_from_history": False,
+        },
         "pagination_completeness": pagination,
         "missing_global_requirements": missing_global,
     }
@@ -951,6 +1215,8 @@ def pagination_completeness_summary(events: List[Dict[str, Any]], audit: Dict[st
         "pagination_marker_count": pagination_marker_count,
         "pagination_marker_field_counts": dict(sorted((audit.get("pagination_marker_field_counts") or {}).items())),
         "authorized_browser_network_export_used": har_used,
+        "browser_history_event_count": int(audit.get("browser_history_event_count") or 0),
+        "browser_history_source_apps": list(audit.get("browser_history_source_apps") or []),
         "har_endpoint_counts": dict(sorted((audit.get("har_endpoint_counts") or {}).items())),
         "har_response_record_count": int(audit.get("har_response_record_count") or 0),
         "missing_requirements": missing_requirements,
@@ -984,6 +1250,36 @@ def number(value: Any) -> Optional[float]:
         return float(text)
     except ValueError:
         return None
+
+
+def int_number(value: Any) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(str(value)))
+    except ValueError:
+        return None
+
+
+def browser_transition_type(value: Any) -> Optional[str]:
+    raw = int_number(value)
+    if raw is None:
+        return None
+    core = raw & 0xFF
+    mapping = {
+        0: "link",
+        1: "typed",
+        2: "auto_bookmark",
+        3: "auto_subframe",
+        4: "manual_subframe",
+        5: "generated",
+        6: "auto_toplevel",
+        7: "form_submit",
+        8: "reload",
+        9: "keyword",
+        10: "keyword_generated",
+    }
+    return mapping.get(core, "other")
 
 
 def normalize_symbol(value: Optional[str]) -> Optional[str]:
@@ -1138,6 +1434,7 @@ def finalize_audit(audit: Dict[str, Any]) -> None:
         "har_endpoint_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
+    audit["browser_history_source_apps"] = sorted(set(audit.get("browser_history_source_apps") or []))
 
 
 def html_to_text(html: str) -> str:
