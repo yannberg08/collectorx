@@ -90,7 +90,7 @@ Operational docs:
 | `calendar` | `calendar-collector` | Local ICS/JSON/CSV/TSV/ZIP event-package baseline with Apple/Google/Outlook/Feishu/DingTalk/WeCom/Tencent Meeting platform coverage, source audit, ZIP skip reasons, and path-level parse results; investment filtering handled by `task-calendar-investor` |
 | `meeting-artifacts` | `meeting-artifacts` | Authorized local/platform-export/ZIP baseline for meeting minutes, transcripts, HTML/CSV/JSON exports, participants, links, platform normalization, platform coverage, ZIP skip reasons, and path-level parse audit; account API adapters pending |
 | `wechat-favorites` | `wechat-favorites` | Local saved-article/favorites/read/share file/folder/ZIP baseline with action coverage, per-input source audit, skip reasons, and path-safety manifest; real WeChat favorites adapter pending |
-| `social-activity` | `social-activity` | Local JSON/CSV/Excel/HTML/TXT/ZIP activity baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, engagement counts, weak influence signals, and platform/action/field coverage manifests |
+| `social-activity` | `social-activity` | Local JSON/CSV/Excel/HTML/TXT/ZIP activity baseline for Weibo/Bilibili/Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, engagement counts, weak influence signals, platform/action/field coverage, per-input source audit, skipped reasons, and ZIP member audit |
 
 ### Vertical Investor Collectors
 

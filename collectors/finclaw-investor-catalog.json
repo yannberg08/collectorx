@@ -362,7 +362,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-social-activity-export-import",
       "cli": "python3 skills/social-activity/scripts/social_activity.py collect --input <authorized-social-activity-export> --out-dir <out-dir>",
-      "collects": "Weibo, Bilibili, and Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, topics, symbols, engagement counts, and weak influence signals.",
+      "collects": "Weibo, Bilibili, and Xiaohongshu follows, likes, favorites, watch history, comments, shares, creators, topics, symbols, engagement counts, weak influence signals, platform/action/field coverage, per-input source audit, skipped file reasons, and ZIP member audit.",
       "must_not_collect": "Standalone investment conclusions, platform-wide scraping, full creator-profile scraping, or private platform secrets.",
       "production_gap": "Real platform exports, creator/domain allowlists, and weak-evidence backtest."
     },

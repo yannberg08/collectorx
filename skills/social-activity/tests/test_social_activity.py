@@ -97,6 +97,7 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         package = root / "xhs_social_package.json"
         workbook_path = root / "bilibili_activity.xlsx"
         weibo_zip = root / "weibo_share.zip"
+        unsupported = root / "ignore.bin"
         out = root / "out"
         package.write_text(
             json.dumps(
@@ -153,6 +154,7 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
             archive.writestr("../unsafe.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
             archive.writestr("..\\windows-traversal.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
             archive.writestr("C:\\unsafe.json", json.dumps([{"platform": "微博", "action": "点赞"}], ensure_ascii=False))
+        unsupported.write_bytes(b"not a supported social activity export")
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -209,9 +211,108 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["collection_readiness"]["weak_signal_field_coverage_status"] == "all_expected_weak_signal_fields_observed"
         assert manifest["collection_readiness"]["collector_claims_investment_conclusion"] is False
+        assert manifest["source_audit"]["source_type"] == "authorized_social_activity_export"
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 3
+        assert manifest["source_audit"]["parsed_record_count"] == 8
+        assert manifest["source_audit"]["emitted_event_count"] == 8
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert manifest["source_audit"]["extension_counts"] == {
+            ".bin": 1,
+            ".json": 1,
+            ".xlsx": 1,
+            ".zip": 1,
+        }
+        assert len(manifest["source_audit"]["path_results"]) == 4
+
+
+def test_collect_zip_limit_counts_only_emitted_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "social.zip"
+        out = root / "out"
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr(
+                "weibo.json",
+                json.dumps(
+                    [
+                        {"platform": "微博", "action": "点赞", "title": "宏观图表"},
+                        {"platform": "微博", "action": "收藏", "title": "策略复盘"},
+                    ],
+                    ensure_ascii=False,
+                ),
+            )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--limit",
+                "1",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        source_audit = manifest["source_audit"]
+        assert len(events) == 1
+        assert source_audit["limit_reached"] is True
+        assert source_audit["archive_member_event_count"] == 1
+        assert source_audit["parsed_record_count"] == 1
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["path_results"][0]["parsed_record_count"] == 1
+
+
+def test_collect_missing_input_writes_gap_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        missing = root / "missing-export"
+        out = root / "out"
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(missing),
+                "--out-dir",
+                str(out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "social_activity_authorized_input_missing"
+        assert manifest["collection_readiness"]["status"] == "needs_social_activity_input"
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["input_missing_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
 
 
 if __name__ == "__main__":
     test_collect_social_activity_exports()
     test_collect_nested_sections_workbook_and_weak_policy()
+    test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_missing_input_writes_gap_audit()
     print("social-activity tests passed.")

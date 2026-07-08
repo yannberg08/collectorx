@@ -16,7 +16,7 @@ description: 微博、B站、小红书等社交平台用户活动通用采集器
 - 事件明确标记为 `weak_influence_signal`，需要交易、笔记、研报、会议等更强证据交叉验证。
 - `manifest.platform_coverage`、`manifest.action_coverage`、`manifest.weak_signal_field_coverage` 和 `manifest.weak_evidence_policy`。
 - `manifest.influence_surface_summary`：记录创作者、主页、URL、标签、话题、证券代码、互动计数、评论/内容预览和 section 可用面。
-- `manifest.source_audit`：记录文件/ZIP 成员来源、section/sheet 来源，并声明未采集危险路径成员。
+- `manifest.source_audit`：记录请求输入、缺失输入、逐文件解析结果、扩展名覆盖、跳过原因、ZIP 成员数量、ZIP 成员跳过原因、section/sheet 来源，并声明未采集危险路径成员。
 - `manifest.content_policy`：声明不抓平台全站、不抓完整创作者主页、默认不写全文，只保留预览。
 
 不采集：
@@ -40,6 +40,9 @@ python3 skills/social-activity/scripts/social_activity.py collect \
 - `lake/social-activity/events.jsonl`
 - `manifest.json`
 - `SUMMARY.md`
+
+`manifest.source_audit` 可用于 FinClaw 判断用户授权输入是否完整、哪些文件或
+ZIP 成员未进入数据湖，以及 `--limit` 是否造成截断。
 
 通用社交活动不会直接写入投资 Wiki。投资影响源筛选由
 `social-investment-influence` lens 完成。即使经过 lens 筛选，也只能作为弱影响源证据，

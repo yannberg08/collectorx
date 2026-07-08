@@ -1416,6 +1416,32 @@ Findings:
 - Hardened ZIP import against POSIX traversal and Windows drive/traversal
   members.
 
+### Wave X3: P2 social activity source audit hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-social-activity-source-audit-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `social-activity` to `0.2.3`.
+- Added `collect_from_inputs_with_audit` while preserving the existing
+  `collect_from_inputs` compatibility wrapper.
+- Added `manifest.source_audit` fields for requested inputs, missing inputs,
+  supported extensions, extension coverage, skipped file counts, skipped file
+  reasons, parsed/emitted counts, path-level parse results, and limit
+  truncation.
+- Added ZIP member audit for member counts, emitted member events, skipped ZIP
+  member counts, skipped ZIP member reasons, and unsafe path refusal.
+- Updated the CLI so package manifests receive the collection audit instead of
+  inferring sources only from emitted events.
+- Fixture validation covers Weibo JSON, Bilibili CSV, Xiaohongshu HTML,
+  Xiaohongshu nested JSON, Bilibili/Weibo XLSX, Weibo ZIP, unsupported input
+  files, unsafe ZIP members, missing input gap audit, credential filtering, ZIP
+  limit accounting, weak-evidence policy, and preview-only content policy.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -1442,7 +1468,7 @@ Findings:
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, asset value summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, multi-currency/margin/tax validation |
 | 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, license-safe validation |
-| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, source audit, ZIP provenance, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
+| 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, influence surface summary, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, weak-evidence backtest |
 
 ## Git Practice
 

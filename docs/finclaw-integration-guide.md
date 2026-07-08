@@ -648,7 +648,10 @@ Current status:
   manifests.
 - Writes `manifest.influence_surface_summary`, `manifest.source_audit`, and
   `manifest.content_policy` so Lake can see creator/URL/topic/symbol/engagement
-  availability, export package provenance, and preview-only content boundaries.
+  availability, requested inputs, missing inputs, per-file parse results,
+  extension coverage, skipped file reasons, ZIP member counts, skipped ZIP
+  member reasons, limit truncation, export package provenance, and preview-only
+  content boundaries.
 - Does not claim investment influence directly.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
   lens. Treat resulting evidence as weak influence evidence unless corroborated
