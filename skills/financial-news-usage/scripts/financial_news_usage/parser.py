@@ -1008,6 +1008,13 @@ def build_manifest(
         "field_coverage": field_coverage(events),
         "usage_surface_summary": usage_surface_summary(events),
         "source_audit": source_audit(events, collection_audit=collection_audit),
+        "usage_boundary_proof": build_usage_boundary_proof(
+            events,
+            collection_audit=collection_audit,
+            missing_expected_platforms=missing_expected_platforms,
+            missing_expected_actions=missing_expected_actions,
+            gap_only=gap_only,
+        ),
         "content_policy": {
             "full_public_news_crawl": False,
             "full_article_content_included_by_default": False,
@@ -1032,6 +1039,120 @@ def build_manifest(
             "next_action": "Provide authorized CLS/WallstreetCN/Gelonghui usage export." if gap_only else "Use as investor information-consumption evidence; continue real app/account validation.",
         },
     }
+
+
+def build_usage_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]],
+    missing_expected_platforms: List[str],
+    missing_expected_actions: List[str],
+    gap_only: bool,
+) -> Dict[str, Any]:
+    usage_events = usable_usage_events(events)
+    action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in usage_events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usage_events)
+    observed_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if platform_counts.get(platform)]
+    observed_expected_actions = [action for action in EXPECTED_FINANCIAL_NEWS_ACTIONS if action_counts.get(action)]
+    audit = source_audit(events, collection_audit=collection_audit)
+    surface = usage_surface_summary(events)
+    return {
+        "source_type": "authorized_financial_news_usage_export_or_browser_history_copy",
+        "proof_level": usage_boundary_proof_level(
+            usage_events,
+            audit=audit,
+            surface=surface,
+            missing_expected_platforms=missing_expected_platforms,
+            missing_expected_actions=missing_expected_actions,
+            gap_only=gap_only,
+        ),
+        "event_count": len(usage_events),
+        "parsed_record_count": audit.get("parsed_record_count", len(usage_events)),
+        "emitted_event_count": audit.get("emitted_event_count", len(events)),
+        "input_boundary": {
+            "input_count": audit.get("input_count", 0),
+            "requested_inputs": audit.get("requested_inputs", []),
+            "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+            "input_missing_count": audit.get("input_missing_count", 0),
+            "skipped_file_count": audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+            "limit": audit.get("limit"),
+            "limit_reached": audit.get("limit_reached", False),
+        },
+        "platform_action_boundary": {
+            "expected_platforms": list(EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS),
+            "observed_expected_platforms": observed_expected_platforms,
+            "missing_expected_platforms": missing_expected_platforms,
+            "platform_counts": dict(sorted(platform_counts.items())),
+            "expected_actions": list(EXPECTED_FINANCIAL_NEWS_ACTIONS),
+            "observed_expected_actions": observed_expected_actions,
+            "missing_expected_actions": missing_expected_actions,
+            "action_counts": dict(sorted(action_counts.items())),
+        },
+        "usage_topic_boundary": {
+            "expected_usage_topics": surface.get("expected_usage_topics", []),
+            "usage_topic_counts": surface.get("usage_topic_counts", {}),
+            "missing_expected_usage_topics": surface.get("missing_expected_usage_topics", []),
+            "events_with_usage_topics": surface.get("events_with_usage_topics", 0),
+            "platform_topic_counts": surface.get("platform_topic_counts", {}),
+        },
+        "source_artifact_boundary": {
+            "source_ref_count": audit.get("source_ref_count", 0),
+            "archive_count": audit.get("archive_count", 0),
+            "archive_member_count": audit.get("archive_member_count", 0),
+            "archive_member_event_count": audit.get("archive_member_event_count", 0),
+            "skipped_archive_member_count": audit.get("skipped_archive_member_count", 0),
+            "skipped_archive_member_reason_counts": audit.get("skipped_archive_member_reason_counts", {}),
+            "browser_history_input_count": audit.get("browser_history_input_count", 0),
+            "browser_history_event_count": audit.get("browser_history_event_count", 0),
+            "browser_history_source_apps": audit.get("browser_history_source_apps", []),
+            "archive_path_traversal_members_collected": audit.get("archive_path_traversal_members_collected", False),
+            "windows_drive_archive_members_collected": audit.get("windows_drive_archive_members_collected", False),
+        },
+        "content_pointer_boundary": {
+            "events_with_url": surface.get("events_with_url", 0),
+            "events_with_domain": surface.get("events_with_domain", 0),
+            "events_with_source_app": surface.get("events_with_source_app", 0),
+            "events_with_source_or_channel": surface.get("events_with_source_or_channel", 0),
+            "events_with_query": surface.get("events_with_query", 0),
+            "events_with_symbols": surface.get("events_with_symbols", 0),
+            "events_with_tags": surface.get("events_with_tags", 0),
+            "events_with_text": surface.get("events_with_text", 0),
+            "alert_event_count": surface.get("alert_event_count", 0),
+            "subscription_event_count": surface.get("subscription_event_count", 0),
+        },
+        "complete_usage_history_claimed": False,
+        "complete_account_boundary_claimed": False,
+        "public_news_full_crawl_claimed": False,
+        "public_article_body_mirrored": False,
+        "platform_wide_data_claimed": False,
+        "unrelated_browser_history_collected": False,
+        "browser_history_domain_filtering": True,
+        "direct_app_or_account_reconnect": False,
+        "collector_writes_wiki_directly": False,
+        "personal_usage_only": True,
+        "can_enter_finclaw": bool(usage_events) and not gap_only,
+    }
+
+
+def usage_boundary_proof_level(
+    usage_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    surface: Dict[str, Any],
+    missing_expected_platforms: List[str],
+    missing_expected_actions: List[str],
+    gap_only: bool,
+) -> str:
+    if not usage_events or gap_only:
+        if int(audit.get("input_missing_count") or 0) > 0 or int(audit.get("input_count") or 0) == 0:
+            return "no_authorized_financial_news_usage_input"
+        return "no_usable_financial_news_usage_records"
+    if int(surface.get("browser_history_event_count") or 0) > 0:
+        return "authorized_financial_news_usage_with_browser_history"
+    if not missing_expected_platforms and not missing_expected_actions and not surface.get("missing_expected_usage_topics"):
+        return "authorized_financial_news_usage_with_platform_action_topic_coverage"
+    return "authorized_financial_news_usage_partial_coverage"
 
 
 def coverage_status(events: List[Dict[str, Any]], missing_expected: List[str], noun: str) -> str:

@@ -54,6 +54,7 @@ def collect(args: argparse.Namespace) -> int:
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
                     f"- skipped_archive_members：{manifest['source_audit'].get('skipped_archive_member_count', 0)}",
                     f"- browser_history_events：{manifest['source_audit']['browser_history_event_count']}",
+                    f"- usage_boundary_proof：`{manifest['usage_boundary_proof']['proof_level']}`",
                     "- 边界：只采用户动作，不采公共新闻库。",
                 ]
             ),

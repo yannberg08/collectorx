@@ -160,6 +160,35 @@ def test_collect_usage_exports() -> None:
         assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["content_policy"]["full_public_news_crawl"] is False
         assert manifest["evidence_policy"]["personal_usage_only"] is True
+        proof = manifest["usage_boundary_proof"]
+        assert proof["proof_level"] == "authorized_financial_news_usage_with_platform_action_topic_coverage"
+        assert proof["event_count"] == 5
+        assert proof["parsed_record_count"] == 5
+        assert proof["emitted_event_count"] == 5
+        assert proof["platform_action_boundary"]["observed_expected_platforms"] == ["cls", "wallstreetcn", "gelonghui"]
+        assert proof["platform_action_boundary"]["missing_expected_platforms"] == []
+        assert proof["platform_action_boundary"]["observed_expected_actions"] == ["read", "favorite", "search", "subscribe", "alert"]
+        assert proof["platform_action_boundary"]["missing_expected_actions"] == []
+        assert proof["usage_topic_boundary"]["missing_expected_usage_topics"] == []
+        assert proof["usage_topic_boundary"]["usage_topic_counts"]["industry_theme"] == 3
+        assert proof["source_artifact_boundary"]["archive_count"] == 1
+        assert proof["source_artifact_boundary"]["archive_member_event_count"] == 1
+        assert proof["source_artifact_boundary"]["skipped_archive_member_count"] == 3
+        assert proof["source_artifact_boundary"]["browser_history_event_count"] == 0
+        assert proof["source_artifact_boundary"]["archive_path_traversal_members_collected"] is False
+        assert proof["source_artifact_boundary"]["windows_drive_archive_members_collected"] is False
+        assert proof["content_pointer_boundary"]["events_with_domain"] == 3
+        assert proof["content_pointer_boundary"]["events_with_query"] == 1
+        assert proof["content_pointer_boundary"]["events_with_text"] == 1
+        assert proof["content_pointer_boundary"]["alert_event_count"] == 1
+        assert proof["complete_usage_history_claimed"] is False
+        assert proof["public_news_full_crawl_claimed"] is False
+        assert proof["public_article_body_mirrored"] is False
+        assert proof["platform_wide_data_claimed"] is False
+        assert proof["unrelated_browser_history_collected"] is False
+        assert proof["browser_history_domain_filtering"] is True
+        assert proof["direct_app_or_account_reconnect"] is False
+        assert proof["personal_usage_only"] is True
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["source_is_public_news_crawler"] is False
         assert evidence["coverage_summary"]["personal_usage_only"] is True
@@ -229,6 +258,11 @@ def test_collect_chromium_browser_history() -> None:
         assert manifest["source_audit"]["extension_counts"] == {"<browser_history>": 1}
         assert manifest["source_audit"]["path_results"][0]["parser"] == "browser_history"
         assert manifest["usage_surface_summary"]["browser_history_event_count"] == 2
+        assert manifest["usage_boundary_proof"]["proof_level"] == "authorized_financial_news_usage_with_browser_history"
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_input_count"] == 1
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_event_count"] == 2
+        assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_source_apps"] == ["chromium_history"]
+        assert manifest["usage_boundary_proof"]["unrelated_browser_history_collected"] is False
 
 
 def test_collect_zip_limit_counts_only_emitted_records() -> None:
@@ -318,6 +352,9 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+        assert manifest["usage_boundary_proof"]["proof_level"] == "no_authorized_financial_news_usage_input"
+        assert manifest["usage_boundary_proof"]["can_enter_finclaw"] is False
+        assert manifest["usage_boundary_proof"]["input_boundary"]["input_missing_count"] == 1
 
 
 if __name__ == "__main__":
