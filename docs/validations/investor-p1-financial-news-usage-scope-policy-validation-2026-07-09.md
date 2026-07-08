@@ -3,7 +3,9 @@
 ## Scope
 
 This validation covers `financial-news-usage` `0.2.8`, the vertical collector
-for user-authorized CLS, WallstreetCN, and Gelonghui usage traces.
+for user-authorized CLS, WallstreetCN, and Gelonghui usage traces. Version
+`0.2.9` later hardens filtered-all package behavior; see
+`docs/validations/investor-p1-financial-news-usage-filtered-all-gap-validation-2026-07-09.md`.
 
 The goal is to narrow authorized finance-news usage records before Lake output
 while preserving the product boundary: this collector records personal usage
@@ -24,8 +26,9 @@ signals, not public news facts or platform-wide content.
 - `usage_boundary_proof.authorization_scope_boundary` gives FinClaw a stable
   place to inspect the user's authorization policy.
 - If all candidate records are excluded by policy, readiness reports
-  `scope_policy_filtered_all` and the collector does not emit a synthetic gap
-  event.
+  `scope_policy_filtered_all`. As of version `0.2.9`, the collector also emits
+  one `financial_news_scope_policy_filtered_all` profile gap event so FinClaw
+  can validate a traceable package instead of receiving an empty Lake file.
 
 ## Validation Commands
 
@@ -59,7 +62,9 @@ PYTHON=.venv/bin/python bash test_collectors.sh
   history members, unsafe ZIP skips, source audit, behavior summary, and
   usage boundary proof.
 - New scope-policy tests cover partial retention by platform/action/source
-  app/domain/topic/keyword and filtered-all readiness.
+  app/domain/topic/keyword and filtered-all readiness. Version `0.2.9` extends
+  this fixture to validate the gap package with
+  `tools/validate_collector_package.py --collector financial-news-usage`.
 
 ## Product Boundary
 

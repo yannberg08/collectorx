@@ -16,7 +16,23 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`filesystem` now emits validator-safe metadata gap packages:
+`financial-news-usage` now emits validator-safe filtered-all gap packages:
+
+- When a user-authorized CLS, WallstreetCN, or Gelonghui usage input is fully
+  excluded by platform, action, source-app, domain, topic, or keyword scope
+  filters, the Lake file contains one profile gap event instead of being empty.
+- The gap reason is `financial_news_scope_policy_filtered_all`, readiness
+  remains `scope_policy_filtered_all`, and
+  `collection_readiness.can_enter_finclaw=false`.
+- Manifest `usage_event_count=0` and `gap_event_count=1` keep the distinction
+  between package observability and real personal usage evidence explicit.
+- Gap events carry candidate/filter counts and reason summaries but no public
+  article body, local input path, browser-history row, credential, token, or
+  investment conclusion.
+- Missing-input/no-record gap events now also carry a non-empty `time` value and
+  pass the shared CollectorX package validator with evidence required.
+
+The prior completed wave: `filesystem` now emits validator-safe metadata gap packages:
 
 - When a user-authorized filesystem root yields no retained file metadata, the
   Lake file contains one profile gap event instead of being empty.
@@ -202,7 +218,7 @@ filters before generic note events enter the Lake:
 - This tightens the generic-to-lens boundary: `notes` narrows authorized scope,
   while `investment-notes` still performs investment relevance classification.
 
-The latest completed wave: `hk-us-brokerage` now supports explicit
+The prior completed wave: `hk-us-brokerage` now supports explicit
 authorization scope filters for user-owned read-only brokerage records:
 
 - `skills/hk-us-brokerage/scripts/hk_us_brokerage.py collect` accepts
@@ -227,8 +243,9 @@ authorization scope filters for user-owned finance-news usage traces:
 - Manifest `source_audit.financial_news_scope_policy` records the configured
   filters, candidate record count, filtered record count, filter reason counts,
   and whether every candidate was excluded by policy.
-- When all candidate records are excluded, collection readiness reports
-  `scope_policy_filtered_all` and no synthetic gap event is written.
+- As of version `0.2.9`, when all candidate records are excluded, collection
+  readiness reports `scope_policy_filtered_all` and the package emits one
+  `financial_news_scope_policy_filtered_all` profile gap event.
 - `usage_boundary_proof.authorization_scope_boundary` gives FinClaw a stable
   place to inspect the user's authorization boundary before using events in the
   investor Wiki pipeline.
@@ -1108,7 +1125,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + authorized export/ZIP import + `investment-notes` lens classifier | `baseline+audit`; macOS Obsidian-style real validation passed; Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP fixtures pass; generic notes manifest reports platform coverage, field coverage, source-app/path/tag authorization filters, table import audit, Canvas import audit, per-input parse results, skipped reasons, ZIP provenance, path-safety boundary, content policy, and generic-collector evidence policy; investment-notes manifest/evidence now reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote account exports or APIs, real-user allowlist tuning, false-positive review, Windows/Linux vault path validation |
 | 日历/任务/滴答清单 | `ticktick-cli` SoulMirror YAML + AgentRunner + skill live path; `ticktick_events.py` offline export helper; `calendar-collector`; `task-calendar-investor` lens classifier | `baseline+audit`; TickTick live path now returns a dependency-light JSON snapshot through `collect_for_soulmirror.py`, fails clearly with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; offline TickTick/Dida imports support source-app/project/tag/keyword scope-policy audit; fake OpenAPI validation covers active/completed tasks, project names, inbox fallback, dedupe, checklist counts, timezone/repeat/reminder fields, and token non-leakage; generic calendar ICS/JSON/CSV/TSV/ZIP paths report duration, multi-day, invalid-time, conflict quality, and source-platform/calendar/attendee/keyword scope-policy audit; task-calendar lens surfaces preserve these time-quality counts plus task checklist execution structure and writes task/calendar boundary proof | Deploy FinClaw-managed TickTick OAuth Broker, run real account validation, validate real calendar exports/accounts, recurring tasks/timezones/checklists, backtest investment task classifier |
 | 公众号/微信收藏文章 | `wechat-favorites` local file/folder/ZIP collector + `wechat-article-favorites` lens classifier | `baseline+audit`; macOS saved-article validation passed; JSON/HTML/ZIP fixtures cover favorite/read/share/saved-file actions plus favorite reasons, share targets, read duration/progress, article IDs, symbols, and engagement counters; generic manifest reports action coverage, field coverage, article surface summary, article behavior summary, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, filtered-all status, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, content policy, and generic-collector evidence policy; wechat-article lens reports broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surfaces, action counts, source-account type counts, URL/article-ID/tag/text/time coverage, behavior boundary proof, article boundary proof, and filters non-investment saved articles; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive backtest |
-| 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage/browser-history/ZIP collector | `baseline+audit`; JSON/CSV/HTML/TXT/ZIP fixture validation passed; Chromium browser-history validation passed; Safari `History.db` direct-file and ZIP-member validation passed; manifest reports platform/action/topic coverage, field coverage, usage surface summary, usage behavior summary, platform/action/source-app/domain/topic/keyword scope-policy audit, filtered-all readiness, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, browser-history source audit/source-app counts, usage boundary proof, content policy, and evidence policy; usage topics cover macro policy, market strategy, industry themes, company fundamentals, HK/US markets, risk events, trading opportunities, and portfolio alerts; behavior fields cover query terms, subscription targets, alert conditions, notification channels, trigger sources, referrers, session IDs, dwell seconds, visit/typed counts, Safari load status, and browser transition types; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui app caches, account APIs, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux browser-history paths, authorization default scopes, topic false-positive review; do not crawl public news as personal evidence |
+| 华尔街见闻/财联社/格隆汇使用痕迹 | `financial-news-usage` local usage/browser-history/ZIP collector | `baseline+audit`; JSON/CSV/HTML/TXT/ZIP fixture validation passed; Chromium browser-history validation passed; Safari `History.db` direct-file and ZIP-member validation passed; manifest reports platform/action/topic coverage, field coverage, usage surface summary, usage behavior summary, platform/action/source-app/domain/topic/keyword scope-policy audit, filtered-all gap packages, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, browser-history source audit/source-app counts, usage boundary proof, content policy, and evidence policy; usage topics cover macro policy, market strategy, industry themes, company fundamentals, HK/US markets, risk events, trading opportunities, and portfolio alerts; behavior fields cover query terms, subscription targets, alert conditions, notification channels, trigger sources, referrers, session IDs, dwell seconds, visit/typed counts, Safari load status, and browser transition types; real app/account adapters pending | Discover/validate CLS/WallstreetCN/Gelonghui app caches, account APIs, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux browser-history paths, authorization default scopes, topic false-positive review; do not crawl public news as personal evidence |
 
 ## P2 Status
 

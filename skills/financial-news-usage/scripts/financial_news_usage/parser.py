@@ -447,25 +447,36 @@ def collect_from_inputs_with_audit(
         if limit is not None and len(events) >= limit:
             break
 
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     scope_policy_filtered_all = (
         policy["enabled"]
         and candidate_record_count > 0
         and scope_policy_filtered_record_count == candidate_record_count
         and not events
     )
-    if not events and not scope_policy_filtered_all:
-        reason = "financial_news_usage_authorized_input_missing" if not input_list or audit["input_missing_count"] else "financial_news_usage_records_empty"
-        events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["candidate_record_count"] = candidate_record_count
-    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
-    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     audit["financial_news_scope_policy_filtered_all"] = scope_policy_filtered_all
     audit["parsed_record_count"] = candidate_record_count
-    audit["emitted_event_count"] = len(events)
     audit["extension_counts"] = dict(sorted(extension_counts.items()))
     audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
     audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
     audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+    if not events:
+        if scope_policy_filtered_all:
+            events = [
+                gap_event(
+                    collected_at=collected_at,
+                    reason="financial_news_scope_policy_filtered_all",
+                    collection_audit=audit,
+                )
+            ]
+        else:
+            reason = "financial_news_usage_authorized_input_missing" if not input_list or audit["input_missing_count"] else "financial_news_usage_records_empty"
+            events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
+    audit["emitted_event_count"] = len(events)
+    audit["usage_event_count"] = len(usable_usage_events(events))
+    audit["gap_event_count"] = sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap")
     audit["browser_history_event_count"] = sum(
         1 for event in usable_usage_events(events) if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
     )
@@ -1268,23 +1279,48 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(*, collected_at: Optional[str], reason: str, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    timestamp = collected_at or now_iso()
+    audit = collection_audit or {}
+    messages = {
+        "financial_news_scope_policy_filtered_all": "Authorized financial-news usage records were found, but every candidate was outside the configured authorization scope policy.",
+        "financial_news_usage_authorized_input_missing": "No user-authorized financial news usage export or local input was provided.",
+        "financial_news_usage_records_empty": "Authorized financial news usage input was provided, but no readable usage records were found.",
+    }
+    status = "scope_policy_filtered_all" if reason == "financial_news_scope_policy_filtered_all" else "needs_financial_news_usage_input"
+    data = {
+        "action_type": "collector_gap",
+        "gap": reason,
+        "status": status,
+        "profile_type": reason,
+        "message": messages.get(reason, "Financial-news usage collection could not produce usable evidence for this run."),
+        "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+        "parsed_record_count": int(audit.get("parsed_record_count") or 0),
+        "scope_policy_filtered_record_count": int(audit.get("scope_policy_filtered_record_count") or 0),
+        "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts") or {},
+        "financial_news_scope_policy_filtered_all": bool(audit.get("financial_news_scope_policy_filtered_all")),
+        "policy_does_not_assert_investment_relevance": True,
+        "personal_usage_event_count": 0,
+        "public_news_full_crawl_claimed": False,
+        "public_article_body_mirrored": False,
+        "platform_wide_data_claimed": False,
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "财经资讯使用痕迹授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
-        "data": {
-            "action_type": "collector_gap",
-            "gap": reason,
-            "message": "No user-authorized financial news usage export or local input was provided.",
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
+        "data": data,
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool((audit.get("financial_news_scope_policy") or {}).get("enabled")),
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["none"]},
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["collection_gap", "financial_news_usage_metadata"]},
         "wiki_targets": ["investor.data_quality.collection_gaps"],
     }
 
@@ -1403,6 +1439,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usage_event_count": len(usable_usage_events(events)),
+        "gap_event_count": sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap"),
         "kind_counts": dict(sorted(kind_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
@@ -1523,8 +1561,11 @@ def build_usage_boundary_proof(
             gap_only=gap_only,
         ),
         "event_count": len(usage_events),
+        "package_event_count": len(events),
+        "gap_event_count": sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap"),
         "parsed_record_count": audit.get("parsed_record_count", len(usage_events)),
         "emitted_event_count": audit.get("emitted_event_count", len(events)),
+        "usage_event_count": audit.get("usage_event_count", len(usage_events)),
         "input_boundary": {
             "input_count": audit.get("input_count", 0),
             "requested_inputs": audit.get("requested_inputs", []),
@@ -1805,6 +1846,8 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     )
     audit = {
         "source_ref_count": source_ref_count,
+        "usage_event_count": len(usage_events),
+        "gap_event_count": sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap"),
         "archive_member_event_count": archive_member_event_count,
         "archive_count": len(set(archives)),
         "browser_history_event_count": browser_history_event_count,
@@ -1816,6 +1859,8 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     if collection_audit:
         audit.update(collection_audit)
         audit["source_ref_count"] = source_ref_count
+        audit["usage_event_count"] = len(usage_events)
+        audit["gap_event_count"] = sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap")
         audit["archive_member_event_count"] = archive_member_event_count
         audit["browser_history_event_count"] = browser_history_event_count
         audit["browser_history_source_apps"] = browser_history_apps

@@ -14,7 +14,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "financial_news_usage.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 
 
 def chromium_time(value: datetime) -> int:
@@ -635,23 +637,48 @@ def test_collect_scope_policy_filtered_all_status() -> None:
             capture_output=True,
         )
         events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert events == []
+        assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T03:20:00+08:00"
+        assert events[0]["data"]["action_type"] == "collector_gap"
+        assert events[0]["data"]["gap"] == "financial_news_scope_policy_filtered_all"
+        assert events[0]["data"]["status"] == "scope_policy_filtered_all"
+        assert events[0]["data"]["candidate_record_count"] == 1
+        assert events[0]["data"]["scope_policy_filtered_record_count"] == 1
+        assert events[0]["data"]["scope_policy_filter_reason_counts"] == {"topic_not_allowed": 1}
+        assert events[0]["data"]["personal_usage_event_count"] == 0
+        assert events[0]["data"]["public_news_full_crawl_claimed"] is False
+        assert events[0]["raw_ref"]["scope_policy_enabled"] is True
+        assert str(export) not in json.dumps(events[0], ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["usage_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["source_audit"]["candidate_record_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 1
         assert manifest["source_audit"]["scope_policy_filtered_record_count"] == 1
-        assert manifest["source_audit"]["emitted_event_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["usage_event_count"] == 0
+        assert manifest["source_audit"]["gap_event_count"] == 1
         assert manifest["source_audit"]["financial_news_scope_policy_filtered_all"] is True
         assert manifest["source_audit"]["scope_policy_filter_reason_counts"] == {"topic_not_allowed": 1}
         assert manifest["source_audit"]["path_results"][0]["status"] == "filtered_by_scope_policy"
         assert manifest["usage_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
+        assert manifest["usage_boundary_proof"]["event_count"] == 0
+        assert manifest["usage_boundary_proof"]["package_event_count"] == 1
+        assert manifest["usage_boundary_proof"]["gap_event_count"] == 1
         assert manifest["usage_boundary_proof"]["can_enter_finclaw"] is False
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "financial-news-usage", "--require-evidence"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
 
 
 def test_collect_missing_input_writes_gap_audit() -> None:
@@ -677,19 +704,32 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         )
         events = [json.loads(line) for line in (out / "lake" / "financial-news-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T03:20:00+08:00"
         assert events[0]["data"]["gap"] == "financial_news_usage_authorized_input_missing"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["usage_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_financial_news_usage_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["input_missing_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 0
         assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["usage_event_count"] == 0
+        assert manifest["source_audit"]["gap_event_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
         assert manifest["usage_boundary_proof"]["proof_level"] == "no_authorized_financial_news_usage_input"
         assert manifest["usage_boundary_proof"]["can_enter_finclaw"] is False
         assert manifest["usage_boundary_proof"]["input_boundary"]["input_missing_count"] == 1
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "financial-news-usage", "--require-evidence"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ scope:
     - source_audit_manifest
     - scope_policy_authorization_filters
     - scope_policy_filter_reason_counts
-    - scope_policy_filtered_all_status
+    - scope_policy_filtered_all_gap_package
     - content_policy_manifest
     - usage_boundary_proof_manifest
     - archive_member_provenance
@@ -65,5 +65,5 @@ description: |
   财经资讯 App 是投资垂直通道，但只采用户自己的阅读、收藏、订阅、搜索和提醒动作。
   支持用户授权导出文件、ZIP 包、保存页面、直接浏览器历史副本和 ZIP 包内浏览器历史成员，并在 manifest 中报告平台/动作覆盖、
   主题覆盖、字段覆盖、行为强度、使用痕迹可用面、逐输入来源审计、平台/动作/来源应用/域名/主题/关键词授权范围过滤、
-  跳过原因、内容/证据边界和使用边界证明。
+  filtered-all gap 包、跳过原因、内容/证据边界和使用边界证明。
   公共新闻全文库属于 FinClaw research tools，不进个人证据湖。
