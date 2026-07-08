@@ -62,7 +62,7 @@ skill-name/
 | feishu | 8+ | 飞书 OAuth/API 工具 + 通用采集器 baseline；支持授权 JSON/CSV/HTML/Markdown/TXT/ZIP 本地导入、字段覆盖、飞书数据面、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤，仍需真实飞书账号/API 验证 |
 | ticktick-cli | 12+ | 滴答清单 API 工具 + SoulMirror YAML/AgentRunner 主采集路径；`collect_for_soulmirror.py` 输出任务快照数组，未授权以 `ticktick_auth_required` 失败，离线 JSON/ZIP 转换 helper 保留到 `exports/ticktick/events.jsonl`，仍需托管 OAuth Broker 和真实账号验证 |
 | calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest、时长/跨天/异常时间段/同日历冲突质量审计，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |
-| meeting-artifacts | 7+ | 通用会议产物采集器 baseline；支持授权本地文件/平台导出/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤；`meeting-minutes` lens 已汇总路演/调研/投委会/专家会/业绩会/风险/后续行动面谱，仍需真实飞书/钉钉/企业微信/腾讯会议账号验证 |
+| meeting-artifacts | 7+ | 通用会议产物采集器 baseline；支持授权本地文件/平台导出/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤；`meeting-minutes` lens 已汇总路演/调研/投委会/专家会/业绩会/风险/后续行动面谱和会议边界证明，仍需真实飞书/钉钉/企业微信/腾讯会议账号验证 |
 | collaboration-exports | 7+ | 钉钉/企业微信通用协作导出采集器 baseline；支持授权 JSON/CSV/HTML/文本/ZIP、消息/联系人/文件/会议指针、ZIP 跳过审计和逐文件解析 manifest，仍需真实账号/API 验证 |
 | wechat-favorites | 8+ | 微信收藏/公众号文章动作通用采集器 baseline；支持授权文件/目录/ZIP、动作覆盖、逐输入来源审计、跳过原因和凭证字段过滤；`wechat-article-favorites` lens 已汇总文章面谱、动作和来源类型，仍需真实微信收藏/公众号阅读库验证 |
 | doubao-chat-export | 19+ | 迁移 skill，需确认上游许可与真实环境 |

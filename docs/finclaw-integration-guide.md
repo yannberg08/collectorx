@@ -687,6 +687,11 @@ Current status:
   `lake/dingtalk/events.jsonl`, or `lake/wecom/events.jsonl` into the
   `meeting-minutes` lens for roadshow, research, IC, expert-call,
   earnings-call, decision-point, risk-discussion, and follow-up surfaces.
+- The `meeting-minutes` lens writes `manifest.meeting_minutes_boundary_proof`
+  with authorized input counts, upstream meeting/collaboration source counts,
+  candidate/matched/filtered counts, participant coverage, meeting-link
+  coverage, attachment/recording reference coverage, time coverage, and an
+  explicit no-complete-meeting-history/no-complete-workspace boundary.
 - Feishu/DingTalk/WeCom/Tencent Meeting account API adapters still require
   real authorization validation.
 

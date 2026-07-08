@@ -268,6 +268,11 @@ def build_manifest(
         if source_id == "task-calendar-investor"
         else None
     )
+    meeting_minutes_proof = (
+        build_meeting_minutes_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "meeting-minutes"
+        else None
+    )
     manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -305,6 +310,8 @@ def build_manifest(
         manifest["investment_note_boundary_proof"] = investment_note_proof
     if task_calendar_proof is not None:
         manifest["task_calendar_boundary_proof"] = task_calendar_proof
+    if meeting_minutes_proof is not None:
+        manifest["meeting_minutes_boundary_proof"] = meeting_minutes_proof
     return manifest
 
 
@@ -604,6 +611,93 @@ def task_calendar_proof_level(
     if int(surface.get("events_with_due_or_start") or 0) > 0:
         return "authorized_task_calendar_with_time_surface"
     return "authorized_task_calendar_event_only"
+
+
+def build_meeting_minutes_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    surface = meeting_minutes_surface_summary(usable_events)
+    return {
+        "source_type": "meeting_and_collaboration_lake_investor_lens",
+        "proof_level": meeting_minutes_proof_level(usable_events, audit=audit, readiness=collection_readiness),
+        "event_count": len(usable_events),
+        "candidate_record_count": audit.get("candidate_record_count", 0),
+        "matched_event_count": audit.get("matched_event_count", 0),
+        "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
+        "input_boundary": {
+            "input_count": audit.get("input_count", 0),
+            "requested_inputs": audit.get("requested_inputs", []),
+            "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+            "input_missing_count": audit.get("input_missing_count", 0),
+            "skipped_file_count": audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+            "limit": audit.get("limit"),
+            "limit_reached": audit.get("limit_reached", False),
+        },
+        "source_policy_boundary": {
+            "enabled": source_policy.get("enabled", False),
+            "allow_chats": source_policy.get("allow_chats", []),
+            "deny_chats": source_policy.get("deny_chats", []),
+            "allow_senders": source_policy.get("allow_senders", []),
+            "deny_senders": source_policy.get("deny_senders", []),
+            "filtered_candidate_count": source_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": source_policy.get("filter_reason_counts", {}),
+            "policy_does_not_assert_investment_relevance": source_policy.get("policy_does_not_assert_investment_relevance", True),
+        },
+        "upstream_boundary": {
+            "upstream_collector_counts": surface.get("upstream_collector_counts", {}),
+            "kind_counts": surface.get("kind_counts", {}),
+            "source_platform_counts": surface.get("source_platform_counts", {}),
+        },
+        "meeting_context_boundary": {
+            "participant_event_count": surface.get("participant_event_count", 0),
+            "participant_ref_count": surface.get("participant_ref_count", 0),
+            "meeting_url_event_count": surface.get("meeting_url_event_count", 0),
+            "attachment_ref_event_count": surface.get("attachment_ref_event_count", 0),
+            "recording_ref_event_count": surface.get("recording_ref_event_count", 0),
+            "events_with_time": surface.get("events_with_time", 0),
+            "matched_symbol_event_count": surface.get("matched_symbol_event_count", 0),
+        },
+        "meeting_minutes_boundary": surface,
+        "complete_meeting_history_claimed": False,
+        "complete_workspace_claimed": False,
+        "complete_meeting_context_claimed": False,
+        "recording_body_collected_by_default": False,
+        "direct_meeting_platform_reconnect": False,
+        "requires_upstream_meeting_or_collaboration_collector": True,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness.get("can_enter_finclaw", False),
+    }
+
+
+def meeting_minutes_proof_level(
+    usable_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    readiness: Dict[str, Any],
+) -> str:
+    if not usable_events:
+        status = str(readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            return "no_authorized_meeting_lake_input"
+        if status == "source_policy_filtered_all":
+            return "source_policy_filtered_all"
+        if status == "no_readable_input":
+            return "no_readable_meeting_lake_input"
+        return "no_usable_investment_meetings_after_filter"
+    surface = meeting_minutes_surface_summary(usable_events)
+    if int(surface.get("recording_ref_event_count") or 0) > 0 or int(surface.get("attachment_ref_event_count") or 0) > 0:
+        return "authorized_meeting_minutes_with_artifact_refs"
+    if int(surface.get("participant_event_count") or 0) > 0 or int(surface.get("meeting_url_event_count") or 0) > 0:
+        return "authorized_meeting_minutes_with_context"
+    if int(surface.get("events_with_time") or 0) > 0:
+        return "authorized_meeting_minutes_with_time_surface"
+    return "authorized_meeting_minutes_event_only"
 
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:

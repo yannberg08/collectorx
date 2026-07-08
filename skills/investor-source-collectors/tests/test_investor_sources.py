@@ -1323,6 +1323,31 @@ def test_meeting_minutes_lens_reports_meeting_surface_from_upstream_events() -> 
         assert surface["matched_symbol_event_count"] == 1
         assert surface["events_with_time"] == 4
         assert surface["collector_writes_wiki_directly"] is False
+        proof = manifest["meeting_minutes_boundary_proof"]
+        assert proof["proof_level"] == "authorized_meeting_minutes_with_artifact_refs"
+        assert proof["event_count"] == 4
+        assert proof["candidate_record_count"] == 5
+        assert proof["matched_event_count"] == 4
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["upstream_boundary"]["upstream_collector_counts"] == {
+            "dingtalk": 1,
+            "feishu": 1,
+            "meeting-artifacts": 1,
+            "wecom": 1,
+        }
+        assert proof["meeting_context_boundary"]["participant_event_count"] == 4
+        assert proof["meeting_context_boundary"]["participant_ref_count"] == 7
+        assert proof["meeting_context_boundary"]["meeting_url_event_count"] == 2
+        assert proof["meeting_context_boundary"]["attachment_ref_event_count"] == 2
+        assert proof["meeting_context_boundary"]["recording_ref_event_count"] == 1
+        assert proof["meeting_context_boundary"]["events_with_time"] == 4
+        assert proof["complete_meeting_history_claimed"] is False
+        assert proof["complete_workspace_claimed"] is False
+        assert proof["complete_meeting_context_claimed"] is False
+        assert proof["recording_body_collected_by_default"] is False
+        assert proof["direct_meeting_platform_reconnect"] is False
+        assert proof["requires_upstream_meeting_or_collaboration_collector"] is True
+        assert proof["meeting_minutes_boundary"]["meeting_minutes_surface_counts"]["risk_discussion"] == 3
 
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["meeting-minutes"]

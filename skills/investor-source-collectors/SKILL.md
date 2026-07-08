@@ -131,6 +131,7 @@ P2 必做：
 - 对 `research-documents` 额外输出 `research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描。
 - 对 `investment-notes` 输出 `investment_note_boundary_proof`：汇总授权输入、来源应用、预览/全文、标签/路径/URL、候选/命中/过滤数量和投资笔记类型面谱，并明确不声明完整笔记库或完整上下文。
 - 对 `task-calendar-investor` 输出 `task_calendar_boundary_proof`：汇总授权输入、上游任务/日历来源、候选/命中/过滤数量、时间/提醒/会议链接/日程质量面谱，并明确不声明完整任务清单、完整日历或完整上下文。
+- 对 `meeting-minutes` 输出 `meeting_minutes_boundary_proof`：汇总授权输入、上游会议/协作来源、候选/命中/过滤数量、参会人、会议链接、附件/录制指针和时间覆盖，并明确不声明完整会议历史、完整工作区或默认采集录制正文。
 - 不支持的研究文档扩展名会被跳过，不会因为文件名里有弱投资词就污染 Wiki 覆盖率。
 
 ## Lens 分类器

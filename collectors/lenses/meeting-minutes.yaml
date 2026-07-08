@@ -33,6 +33,7 @@ scope:
     - follow_up_actions
     - upstream_collector_surface
     - attachment_recording_refs
+    - meeting_minutes_boundary_proof
   excludes:
     - all_meetings
     - unauthorized_recordings
@@ -40,4 +41,5 @@ scope:
 
 description: |
   会议通道先作为通用证据入 lake；本 lens 只识别投资调研、路演、投委会、
-  专家会、业绩会、风险讨论和后续行动，并输出会议面谱用于投资分身 Wiki。
+  专家会、业绩会、风险讨论和后续行动，并输出会议面谱和会议边界证明用于投资分身 Wiki。
+  它不声明完整会议历史、完整工作区、完整会议上下文或默认采集录制正文。
