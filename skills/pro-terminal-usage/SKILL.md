@@ -17,7 +17,7 @@ description: 专业金融终端使用痕迹采集器。采集用户授权的 Win
 - 授权 ZIP 包；保留 `archive.zip::member` 证据路径。
 - `manifest.terminal_coverage`、`manifest.activity_coverage`、`manifest.workflow_field_coverage`：记录 Wind/Choice/iFinD/Bloomberg、六类活动和推荐工作流字段覆盖。
 - `manifest.workflow_surface_summary`：记录工作区、项目、模块、函数、菜单、搜索、证券、行业、地区、因子、数据集、字段、模板、下载格式和内容预览可用面。
-- `manifest.source_audit`：记录文件/ZIP 成员来源、section/sheet 来源，并声明未采集危险路径成员。
+- `manifest.source_audit`：记录授权输入、缺失输入、逐文件解析结果、扩展名覆盖、跳过文件原因、ZIP 成员数量、跳过 ZIP 成员原因、文件/ZIP 成员来源、section/sheet 来源，并声明未采集危险路径成员。
 - `manifest.license_policy` 与 `manifest.evidence_policy`：声明只采工作流元数据，不镜像厂商数据库，不镜像授权内容全文。
 
 不采集：
@@ -44,5 +44,5 @@ python3 skills/pro-terminal-usage/scripts/pro_terminal_usage.py collect \
 
 当前支持 JSON/JSONL/NDJSON、CSV/TSV、XLSX/XLSM、HTML、Markdown/TXT、INI/CONF/LOG、ZIP。
 JSON/ZIP 包会展开 workspaces、watchlists、searches、downloads、templates、models、
-factors 等 section。采集器记录用户“怎么研究、关注什么、常用什么工具”，不是公共金融
-数据采集器。
+factors 等 section。manifest 会记录逐输入来源审计、跳过原因、ZIP 成员审计和路径安全
+边界。采集器记录用户“怎么研究、关注什么、常用什么工具”，不是公共金融数据采集器。

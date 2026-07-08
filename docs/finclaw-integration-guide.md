@@ -613,6 +613,9 @@ Current status:
   `manifest.license_policy`, and `manifest.evidence_policy` so Lake can see
   workflow metadata availability, ZIP/section provenance, and license-safe
   boundaries before using the evidence.
+- `manifest.source_audit` records requested inputs, missing inputs, per-file
+  parse results, extension coverage, skipped file reasons, ZIP member counts,
+  skipped ZIP member reasons, parsed/emitted counts, and path-safety flags.
 - Outputs workflow evidence for capability circle, research workflow, monitoring
   rules, and information-source dimensions.
 - Does not copy vendor databases, public market data, reports, or licensed

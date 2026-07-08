@@ -98,6 +98,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         package = root / "bloomberg_workflow.json"
         workbook_path = root / "choice_workflow.xlsx"
         ifind_zip = root / "ifind_workflow.zip"
+        unsupported = root / "ignore.bin"
         out = root / "out"
         package.write_text(
             json.dumps(
@@ -152,6 +153,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
             archive.writestr("../unsafe.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
             archive.writestr("..\\windows-traversal.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
             archive.writestr("C:\\unsafe.json", json.dumps([{"terminal": "iFinD", "activity_type": "download"}], ensure_ascii=False))
+        unsupported.write_bytes(b"not a supported terminal export")
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--input", str(root), "--out-dir", str(out)],
@@ -208,8 +210,24 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert manifest["workflow_surface_summary"]["events_with_fields"] == 2
         assert manifest["workflow_surface_summary"]["events_with_content_preview"] == 1
         assert manifest["source_audit"]["archive_member_event_count"] == 1
+        assert manifest["source_audit"]["archive_member_count"] == 4
+        assert manifest["source_audit"]["skipped_archive_member_count"] == 3
+        assert manifest["source_audit"]["skipped_archive_member_reason_counts"] == {"unsafe_path": 3}
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["source_audit"]["source_section_event_count"] == 8
+        assert manifest["source_audit"]["resolved_input_file_count"] == 3
+        assert manifest["source_audit"]["parsed_record_count"] == 8
+        assert manifest["source_audit"]["emitted_event_count"] == 8
+        assert manifest["source_audit"]["skipped_file_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert manifest["source_audit"]["extension_counts"] == {
+            ".bin": 1,
+            ".json": 1,
+            ".xlsx": 1,
+            ".zip": 1,
+        }
+        assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
         assert manifest["source_audit"]["windows_drive_archive_members_collected"] is False
         assert manifest["license_policy"]["licensed_content_mirrored"] is False
@@ -224,7 +242,96 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert evidence["coverage_summary"]["vendor_database_mirror"] is False
 
 
+def test_collect_zip_limit_counts_only_emitted_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        package = root / "wind.zip"
+        out = root / "out"
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr(
+                "usage.json",
+                json.dumps(
+                    [
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "search",
+                            "query": "半导体景气度",
+                        },
+                        {
+                            "terminal": "Wind",
+                            "activity_type": "search",
+                            "query": "AI 服务器",
+                        },
+                    ],
+                    ensure_ascii=False,
+                ),
+            )
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(package),
+                "--out-dir",
+                str(out),
+                "--limit",
+                "1",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        source_audit = manifest["source_audit"]
+        assert source_audit["limit_reached"] is True
+        assert source_audit["archive_member_event_count"] == 1
+        assert source_audit["parsed_record_count"] == 1
+        assert source_audit["emitted_event_count"] == 1
+        assert source_audit["path_results"][0]["parsed_record_count"] == 1
+
+
+def test_collect_missing_input_writes_gap_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        missing = root / "missing-export"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(missing),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T04:30:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = [json.loads(line) for line in (out / "lake" / "pro-terminal-usage" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert len(events) == 1
+        assert events[0]["data"]["gap"] == "pro_terminal_usage_authorized_input_missing"
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "needs_pro_terminal_usage_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["input_missing_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+
+
 if __name__ == "__main__":
     test_collect_terminal_workflow_exports()
     test_collect_nested_sections_workbook_and_sanitizes()
+    test_collect_zip_limit_counts_only_emitted_records()
+    test_collect_missing_input_writes_gap_audit()
     print("pro-terminal-usage tests passed.")

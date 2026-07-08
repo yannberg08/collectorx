@@ -1,1 +1,1 @@
-{"collector":"pro-terminal-usage","class":"vertical","version":"0.2.1","status":"baseline","description":"User-authorized Wind/Choice/iFinD/Bloomberg workflow metadata exports and ZIP packages, including terminal/activity/workflow-field coverage manifests."}
+{"collector":"pro-terminal-usage","class":"vertical","version":"0.2.3","status":"baseline+audit","description":"User-authorized Wind/Choice/iFinD/Bloomberg workflow metadata exports and ZIP packages, including terminal/activity/workflow-field coverage and per-input source audit manifests."}
