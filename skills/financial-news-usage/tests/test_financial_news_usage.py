@@ -41,18 +41,26 @@ def test_collect_usage_exports() -> None:
                             "url": "https://www.cls.cn/detail/1",
                             "saved_at": "2026-07-08T08:30:00+08:00",
                             "channel": "电报",
+                            "dwell_seconds": 180,
+                            "referrer": "https://www.cls.cn/telegraph",
+                            "session_id": "cls-session-1",
                             "profile": {"token": "must-not-leak", "note": "keep"},
                         },
                         {
                             "platform": "格隆汇",
                             "action": "搜索",
                             "query": "港股创新药",
+                            "query_terms": ["港股", "创新药"],
+                            "source_app": "gelonghui_app",
+                            "dwell_seconds": "2分钟",
                             "time": "2026-07-08T09:00:00+08:00",
                         },
                         {
                             "platform": "华尔街见闻",
                             "action": "订阅",
                             "channel": "宏观",
+                            "subscription_target": "宏观政策",
+                            "notification_channel": "App推送",
                             "time": "2026-07-08T09:10:00+08:00",
                         },
                     ]
@@ -79,6 +87,10 @@ def test_collect_usage_exports() -> None:
                                 "action": "提醒",
                                 "title": "半导体自选提醒：风险预警与交易机会",
                                 "url": "https://www.cls.cn/detail/alert",
+                                "alert_condition": "半导体自选出现风险预警",
+                                "notification_channel": "系统推送",
+                                "symbols": ["688981"],
+                                "trigger_source": "watchlist_alert",
                                 "time": "2026-07-08T09:20:00+08:00",
                             }
                         ]
@@ -121,6 +133,14 @@ def test_collect_usage_exports() -> None:
         alert_event = next(event for event in events if event["data"]["action_type"] == "alert")
         assert alert_event["raw_ref"]["source_archive"] == str(alert_zip)
         assert alert_event["raw_ref"]["archive_member"] == "cls-alert.json"
+        assert alert_event["data"]["alert_condition"] == "半导体自选出现风险预警"
+        assert alert_event["data"]["notification_channel"] == "系统推送"
+        assert alert_event["data"]["trigger_source"] == "watchlist_alert"
+        search_event = next(event for event in events if event["data"]["action_type"] == "search")
+        assert search_event["data"]["query_terms"] == ["港股", "创新药"]
+        assert search_event["data"]["dwell_seconds"] == 120
+        subscribe_event = next(event for event in events if event["data"]["action_type"] == "subscribe")
+        assert subscribe_event["data"]["subscription_target"] == "宏观政策"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_claim_complete_usage_history"] is False
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["cls", "wallstreetcn", "gelonghui"]
@@ -130,6 +150,12 @@ def test_collect_usage_exports() -> None:
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["field_coverage"]["field_counts"]["action_type"] == 5
+        assert manifest["field_coverage"]["field_counts"]["query_terms"] == 1
+        assert manifest["field_coverage"]["field_counts"]["subscription_target"] == 1
+        assert manifest["field_coverage"]["field_counts"]["alert_condition"] == 1
+        assert manifest["field_coverage"]["field_counts"]["notification_channel"] == 2
+        assert manifest["field_coverage"]["field_counts"]["trigger_source"] == 5
+        assert manifest["field_coverage"]["field_counts"]["dwell_seconds"] == 2
         assert manifest["usage_surface_summary"]["events_with_domain"] == 3
         assert manifest["usage_surface_summary"]["events_with_query"] == 1
         assert manifest["usage_surface_summary"]["alert_event_count"] == 1
@@ -144,6 +170,21 @@ def test_collect_usage_exports() -> None:
         assert manifest["usage_surface_summary"]["usage_topic_counts"]["trading_opportunity"] == 1
         assert manifest["usage_surface_summary"]["usage_topic_counts"]["portfolio_alert"] == 1
         assert manifest["usage_surface_summary"]["platform_topic_counts"]["cls:portfolio_alert"] == 1
+        behavior = manifest["usage_behavior_summary"]
+        assert behavior["events_with_trigger_source"] == 5
+        assert behavior["events_with_query_terms"] == 1
+        assert behavior["query_term_count"] == 2
+        assert behavior["events_with_subscription_target"] == 1
+        assert behavior["subscription_target_count"] == 1
+        assert behavior["events_with_alert_condition"] == 1
+        assert behavior["alert_condition_count"] == 1
+        assert behavior["events_with_notification_channel"] == 2
+        assert behavior["events_with_referrer"] == 1
+        assert behavior["events_with_session_id"] == 1
+        assert behavior["events_with_dwell_seconds"] == 2
+        assert behavior["average_dwell_seconds"] == 150
+        assert behavior["trigger_source_counts"]["watchlist_alert"] == 1
+        assert behavior["trigger_source_counts"]["saved_page"] == 1
         assert manifest["source_audit"]["archive_member_event_count"] == 1
         assert manifest["source_audit"]["archive_member_count"] == 4
         assert manifest["source_audit"]["skipped_archive_member_count"] == 3
@@ -161,7 +202,7 @@ def test_collect_usage_exports() -> None:
         assert manifest["content_policy"]["full_public_news_crawl"] is False
         assert manifest["evidence_policy"]["personal_usage_only"] is True
         proof = manifest["usage_boundary_proof"]
-        assert proof["proof_level"] == "authorized_financial_news_usage_with_platform_action_topic_coverage"
+        assert proof["proof_level"] == "authorized_financial_news_usage_with_behavior_surface"
         assert proof["event_count"] == 5
         assert proof["parsed_record_count"] == 5
         assert proof["emitted_event_count"] == 5
@@ -181,6 +222,11 @@ def test_collect_usage_exports() -> None:
         assert proof["content_pointer_boundary"]["events_with_query"] == 1
         assert proof["content_pointer_boundary"]["events_with_text"] == 1
         assert proof["content_pointer_boundary"]["alert_event_count"] == 1
+        assert proof["usage_behavior_boundary"]["events_with_alert_condition"] == 1
+        assert proof["usage_behavior_boundary"]["events_with_subscription_target"] == 1
+        assert proof["usage_behavior_boundary"]["events_with_query_terms"] == 1
+        assert proof["usage_behavior_boundary"]["events_with_dwell_seconds"] == 2
+        assert proof["usage_behavior_boundary"]["average_dwell_seconds"] == 150
         assert proof["complete_usage_history_claimed"] is False
         assert proof["public_news_full_crawl_claimed"] is False
         assert proof["public_article_body_mirrored"] is False
@@ -194,6 +240,7 @@ def test_collect_usage_exports() -> None:
         assert evidence["coverage_summary"]["personal_usage_only"] is True
         assert evidence["coverage_summary"]["public_news_content_mirror"] is False
         assert evidence["coverage_summary"]["usage_surface_summary"]["usage_topic_counts"]["industry_theme"] == 3
+        assert evidence["coverage_summary"]["usage_behavior_summary"]["events_with_alert_condition"] == 1
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
         information_source = next(
@@ -258,6 +305,12 @@ def test_collect_chromium_browser_history() -> None:
         assert manifest["source_audit"]["extension_counts"] == {"<browser_history>": 1}
         assert manifest["source_audit"]["path_results"][0]["parser"] == "browser_history"
         assert manifest["usage_surface_summary"]["browser_history_event_count"] == 2
+        assert manifest["usage_behavior_summary"]["events_with_visit_count"] == 2
+        assert manifest["usage_behavior_summary"]["total_visit_count"] == 4
+        assert manifest["usage_behavior_summary"]["events_with_typed_count"] == 2
+        assert manifest["usage_behavior_summary"]["total_typed_count"] == 1
+        assert manifest["usage_behavior_summary"]["transition_type_counts"] == {"link": 2}
+        assert manifest["usage_behavior_summary"]["trigger_source_counts"] == {"browser_history": 2}
         assert manifest["usage_boundary_proof"]["proof_level"] == "authorized_financial_news_usage_with_browser_history"
         assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_input_count"] == 1
         assert manifest["usage_boundary_proof"]["source_artifact_boundary"]["browser_history_event_count"] == 2

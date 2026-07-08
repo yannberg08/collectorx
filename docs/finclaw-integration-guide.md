@@ -909,9 +909,10 @@ Current status:
   themes, company fundamentals, HK/US markets, risk events, trading
   opportunities, and portfolio alerts.
 - Writes `manifest.field_coverage`, `manifest.usage_surface_summary`,
-  `manifest.source_audit`, `manifest.content_policy`, and
-  `manifest.evidence_policy` so Lake can tell which usage fields, browser
-  history sources, ZIP members, and evidence boundaries are actually present.
+  `manifest.usage_behavior_summary`, `manifest.source_audit`,
+  `manifest.content_policy`, and `manifest.evidence_policy` so Lake can tell
+  which usage fields, behavior fields, browser history sources, ZIP members,
+  and evidence boundaries are actually present.
 - Writes `manifest.usage_boundary_proof` so FinClaw can inspect authorized
   inputs, platform/action/topic coverage, browser-history domain filtering, ZIP
   safety, content pointers, and the explicit no-complete-usage-history /
@@ -922,8 +923,10 @@ Current status:
   flags.
 - For browser history, filters to CLS, WallstreetCN, and Gelonghui domains
   before writing events.
-- Captures domain, source app, URL, title, visit time, visit count, typed count,
-  tags, symbols, and article ID where present.
+- Captures domain, source app, URL, title, visit time, visit count, typed
+  count, query terms, subscription target, alert condition, notification
+  channel, trigger source, referrer, session ID, dwell seconds, browser
+  transition type, tags, symbols, and article ID where present.
 - Preserves file/ZIP member provenance in `raw_ref.path`, `source_archive`,
   and `archive_member`.
 - Recursively filters credential-like raw keys.

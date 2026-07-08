@@ -51,6 +51,9 @@ def collect(args: argparse.Namespace) -> int:
                     f"- observed_actions：`{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
                     f"- missing_expected_actions：`{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
                     f"- field_coverage_missing：`{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
+                    f"- behavior_fields：alert_condition={manifest['usage_behavior_summary']['events_with_alert_condition']}, "
+                    f"subscription_target={manifest['usage_behavior_summary']['events_with_subscription_target']}, "
+                    f"query_terms={manifest['usage_behavior_summary']['events_with_query_terms']}",
                     f"- archive_member_events：{manifest['source_audit']['archive_member_event_count']}",
                     f"- skipped_archive_members：{manifest['source_audit'].get('skipped_archive_member_count', 0)}",
                     f"- browser_history_events：{manifest['source_audit']['browser_history_event_count']}",

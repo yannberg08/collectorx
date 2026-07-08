@@ -22,11 +22,21 @@ scope:
     - subscriptions
     - searches
     - alerts
+    - query_terms
+    - subscription_targets
+    - alert_conditions
+    - notification_channels
+    - trigger_sources
+    - referrers
+    - session_ids
+    - dwell_seconds
+    - browser_transition_types
     - platform_coverage_manifest
     - action_coverage_manifest
     - usage_topic_manifest
     - field_coverage_manifest
     - usage_surface_summary
+    - usage_behavior_summary
     - source_audit_manifest
     - content_policy_manifest
     - usage_boundary_proof_manifest
@@ -46,5 +56,5 @@ scope:
 description: |
   财经资讯 App 是投资垂直通道，但只采用户自己的阅读、收藏、订阅、搜索和提醒动作。
   支持用户授权导出文件、ZIP 包、保存页面和浏览器历史副本，并在 manifest 中报告平台/动作覆盖、
-  主题覆盖、字段覆盖、使用痕迹可用面、逐输入来源审计、跳过原因、内容/证据边界和使用边界证明。
+  主题覆盖、字段覆盖、行为强度、使用痕迹可用面、逐输入来源审计、跳过原因、内容/证据边界和使用边界证明。
   公共新闻全文库属于 FinClaw research tools，不进个人证据湖。

@@ -115,6 +115,14 @@ FINANCIAL_NEWS_RECOMMENDED_FIELDS = (
     "source",
     "channel",
     "query",
+    "query_terms",
+    "subscription_target",
+    "alert_condition",
+    "notification_channel",
+    "trigger_source",
+    "referrer",
+    "session_id",
+    "dwell_seconds",
     "symbols",
     "tags",
     "article_id",
@@ -770,8 +778,23 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     domain = host_for(url)
     text = first(record, ["text", "content", "body", "summary", "abstract", "note", "正文", "内容", "摘要", "备注"]) or ""
     query = first(record, ["query", "keyword", "search", "搜索词", "关键词"])
+    query_terms = query_terms_for(query, record)
     tags = tags_for(record)
     symbols = symbols_for(record)
+    source_app = first(record, ["source_app", "browser", "client", "app", "客户端", "应用"])
+    channel = first(record, ["channel", "column", "category", "栏目", "频道", "分类"])
+    subscription_target = first(record, ["subscription_target", "subscribe_target", "topic", "subject", "订阅对象", "关注栏目", "订阅栏目"]) or (
+        channel if action_type == "subscribe" else None
+    )
+    alert_condition = first(record, ["alert_condition", "condition", "trigger", "alert_rule", "提醒条件", "预警条件", "触发条件"])
+    notification_channel = first(record, ["notification_channel", "push_channel", "notify_channel", "通知渠道", "推送渠道"])
+    referrer = first(record, ["referrer", "referer", "from_url", "source_url", "来源页面", "前序页面"])
+    session_id = first(record, ["session_id", "visit_id", "trace_id", "会话ID", "访问ID"])
+    dwell_seconds = int_value(first(record, ["dwell_seconds", "read_duration_seconds", "duration_seconds", "stay_seconds", "停留秒数", "阅读秒数", "停留时长", "阅读时长"]))
+    visit_count = int_value(first(record, ["visit_count", "访问次数"]))
+    typed_count = int_value(first(record, ["typed_count", "输入访问次数"]))
+    transition = first(record, ["transition", "访问方式"])
+    transition_type = first(record, ["transition_type", "访问方式类型"]) or browser_transition_type(transition)
     usage_topics, usage_topic_terms = classify_usage_topics(
         record,
         title=title,
@@ -806,22 +829,31 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "title": title,
         "url": url,
         "domain": domain,
-        "source_app": first(record, ["source_app", "browser", "client", "app", "客户端", "应用"]),
+        "source_app": source_app,
         "source": first(record, ["source", "source_name", "publisher", "author", "来源", "作者"]),
-        "channel": first(record, ["channel", "column", "category", "栏目", "频道", "分类"]),
+        "channel": channel,
         "query": query,
+        "query_terms": query_terms,
+        "subscription_target": subscription_target,
+        "alert_condition": alert_condition,
+        "notification_channel": notification_channel,
+        "trigger_source": trigger_source_for(record, path_label=path_label, source_app=source_app),
+        "referrer": referrer,
+        "session_id": session_id,
+        "dwell_seconds": dwell_seconds,
         "symbols": symbols,
         "tags": tags,
-        "visit_count": first(record, ["visit_count", "访问次数"]),
-        "typed_count": first(record, ["typed_count", "输入访问次数"]),
-        "transition": first(record, ["transition", "访问方式"]),
+        "visit_count": visit_count,
+        "typed_count": typed_count,
+        "transition": transition,
+        "transition_type": transition_type,
         "article_id": article_id_for(url),
         "text_preview": text[:TEXT_PREVIEW_MAX_CHARS],
         "has_text": bool(text),
         "text_length": len(text),
         "raw": sanitized(record),
     }
-    data = {key: value for key, value in data.items() if value not in (None, "", [])}
+    data = {key: value for key, value in data.items() if value not in (None, "", [], {})}
     raw_ref = {
         "path": path_label,
         "row": row,
@@ -1007,6 +1039,7 @@ def build_manifest(
         },
         "field_coverage": field_coverage(events),
         "usage_surface_summary": usage_surface_summary(events),
+        "usage_behavior_summary": usage_behavior_summary(events),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "usage_boundary_proof": build_usage_boundary_proof(
             events,
@@ -1121,6 +1154,7 @@ def build_usage_boundary_proof(
             "alert_event_count": surface.get("alert_event_count", 0),
             "subscription_event_count": surface.get("subscription_event_count", 0),
         },
+        "usage_behavior_boundary": usage_behavior_summary(events),
         "complete_usage_history_claimed": False,
         "complete_account_boundary_claimed": False,
         "public_news_full_crawl_claimed": False,
@@ -1150,6 +1184,20 @@ def usage_boundary_proof_level(
         return "no_usable_financial_news_usage_records"
     if int(surface.get("browser_history_event_count") or 0) > 0:
         return "authorized_financial_news_usage_with_browser_history"
+    behavior = usage_behavior_summary(usage_events)
+    if any(
+        int(behavior.get(key) or 0) > 0
+        for key in (
+            "events_with_alert_condition",
+            "events_with_subscription_target",
+            "events_with_query_terms",
+            "events_with_dwell_seconds",
+            "events_with_referrer",
+            "events_with_notification_channel",
+            "events_with_session_id",
+        )
+    ):
+        return "authorized_financial_news_usage_with_behavior_surface"
     if not missing_expected_platforms and not missing_expected_actions and not surface.get("missing_expected_usage_topics"):
         return "authorized_financial_news_usage_with_platform_action_topic_coverage"
     return "authorized_financial_news_usage_partial_coverage"
@@ -1233,6 +1281,60 @@ def usage_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "subscription_event_count": sum(
             1 for event in usage_events if (event.get("data") or {}).get("action_type") == "subscribe"
         ),
+    }
+
+
+def usage_behavior_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usage_events = usable_usage_events(events)
+    trigger_source_counts: Counter[str] = Counter()
+    transition_type_counts: Counter[str] = Counter()
+    query_terms = set()
+    subscription_targets = set()
+    alert_conditions = set()
+    dwell_values: List[int] = []
+    visit_values: List[int] = []
+    typed_values: List[int] = []
+    for event in usage_events:
+        data = event.get("data") or {}
+        if data.get("trigger_source"):
+            trigger_source_counts[str(data["trigger_source"])] += 1
+        if data.get("transition_type"):
+            transition_type_counts[str(data["transition_type"])] += 1
+        for term in data.get("query_terms") or []:
+            if term:
+                query_terms.add(str(term))
+        if data.get("subscription_target"):
+            subscription_targets.add(str(data["subscription_target"]))
+        if data.get("alert_condition"):
+            alert_conditions.add(str(data["alert_condition"]))
+        dwell = int_value(data.get("dwell_seconds"))
+        if dwell is not None:
+            dwell_values.append(dwell)
+        visit_count = int_value(data.get("visit_count"))
+        if visit_count is not None:
+            visit_values.append(visit_count)
+        typed_count = int_value(data.get("typed_count"))
+        if typed_count is not None:
+            typed_values.append(typed_count)
+    return {
+        "events_with_trigger_source": sum(1 for event in usage_events if (event.get("data") or {}).get("trigger_source")),
+        "events_with_query_terms": sum(1 for event in usage_events if (event.get("data") or {}).get("query_terms")),
+        "query_term_count": len(query_terms),
+        "events_with_subscription_target": sum(1 for event in usage_events if (event.get("data") or {}).get("subscription_target")),
+        "subscription_target_count": len(subscription_targets),
+        "events_with_alert_condition": sum(1 for event in usage_events if (event.get("data") or {}).get("alert_condition")),
+        "alert_condition_count": len(alert_conditions),
+        "events_with_notification_channel": sum(1 for event in usage_events if (event.get("data") or {}).get("notification_channel")),
+        "events_with_referrer": sum(1 for event in usage_events if (event.get("data") or {}).get("referrer")),
+        "events_with_session_id": sum(1 for event in usage_events if (event.get("data") or {}).get("session_id")),
+        "events_with_dwell_seconds": len(dwell_values),
+        "average_dwell_seconds": round(sum(dwell_values) / len(dwell_values), 2) if dwell_values else None,
+        "events_with_visit_count": len(visit_values),
+        "total_visit_count": sum(visit_values) if visit_values else 0,
+        "events_with_typed_count": len(typed_values),
+        "total_typed_count": sum(typed_values) if typed_values else 0,
+        "trigger_source_counts": dict(sorted(trigger_source_counts.items())),
+        "transition_type_counts": dict(sorted(transition_type_counts.items())),
     }
 
 
@@ -1330,6 +1432,7 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
                 }
             ),
             "usage_surface_summary": usage_surface_summary(events),
+            "usage_behavior_summary": usage_behavior_summary(events),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
@@ -1386,6 +1489,72 @@ def first(record: Dict[str, Any], keys: Iterable[str]) -> Optional[str]:
         if value not in (None, ""):
             return str(value)
     return None
+
+
+def int_value(value: Any) -> Optional[int]:
+    if value in (None, ""):
+        return None
+    match = re.search(r"-?\d+(?:\.\d+)?", str(value))
+    if not match:
+        return None
+    number = float(match.group(0))
+    text = str(value).lower()
+    if "小时" in text or "hour" in text:
+        number *= 3600
+    elif "分钟" in text or "min" in text:
+        number *= 60
+    return max(0, int(round(number)))
+
+
+def query_terms_for(query: Optional[str], record: Dict[str, Any]) -> List[str]:
+    raw = record.get("query_terms") or record.get("keywords") or record.get("搜索词列表") or query or []
+    if isinstance(raw, str):
+        return split_terms(raw)
+    if isinstance(raw, list):
+        return clean_list_items(raw, ["term", "keyword", "name", "搜索词", "关键词"])
+    return []
+
+
+def trigger_source_for(record: Dict[str, Any], *, path_label: str, source_app: Optional[str]) -> str:
+    explicit = first(record, ["trigger_source", "entry_point", "origin", "入口", "触发来源"])
+    if explicit:
+        return explicit
+    source_text = (source_app or "").lower()
+    path_text = path_label.lower()
+    if source_text.endswith("_history"):
+        return "browser_history"
+    if "alert" in path_text or "提醒" in path_label or "预警" in path_label:
+        return "alert_export"
+    if source_app:
+        return "app_export"
+    if "::" in path_label:
+        return "archive_export"
+    if path_text.endswith((".html", ".htm", ".md", ".markdown", ".txt")):
+        return "saved_page"
+    return "authorized_export"
+
+
+def browser_transition_type(value: Optional[str]) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    try:
+        transition = int(str(value))
+    except ValueError:
+        return str(value)
+    core = transition & 0xFF
+    return {
+        0: "link",
+        1: "typed",
+        2: "auto_bookmark",
+        3: "auto_subframe",
+        4: "manual_subframe",
+        5: "generated",
+        6: "auto_toplevel",
+        7: "form_submit",
+        8: "reload",
+        9: "keyword",
+        10: "keyword_generated",
+    }.get(core, "unknown")
 
 
 def tags_for(record: Dict[str, Any]) -> List[str]:

@@ -343,7 +343,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-usage-export-or-browser-history-copy-import",
       "cli": "python3 skills/financial-news-usage/scripts/financial_news_usage.py collect --input <authorized-finance-news-usage-export> --out-dir <out-dir>",
-      "collects": "WallstreetCN, CLS, and Gelonghui read, favorite, subscribe, search, alert, browser-history, URL, domain, symbol, source-app traces, platform/action/topic coverage, macro policy, market strategy, industry theme, company fundamental, HK/US market, risk event, trading opportunity, portfolio alert surfaces, per-input source audit, skipped reasons, ZIP member audit, and usage boundary proof.",
+      "collects": "WallstreetCN, CLS, and Gelonghui read, favorite, subscribe, search, alert, browser-history, URL, domain, symbol, source-app traces, query terms, subscription targets, alert conditions, notification channels, trigger sources, referrers, session IDs, dwell seconds, visit/typed counts, browser transition types, platform/action/topic coverage, macro policy, market strategy, industry theme, company fundamental, HK/US market, risk event, trading opportunity, portfolio alert surfaces, behavior summary, per-input source audit, skipped reasons, ZIP member audit, and usage boundary proof.",
       "must_not_collect": "Public news crawling, public article mirroring, or unrelated browser history.",
       "production_gap": "Real app/account adapters, subscription stores, Safari/Windows/Linux history validation, topic false-positive review, and platform inference on noisy exports."
     },
