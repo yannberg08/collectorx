@@ -130,18 +130,30 @@ RECOMMENDED_WORKFLOW_FIELDS = (
     "function_code",
     "menu_path",
     "query",
+    "query_terms",
+    "parameters",
     "symbols",
+    "symbol_count",
     "universe",
     "industries",
     "regions",
     "factors",
+    "factor_count",
     "datasets",
+    "dataset_count",
     "fields",
+    "field_count",
+    "workspace_id",
     "template_name",
+    "template_id",
     "frequency",
     "date_range",
     "download_format",
     "file_name",
+    "export_path",
+    "row_count",
+    "watchlist_size",
+    "lineage_ref",
 )
 TERMINAL_WORKFLOW_TOPIC_ORDER = (
     "macro_policy",
@@ -767,6 +779,10 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     text = first(record, ["text", "content", "description", "note", "summary", "正文", "内容", "备注", "说明"]) or ""
     query = first(record, ["query", "keyword", "search", "搜索词", "关键词"])
     symbols = symbols_for(record)
+    query_terms = query_terms_for(record, query)
+    factors = list_values(record, ["factors", "factor", "因子", "指标"])
+    datasets = list_values(record, ["datasets", "dataset", "database", "table", "数据集", "数据库", "表"])
+    fields = list_values(record, ["fields", "field", "columns", "indicators", "字段", "列", "指标"])
     workflow_topics, workflow_topic_terms = classify_workflow_topics(
         record,
         title=title,
@@ -791,26 +807,43 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "function_code": first(record, ["function_code", "command", "api", "formula", "函数", "命令", "公式"]),
         "menu_path": first(record, ["menu_path", "navigation", "path", "菜单路径", "导航路径"]),
         "query": query,
+        "query_terms": query_terms,
+        "parameters": parameters_for(record),
         "symbols": symbols,
+        "symbol_count": numeric_value(record, ["symbol_count", "security_count", "securities_count", "ticker_count", "证券数", "代码数"])
+        or (len(symbols) if symbols else None),
         "universe": list_values(record, ["universe", "scope", "stock_pool", "股票池", "样本空间"]),
         "industries": list_values(record, ["industries", "industry", "行业"]),
         "regions": list_values(record, ["regions", "region", "markets", "market", "地区", "市场"]),
-        "factors": list_values(record, ["factors", "factor", "因子", "指标"]),
-        "datasets": list_values(record, ["datasets", "dataset", "database", "table", "数据集", "数据库", "表"]),
-        "fields": list_values(record, ["fields", "field", "columns", "indicators", "字段", "列", "指标"]),
+        "factors": factors,
+        "factor_count": numeric_value(record, ["factor_count", "indicator_count", "因子数", "指标数"])
+        or (len(factors) if factors else None),
+        "datasets": datasets,
+        "dataset_count": numeric_value(record, ["dataset_count", "database_count", "table_count", "数据集数", "数据库数", "表数"])
+        or (len(datasets) if datasets else None),
+        "fields": fields,
+        "field_count": numeric_value(record, ["field_count", "column_count", "indicator_count", "字段数", "列数", "指标数"])
+        or (len(fields) if fields else None),
+        "workspace_id": first(record, ["workspace_id", "workspace_code", "workbook_id", "工作区ID", "工作区编号"]),
         "template_name": first(record, ["template_name", "template", "model_name", "模板名称", "模型名称"]),
+        "template_id": first(record, ["template_id", "model_id", "模板ID", "模型ID"]),
         "frequency": first(record, ["frequency", "freq", "周期", "频率"]),
         "date_range": first(record, ["date_range", "range", "区间", "日期区间"]),
         "start_date": first(record, ["start_date", "from_date", "开始日期"]),
         "end_date": first(record, ["end_date", "to_date", "结束日期"]),
         "download_format": first(record, ["download_format", "format", "file_type", "文件格式", "格式"]),
         "file_name": first(record, ["file_name", "filename", "export_name", "文件名", "导出文件"]),
+        "export_path": first(record, ["export_path", "output_path", "save_path", "saved_path", "download_path", "保存路径", "导出路径", "输出路径", "下载路径"]),
+        "row_count": numeric_value(record, ["row_count", "rows", "record_count", "result_count", "行数", "记录数", "结果数"]),
+        "watchlist_size": numeric_value(record, ["watchlist_size", "watchlist_count", "自选数量", "关注数量"])
+        or (len(symbols) if activity_type == "watchlist" and symbols else None),
         "file_path_hint": first(record, ["file_path", "local_path", "path_hint", "文件路径"]),
         "content_preview": text[:CONTENT_PREVIEW_MAX_CHARS],
         "has_content_preview": bool(text),
         "content_length": len(text),
         "raw": sanitized(record),
     }
+    data["lineage_ref"] = lineage_ref_for(data)
     data = {key: value for key, value in data.items() if value not in (None, "", [])}
     raw_ref = {
         "path": path_label,
@@ -987,6 +1020,7 @@ def build_manifest(
             "real_account_validation": False,
         },
         "workflow_surface_summary": workflow_surface_summary(events),
+        "workflow_intensity_summary": workflow_intensity_summary(events),
         "workflow_boundary_proof": workflow_boundary_proof(events, collection_audit=collection_audit),
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "license_policy": {
@@ -1066,17 +1100,111 @@ def workflow_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
         "events_with_function_code": sum(1 for event in usable_events if (event.get("data") or {}).get("function_code")),
         "events_with_menu_path": sum(1 for event in usable_events if (event.get("data") or {}).get("menu_path")),
         "events_with_query": sum(1 for event in usable_events if (event.get("data") or {}).get("query")),
+        "events_with_query_terms": sum(1 for event in usable_events if (event.get("data") or {}).get("query_terms")),
+        "events_with_parameters": sum(1 for event in usable_events if (event.get("data") or {}).get("parameters")),
         "events_with_symbols": sum(1 for event in usable_events if (event.get("data") or {}).get("symbols")),
+        "events_with_symbol_count": sum(1 for event in usable_events if (event.get("data") or {}).get("symbol_count") is not None),
         "events_with_universe": sum(1 for event in usable_events if (event.get("data") or {}).get("universe")),
         "events_with_industries": sum(1 for event in usable_events if (event.get("data") or {}).get("industries")),
         "events_with_regions": sum(1 for event in usable_events if (event.get("data") or {}).get("regions")),
         "events_with_factors": sum(1 for event in usable_events if (event.get("data") or {}).get("factors")),
+        "events_with_factor_count": sum(1 for event in usable_events if (event.get("data") or {}).get("factor_count") is not None),
         "events_with_datasets": sum(1 for event in usable_events if (event.get("data") or {}).get("datasets")),
+        "events_with_dataset_count": sum(1 for event in usable_events if (event.get("data") or {}).get("dataset_count") is not None),
         "events_with_fields": sum(1 for event in usable_events if (event.get("data") or {}).get("fields")),
+        "events_with_field_count": sum(1 for event in usable_events if (event.get("data") or {}).get("field_count") is not None),
+        "events_with_workspace_id": sum(1 for event in usable_events if (event.get("data") or {}).get("workspace_id")),
         "events_with_template_name": sum(1 for event in usable_events if (event.get("data") or {}).get("template_name")),
+        "events_with_template_id": sum(1 for event in usable_events if (event.get("data") or {}).get("template_id")),
         "events_with_download_format": sum(1 for event in usable_events if (event.get("data") or {}).get("download_format")),
+        "events_with_export_path": sum(1 for event in usable_events if (event.get("data") or {}).get("export_path")),
+        "events_with_row_count": sum(1 for event in usable_events if (event.get("data") or {}).get("row_count") is not None),
+        "events_with_watchlist_size": sum(1 for event in usable_events if (event.get("data") or {}).get("watchlist_size") is not None),
         "events_with_content_preview": sum(1 for event in usable_events if (event.get("data") or {}).get("has_content_preview")),
         "events_with_source_section": sum(1 for event in usable_events if (event.get("data") or {}).get("source_section")),
+    }
+
+
+def workflow_intensity_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    usable_events = usable_terminal_events(events)
+    query_terms: Counter[str] = Counter()
+    parameter_keys: Counter[str] = Counter()
+    function_codes: Counter[str] = Counter()
+    datasets: Counter[str] = Counter()
+    fields: Counter[str] = Counter()
+    factors: Counter[str] = Counter()
+    templates: Counter[str] = Counter()
+    workspaces: Counter[str] = Counter()
+    workspace_ids: Counter[str] = Counter()
+    template_ids: Counter[str] = Counter()
+    download_formats: Counter[str] = Counter()
+    activity_totals: Dict[str, Counter[str]] = defaultdict(Counter)
+    total_export_rows = 0
+    max_export_rows = 0
+    for event in usable_events:
+        data = event.get("data") or {}
+        activity = str(data.get("activity_type") or "unknown")
+        for term in data.get("query_terms") or []:
+            query_terms[str(term)] += 1
+        parameters = data.get("parameters")
+        if isinstance(parameters, dict):
+            for key in parameters:
+                parameter_keys[str(key)] += 1
+        elif parameters not in (None, "", []):
+            parameter_keys["<unstructured>"] += 1
+        if data.get("function_code"):
+            function_codes[str(data["function_code"])] += 1
+        for value in data.get("datasets") or []:
+            datasets[str(value)] += 1
+        for value in data.get("fields") or []:
+            fields[str(value)] += 1
+        for value in data.get("factors") or []:
+            factors[str(value)] += 1
+        if data.get("template_name"):
+            templates[str(data["template_name"])] += 1
+        if data.get("workspace"):
+            workspaces[str(data["workspace"])] += 1
+        if data.get("workspace_id"):
+            workspace_ids[str(data["workspace_id"])] += 1
+        if data.get("template_id"):
+            template_ids[str(data["template_id"])] += 1
+        if data.get("download_format"):
+            download_formats[str(data["download_format"])] += 1
+        for field in ("row_count", "symbol_count", "field_count", "dataset_count", "factor_count", "watchlist_size"):
+            amount = number_from_data(data.get(field))
+            if amount is not None:
+                activity_totals[activity][field] += amount
+                if field == "row_count":
+                    total_export_rows += amount
+                    max_export_rows = max(max_export_rows, amount)
+    return {
+        "workflow_event_count": len(usable_events),
+        "events_with_query_terms": sum(1 for event in usable_events if (event.get("data") or {}).get("query_terms")),
+        "unique_query_term_count": len(query_terms),
+        "query_term_counts": top_counts(query_terms),
+        "events_with_parameters": sum(1 for event in usable_events if (event.get("data") or {}).get("parameters")),
+        "parameter_key_counts": top_counts(parameter_keys),
+        "events_with_export_path": sum(1 for event in usable_events if (event.get("data") or {}).get("export_path")),
+        "events_with_row_count": sum(1 for event in usable_events if (event.get("data") or {}).get("row_count") is not None),
+        "total_export_rows": total_export_rows,
+        "max_export_rows": max_export_rows,
+        "events_with_workspace_id": sum(1 for event in usable_events if (event.get("data") or {}).get("workspace_id")),
+        "events_with_template_id": sum(1 for event in usable_events if (event.get("data") or {}).get("template_id")),
+        "total_symbol_refs": sum(number_from_data((event.get("data") or {}).get("symbol_count")) or 0 for event in usable_events),
+        "total_field_refs": sum(number_from_data((event.get("data") or {}).get("field_count")) or 0 for event in usable_events),
+        "total_dataset_refs": sum(number_from_data((event.get("data") or {}).get("dataset_count")) or 0 for event in usable_events),
+        "total_factor_refs": sum(number_from_data((event.get("data") or {}).get("factor_count")) or 0 for event in usable_events),
+        "total_watchlist_size": sum(number_from_data((event.get("data") or {}).get("watchlist_size")) or 0 for event in usable_events),
+        "function_code_counts": top_counts(function_codes),
+        "dataset_counts": top_counts(datasets),
+        "field_counts": top_counts(fields),
+        "factor_counts": top_counts(factors),
+        "template_counts": top_counts(templates),
+        "workspace_counts": top_counts(workspaces),
+        "workspace_id_counts": top_counts(workspace_ids),
+        "template_id_counts": top_counts(template_ids),
+        "download_format_counts": top_counts(download_formats),
+        "activity_intensity_totals": {activity: dict(sorted(counter.items())) for activity, counter in sorted(activity_totals.items())},
     }
 
 
@@ -1101,6 +1229,7 @@ def workflow_boundary_proof(
     observed_recommended_fields = [field for field in RECOMMENDED_WORKFLOW_FIELDS if field_counts.get(field)]
     missing_recommended_fields = [field for field in RECOMMENDED_WORKFLOW_FIELDS if not field_counts.get(field)]
     surface = workflow_surface_summary(events)
+    intensity = workflow_intensity_summary(events)
     audit = source_audit(events, collection_audit=collection_audit)
     expected_topics = list(TERMINAL_WORKFLOW_TOPIC_ORDER[:-1])
     observed_topics = [topic for topic in expected_topics if surface["workflow_topic_counts"].get(topic)]
@@ -1184,10 +1313,26 @@ def workflow_boundary_proof(
             "events_with_function_code": surface["events_with_function_code"],
             "events_with_menu_path": surface["events_with_menu_path"],
             "events_with_query": surface["events_with_query"],
+            "events_with_query_terms": surface["events_with_query_terms"],
+            "events_with_parameters": surface["events_with_parameters"],
             "events_with_symbols": surface["events_with_symbols"],
             "events_with_datasets": surface["events_with_datasets"],
             "events_with_fields": surface["events_with_fields"],
+            "events_with_export_path": surface["events_with_export_path"],
+            "events_with_row_count": surface["events_with_row_count"],
             "events_with_content_preview": surface["events_with_content_preview"],
+        },
+        "workflow_intensity_boundary": {
+            "query_terms_observed": intensity["events_with_query_terms"] > 0,
+            "parameters_observed": intensity["events_with_parameters"] > 0,
+            "export_paths_observed": intensity["events_with_export_path"] > 0,
+            "row_counts_observed": intensity["events_with_row_count"] > 0,
+            "total_export_rows": intensity["total_export_rows"],
+            "total_symbol_refs": intensity["total_symbol_refs"],
+            "total_field_refs": intensity["total_field_refs"],
+            "total_dataset_refs": intensity["total_dataset_refs"],
+            "total_factor_refs": intensity["total_factor_refs"],
+            "total_watchlist_size": intensity["total_watchlist_size"],
         },
         "source_boundary": {
             "requested_input_count": int(audit.get("input_count") or 0),
@@ -1308,6 +1453,7 @@ def build_evidence(
             "workflow_metadata_only": True,
             "vendor_database_mirror": False,
             "workflow_surface_summary": workflow_surface_summary(events),
+            "workflow_intensity_summary": workflow_intensity_summary(events),
             "workflow_boundary_proof": workflow_boundary_proof(events, collection_audit=collection_audit),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
@@ -1446,6 +1592,14 @@ def list_values(record: Dict[str, Any], keys: Iterable[str]) -> List[str]:
     return []
 
 
+def first_raw_any(record: Dict[str, Any], keys: Iterable[str]) -> Any:
+    for key in keys:
+        value = first_raw(record, key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def first_raw(record: Dict[str, Any], key: str) -> Any:
     if key in record:
         return record.get(key)
@@ -1458,6 +1612,87 @@ def first_raw(record: Dict[str, Any], key: str) -> Any:
 
 def split_terms(text: str) -> List[str]:
     return [item.strip() for item in re.split(r"[,，、;；|\n]+", text) if item.strip()]
+
+
+def split_query_terms(text: str) -> List[str]:
+    return [item.strip() for item in re.split(r"[,，、;；|\n\t ]+", text) if item.strip()]
+
+
+def dedupe(items: Iterable[str]) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for item in items:
+        value = item.strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def query_terms_for(record: Dict[str, Any], query: Optional[str]) -> List[str]:
+    explicit = list_values(
+        record,
+        [
+            "query_terms",
+            "search_terms",
+            "keywords",
+            "keyword_list",
+            "terms",
+            "tags",
+            "查询词",
+            "检索词",
+            "关键词列表",
+            "标签",
+        ],
+    )
+    if explicit:
+        return dedupe(explicit)
+    if query:
+        return dedupe(split_query_terms(query))
+    return []
+
+
+def parameters_for(record: Dict[str, Any]) -> Any:
+    value = first_raw_any(record, ["parameters", "params", "query_params", "filters", "screening", "筛选条件", "参数", "条件"])
+    if value in (None, ""):
+        return None
+    return sanitized(value)
+
+
+def numeric_value(record: Dict[str, Any], keys: Iterable[str]) -> Optional[int]:
+    return number_from_data(first_raw_any(record, keys))
+
+
+def number_from_data(value: Any) -> Optional[int]:
+    if isinstance(value, bool) or value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value)
+    if isinstance(value, str):
+        cleaned = re.sub(r"[,，\s]", "", value)
+        match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
+        if match:
+            return int(float(match.group(0)))
+    return None
+
+
+def lineage_ref_for(data: Dict[str, Any]) -> str:
+    parts = [
+        str(data.get("terminal") or "unknown"),
+        str(data.get("workspace_id") or data.get("workspace") or ""),
+        str(data.get("project") or ""),
+        str(data.get("module") or ""),
+        str(data.get("template_id") or data.get("template_name") or ""),
+        str(data.get("function_code") or ""),
+        str(data.get("file_name") or data.get("export_path") or ""),
+        str(data.get("query") or ""),
+    ]
+    return stable_id(*[part for part in parts if part])
+
+
+def top_counts(counts: Counter[str], limit: int = 20) -> Dict[str, int]:
+    return {key: value for key, value in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]}
 
 
 def clean_list_items(items: List[Any]) -> List[str]:

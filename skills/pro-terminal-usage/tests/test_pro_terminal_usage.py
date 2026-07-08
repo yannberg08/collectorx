@@ -32,6 +32,7 @@ def test_collect_terminal_workflow_exports() -> None:
                             "terminal": "Wind",
                             "activity_type": "search",
                             "query": "半导体 ROE 估值",
+                            "parameters": {"market": "A股", "period": "2024-2026"},
                             "time": "2026-07-08T09:00:00+08:00",
                         },
                         {
@@ -92,10 +93,15 @@ def test_collect_terminal_workflow_exports() -> None:
         assert manifest["workflow_surface_summary"]["events_with_workflow_topics"] == 5
         assert manifest["workflow_surface_summary"]["workflow_topic_counts"]["macro_policy"] == 1
         assert manifest["workflow_surface_summary"]["workflow_topic_counts"]["valuation_model"] >= 1
+        assert manifest["workflow_intensity_summary"]["events_with_query_terms"] == 1
+        assert manifest["workflow_intensity_summary"]["events_with_parameters"] == 1
+        assert manifest["workflow_intensity_summary"]["total_watchlist_size"] == 2
         proof = manifest["workflow_boundary_proof"]
         assert proof["proof_level"] == "medium_partial_workflow_boundary"
         assert proof["can_enter_finclaw_lake"] is True
         assert proof["workflow_metadata_only"] is True
+        assert proof["workflow_intensity_boundary"]["query_terms_observed"] is True
+        assert proof["workflow_intensity_boundary"]["parameters_observed"] is True
         assert proof["terminal_boundary"]["observed_terminals"] == ["wind", "choice", "ifind"]
         assert proof["license_boundary"]["licensed_content_mirrored"] is False
         assert proof["false_claims"]["vendor_database_mirrored"] is False
@@ -135,15 +141,35 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
                         {
                             "title": "US Credit Monitor",
                             "workspace": "credit research",
+                            "workspace_id": "bbg-ws-credit",
                             "module": "Launchpad",
                             "menu_path": "Launchpad/Credit Monitor",
                             "content": "licensed-content-" * 200,
                             "license_key": "must-not-leak",
                         }
                     ],
-                    "searches": [{"query": "AI capex credit spread", "symbols": ["NVDA US Equity"], "industries": "AI,Semiconductor", "time": "2026-07-08T09:00:00+08:00"}],
-                    "downloads": [{"dataset": "FA", "fields": "Revenue, EBITDA", "format": "xlsx", "frequency": "quarterly", "date_range": "2024-2026"}],
-                    "templates": [{"template_name": "Credit model", "function_code": "XLTP", "project": "AI infra"}],
+                    "searches": [
+                        {
+                            "query": "AI capex credit spread",
+                            "query_terms": ["AI capex", "credit spread"],
+                            "parameters": {"spread_min_bp": 120, "period": "2024-2026"},
+                            "symbols": ["NVDA US Equity"],
+                            "industries": "AI,Semiconductor",
+                            "time": "2026-07-08T09:00:00+08:00",
+                        }
+                    ],
+                    "downloads": [
+                        {
+                            "dataset": "FA",
+                            "fields": "Revenue, EBITDA",
+                            "format": "xlsx",
+                            "frequency": "quarterly",
+                            "date_range": "2024-2026",
+                            "row_count": 240,
+                            "export_path": "/exports/fa_ai_infra.xlsx",
+                        }
+                    ],
+                    "templates": [{"template_name": "Credit model", "template_id": "tpl-credit", "function_code": "XLTP", "project": "AI infra"}],
                     "factors": [{"factor": "OAS", "universe": "US IG Tech"}],
                 },
                 ensure_ascii=False,
@@ -156,8 +182,8 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         watchlists.append(["Terminal", "Title", "Symbols", "Markets", "Project"])
         watchlists.append(["Choice", "央企红利自选", "600900.SH,00883.HK", "CN,HK", "红利策略"])
         downloads = workbook.create_sheet("Downloads")
-        downloads.append(["Terminal", "Title", "Datasets", "Fields", "Format", "Date Range", "File Name"])
-        downloads.append(["Wind", "宏观利率导出", "EDB", "M2,社融,十年国债", "xlsx", "2020-2026", "macro_rates.xlsx"])
+        downloads.append(["Terminal", "Title", "Datasets", "Fields", "Format", "Date Range", "File Name", "Row Count", "Export Path"])
+        downloads.append(["Wind", "宏观利率导出", "EDB", "M2,社融,十年国债", "xlsx", "2020-2026", "macro_rates.xlsx", "120", "/Users/me/exports/macro_rates.xlsx"])
         workbook.save(workbook_path)
         with zipfile.ZipFile(ifind_zip, "w") as archive:
             archive.writestr(
@@ -204,11 +230,22 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert len(workspace["data"]["raw"]["content"]) == 800
         assert workspace["data"]["content_length"] > 800
         assert workspace["data"]["menu_path"] == "Launchpad/Credit Monitor"
+        assert workspace["data"]["workspace_id"] == "bbg-ws-credit"
+        search = next(event for event in events if event["data"]["activity_type"] == "search")
+        assert search["data"]["query_terms"] == ["AI capex", "credit spread"]
+        assert search["data"]["parameters"]["spread_min_bp"] == 120
         download = next(event for event in events if event["data"].get("file_name") == "macro_rates.xlsx")
         assert download["data"]["datasets"] == ["EDB"]
         assert "十年国债" in download["data"]["fields"]
+        assert download["data"]["row_count"] == 120
+        assert download["data"]["export_path"] == "/Users/me/exports/macro_rates.xlsx"
+        bbg_download = next(event for event in events if event["data"].get("export_path") == "/exports/fa_ai_infra.xlsx")
+        assert bbg_download["data"]["row_count"] == 240
+        template = next(event for event in events if event["data"]["activity_type"] == "model_template")
+        assert template["data"]["template_id"] == "tpl-credit"
         watchlist = next(event for event in events if event["data"].get("title") == "央企红利自选")
         assert watchlist["data"]["regions"] == ["CN", "HK"]
+        assert watchlist["data"]["watchlist_size"] == 2
         zip_event = next(event for event in events if event["data"].get("title") == "半导体设备观察")
         assert zip_event["raw_ref"]["path"] == f"{ifind_zip}::usage/ifind_watchlist.json"
         assert zip_event["raw_ref"]["source_archive"] == str(ifind_zip)
@@ -250,7 +287,31 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert manifest["workflow_surface_summary"]["events_with_symbols"] >= 3
         assert manifest["workflow_surface_summary"]["events_with_datasets"] == 2
         assert manifest["workflow_surface_summary"]["events_with_fields"] == 2
+        assert manifest["workflow_surface_summary"]["events_with_query_terms"] == 1
+        assert manifest["workflow_surface_summary"]["events_with_parameters"] == 1
+        assert manifest["workflow_surface_summary"]["events_with_export_path"] == 2
+        assert manifest["workflow_surface_summary"]["events_with_row_count"] == 2
+        assert manifest["workflow_surface_summary"]["events_with_workspace_id"] == 1
+        assert manifest["workflow_surface_summary"]["events_with_template_id"] == 1
         assert manifest["workflow_surface_summary"]["events_with_content_preview"] == 1
+        intensity = manifest["workflow_intensity_summary"]
+        assert intensity["events_with_query_terms"] == 1
+        assert intensity["unique_query_term_count"] == 2
+        assert intensity["events_with_parameters"] == 1
+        assert intensity["events_with_export_path"] == 2
+        assert intensity["events_with_row_count"] == 2
+        assert intensity["total_export_rows"] == 360
+        assert intensity["max_export_rows"] == 240
+        assert intensity["events_with_workspace_id"] == 1
+        assert intensity["events_with_template_id"] == 1
+        assert intensity["total_symbol_refs"] == 4
+        assert intensity["total_field_refs"] == 5
+        assert intensity["total_dataset_refs"] == 2
+        assert intensity["total_factor_refs"] == 1
+        assert intensity["total_watchlist_size"] == 3
+        assert intensity["function_code_counts"] == {"XLTP": 1}
+        assert intensity["dataset_counts"] == {"EDB": 1, "FA": 1}
+        assert intensity["download_format_counts"] == {"xlsx": 2}
         boundary_proof = manifest["workflow_boundary_proof"]
         assert boundary_proof["proof_level"] == "strong_partial_workflow_boundary"
         assert boundary_proof["authorized_input_observed"] is True
@@ -260,6 +321,11 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert boundary_proof["workflow_field_boundary"]["missing_recommended_fields"] == []
         assert boundary_proof["workflow_topic_boundary"]["missing_expected_workflow_topics"] == []
         assert boundary_proof["workflow_surface_boundary"]["events_with_content_preview"] == 1
+        assert boundary_proof["workflow_intensity_boundary"]["query_terms_observed"] is True
+        assert boundary_proof["workflow_intensity_boundary"]["parameters_observed"] is True
+        assert boundary_proof["workflow_intensity_boundary"]["export_paths_observed"] is True
+        assert boundary_proof["workflow_intensity_boundary"]["row_counts_observed"] is True
+        assert boundary_proof["workflow_intensity_boundary"]["total_export_rows"] == 360
         assert boundary_proof["source_boundary"]["requested_input_count"] == 1
         assert boundary_proof["source_boundary"]["resolved_input_file_count"] == 3
         assert boundary_proof["source_boundary"]["archive_member_count"] == 4
@@ -302,6 +368,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert evidence["coverage_summary"]["workflow_metadata_only"] is True
         assert evidence["coverage_summary"]["vendor_database_mirror"] is False
         assert evidence["coverage_summary"]["workflow_surface_summary"]["missing_expected_workflow_topics"] == []
+        assert evidence["coverage_summary"]["workflow_intensity_summary"]["total_export_rows"] == 360
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["proof_level"] == "strong_partial_workflow_boundary"
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["source_boundary"]["archive_member_count"] == 4
         assert evidence["coverage_summary"]["dimension_count"] == 7

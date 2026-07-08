@@ -371,6 +371,27 @@ coverage for authorized Weibo, Bilibili, and Xiaohongshu activity packages:
   allowlists, social-topic false-positive review, weak-evidence backtest, or
   Windows/macOS/Linux path validation.
 
+The prior completed wave: `pro-terminal-usage` now has workflow-intensity and
+lineage surfaces for authorized Wind, Choice, iFinD, and Bloomberg workflow
+packages:
+
+- Per-event workflow metadata now includes query terms, query/filter
+  parameters, export paths, row counts, workspace IDs, template IDs,
+  securities/fields/datasets/factors counts, watchlist sizes, and stable
+  lineage refs.
+- `manifest.workflow_intensity_summary` summarizes query terms, parameter keys,
+  export row totals, workspace/template IDs, function codes, datasets, fields,
+  factors, templates, workspaces, download formats, and per-activity quantity
+  totals.
+- `manifest.workflow_boundary_proof.workflow_intensity_boundary` lets FinClaw
+  check whether query terms, parameters, export paths, row counts, symbol refs,
+  field refs, dataset refs, factor refs, and watchlist sizes are available
+  before using the evidence for the investor avatar.
+- This improves P2 professional-terminal evidence quality, but it still does
+  not claim complete terminal history, vendor database mirroring, licensed
+  content mirroring, legal/license review, or real Wind/Choice/iFinD/Bloomberg
+  account validation.
+
 The prior completed wave: `pro-terminal-usage` now has unified workflow-boundary
 proof for authorized Wind, Choice, iFinD, and Bloomberg workflow packages:
 
@@ -659,7 +680,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
 | 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux paths |
-| Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false positives, and license-safe boundaries |
+| Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, workflow-topic false positives, and license-safe boundaries |
 | B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, social activity boundary proof, social influence boundary proof, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
 
 ## Deep-Designed Existing Collectors

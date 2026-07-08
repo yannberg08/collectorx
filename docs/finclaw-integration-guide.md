@@ -1002,6 +1002,10 @@ Current status:
 - Captures workflow metadata such as function codes, menu paths, projects,
   strategy names, datasets, fields, frequency, date ranges, download formats,
   file names, symbols, industries, markets, and regions.
+- Captures workflow intensity and lineage metadata such as query terms,
+  query/filter parameters, export paths, row counts, workspace IDs, template
+  IDs, securities/fields/datasets/factors counts, watchlist sizes, and stable
+  lineage refs.
 - Adds per-event `workflow_topics`, `primary_workflow_topic`, and
   `workflow_topic_terms` so FinClaw can map terminal behavior to macro,
   strategy, industry, fundamental, valuation, credit, factor, portfolio,
@@ -1009,10 +1013,10 @@ Current status:
 - Writes terminal, activity, and workflow-field coverage manifests so FinClaw
   can see missing platforms, activity types, or research-workflow metadata.
 - Writes `manifest.workflow_surface_summary`, `manifest.source_audit`,
-  `manifest.workflow_boundary_proof`, `manifest.license_policy`, and
-  `manifest.evidence_policy` so Lake can see workflow metadata and topic
-  availability, ZIP/section provenance, and license-safe boundaries before
-  using the evidence.
+  `manifest.workflow_intensity_summary`, `manifest.workflow_boundary_proof`,
+  `manifest.license_policy`, and `manifest.evidence_policy` so Lake can see
+  workflow metadata, topic availability, query/export/object-count intensity,
+  ZIP/section provenance, and license-safe boundaries before using the evidence.
 - `manifest.workflow_boundary_proof` gives FinClaw a single gate for authorized
   input presence, terminal/activity/field/topic coverage, workflow surfaces,
   source audit, license safety, Wiki flow, and explicit false claims such as no

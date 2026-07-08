@@ -30,7 +30,8 @@
     "strong-trade-asset-facts": "Broker or trading-app facts such as assets, positions, executions, orders, and fund flows.",
     "supporting-communication": "Supporting communication evidence that needs an investor lens before Wiki use.",
     "weak-influence": "Weak social influence evidence that requires corroboration and cannot stand alone as an investment conclusion.",
-    "workflow-metadata": "Professional terminal workflow metadata without vendor database or licensed content mirroring."
+    "workflow-metadata": "Professional terminal workflow metadata without vendor database or licensed content mirroring.",
+    "workflow-metadata-and-intensity": "Professional terminal workflow metadata plus query/export/object-count intensity summaries without vendor database or licensed content mirroring."
   },
   "contracts": [
     {
@@ -297,9 +298,9 @@
       "id": "pro-terminal-usage",
       "authorization_mode": "authorized-local-export",
       "product_surface": "import-beta",
-      "evidence_role": "workflow-metadata",
-      "user_step": "Provide authorized Wind, Choice, iFinD, or Bloomberg workflow metadata exports.",
-      "preflight": "Input contains personal workflow metadata only, not vendor database mirrors or licensed content bodies.",
+      "evidence_role": "workflow-metadata-and-intensity",
+      "user_step": "Provide authorized Wind, Choice, iFinD, or Bloomberg workflow metadata exports with available query, export, workspace, template, dataset, and field metadata.",
+      "preflight": "Input contains personal workflow metadata and workflow intensity metadata only, not vendor database mirrors or licensed content bodies.",
       "failure_state": "needs_authorized_terminal_workflow_export"
     },
     {

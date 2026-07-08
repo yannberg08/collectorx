@@ -2258,6 +2258,37 @@ Findings:
 - Fixture validation covers medium partial, strong partial, and missing-input
   proof levels.
 
+### Wave W6: P2 professional terminal workflow-intensity pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p2-pro-terminal-workflow-intensity-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `pro-terminal-usage` to `0.2.6`.
+- Added per-event workflow intensity and lineage metadata: query terms,
+  query/filter parameters, export paths, row counts, workspace IDs, template
+  IDs, securities/fields/datasets/factors counts, watchlist sizes, and stable
+  lineage refs.
+- Added `manifest.workflow_intensity_summary` with query term counts,
+  parameter-key counts, export row totals, workspace/template ID counts,
+  function-code counts, dataset/field/factor/template/workspace/download-format
+  counts, and per-activity quantity totals.
+- Added `workflow_intensity_boundary` under
+  `manifest.workflow_boundary_proof` so FinClaw can gate whether query/export
+  lineage and object-count evidence is present before feeding the investor
+  avatar.
+- Mirrored the workflow-intensity summary into
+  `investor_wiki_evidence.v1.json.coverage_summary`.
+- Fixture validation covers Bloomberg nested JSON, Choice/Wind Excel downloads,
+  iFinD ZIP provenance, query parameters, explicit query terms, export paths,
+  row counts, workspace/template IDs, object counts, license filtering, unsafe
+  ZIP member skipping, and the existing medium/strong/missing-input proof
+  levels.
+
 ### Wave X: P2 social activity coverage pass 1
 
 Status: `completed-baseline`
@@ -2885,7 +2916,7 @@ Findings:
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `hk-us-brokerage` | G1/G2 strengthened for authorized CSV/JSON/Excel/ZIP export packages with broker, trade-surface, strong-field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, unified brokerage-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, and read-only evidence policy; real local broker export missing | G2/G3: real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, and Windows/macOS/Linux path validation |
-| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, workflow-topic false-positive review, license-safe validation |
+| 2 | `pro-terminal-usage` | G1/G2 strengthened for authorized CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow packages with terminal, activity, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, unified workflow-boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, license policy, and evidence policy; real native terminal export not validated | G2/G3: real Wind/Choice/iFinD/Bloomberg workflow exports, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, workflow-topic false-positive review, license-safe validation |
 | 3 | `social-investment-influence` | G1/G2 strengthened for authorized JSON/CSV/Excel/HTML/TXT/ZIP social activity packages with weak-evidence policy, platform coverage, action coverage, weak-field coverage, social-topic coverage, influence surface summary, social activity boundary proof, lens social-surface summary, social influence boundary proof, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, ZIP provenance, limit truncation audit, and preview-only content policy; strict local saved-record validation remains partial | Real Weibo/Bilibili/Xiaohongshu exports, platform/domain allowlists, creator allowlists, engagement fields, social-topic false-positive review, weak-evidence backtest |
 
 ## Git Practice
