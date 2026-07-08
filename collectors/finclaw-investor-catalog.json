@@ -245,7 +245,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-notes-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source investment-notes --input <notes-events-jsonl> --out-dir <out-dir>",
-      "collects": "Investment notes, review records, rules, checklists, valuation assumptions, thesis updates, decision frameworks, note-type surface, source-app surface, and preview/full-content surface.",
+      "collects": "Investment notes, review records, rules, checklists, valuation assumptions, thesis updates, decision frameworks, note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof.",
       "must_not_collect": "Non-investment notes as investor facts.",
       "production_gap": "User allowlists and real note-corpus false-positive backtest."
     },

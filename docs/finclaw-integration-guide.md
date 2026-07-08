@@ -491,6 +491,9 @@ Current status:
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.
+- The `investment-notes` lens writes `manifest.investment_note_boundary_proof`
+  with source-app, preview/full-content, tag/path/URL, candidate/matched/filtered,
+  and note-type boundaries. It does not claim a complete notes vault.
 
 ### 滴答清单 / 任务
 

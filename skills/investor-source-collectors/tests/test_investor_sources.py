@@ -1765,6 +1765,22 @@ def test_investment_notes_lens_reports_note_type_surface_from_notes_events() -> 
         assert surface["preview_only_event_count"] == 3
         assert surface["tagged_event_count"] == 3
         assert surface["collector_writes_wiki_directly"] is False
+        proof = manifest["investment_note_boundary_proof"]
+        assert proof["proof_level"] == "authorized_investment_notes_preview_only"
+        assert proof["event_count"] == 3
+        assert proof["candidate_record_count"] == 4
+        assert proof["matched_event_count"] == 3
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["complete_notes_vault_claimed"] is False
+        assert proof["complete_note_context_claimed"] is False
+        assert proof["direct_notes_reconnect"] is False
+        assert proof["requires_upstream_notes_collector"] is True
+        assert proof["content_boundary"]["full_content_event_count"] == 0
+        assert proof["content_boundary"]["preview_only_event_count"] == 3
+        assert proof["content_boundary"]["tagged_event_count"] == 3
+        assert proof["content_boundary"]["path_event_count"] == 3
+        assert proof["note_boundary"]["source_app_counts"] == {"obsidian": 1, "notion": 1, "youdao": 1}
+        assert proof["note_boundary"]["investment_note_type_counts"]["rules_library"] == 2
 
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["investment-notes"]

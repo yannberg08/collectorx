@@ -258,6 +258,11 @@ def build_manifest(
         if source_id == "wechat-investment-dialogue"
         else None
     )
+    investment_note_proof = (
+        build_investment_note_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
+        if source_id == "investment-notes"
+        else None
+    )
     manifest = {
         "schema": "collectorx.investor_source_collect.manifest.v1",
         "collector": source_id,
@@ -291,6 +296,8 @@ def build_manifest(
         manifest["research_corpus_boundary_proof"] = research_proof
     if wechat_proof is not None:
         manifest["wechat_dialogue_boundary_proof"] = wechat_proof
+    if investment_note_proof is not None:
+        manifest["investment_note_boundary_proof"] = investment_note_proof
     return manifest
 
 
@@ -427,6 +434,80 @@ def wechat_dialogue_proof_level(
     if source_policy.get("enabled"):
         return "authorized_wechat_dialogue_with_source_policy"
     return "authorized_wechat_dialogue_partial"
+
+
+def build_investment_note_boundary_proof(
+    events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    collection_readiness: Dict[str, Any],
+) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    source_policy = audit.get("source_policy") if isinstance(audit.get("source_policy"), dict) else {}
+    surface = investment_note_surface_summary(usable_events)
+    return {
+        "source_type": "notes_lake_investment_note_lens",
+        "proof_level": investment_note_proof_level(usable_events, audit=audit, readiness=collection_readiness),
+        "event_count": len(usable_events),
+        "candidate_record_count": audit.get("candidate_record_count", 0),
+        "matched_event_count": audit.get("matched_event_count", 0),
+        "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
+        "input_boundary": {
+            "input_count": audit.get("input_count", 0),
+            "requested_inputs": audit.get("requested_inputs", []),
+            "resolved_input_file_count": audit.get("resolved_input_file_count", 0),
+            "input_missing_count": audit.get("input_missing_count", 0),
+            "skipped_file_count": audit.get("skipped_file_count", 0),
+            "skipped_reason_counts": audit.get("skipped_reason_counts", {}),
+            "limit": audit.get("limit"),
+            "limit_reached": audit.get("limit_reached", False),
+        },
+        "source_policy_boundary": {
+            "enabled": source_policy.get("enabled", False),
+            "allow_chats": source_policy.get("allow_chats", []),
+            "deny_chats": source_policy.get("deny_chats", []),
+            "allow_senders": source_policy.get("allow_senders", []),
+            "deny_senders": source_policy.get("deny_senders", []),
+            "filtered_candidate_count": source_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": source_policy.get("filter_reason_counts", {}),
+            "policy_does_not_assert_investment_relevance": source_policy.get("policy_does_not_assert_investment_relevance", True),
+        },
+        "content_boundary": {
+            "full_content_event_count": surface.get("full_content_event_count", 0),
+            "preview_only_event_count": surface.get("preview_only_event_count", 0),
+            "tagged_event_count": surface.get("tagged_event_count", 0),
+            "path_event_count": surface.get("path_event_count", 0),
+            "url_event_count": surface.get("url_event_count", 0),
+        },
+        "note_boundary": surface,
+        "complete_notes_vault_claimed": False,
+        "complete_note_context_claimed": False,
+        "direct_notes_reconnect": False,
+        "requires_upstream_notes_collector": True,
+        "collector_writes_wiki_directly": False,
+        "can_enter_finclaw": collection_readiness.get("can_enter_finclaw", False),
+    }
+
+
+def investment_note_proof_level(
+    usable_events: List[Dict[str, Any]],
+    *,
+    audit: Dict[str, Any],
+    readiness: Dict[str, Any],
+) -> str:
+    if not usable_events:
+        status = str(readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            return "no_authorized_notes_lake_input"
+        if status == "source_policy_filtered_all":
+            return "source_policy_filtered_all"
+        if status == "no_readable_input":
+            return "no_readable_notes_lake_input"
+        return "no_usable_investment_notes_after_filter"
+    surface = investment_note_surface_summary(usable_events)
+    if int(surface.get("full_content_event_count") or 0) > 0:
+        return "authorized_investment_notes_with_full_content"
+    return "authorized_investment_notes_preview_only"
 
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
