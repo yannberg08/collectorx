@@ -18,7 +18,7 @@ skill = SKILL.md + scripts/ + references/ + tests/
 | 采集器 | 代码量 | 核心技术 | 数据源 |
 |--------|--------|----------|--------|
 | wechat-export | 2358行 | SQLCipher4解密 + lldb hook | 本地数据库 |
-| feishu | 888行 | OAuth + Chrome CDP | 飞书API |
+| feishu | 900+行 | OAuth + Chrome CDP + CollectorX package import | 飞书API/授权导出 |
 | ticktick-cli | 745行 | OAuth + REST API | 滴答API |
 | doubao-chat-export | 115行 | 预编译二进制 + cookie解密 | 豆包API |
 

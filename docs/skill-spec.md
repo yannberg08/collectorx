@@ -59,7 +59,7 @@ skill-name/
 | 采集器 | 文件数 | 状态 |
 |--------|--------|------|
 | wechat-export | 15+ | 迁移 skill，需确认上游许可与真实环境 |
-| feishu | 5+ | 迁移 skill，需确认上游许可与真实环境 |
+| feishu | 8+ | 飞书 OAuth/API 工具 + 通用采集器 baseline；支持授权 JSON/CSV/HTML/Markdown/TXT/ZIP 本地导入、字段覆盖、飞书数据面、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤，仍需真实飞书账号/API 验证 |
 | ticktick-cli | 12+ | 滴答清单 API 工具 + CollectorX 任务事件转换 baseline；支持授权 JSON/ZIP、平台覆盖 manifest 和凭证字段过滤，仍需真实 OAuth 账号验证 |
 | calendar-collector | 5+ | 通用日历采集器 baseline；支持授权 ICS/JSON/CSV/TSV/ZIP、平台覆盖 manifest，仍需真实 Apple/Google/Outlook/飞书/钉钉/企业微信日历验证 |
 | meeting-artifacts | 7+ | 通用会议产物采集器 baseline；支持授权本地文件/平台导出/ZIP、平台覆盖、ZIP 跳过审计、逐文件解析 manifest 和凭证字段过滤，仍需真实飞书/钉钉/企业微信/腾讯会议账号验证 |

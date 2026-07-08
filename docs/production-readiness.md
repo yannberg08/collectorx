@@ -16,8 +16,25 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`china-wealth-assets` now has stronger source audit coverage for authorized
-fund, wealth-management, and cash-management exports:
+`feishu` now has a CollectorX standard package path instead of only being a
+migrated utility skill:
+
+- `feishu_api.py collect --input <authorized-feishu-export> --out-dir <dir>`
+  writes `lake/feishu/events.jsonl`, `manifest.json`, and `SUMMARY.md`.
+- Manifest output records field coverage, Feishu surface summary, source
+  audit, ZIP member/skipped-member counts, parsed/emitted counts, and
+  path-level parse results.
+- Existing Feishu OAuth/API helper commands remain available; the new collect
+  path is a read-only local authorized export import and does not require live
+  account credentials.
+- The generic/lens boundary remains explicit: Feishu events enter Lake, while
+  meeting, research-document, and collaboration lenses decide what becomes
+  investor Wiki evidence.
+- This improves the export/package path, but it does not claim real Feishu
+  account/API validation or tenant-permission boundary validation.
+
+The prior completed wave: `china-wealth-assets` now has stronger source audit
+coverage for authorized fund, wealth-management, and cash-management exports:
 
 - Manifest output records input count, resolved file count, extension coverage,
   ZIP member/skipped-member counts, parsed record count, emitted event count,
@@ -93,7 +110,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Need | Current implementation | Status | Gap |
 | --- | --- | --- | --- |
-| 飞书/钉钉/腾讯会议/企业微信会议纪要 | `meeting-artifacts` local/platform-export/ZIP collector + `collaboration-exports` for `dingtalk`/`wecom` + `feishu` exists; `meeting-minutes` lens classifier | `baseline+audit`; macOS local meeting-file validation passed; HTML/CSV/JSON/ZIP platform-export fixture validation passed; meeting manifest reports platform coverage, field coverage, meeting surface summary, ZIP provenance, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; DingTalk/WeCom collaboration exports support ZIP plus field coverage, collaboration surface summary, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; platform account APIs pending | Build/port real Feishu/DingTalk/WeCom/Tencent Meeting account adapters, validate real authorized exports, participant identity normalization, false-positive review |
+| 飞书/钉钉/腾讯会议/企业微信会议纪要 | `meeting-artifacts` local/platform-export/ZIP collector + `feishu` authorized export package collector + `collaboration-exports` for `dingtalk`/`wecom` + `meeting-minutes` lens classifier | `baseline+audit`; macOS local meeting-file validation passed; HTML/CSV/JSON/ZIP platform-export fixture validation passed; meeting manifest reports platform coverage, field coverage, meeting surface summary, ZIP provenance, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; Feishu now has a CollectorX `collect` package path for messages/documents/files/folders/meetings/recordings with field coverage, surface summary, ZIP skip counts/reasons, per-input parse audit, source audit, and evidence policy; DingTalk/WeCom collaboration exports support ZIP plus equivalent audit fields; platform account APIs pending | Build/port real Feishu/DingTalk/WeCom/Tencent Meeting account adapters, validate real authorized exports, participant identity normalization, false-positive review |
 | Obsidian/Notion/有道云/印象笔记 | `notes-collector` event package + authorized export/ZIP import + `investment-notes` lens classifier | `baseline+audit`; macOS Obsidian-style real validation passed; Youdao/Evernote/Markdown/HTML/JSON/ENEX/ZIP fixtures pass; manifest reports platform coverage, field coverage, source audit, ZIP provenance, path-safety boundary, content policy, and generic-collector evidence policy | Validate real Notion/Youdao/Evernote account exports or APIs, user allowlists, false-positive review, Windows/Linux vault path validation |
 | 日历/任务/滴答清单 | `ticktick-cli` API tool + `ticktick_events.py`; `calendar-collector`; `task-calendar-investor` lens classifier | `baseline+audit`; TickTick/Dida JSON/ZIP export and generic calendar ICS/JSON/CSV/TSV/ZIP paths exist; manifests report platform coverage, field coverage, task time/status summary, calendar time-surface summary, ZIP provenance, source audit, and generic-collector evidence policy; real TickTick/API calendar validation blocked by missing account tokens/exports | Complete TickTick OAuth validation, validate real calendar exports/accounts, recurring tasks/timezones, backtest investment task classifier |
 | 公众号/微信收藏文章 | `wechat-favorites` local file/folder/ZIP collector + `wechat-article-favorites` lens classifier | `baseline+audit`; macOS saved-article validation passed; JSON/HTML/ZIP fixtures cover favorite/read/share/saved-file actions; manifest reports action coverage, field coverage, article surface summary, ZIP provenance, source audit, content policy, and generic-collector evidence policy; real WeChat favorites adapter pending | Discover/validate real WeChat favorites and public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation |

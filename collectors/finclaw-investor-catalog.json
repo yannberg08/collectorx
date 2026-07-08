@@ -202,13 +202,13 @@
       "priority": "P1",
       "category": "generic",
       "skill": "feishu",
-      "readiness": "migrated-review",
-      "gate": "G1",
-      "finclaw_action": "setup-required-or-use-meeting-artifacts-export-import-first",
-      "cli": "python3 skills/feishu/scripts/feishu_api.py --help",
-      "collects": "Authorized Feishu documents, chats, files, folders, and recording-related artifacts through the migrated skill.",
-      "must_not_collect": "Tenant secrets, bot tokens in output, or unrelated workspace-wide data.",
-      "production_gap": "Align Feishu account APIs with CollectorX event packages and investor lens routing."
+      "readiness": "baseline+audit",
+      "gate": "G2",
+      "finclaw_action": "authorized-feishu-export-import-before-investor-lenses",
+      "cli": "python3 skills/feishu/scripts/feishu_api.py collect --input <authorized-feishu-export> --out-dir <out-dir>",
+      "collects": "Feishu messages, chats, contacts, documents, file refs, folders, meeting refs, recording refs, source audit, ZIP skip reasons, and path-level parse results.",
+      "must_not_collect": "Tenant secrets, app secrets, cookies, access/refresh tokens, unauthorized workspace-wide data, file bodies by default, or direct investor conclusions.",
+      "production_gap": "Real Feishu account API/export validation, tenant permission boundary review, participant normalization, and investor lens backtest."
     },
     {
       "id": "meeting-minutes",

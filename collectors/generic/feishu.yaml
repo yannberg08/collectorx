@@ -13,9 +13,43 @@ backfill:
   span: 90d
   page: 5000
 armed: false
+category: generic
+owner_scope: personal
 
 # 采集器使用的skill
 skill: feishu
 
-# 采集逻辑由skill定义
-# skill会处理：API认证、消息获取、数据导出
+scope:
+  collects:
+    - messages
+    - chats
+    - contacts
+    - documents
+    - file_refs
+    - folders
+    - meeting_refs
+    - recording_refs
+    - field_coverage_manifest
+    - feishu_surface_summary
+    - source_audit_manifest
+    - archive_member_provenance
+    - archive_member_skip_audit
+    - path_level_collection_audit
+  excludes:
+    - investment_classification
+    - app_secret
+    - password
+    - cookie
+    - access_token
+    - refresh_token
+    - unauthorized_workspace_data
+    - file_body_mirroring
+    - archive_path_traversal_members
+    - windows_drive_path_archive_members
+
+description: |
+  飞书通用采集器。保留原 OAuth/API 工具能力，同时支持用户授权本地导出的
+  JSON/CSV/HTML/Markdown/TXT/ZIP 转 CollectorX 标准包。输出 lake/feishu/events.jsonl、
+  manifest.json 和 SUMMARY.md；manifest 记录字段覆盖、飞书数据面、ZIP 来源审计、
+  跳过成员原因和逐文件解析结果。投资会议、研报文档和协作讨论由下游 investor lens
+  从 lake 中筛选。

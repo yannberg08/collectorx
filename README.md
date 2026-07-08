@@ -79,7 +79,7 @@ Operational docs:
 | --- | --- | --- |
 | `filesystem` | `filesystem-collector` | Metadata-only generic file collector aligned with SoulMirror driver boundary; manifest includes macOS/Windows/Linux default-root plan; investor routing is handled by lenses |
 | `wechat` | `wechat-export` | WeChat 4.x local query baseline with `--collect --out-dir` CollectorX package output, field/filter/source audit manifest, and generic-to-lens boundary; real-source validation still requires authorized keys/platform setup |
-| `feishu` | `feishu` | Migrated skill; provenance review required |
+| `feishu` | `feishu` | Legacy OAuth/API tool plus authorized local/ZIP export package baseline for Feishu messages, documents, file refs, folders, meetings, recordings, source audit, ZIP skip reasons, and path-level parse results; real account API validation pending |
 | `ticktick` | `ticktick-cli` + `ticktick_events.py` | API tool plus authorized JSON/ZIP event-conversion baseline; manifest reports TickTick/Dida source coverage; real OAuth validation pending |
 | `doubao` | `doubao-chat-export` | Migrated skill; provenance review required |
 | `email` | `email-collector` | Multi-account IMAP and authorized local EML/MBOX/JSON/CSV package output with account/folder audit, field coverage, body/attachment policy, and generic-to-lens boundary; real mailbox validation still pending |

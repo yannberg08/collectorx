@@ -383,6 +383,36 @@ Current status:
 - Feed `lake/calendar/events.jsonl` into `task-calendar-investor` lens for
   trading plans, earnings events, research meetings, and review reminders.
 
+### 飞书通用授权导入
+
+```bash
+python3 skills/feishu/scripts/feishu_api.py collect \
+  --input <authorized-feishu-export> \
+  --out-dir <out-dir>
+```
+
+Current status:
+
+- Preserves the legacy Feishu OAuth/API utility commands while adding a
+  CollectorX package path for authorized local exports.
+- Converts authorized JSON/JSONL/NDJSON, CSV/TSV, HTML, Markdown, TXT, and ZIP
+  Feishu exports into generic `feishu` events.
+- Captures messages, chats, contacts, documents, file refs, folders, meeting
+  refs, recording refs, participants, links, document refs, content previews,
+  and source provenance.
+- Writes `manifest.field_coverage`, `feishu_surface_summary`, `source_audit`,
+  and `evidence_policy` so FinClaw can inspect message/document/file/meeting
+  coverage, ZIP provenance, total/skipped ZIP members, skip reasons,
+  per-input parse results, and required downstream lenses.
+- Filters credential-like raw keys including app secrets, cookies, access
+  tokens, refresh tokens, authorization, session, and password fields.
+- Does not claim investment evidence directly.
+- Feed `lake/feishu/events.jsonl` into downstream investor lenses such as
+  `meeting-minutes`, `research-documents`, and future collaboration dialogue
+  lenses.
+- Real Feishu account/API collection still requires user authorization and
+  tenant-permission validation.
+
 ### 钉钉 / 企业微信协作导出
 
 ```bash

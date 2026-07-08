@@ -973,6 +973,30 @@ Findings:
   backslash traversal, and Windows drive-letter ZIP members are skipped and
   counted.
 
+### Wave S4: P1 Feishu CollectorX package pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-feishu-collector-package-validation-2026-07-08.md`
+
+Findings:
+
+- Upgraded `feishu` from migrated-review utility status to `0.2.0`
+  `baseline+audit`.
+- Kept legacy Feishu OAuth/API commands intact and added a read-only
+  `feishu_api.py collect` path for authorized local exports.
+- Added parsing for JSON/JSONL/NDJSON, CSV/TSV, HTML, Markdown, TXT, and ZIP
+  Feishu exports.
+- Added standard output package: `lake/feishu/events.jsonl`, `manifest.json`,
+  and `SUMMARY.md`.
+- Manifest now reports field coverage, Feishu surface summary, source audit,
+  ZIP skipped-member counts/reasons, path-level parse results, and generic/lens
+  evidence policy.
+- Fixture validation covers messages, documents, file refs, meetings,
+  recordings, credential filtering, gap output, and ZIP traversal safety.
+
 ### Wave T: P1 WeChat favorites action coverage pass 1
 
 Status: `completed-baseline`

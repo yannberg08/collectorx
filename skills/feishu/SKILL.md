@@ -1,7 +1,6 @@
 ---
 name: feishu
-description: 飞书完整工具：读取文档、创建文档、搜索文档、发送消息、上传文件、管理云空间、录音豆转写。当用户提到"飞书"、"飞书文档"、"飞书纪要"、"会议纪要"、"读取飞书"、"传到飞书"、"发飞书"、"飞书消息"、"录音豆"、"录音转写"、"拉录音"时触发。
-version: 0.1.4
+description: 飞书完整工具和通用采集器：读取文档、创建文档、搜索文档、发送消息、上传文件、管理云空间、录音豆转写，也支持用户授权本地导出转 CollectorX 标准包。当用户提到"飞书"、"飞书文档"、"飞书纪要"、"会议纪要"、"读取飞书"、"传到飞书"、"发飞书"、"飞书消息"、"录音豆"、"录音转写"、"拉录音"时触发。
 ---
 
 ## 调用约定（AI 必读）
@@ -10,6 +9,7 @@ version: 0.1.4
 
 ```bash
 python <SKILL_DIR>/scripts/feishu_api.py search "MES"
+python <SKILL_DIR>/scripts/feishu_api.py collect --input <authorized-feishu-export> --out-dir <out-dir>
 python <SKILL_DIR>/scripts/auth.py register <app_id> <app_secret>
 python <SKILL_DIR>/scripts/auth.py authorize
 ```
@@ -125,6 +125,30 @@ python <SKILL_DIR>/scripts/auth.py authorize                       # 起本地 s
 
 录音豆识别用严格标题模式（『文字记录：xxx 2026年4月24日』『智能纪要：...』『soundcore Work_MM-DD HH:MM』），不会混入人工写的会议纪要。
 
+### CollectorX 标准采集包
+
+```bash
+python <SKILL_DIR>/scripts/feishu_api.py collect \
+  --input <authorized-feishu-export-file-or-folder-or-zip> \
+  --out-dir <out-dir>
+```
+
+采集用户授权导出的 JSON/JSONL/NDJSON、CSV/TSV、HTML、Markdown、TXT、ZIP。
+输出：
+
+```text
+<out-dir>/
+├── lake/feishu/events.jsonl
+├── manifest.json
+└── SUMMARY.md
+```
+
+本模式只做 generic lake 采集：消息、会话、联系人、文档、文件指针、会议/妙记
+产物进入 `collectorx.event.v1`，不直接写投资 Wiki。`manifest.json` 记录
+字段覆盖、飞书数据面、来源审计、ZIP 成员总数、跳过成员数量/原因、逐文件解析结果
+和 evidence policy。投资含义由 `meeting-minutes`、`research-documents` 或后续协作
+lens 判断。
+
 ## 2) 状态文件
 
 `~/.cufin/skills-config/feishu.json` 一个文件搞定：
@@ -150,6 +174,7 @@ python <SKILL_DIR>/scripts/auth.py authorize                       # 起本地 s
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.2.0 | 2026-07-08 | 增加 `feishu_api.py collect` 只读本地授权导入，输出 `lake/feishu/events.jsonl`、`manifest.json`、`SUMMARY.md`；支持 JSON/CSV/HTML/Markdown/TXT/ZIP，manifest 记录字段覆盖、飞书数据面、来源审计、ZIP 跳过成员原因和 generic/lens 边界；保留原 OAuth/API 工具命令 |
 | 0.1.5 | 2026-05-24 | **状态目录定为 `~/.cufin/skills-config/`**（萃分身英文代号 cufin）。token / chrome-auto profile 全部在此。env var 主名 `CUFIN_CHROME_PROFILE` / `CUFIN_CHROME_PORT` / `CUFIN_CHROME_BIN`。改动文件：SKILL.md / auth.py / chrome_setup.py / feishu_api.py 共 4 处路径常量 + env var 处理 + 注释/文档更新 |
 | 0.1.4 | 2026-05-01 | **修『AI 调用方等不及重跑导致权限只勾上一半』root cause**：setup 是个长流程（60–120 秒），QClaw / Codex / 其他 AI runner 默认子进程超时太短（30–60s）等不到 `凭证已落 .../feishu.json` 就以为失败重跑，第二个 setup 进程跟第一个抢 Chrome / 飞书后台 SPA，互相打断 _enable_scopes 的 click 流程，结果 8 个 scope 只勾上一部分（甚至 0 个），OAuth 拿到 token 但调 API 全 Unauthorized。SKILL.md 顶部加显眼提示："不要因为终端短时间没新输出就重跑，总超时设到 3 分钟以上"。同时加防御：每次 click 后 sleep 250ms 让 React state 同步、勾完后 sleep 2s 再点确认开通（dump_state 诊断 log 也保留作生产调试用） |
 | 0.1.3 | 2026-05-01 | Windows 浏览器探测加 3 层 fallback，覆盖绿色版/便携版 Chrome：① `winreg` 查 App Paths（标准安装注册）；② 固定标准路径列表；③ **递归扫 `%LOCALAPPDATA%\Google\Chrome\` 等根目录**——校长机器实测 Chrome 109 装在 `\Bin\chrome.exe`（不是标准的 `\Application\`）且没注册到 App Paths/Uninstall/PATH，旧探测全 miss。探测顺序按浏览器分组（Chrome 全部探测方式 → Edge 全部 → Brave 全部）而不是按方式分组，让 Chrome 优先级压过 Edge（Win 上 Edge 预装率高，否则会先命中 Edge）。同步修 0.1.2 残留的 `_grab_credentials` bug——用精确 `.auth-info__secret` + `.secret-code__code` selector 抓 secret，不再正则匹配 textContent（避免误抓到 Verification Token 等其他 32 字符串导致 OAuth 报『app secret invalid』10014） |

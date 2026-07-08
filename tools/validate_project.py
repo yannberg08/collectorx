@@ -46,6 +46,7 @@ CLI_HELP_TARGETS = [
 
 PARSER_TESTS = [
     "skills/email-collector/tests/test_events.py",
+    "skills/feishu/tests/test_feishu_collect.py",
     "skills/filesystem-collector/tests/test_filesystem_collector.py",
     "skills/meeting-artifacts/tests/test_meeting_artifacts.py",
     "skills/wechat-export/tests/test_collect_package.py",

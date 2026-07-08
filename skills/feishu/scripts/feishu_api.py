@@ -12,6 +12,15 @@ import sys
 import time
 from pathlib import Path
 
+from feishu_collect.parser import (
+    build_manifest as build_collect_manifest,
+    collect_from_inputs_with_audit,
+    now_iso as collect_now_iso,
+    write_json,
+    write_jsonl,
+    write_summary,
+)
+
 # Windows 控制台默认 cp936 不能输出非 GBK 字符——把 stdout/stderr 切成 utf-8
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -810,6 +819,27 @@ def cmd_recordings_latest():
         print("未找到录音记录")
 
 
+# ==================== CollectorX 采集包 ====================
+
+def cmd_collect(args):
+    """采集用户授权的飞书本地导出，输出 CollectorX 标准包。"""
+    collected_at = args.collected_at or collect_now_iso()
+    events, collection_audit = collect_from_inputs_with_audit(
+        args.input or [],
+        collected_at=collected_at,
+        limit=args.limit,
+    )
+    if args.event_export:
+        write_jsonl(Path(args.event_export).expanduser(), events)
+    if args.out_dir:
+        out_dir = Path(args.out_dir).expanduser()
+        write_jsonl(out_dir / "lake" / "feishu" / "events.jsonl", events)
+        manifest = build_collect_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
+        write_json(out_dir / "manifest.json", manifest)
+        write_summary(out_dir / "SUMMARY.md", manifest)
+    print(json.dumps({"collector": "feishu", "event_count": len(events)}, ensure_ascii=False, sort_keys=True))
+
+
 # ==================== 主入口 ====================
 
 def main():
@@ -860,6 +890,14 @@ def main():
     rec_sub.add_parser("get", help="获取转写全文").add_argument("token", help="文档token")
     rec_sub.add_parser("latest", help="拉取最新一条转写")
 
+    # CollectorX 本地授权导入
+    p_collect = sub.add_parser("collect", help="采集用户授权的飞书本地导出为 CollectorX 标准包")
+    p_collect.add_argument("--input", action="append", help="授权导出文件或目录，可重复传入")
+    p_collect.add_argument("--out-dir", help="输出 CollectorX 包目录")
+    p_collect.add_argument("--event-export", help="输出 CollectorX Event JSONL 路径")
+    p_collect.add_argument("--limit", type=int, help="最多输出事件数")
+    p_collect.add_argument("--collected-at", help="覆盖采集时间")
+
     args = parser.parse_args()
 
     if args.command == "auth":
@@ -889,6 +927,8 @@ def main():
             cmd_recordings_latest()
         else:
             p_rec.print_help()
+    elif args.command == "collect":
+        cmd_collect(args)
     else:
         parser.print_help()
 
