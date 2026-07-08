@@ -225,6 +225,54 @@ def test_doctor_require_all_ready_fails_when_any_entry_is_blocked() -> None:
     assert report["not_ready"] > 0
 
 
+def stage_by_name(runbook: dict[str, object], name: str) -> dict[str, object]:
+    stages = runbook["stages"]
+    assert isinstance(stages, list)
+    by_name = {stage["name"]: stage for stage in stages}
+    return by_name[name]
+
+
+def stage_ids(runbook: dict[str, object], name: str) -> set[str]:
+    stage = stage_by_name(runbook, name)
+    return {item["id"] for item in stage["items"]}
+
+
+def test_runbook_groups_p0_entries_by_product_stage() -> None:
+    runbook = run_json("runbook", "--priority", "P0", "--out-dir-root", "/tmp/collectorx-out", "--json")
+    assert runbook["schema"] == "collectorx.finclaw_runbook.v1"
+    assert runbook["summary"]["by_stage"]["ready_collectors"] > 0
+    assert runbook["summary"]["by_stage"]["needs_user_input"] > 0
+    assert runbook["summary"]["by_stage"]["needs_upstream_lake"] > 0
+    assert "eastmoney-portfolio" in stage_ids(runbook, "ready_collectors")
+    assert "email" in stage_ids(runbook, "ready_collectors")
+    assert "ths-watchlist" in stage_ids(runbook, "needs_user_input")
+    assert "email-research" in stage_ids(runbook, "needs_upstream_lake")
+
+
+def test_runbook_places_ready_lens_after_upstream_input_is_supplied() -> None:
+    runbook = run_json(
+        "runbook",
+        "--priority",
+        "P0",
+        "--out-dir-root",
+        "/tmp/collectorx-out",
+        "--set",
+        "email-events-jsonl=/tmp/lake/email/events.jsonl",
+        "--json",
+    )
+    assert "email-research" in stage_ids(runbook, "ready_lenses")
+    ready_lens = next(item for item in stage_by_name(runbook, "ready_lenses")["items"] if item["id"] == "email-research")
+    assert ready_lens["ready_to_run"] is True
+    assert ready_lens["package_validation"]["require_evidence"] is True
+
+
+def test_runbook_require_all_ready_fails_when_any_entry_is_blocked() -> None:
+    proc = run_proc("runbook", "--priority", "P0", "--out-dir-root", "/tmp/collectorx-out", "--json", "--require-all-ready")
+    assert proc.returncode == 2
+    runbook = json.loads(proc.stdout)
+    assert runbook["not_ready"] > 0
+
+
 def main() -> int:
     test_list_includes_catalog_and_contract_fields()
     test_show_lens_includes_upstream_contract()
@@ -239,6 +287,9 @@ def main() -> int:
     test_doctor_reports_batch_readiness_summary()
     test_doctor_filters_priority()
     test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
+    test_runbook_groups_p0_entries_by_product_stage()
+    test_runbook_places_ready_lens_after_upstream_input_is_supplied()
+    test_runbook_require_all_ready_fails_when_any_entry_is_blocked()
     print("finclaw catalog tests passed.")
     return 0
 

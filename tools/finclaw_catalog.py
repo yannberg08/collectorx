@@ -358,6 +358,94 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return 0
 
 
+RUNBOOK_STAGE_DEFINITIONS = [
+    (
+        "ready_collectors",
+        "Run ordinary source collectors that do not require upstream Lake inputs.",
+    ),
+    (
+        "ready_lenses",
+        "Run investor lenses whose upstream Lake inputs have been supplied.",
+    ),
+    (
+        "needs_upstream_lake",
+        "Run or select upstream collectors before these lenses can execute.",
+    ),
+    (
+        "needs_user_input",
+        "Ask the user for authorized files, folders, accounts, or placeholders.",
+    ),
+    (
+        "soulmirror_runner",
+        "Hand these collectors to the SoulMirror-managed runner.",
+    ),
+]
+
+
+def runbook_stage_name(item: dict[str, Any]) -> str:
+    if item["next_action"] == "run_command" and item["requires_upstream"]:
+        return "ready_lenses"
+    if item["next_action"] == "run_command":
+        return "ready_collectors"
+    if item["next_action"] == "wait_for_upstream_lake":
+        return "needs_upstream_lake"
+    if item["next_action"] == "fill_placeholders":
+        return "needs_user_input"
+    if item["next_action"] == "use_soulmirror_runner":
+        return "soulmirror_runner"
+    return "needs_user_input"
+
+
+def build_runbook(report: dict[str, Any]) -> dict[str, Any]:
+    grouped: dict[str, list[dict[str, Any]]] = {name: [] for name, _ in RUNBOOK_STAGE_DEFINITIONS}
+    for item in report["items"]:
+        grouped[runbook_stage_name(item)].append(item)
+
+    stages = [
+        {
+            "name": name,
+            "description": description,
+            "count": len(grouped[name]),
+            "items": grouped[name],
+        }
+        for name, description in RUNBOOK_STAGE_DEFINITIONS
+    ]
+    return {
+        "schema": "collectorx.finclaw_runbook.v1",
+        "doctor_schema": report["schema"],
+        "total": report["total"],
+        "ready_to_run": report["ready_to_run"],
+        "not_ready": report["not_ready"],
+        "summary": {
+            **report["summary"],
+            "by_stage": {stage["name"]: stage["count"] for stage in stages},
+        },
+        "stages": stages,
+    }
+
+
+def print_human_runbook(runbook: dict[str, Any]) -> None:
+    print(f"total: {runbook['total']}")
+    for stage in runbook["stages"]:
+        print(f"{stage['name']}: {stage['count']}")
+        for item in stage["items"]:
+            print(f"  - {item['id']} ({item['priority']}/{item['category']}): {item['next_action']}")
+
+
+def cmd_runbook(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    replacements = parse_set_values(args.set_values or [])
+    report = build_doctor_report(entries, replacements=replacements, out_dir_root=args.out_dir_root)
+    runbook = build_runbook(report)
+    if args.json:
+        print(json.dumps(runbook, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_runbook(runbook)
+    if args.require_all_ready and runbook["not_ready"]:
+        return 2
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Inspect FinClaw investor collector catalog.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -416,6 +504,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 2 unless every selected entry is ready for ordinary command execution.",
     )
     doctor_parser.set_defaults(func=cmd_doctor)
+
+    runbook_parser = subparsers.add_parser("runbook", help="Build a staged FinClaw collector runbook.")
+    runbook_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    runbook_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    runbook_parser.add_argument("--readiness")
+    runbook_parser.add_argument(
+        "--out-dir-root",
+        help="Replace <out-dir> with <out-dir-root>/<collector-id> for each catalog entry.",
+    )
+    runbook_parser.add_argument(
+        "--set",
+        dest="set_values",
+        action="append",
+        default=[],
+        metavar="PLACEHOLDER=VALUE",
+        help="Replace an arbitrary command placeholder across all plans.",
+    )
+    runbook_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    runbook_parser.add_argument(
+        "--require-all-ready",
+        action="store_true",
+        help="Exit with status 2 unless every selected entry is ready for ordinary command execution.",
+    )
+    runbook_parser.set_defaults(func=cmd_runbook)
     return parser
 
 

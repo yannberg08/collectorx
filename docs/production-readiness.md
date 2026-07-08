@@ -16,9 +16,9 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-FinClaw now has a catalog helper readiness doctor for product-side discovery and invocation planning:
+FinClaw now has a catalog helper readiness doctor and runbook for product-side discovery and invocation planning:
 
-- `tools/finclaw_catalog.py list/show/plan/doctor` merges
+- `tools/finclaw_catalog.py list/show/plan/doctor/runbook` merges
   `collectors/finclaw-investor-catalog.json` with
   `collectors/finclaw-invocation-contracts.json`.
 - Product runners can list collectors, inspect authorization/preflight details,
@@ -29,6 +29,9 @@ FinClaw now has a catalog helper readiness doctor for product-side discovery and
   the post-collection package gate without rebuilding validator commands.
 - `doctor --out-dir-root ... --json` produces a batch readiness matrix for
   setup screens and collection-run planning.
+- `runbook --out-dir-root ... --json` groups the same catalog items into
+  executable product stages: ready collectors, ready lenses, upstream-Lake
+  waits, user-input waits, and SoulMirror-runner handoff.
 - `plan --require-ready` exits with status `2` when a command is not ready for
   ordinary execution, while still returning JSON the product can inspect.
 - Plan and doctor JSON now report `next_action` and `blocked_reason`, so FinClaw
@@ -39,8 +42,8 @@ FinClaw now has a catalog helper readiness doctor for product-side discovery and
   as a normal shell command.
 - `tools/test_finclaw_catalog.py` and project validation now cover catalog
   listing, lens upstream contracts, command placeholder replacement, safe argv
-  rendering, package-validation argv rendering, and ready-to-run gate/doctor
-  handling.
+  rendering, package-validation argv rendering, and ready-to-run
+  gate/doctor/runbook handling.
 - This improves FinClaw product-call ergonomics, but it does not claim new
   real-account validation for any collector.
 

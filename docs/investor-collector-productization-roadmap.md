@@ -2458,6 +2458,30 @@ Findings:
   post-run package gate. It does not claim new real-account validation for any
   collector.
 
+### Wave AL - FinClaw Batch Runbook
+
+Validation record:
+
+- `docs/validations/finclaw-batch-runbook-validation-2026-07-08.md`
+
+Findings:
+
+- Added `tools/finclaw_catalog.py runbook`.
+- The runbook reuses doctor items and groups them into product execution
+  stages.
+- Stages are `ready_collectors`, `ready_lenses`, `needs_upstream_lake`,
+  `needs_user_input`, and `soulmirror_runner`.
+- P0 default runbook currently places `eastmoney-portfolio`, `ths-portfolio`,
+  `wechat`, and `email` in `ready_collectors`.
+- P0 default runbook places `wechat-investment-dialogue`,
+  `research-documents`, and `email-research` in `needs_upstream_lake`.
+- When the `email-events-jsonl` placeholder is supplied, `email-research`
+  moves into `ready_lenses`.
+- Added runbook tests for P0 stage grouping, ready-lens promotion, and
+  `--require-all-ready` failure behavior.
+- This improves FinClaw batch orchestration. It does not claim new real-account
+  validation for any collector.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

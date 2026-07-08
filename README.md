@@ -73,10 +73,11 @@ Operational docs:
   before FinClaw ingests it into Lake or runs Wiki distillation.
 - `tools/finclaw_catalog.py` gives FinClaw a stable CLI for listing catalog
   entries, inspecting authorization/preflight details, rendering invocation
-  plans, and producing a batch readiness matrix from the catalog plus
-  invocation contracts. Product runners should use `doctor` for setup screens
-  and `plan --require-ready` before executing a single collector, then execute
-  the returned `argv` list rather than reparsing the display command string.
+  plans, producing a batch readiness matrix, and building a staged runbook from
+  the catalog plus invocation contracts. Product runners should use `doctor`
+  for setup screens, `runbook` for batch execution order, and
+  `plan --require-ready` before executing a single collector, then execute the
+  returned `argv` list rather than reparsing the display command string.
   After a collector exits, runners should execute the returned
   `package_validation.argv` before ingesting the package into Lake.
 - `tools/validate_investor_wiki_evidence.py` validates
@@ -187,7 +188,8 @@ The suite currently checks:
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
 - FinClaw catalog helper CLI, invocation-plan tests, safe `argv` rendering,
-  package-validation argv rendering, readiness doctor, and ready-to-run gate
+  package-validation argv rendering, readiness doctor/runbook, and
+  ready-to-run gate
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets

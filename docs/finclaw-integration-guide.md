@@ -80,6 +80,10 @@ python3 tools/finclaw_catalog.py doctor \
   --priority P0 \
   --out-dir-root /path/to/run \
   --json
+python3 tools/finclaw_catalog.py runbook \
+  --priority P0 \
+  --out-dir-root /path/to/run \
+  --json
 python3 tools/finclaw_catalog.py plan ths-watchlist \
   --set authorized-ths-watchlist-export=/path/to/watchlist.csv \
   --out-dir /path/to/out \
@@ -94,6 +98,18 @@ and evidence role. The `doctor` output gives the same fields for every selected
 catalog entry, plus summary counts by priority, category, runner, and
 `next_action`; FinClaw should use it to render collector setup and authorization
 checklists.
+
+For batch collection, FinClaw should use `runbook --json`. The runbook keeps the
+same item shape as `doctor` but groups entries into product execution stages:
+
+- `ready_collectors`: source collectors that can run now.
+- `ready_lenses`: investor lenses whose upstream Lake paths have been supplied.
+- `needs_upstream_lake`: lenses that should wait until upstream Lake events
+  exist.
+- `needs_user_input`: collectors that need authorized files, folders, accounts,
+  or placeholder values.
+- `soulmirror_runner`: collectors that must be delegated to the SoulMirror
+  runner.
 
 Product runners should use `--require-ready` before ordinary shell execution.
 If the helper exits with status `2`, FinClaw should parse the same JSON
