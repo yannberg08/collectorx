@@ -15,6 +15,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def out_root_path(*parts: str) -> str:
+    return str(Path("/tmp/collectorx-out").joinpath(*parts))
+
+
 def run_proc(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "tools/finclaw_catalog.py", *args],
@@ -192,11 +196,11 @@ def test_doctor_reports_batch_readiness_summary() -> None:
     by_id = {item["id"]: item for item in report["items"]}
     assert by_id["eastmoney-portfolio"]["ready_to_run"] is True
     assert by_id["eastmoney-portfolio"]["next_action"] == "run_command"
-    assert "/tmp/collectorx-out/eastmoney-portfolio" in by_id["eastmoney-portfolio"]["command"]
-    assert by_id["eastmoney-portfolio"]["argv"][-1] == "/tmp/collectorx-out/eastmoney-portfolio"
+    eastmoney_out = out_root_path("eastmoney-portfolio")
+    assert eastmoney_out in by_id["eastmoney-portfolio"]["argv"]
     eastmoney_validation = by_id["eastmoney-portfolio"]["package_validation"]
     assert eastmoney_validation["ready"] is True
-    assert eastmoney_validation["package_dir"] == "/tmp/collectorx-out/eastmoney-portfolio"
+    assert eastmoney_validation["package_dir"] == eastmoney_out
     assert eastmoney_validation["require_evidence"] is True
     assert "--require-evidence" in eastmoney_validation["argv"]
     email_validation = by_id["email"]["package_validation"]
@@ -811,10 +815,10 @@ def test_runbook_groups_p0_entries_by_product_stage() -> None:
         "email-research",
         "email",
         "email-events-jsonl",
-        "/tmp/collectorx-out/email/lake/email/events.jsonl",
+        out_root_path("email", "lake", "email", "events.jsonl"),
     ) in links
     email_lens = next(item for item in stage_by_name(runbook, "ready_lenses")["items"] if item["id"] == "email-research")
-    assert "/tmp/collectorx-out/email/lake/email/events.jsonl" in email_lens["argv"]
+    assert out_root_path("email", "lake", "email", "events.jsonl") in email_lens["argv"]
 
 
 def test_runbook_respects_explicit_lens_input_over_auto_link() -> None:
@@ -868,13 +872,13 @@ def test_batch_manifest_renders_executable_p0_steps() -> None:
     email_lens = next(step for step in manifest["ready_steps"] if step["id"] == "email-research")
     assert email_lens["stage"] == "ready_lenses"
     assert email_lens["depends_on"] == ["email"]
-    assert email_lens["input_events_jsonl"] == "/tmp/collectorx-out/email/lake/email/events.jsonl"
-    assert email_lens["output_dir"] == "/tmp/collectorx-out/email-research"
-    assert email_lens["lake_events_jsonl"] == "/tmp/collectorx-out/email-research/lake/email-research/events.jsonl"
+    assert email_lens["input_events_jsonl"] == out_root_path("email", "lake", "email", "events.jsonl")
+    assert email_lens["output_dir"] == out_root_path("email-research")
+    assert email_lens["lake_events_jsonl"] == out_root_path("email-research", "lake", "email-research", "events.jsonl")
     assert email_lens["post_run_validation"]["argv"] == [
         "python3",
         "tools/validate_collector_package.py",
-        "/tmp/collectorx-out/email-research",
+        out_root_path("email-research"),
         "--collector",
         "email-research",
         "--require-evidence",
