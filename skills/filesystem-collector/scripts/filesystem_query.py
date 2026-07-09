@@ -19,6 +19,9 @@ from filesystem_collector.scanner import (
 )
 
 
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
+
+
 def build_filesystem_gap_event(source_audit: dict, *, readiness_status: str) -> dict:
     timestamp = now_iso()
     policy = source_audit.get("filesystem_scope_policy") or {}
@@ -27,6 +30,7 @@ def build_filesystem_gap_event(source_audit: dict, *, readiness_status: str) -> 
     status = "scope_policy_filtered_all" if filtered_all else readiness_status
     data = {
         "subtype": "collector_gap",
+        "gap_kind": "collection_gap",
         "gap": gap,
         "status": status,
         "profile_type": gap,
@@ -46,6 +50,8 @@ def build_filesystem_gap_event(source_audit: dict, *, readiness_status: str) -> 
         "metadata_only": True,
         "file_content_collected": False,
         "file_metadata_events_written": False,
+        "business_records_written": False,
+        "read_only": True,
         "whole_disk_scan_claimed": False,
         "investment_relevance_claimed": False,
     }
@@ -75,7 +81,7 @@ def build_filesystem_gap_event(source_audit: dict, *, readiness_status: str) -> 
             "local_only": True,
             "contains": ["file_metadata", "collection_gap"],
         },
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -107,22 +113,39 @@ def collect(args: argparse.Namespace) -> int:
     readiness_status = "events_collected" if events else "no_matching_files"
     if not events and source_audit.get("filesystem_scope_policy_filtered_all"):
         readiness_status = "scope_policy_filtered_all"
-    output_events = events if events else [build_filesystem_gap_event(source_audit, readiness_status=readiness_status)]
+    gap_events = [] if metadata_events else [build_filesystem_gap_event(source_audit, readiness_status=readiness_status)]
+    output_events = [*metadata_events, *gap_events]
+    usable_event_count = len(metadata_events)
+    filesystem_event_count = len(metadata_events)
+    gap_event_count = len(gap_events)
+    can_enter_filesystem_lake = filesystem_event_count > 0
+    can_enter_data_quality_lake = gap_event_count > 0
+    can_feed_research_documents_lens = can_enter_filesystem_lake
     out_dir = Path(args.out_dir).expanduser() if args.out_dir else None
     if out_dir:
-        lake_path = out_dir / "lake" / "filesystem" / "events.jsonl"
-        write_jsonl(lake_path, output_events)
+        if metadata_events:
+            write_jsonl(out_dir / "lake" / "filesystem" / "events.jsonl", metadata_events)
+        if gap_events:
+            write_jsonl(out_dir / "lake" / "data_quality" / "events.jsonl", gap_events)
         manifest = {
             "schema": "collectorx.filesystem_collect.manifest.v1",
             "collector": "filesystem",
             "event_count": len(output_events),
+            "usable_event_count": usable_event_count,
+            "filesystem_event_count": filesystem_event_count,
+            "file_event_count": filesystem_event_count,
+            "gap_event_count": gap_event_count,
             "roots": [str(root) for root in roots],
             "kind_counts": dict(Counter(event["kind"] for event in output_events)),
             "extension_counts": dict(sorted(extension_counts.items())),
+            "lake_routes": {
+                "filesystem": "lake/filesystem/events.jsonl" if metadata_events else None,
+                "data_quality": "lake/data_quality/events.jsonl" if gap_events else None,
+            },
             "file_surface_summary": {
                 "metadata_event_count": len(metadata_events),
                 "content_read_event_count": 0,
-                "gap_event_count": max(0, len(output_events) - len(metadata_events)),
+                "gap_event_count": gap_event_count,
                 "total_size_bytes": total_size_bytes,
                 "extension_counts": dict(sorted(extension_counts.items())),
             },
@@ -136,10 +159,18 @@ def collect(args: argparse.Namespace) -> int:
                 "missing_root_count": source_audit.get("missing_root_count", 0),
                 "scanned_file_count": source_audit.get("scanned_file_count", 0),
                 "emitted_event_count": source_audit.get("emitted_event_count", 0),
-                "gap_event_count": max(0, len(output_events) - len(metadata_events)),
+                "usable_event_count": usable_event_count,
+                "filesystem_event_count": filesystem_event_count,
+                "file_event_count": filesystem_event_count,
+                "gap_event_count": gap_event_count,
                 "skipped_file_count": source_audit.get("skipped_file_count", 0),
                 "skipped_directory_count": source_audit.get("skipped_directory_count", 0),
                 "authorization_scope_boundary": source_audit.get("filesystem_scope_policy", {}),
+                "can_enter_finclaw_lake": can_enter_filesystem_lake,
+                "can_enter_filesystem_lake": can_enter_filesystem_lake,
+                "can_enter_data_quality_lake": can_enter_data_quality_lake,
+                "can_feed_research_documents_lens": can_feed_research_documents_lens,
+                "can_feed_investor_wiki_directly": False,
                 "complete_filesystem_claimed": False,
                 "whole_disk_scan_claimed": False,
                 "file_content_collected": False,
@@ -150,7 +181,15 @@ def collect(args: argparse.Namespace) -> int:
             "platform_default_root_plan": platform_default_root_plan(),
             "collection_readiness": {
                 "status": readiness_status,
-                "can_enter_finclaw": bool(metadata_events),
+                "usable_event_count": usable_event_count,
+                "filesystem_event_count": filesystem_event_count,
+                "file_event_count": filesystem_event_count,
+                "gap_event_count": gap_event_count,
+                "can_enter_finclaw": can_enter_filesystem_lake,
+                "can_enter_filesystem_lake": can_enter_filesystem_lake,
+                "can_enter_data_quality_lake": can_enter_data_quality_lake,
+                "can_feed_research_documents_lens": can_feed_research_documents_lens,
+                "can_feed_investor_wiki_directly": False,
                 "source_collection_scope": "authorized_roots",
                 "source_audit_status": "available",
                 "filesystem_scope_policy_filtered_all": bool(source_audit.get("filesystem_scope_policy_filtered_all")),

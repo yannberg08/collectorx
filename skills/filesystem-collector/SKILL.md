@@ -45,6 +45,15 @@ python <SKILL_DIR>/scripts/filesystem_query.py collect \
 └── SUMMARY.md
 ```
 
+如果本轮没有任何可用文件元数据，输出会改为：
+
+```text
+<out-dir>/
+├── lake/data_quality/events.jsonl
+├── manifest.json
+└── SUMMARY.md
+```
+
 `manifest.json` 会记录 `platform_default_root_plan`，用于说明 macOS、Windows、
 Linux 默认候选根目录的代码级路径计划。无论哪个平台，默认边界仍是：
 metadata-only、用户授权根目录、正文不读取。
@@ -55,8 +64,15 @@ metadata-only、用户授权根目录、正文不读取。
 文件名、目录名和元数据关键词 allow/deny 范围；这只是用户授权边界，
 不代表投资相关性判断。
 如果授权范围过滤掉全部候选文件，或授权根目录没有产生任何可用文件元数据，
-`lake/filesystem/events.jsonl` 会写入一条 profile gap 事件，记录计数和原因，
-但不会伪造文件元数据、不会写正文、也不会把本地路径写进 gap 事件。
+`lake/data_quality/events.jsonl` 会写入一条 validator-safe profile gap 事件，
+`wiki_targets=["collectorx.data_quality.collection_gaps"]`，记录计数和原因，
+但不会伪造文件元数据、不会写正文、不会把本地路径写进 gap 事件，也不会直连
+Investor Wiki。
+
+manifest 会拆分 `usable_event_count`、`filesystem_event_count`/`file_event_count`
+和 `gap_event_count`，并在 `collection_readiness` 中声明
+`can_enter_filesystem_lake`、`can_enter_data_quality_lake`、
+`can_feed_research_documents_lens` 和 `can_feed_investor_wiki_directly=false`。
 
 `manifest.filesystem_boundary_proof` 会把授权根、metadata-only 状态、
 跳过统计和授权范围边界汇总给 FinClaw。该证明明确保持：

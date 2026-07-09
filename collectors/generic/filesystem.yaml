@@ -22,6 +22,14 @@ scope:
     - filesystem_scope_policy
     - scope_policy_filtered_all_gap_package
     - no_metadata_gap_package
+    - validator_safe_data_quality_gap_package
+    - usable_event_count
+    - filesystem_event_count
+    - file_event_count
+    - gap_event_count
+    - filesystem_lake_readiness_gate
+    - data_quality_readiness_gate
+    - research_documents_lens_readiness_gate
     - filesystem_boundary_proof
   excludes:
     - file_content_by_default
@@ -42,5 +50,11 @@ description: |
   manifest.source_audit 会记录授权根、扩展名覆盖、跳过原因和逐根目录结果，
   便于 FinClaw 判断本次本地文件材料采集覆盖面。可选 filesystem_scope_policy
   支持按扩展名、路径、文件名、目录名和元数据关键词收窄用户授权范围；
-  filtered-all 或无可用文件元数据时会输出 profile gap 事件。filesystem_boundary_proof
-  汇总 metadata-only、非全盘扫描和授权边界证明。
+  filtered-all 或无可用文件元数据时会输出 validator-safe profile gap 事件，
+  只路由到 lake/data_quality/events.jsonl 和 collectorx.data_quality.collection_gaps，
+  不写入 filesystem lake，也不直连 Investor Wiki。manifest 拆分 usable_event_count、
+  filesystem_event_count/file_event_count 和 gap_event_count，并通过
+  can_enter_filesystem_lake、can_enter_data_quality_lake、
+  can_feed_research_documents_lens、can_feed_investor_wiki_directly=false
+  表达 readiness gate。filesystem_boundary_proof 汇总 metadata-only、
+  非全盘扫描和授权边界证明。

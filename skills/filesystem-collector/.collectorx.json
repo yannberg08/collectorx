@@ -1,5 +1,5 @@
 {
   "slug": "filesystem-collector",
-  "version": "0.3.2",
-  "description": "Local filesystem metadata collector aligned with SoulMirror driver=filesystem: metadata only, no content reads, with source audit, scope-policy audit, filtered-all/no-metadata gap packages, boundary proof, and skip-reason manifest."
+  "version": "0.3.3",
+  "description": "Local filesystem metadata collector aligned with SoulMirror driver=filesystem: metadata only, no content reads, with source audit, scope-policy audit, filesystem/data-quality readiness gates, data-quality-only filtered-all/no-metadata gap packages, boundary proof, and skip-reason manifest."
 }
