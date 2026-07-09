@@ -1009,6 +1009,121 @@ def cmd_validation_evidence(args: argparse.Namespace) -> int:
     return 0
 
 
+def readiness_review_type(item: dict[str, Any]) -> str:
+    if item["remaining_validation_scope"] == "post_guarded_launch_validation":
+        return "post_guarded_validation_review"
+    if item["readiness"] == "deep-beta":
+        return "production_candidate_review"
+    if item["product_surface"] == "lens-beta":
+        return "lens_beta_review"
+    if item["product_surface"] == "managed-oauth-beta":
+        return "managed_authorization_review"
+    return "beta_readiness_review"
+
+
+def readiness_review_next_action(item: dict[str, Any]) -> str:
+    if not item["readiness_review_allowed"]:
+        return "keep_current_readiness_and_collect_more_evidence"
+    if item["remaining_validation_scope"] == "post_guarded_launch_validation":
+        return "human_review_can_consider_clearing_post_guarded_gap"
+    return "human_review_can_consider_readiness_promotion"
+
+
+def readiness_review_checks(item: dict[str, Any]) -> list[str]:
+    checks = [
+        "inspect_artifacts_against_production_gap",
+        "rerun_package_validation_on_referenced_package",
+        "verify_no_gap_events_enter_investor_wiki",
+        "confirm_user_authorization_and_read_only_boundary",
+        "confirm_scope_policy_and_failure_state_are_still_true",
+    ]
+    if item["category"] in {"vertical", "lens"}:
+        checks.append("rerun_investor_wiki_evidence_validation")
+    if item["remaining_validation_scope"] == "pre_production_validation":
+        checks.append("confirm_real_account_or_real_export_coverage_before_promotion")
+    if item["remaining_validation_scope"] == "post_guarded_launch_validation":
+        checks.append("confirm_guarded_launch_telemetry_and_post_launch_sample_coverage")
+    return checks
+
+
+def readiness_review_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": item["id"],
+        "priority": item["priority"],
+        "category": item["category"],
+        "skill": item["skill"],
+        "current_readiness": item["readiness"],
+        "current_launch_tier": item["launch_tier"],
+        "remaining_validation_scope": item["remaining_validation_scope"],
+        "production_gap": item["production_gap"],
+        "evidence_status": item["evidence_status"],
+        "evidence_record_count": item["evidence_record_count"],
+        "accepted_evidence": item["accepted_evidence"],
+        "issues": item["issues"],
+        "readiness_review_allowed": item["readiness_review_allowed"],
+        "review_type": readiness_review_type(item),
+        "next_action": readiness_review_next_action(item),
+        "required_human_checks": readiness_review_checks(item),
+        "catalog_update_allowed_by_tool": False,
+        "catalog_update_policy": "manual_catalog_change_after_human_review_and_full_validation_only",
+    }
+
+
+def build_readiness_review_packet(entries: list[dict[str, Any]], *, evidence_path: Path) -> dict[str, Any]:
+    evidence_report = build_validation_evidence_report(entries, evidence_path=evidence_path)
+    items = [readiness_review_item(item) for item in evidence_report["items"]]
+    eligible = [item for item in items if item["readiness_review_allowed"]]
+    blocked = [item for item in items if not item["readiness_review_allowed"]]
+    return {
+        "schema": "collectorx.finclaw_readiness_review_packet.v1",
+        "validation_evidence_audit_schema": evidence_report["schema"],
+        "evidence_path": evidence_report["evidence_path"],
+        "total": len(items),
+        "summary": {
+            "eligible_for_human_review": len(eligible),
+            "blocked_from_human_review": len(blocked),
+            "by_review_type": dict(sorted(Counter(item["review_type"] for item in items).items())),
+            "by_next_action": dict(sorted(Counter(item["next_action"] for item in items).items())),
+            "by_evidence_status": evidence_report["summary"]["by_evidence_status"],
+            "ledger_issues": len(evidence_report["ledger_issues"]),
+            "unmatched_evidence_records": evidence_report["summary"]["unmatched_evidence_records"],
+        },
+        "ledger_issues": evidence_report["ledger_issues"],
+        "unmatched_records": evidence_report["unmatched_records"],
+        "eligible_reviews": eligible,
+        "blocked_reviews": blocked,
+    }
+
+
+def print_human_readiness_review(packet: dict[str, Any]) -> None:
+    summary = packet["summary"]
+    print(f"total: {packet['total']}")
+    print(f"eligible_for_human_review: {summary['eligible_for_human_review']}")
+    print(f"blocked_from_human_review: {summary['blocked_from_human_review']}")
+    if packet["ledger_issues"]:
+        print(f"ledger issues: {', '.join(packet['ledger_issues'])}")
+    if packet["unmatched_records"]:
+        print(f"unmatched evidence records: {len(packet['unmatched_records'])}")
+    print("eligible:")
+    for item in packet["eligible_reviews"]:
+        print(f"  - {item['id']} ({item['review_type']}): {item['next_action']}")
+    print("blocked:")
+    for item in packet["blocked_reviews"]:
+        print(f"  - {item['id']} ({item['evidence_status']}): {','.join(item['issues'])}")
+
+
+def cmd_readiness_review(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    packet = build_readiness_review_packet(entries, evidence_path=Path(args.evidence))
+    if args.json:
+        print(json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_readiness_review(packet)
+    if args.require_any_eligible and not packet["summary"]["eligible_for_human_review"]:
+        return 2
+    return 0
+
+
 def print_human_runbook(runbook: dict[str, Any]) -> None:
     print(f"total: {runbook['total']}")
     for stage in runbook["stages"]:
@@ -1160,6 +1275,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 2 unless every selected backlog item has enough evidence for readiness review.",
     )
     validation_evidence_parser.set_defaults(func=cmd_validation_evidence)
+
+    readiness_review_parser = subparsers.add_parser(
+        "readiness-review",
+        help="Build a human readiness-review packet from audited real-validation evidence.",
+    )
+    readiness_review_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    readiness_review_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    readiness_review_parser.add_argument("--readiness")
+    readiness_review_parser.add_argument("--evidence", required=True, help="Path to validation evidence JSON.")
+    readiness_review_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    readiness_review_parser.add_argument(
+        "--require-any-eligible",
+        action="store_true",
+        help="Exit with status 2 unless at least one selected backlog item is ready for human review.",
+    )
+    readiness_review_parser.set_defaults(func=cmd_readiness_review)
 
     runbook_parser = subparsers.add_parser("runbook", help="Build a staged FinClaw collector runbook.")
     runbook_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])

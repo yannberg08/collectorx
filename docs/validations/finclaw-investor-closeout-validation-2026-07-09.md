@@ -68,6 +68,9 @@ stop expanding and move into real-user validation.
   `ready_for_readiness_review` when a record passes, covers the production gap,
   includes real-validation evidence types, artifacts, timestamp, and reviewer.
   It still does not edit readiness.
+- `tools/finclaw_catalog.py readiness-review --evidence <ledger> --json`
+  turns accepted validation evidence into a human review packet with eligible
+  and blocked entries, required checks, and a non-editing catalog policy.
 - `docs/real-validation-evidence-ledger.md` documents the evidence ledger shape
   and the readiness boundary.
 
@@ -82,6 +85,7 @@ python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/finclaw_catalog.py closeout --json
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --json
+.venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --json
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```

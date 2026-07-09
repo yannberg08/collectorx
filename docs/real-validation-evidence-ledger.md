@@ -15,6 +15,9 @@ collector has enough evidence to enter a human readiness review.
 .venv/bin/python tools/finclaw_catalog.py validation-evidence \
   --evidence docs/validations/real-validation-evidence.json \
   --json
+.venv/bin/python tools/finclaw_catalog.py readiness-review \
+  --evidence docs/validations/real-validation-evidence.json \
+  --json
 ```
 
 Use `--require-all-review-ready` in release automation only when every selected
@@ -79,6 +82,22 @@ true:
 - `validated_at` and `validated_by` are present.
 
 Anything else remains `missing_evidence` or `insufficient_evidence`.
+
+## Readiness Review Packet
+
+`readiness-review` consumes the same ledger and emits:
+
+- `eligible_reviews`: collectors with accepted evidence and required human
+  checks.
+- `blocked_reviews`: collectors still missing evidence or holding insufficient
+  evidence.
+- `review_type`: for example `post_guarded_validation_review`,
+  `production_candidate_review`, `lens_beta_review`, or
+  `managed_authorization_review`.
+- `next_action`: either keep the current readiness and collect more evidence,
+  consider clearing a guarded post-launch gap, or consider a readiness
+  promotion.
+- `catalog_update_allowed_by_tool`: always `false`.
 
 ## Readiness Boundary
 

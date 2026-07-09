@@ -397,6 +397,104 @@ def test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps() 
     assert report["summary"]["not_ready_for_readiness_review"] == 12
 
 
+def test_readiness_review_packet_requires_audited_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        evidence_path = Path(tmp) / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [
+                        {
+                            "record_id": "em-real-001",
+                            "collector_id": "eastmoney-portfolio",
+                            "result": "pass",
+                            "decision": "post_guarded_gap_closed",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_account", "real_device", "wiki_backtest"],
+                            "artifacts": [{"path": "/qa/eastmoney/manifest.json"}],
+                            "validated_at": "2026-07-09T18:00:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                        {
+                            "record_id": "ths-real-001",
+                            "collector_id": "ths-portfolio",
+                            "result": "pass",
+                            "decision": "ready_for_readiness_review",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_export", "package_validation"],
+                            "artifacts": [{"path": "/qa/ths/manifest.json"}],
+                            "validated_at": "2026-07-09T19:00:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        packet = run_json("readiness-review", "--priority", "P0", "--evidence", str(evidence_path), "--json")
+
+    assert packet["schema"] == "collectorx.finclaw_readiness_review_packet.v1"
+    assert packet["validation_evidence_audit_schema"] == "collectorx.finclaw_real_validation_evidence_audit.v1"
+    assert packet["total"] == 12
+    assert packet["summary"]["eligible_for_human_review"] == 2
+    assert packet["summary"]["blocked_from_human_review"] == 10
+    assert packet["summary"]["by_next_action"] == {
+        "human_review_can_consider_clearing_post_guarded_gap": 1,
+        "human_review_can_consider_readiness_promotion": 1,
+        "keep_current_readiness_and_collect_more_evidence": 10,
+    }
+    assert packet["summary"]["by_review_type"]["post_guarded_validation_review"] == 1
+    assert packet["summary"]["by_review_type"]["production_candidate_review"] == 1
+
+    eligible_by_id = {item["id"]: item for item in packet["eligible_reviews"]}
+    eastmoney = eligible_by_id["eastmoney-portfolio"]
+    assert eastmoney["review_type"] == "post_guarded_validation_review"
+    assert eastmoney["next_action"] == "human_review_can_consider_clearing_post_guarded_gap"
+    assert eastmoney["catalog_update_allowed_by_tool"] is False
+    assert "confirm_guarded_launch_telemetry_and_post_launch_sample_coverage" in eastmoney["required_human_checks"]
+
+    ths = eligible_by_id["ths-portfolio"]
+    assert ths["review_type"] == "production_candidate_review"
+    assert ths["next_action"] == "human_review_can_consider_readiness_promotion"
+    assert "confirm_real_account_or_real_export_coverage_before_promotion" in ths["required_human_checks"]
+
+    blocked_by_id = {item["id"]: item for item in packet["blocked_reviews"]}
+    assert blocked_by_id["wechat"]["evidence_status"] == "missing_evidence"
+    assert blocked_by_id["wechat"]["next_action"] == "keep_current_readiness_and_collect_more_evidence"
+
+
+def test_readiness_review_require_any_eligible_fails_without_valid_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        evidence_path = Path(tmp) / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        proc = run_proc(
+            "readiness-review",
+            "--priority",
+            "P0",
+            "--evidence",
+            str(evidence_path),
+            "--json",
+            "--require-any-eligible",
+        )
+
+    assert proc.returncode == 2
+    packet = json.loads(proc.stdout)
+    assert packet["summary"]["eligible_for_human_review"] == 0
+    assert packet["summary"]["blocked_from_human_review"] == 12
+
+
 def stage_by_name(runbook: dict[str, object], name: str) -> dict[str, object]:
     stages = runbook["stages"]
     assert isinstance(stages, list)
@@ -586,7 +684,9 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     assert "production-candidate` as full production done" in handoff
     assert "The next phase is real validation, not more collector expansion." in handoff
     assert "validation-evidence --evidence" in handoff
+    assert "readiness-review --evidence" in handoff
     assert "collectorx.finclaw_real_validation_evidence.v1" in evidence_ledger
+    assert "catalog_update_allowed_by_tool" in evidence_ledger
     assert "does not edit" in evidence_ledger
 
 
@@ -608,6 +708,8 @@ def main() -> int:
     test_validation_backlog_matches_closeout_gap_scope()
     test_validation_evidence_audits_real_validation_records()
     test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps()
+    test_readiness_review_packet_requires_audited_evidence()
+    test_readiness_review_require_any_eligible_fails_without_valid_evidence()
     test_runbook_groups_p0_entries_by_product_stage()
     test_runbook_respects_explicit_lens_input_over_auto_link()
     test_runbook_can_disable_auto_upstream_linking()
