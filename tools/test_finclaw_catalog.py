@@ -411,12 +411,14 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     closeout = (ROOT / "docs" / "investor-collector-closeout.md").read_text(encoding="utf-8")
     productization = (ROOT / "docs" / "finclaw-investor-collector-productization.md").read_text(encoding="utf-8")
     production_readiness = (ROOT / "docs" / "production-readiness.md").read_text(encoding="utf-8")
+    roadmap = (ROOT / "docs" / "investor-collector-productization-roadmap.md").read_text(encoding="utf-8")
     handoff = (ROOT / "docs" / "final-handoff-checklist.md").read_text(encoding="utf-8")
 
     assert "docs/final-handoff-checklist.md" in readme
     assert "docs/final-handoff-checklist.md" in closeout
     assert "docs/final-handoff-checklist.md" in productization
     assert "docs/final-handoff-checklist.md" in production_readiness
+    assert "docs/final-handoff-checklist.md" in roadmap
     assert f"CollectorX currently exposes {report['total']} FinClaw investor catalog entries." in handoff
 
     for priority, count in report["summary"]["by_priority"].items():

@@ -4432,6 +4432,30 @@ Findings:
   the closeout view so product, QA, and scheduling use the same acceptance
   language.
 
+### Wave BU: Final FinClaw handoff checklist
+
+Validation record:
+
+- `docs/validations/finclaw-investor-closeout-validation-2026-07-09.md`
+
+Findings:
+
+- Added `docs/final-handoff-checklist.md` as the final handoff entry for
+  FinClaw product, QA, scheduling, package acceptance, and real-validation
+  planning.
+- The final handoff checklist records the current 30-entry catalog state,
+  priority/category/readiness/launch-tier distributions, validation-gap
+  distribution, launch decisions, non-negotiable boundaries, invocation
+  checklist, package acceptance checklist, and remaining P0/P1/P2 real
+  validation work.
+- `tools/test_finclaw_catalog.py` now checks that the final handoff checklist
+  stays synchronized with `tools/finclaw_catalog.py closeout --json` and that
+  README, closeout, productization, and production-readiness docs all point to
+  the same final handoff entry.
+- This wave does not add collectors or raise readiness. It closes the handoff
+  routing gap so the next phase can focus on real user/device/export validation
+  rather than expanding the catalog.
+
 ### Wave BS: P0 WeChat local-source diagnosis hardening
 
 Validation record:
