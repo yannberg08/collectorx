@@ -407,8 +407,12 @@ def test_closeout_handoff_matches_catalog_counts_and_ids() -> None:
 
 def test_final_handoff_checklist_matches_closeout_report() -> None:
     report = run_json("closeout", "--json")
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    closeout = (ROOT / "docs" / "investor-collector-closeout.md").read_text(encoding="utf-8")
     handoff = (ROOT / "docs" / "final-handoff-checklist.md").read_text(encoding="utf-8")
 
+    assert "docs/final-handoff-checklist.md" in readme
+    assert "docs/final-handoff-checklist.md" in closeout
     assert f"CollectorX currently exposes {report['total']} FinClaw investor catalog entries." in handoff
 
     for priority, count in report["summary"]["by_priority"].items():

@@ -16,6 +16,7 @@ stop expanding and move into real-user validation.
 - `docs/finclaw-investor-collector-productization.md`
 - `docs/production-readiness.md`
 - `docs/investor-collector-productization-roadmap.md`
+- `docs/final-handoff-checklist.md`
 
 ## Acceptance assertions
 
@@ -55,6 +56,9 @@ stop expanding and move into real-user validation.
   from `has_remaining_validation_gap` / `remaining_validation_scope`, so the
   EastMoney production candidate remains a guarded launch candidate with
   post-launch validation gaps instead of being treated as fully production done.
+- `docs/final-handoff-checklist.md` records the final handoff checklist for
+  FinClaw product, QA, scheduling, package acceptance, and remaining real
+  validation work; the closeout acceptance view links to it directly.
 
 ## Verification commands
 
