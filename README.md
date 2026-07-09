@@ -65,6 +65,9 @@ Operational docs:
   authorization mode, user step, preflight, failure state, and evidence role.
 - `docs/finclaw-investor-collector-productization.md` is the human control board
   for the P0/P1/P2 investor-avatar collector program.
+- `docs/investor-collector-closeout.md` is the closeout acceptance view: scope
+  freeze, launch tiers, beta boundaries, and the remaining real-validation
+  evidence required before raising readiness.
 - `docs/production-readiness.md` records what is genuinely runnable versus what
   is still a placeholder or lens.
 - `docs/finclaw-integration-guide.md` describes how FinClaw should discover,

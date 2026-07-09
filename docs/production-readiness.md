@@ -77,6 +77,13 @@ This improves product gating before collection and fact creation, but it does
 not claim real mailbox collection, real Xueqiu account validation, or complete
 China wealth account-boundary validation.
 
+The closeout acceptance view is now recorded in
+`docs/investor-collector-closeout.md`. That document is the handoff view for
+FinClaw product and QA: it freezes the P0/P1/P2 scope, separates guarded
+production candidates from deep beta, import/local beta, and lens beta, and
+keeps most `baseline+audit` collectors in beta until real-account or
+real-device evidence exists.
+
 The prior completed wave adds machine-readable local-source readiness
 diagnosis for the P0 `wechat` collector:
 

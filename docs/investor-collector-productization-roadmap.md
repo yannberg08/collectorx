@@ -4413,6 +4413,25 @@ Findings:
   note-corpus false-positive review are still required before promotion beyond
   baseline+audit.
 
+### Wave BT: FinClaw investor collector closeout handoff
+
+Validation record:
+
+- `docs/validations/finclaw-investor-closeout-validation-2026-07-09.md`
+
+Findings:
+
+- Added `docs/investor-collector-closeout.md` as the handoff view for the
+  P0/P1/P2 investor-avatar collector program.
+- The closeout view freezes scope, prevents new collector expansion during
+  handoff, and separates guarded production candidate, deep beta, import/local
+  beta, and lens beta surfaces.
+- The handoff keeps most collectors at `baseline+audit` until real-account,
+  real-device, real-export, or Wiki-backtest evidence exists.
+- README, productization control board, and production readiness now point to
+  the closeout view so product, QA, and scheduling use the same acceptance
+  language.
+
 ### Wave BS: P0 WeChat local-source diagnosis hardening
 
 Validation record:
