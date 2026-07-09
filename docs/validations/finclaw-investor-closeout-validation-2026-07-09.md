@@ -103,6 +103,7 @@ python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --verify-artifacts --artifact-root <artifact-root> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-change-audit --candidate-catalog <candidate-catalog.json> --evidence <ledger> --artifact-root <artifact-root> --json --require-clean
+.venv/bin/python skills/eastmoney-portfolio/tests/test_local_collect.py
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```

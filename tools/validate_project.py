@@ -75,6 +75,7 @@ PARSER_TESTS = [
     "skills/ths-portfolio/tests/test_parser.py",
     "skills/ths-watchlist/tests/test_ths_watchlist.py",
     "skills/eastmoney-portfolio/tests/test_parser.py",
+    "skills/eastmoney-portfolio/tests/test_local_collect.py",
     "skills/xueqiu-watchlist/tests/test_parser.py",
     "skills/xueqiu-investor-activity/tests/test_xueqiu_activity.py",
     "skills/china-wealth-assets/tests/test_china_wealth.py",

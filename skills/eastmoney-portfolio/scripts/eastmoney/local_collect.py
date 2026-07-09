@@ -1753,7 +1753,12 @@ def normalize_event_for_lake(event: Dict[str, Any]) -> Dict[str, Any]:
     normalized["kind"] = collectorx_kind_for_source(source_kind)
     if not isinstance(normalized.get("time"), str) or not normalized.get("time"):
         normalized["time"] = str(normalized.get("collected_at") or "")
-    normalized["wiki_targets"] = canonical_wiki_targets(source_kind, normalized.get("wiki_targets") or [])
+    wiki_targets = canonical_wiki_targets(source_kind, normalized.get("wiki_targets") or [])
+    if is_gap_event(normalized):
+        wiki_targets = [DATA_QUALITY_TARGET]
+    else:
+        wiki_targets = [target for target in wiki_targets if target != DATA_QUALITY_TARGET]
+    normalized["wiki_targets"] = wiki_targets
     return normalized
 
 

@@ -201,6 +201,7 @@ like:
 Run the project validation suite:
 
 ```bash
+.venv/bin/python skills/eastmoney-portfolio/tests/test_local_collect.py
 PYTHON=.venv/bin/python bash test_collectors.sh
 ```
 

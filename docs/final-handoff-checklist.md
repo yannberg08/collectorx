@@ -188,6 +188,7 @@ The closeout state has been verified with:
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <evidence-ledger.json> --verify-artifacts --artifact-root <artifact-root> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-change-audit --candidate-catalog <candidate-catalog.json> --evidence <evidence-ledger.json> --artifact-root <artifact-root> --json --require-clean
 .venv/bin/python tools/test_finclaw_catalog.py
+.venv/bin/python skills/eastmoney-portfolio/tests/test_local_collect.py
 .venv/bin/python tools/validate_project.py
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check

@@ -2,10 +2,12 @@
 """
 东方财富本机采集基础解析测试
 """
+import os
 import sys
 import shutil
 import json
 import subprocess
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
@@ -30,6 +32,12 @@ from eastmoney.ui_collect import parse_ax_trade_records, parse_ax_trade_state, p
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def eastmoney_tmp(name: str) -> Path:
+    root = Path(tempfile.gettempdir()) / f"{name}_{os.getpid()}"
+    shutil.rmtree(root, ignore_errors=True)
+    return root
 
 
 def assert_package_valid(output: Path) -> None:
@@ -106,8 +114,7 @@ def test_windows_code_level_probe_fixture():
     assert report["capabilities"]["recent_stock_files"] == 1
     assert report["capabilities"]["trade_interface_logs"] == 1
 
-    output = Path("/tmp/eastmoney_windows_sim_collect")
-    shutil.rmtree(output, ignore_errors=True)
+    output = eastmoney_tmp("eastmoney_windows_sim_collect")
     manifest = collect_local(
         output_dir=output,
         eastmoney_home=homes[0],
@@ -178,8 +185,7 @@ def test_trade_export_detail_fixture():
     assert trade_rows[0].data["execution_id"] == "E18888888801"
     assert trade_rows[0].data["order_id"] == "O18888888801"
 
-    output = Path("/tmp/eastmoney_trade_export_sim_collect")
-    shutil.rmtree(output, ignore_errors=True)
+    output = eastmoney_tmp("eastmoney_trade_export_sim_collect")
     manifest = collect_local(
         output_dir=output,
         eastmoney_home=homes[0],
@@ -218,8 +224,7 @@ def test_eastmoney_scope_policy_filters_strong_trade_package():
     home_root = find_fixture_root("eastmoney-windows-simulated")
     trade_export_root = find_fixture_root("eastmoney-trade-export-simulated")
     homes = find_eastmoney_homes(str(home_root), platform="windows")
-    output = Path("/tmp/eastmoney_scope_policy_collect")
-    shutil.rmtree(output, ignore_errors=True)
+    output = eastmoney_tmp("eastmoney_scope_policy_collect")
 
     policy = build_eastmoney_scope_policy(
         allow_event_kinds=["broker_trade_execution"],
@@ -263,8 +268,7 @@ def test_eastmoney_scope_policy_filtered_all_package_status():
     home_root = find_fixture_root("eastmoney-windows-simulated")
     trade_export_root = find_fixture_root("eastmoney-trade-export-simulated")
     homes = find_eastmoney_homes(str(home_root), platform="windows")
-    output = Path("/tmp/eastmoney_scope_policy_filtered_all")
-    shutil.rmtree(output, ignore_errors=True)
+    output = eastmoney_tmp("eastmoney_scope_policy_filtered_all")
 
     policy = build_eastmoney_scope_policy(allow_symbols=["999999"])
     manifest = collect_local(

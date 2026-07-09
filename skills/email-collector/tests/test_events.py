@@ -108,11 +108,12 @@ def test_email_event_jsonl_writer():
     )
     assert "body" in events[0]["data"]
 
-    path = Path("/tmp/collectorx_email_events.jsonl")
-    write_events_jsonl(str(path), events)
-    lines = path.read_text(encoding="utf-8").strip().splitlines()
-    assert len(lines) == 1
-    assert json.loads(lines[0])["collector"] == "email"
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "collectorx_email_events.jsonl"
+        write_events_jsonl(str(path), events)
+        lines = path.read_text(encoding="utf-8").strip().splitlines()
+        assert len(lines) == 1
+        assert json.loads(lines[0])["collector"] == "email"
 
 
 def test_email_event_sanitizes_attachment_and_raw_ref_secrets():
