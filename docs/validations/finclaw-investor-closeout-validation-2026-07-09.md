@@ -32,6 +32,9 @@ stop expanding and move into real-user validation.
   facts.
 - README, the productization control board, production readiness, and the
   roadmap point to the closeout handoff view.
+- `tools/test_finclaw_catalog.py` now verifies that the closeout handoff keeps
+  the current catalog count, readiness distribution, priority distribution, and
+  every catalog id in sync with `collectors/finclaw-investor-catalog.json`.
 
 ## Verification commands
 

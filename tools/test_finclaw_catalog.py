@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 
@@ -354,6 +355,24 @@ def test_runbook_require_all_ready_fails_when_any_entry_is_blocked() -> None:
     assert runbook["not_ready"] > 0
 
 
+def test_closeout_handoff_matches_catalog_counts_and_ids() -> None:
+    catalog = json.loads((ROOT / "collectors" / "finclaw-investor-catalog.json").read_text(encoding="utf-8"))
+    entries = catalog["entries"]
+    closeout = (ROOT / "docs" / "investor-collector-closeout.md").read_text(encoding="utf-8")
+
+    assert f"当前仓库已经形成 {len(entries)} 个 FinClaw catalog 条目" in closeout
+    readiness_counts = Counter(entry["readiness"] for entry in entries)
+    for readiness, count in readiness_counts.items():
+        assert f"| `{readiness}` | {count} |" in closeout
+
+    priority_counts = Counter(entry["priority"] for entry in entries)
+    for priority, count in priority_counts.items():
+        assert f"| {priority} | {count} |" in closeout
+
+    for entry in entries:
+        assert f"`{entry['id']}`" in closeout
+
+
 def main() -> int:
     test_list_includes_catalog_and_contract_fields()
     test_show_lens_includes_upstream_contract()
@@ -374,6 +393,7 @@ def main() -> int:
     test_batch_manifest_renders_executable_p0_steps()
     test_batch_manifest_can_disable_auto_upstream_linking()
     test_runbook_require_all_ready_fails_when_any_entry_is_blocked()
+    test_closeout_handoff_matches_catalog_counts_and_ids()
     print("finclaw catalog tests passed.")
     return 0
 
