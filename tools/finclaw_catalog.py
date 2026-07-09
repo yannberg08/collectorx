@@ -557,6 +557,113 @@ def build_batch_manifest(runbook: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def closeout_launch_tier(entry: dict[str, Any], product_surface: str | None) -> str:
+    readiness = entry["readiness"]
+    if readiness == "production-candidate":
+        return "guarded-production-candidate"
+    if readiness == "deep-beta":
+        return "invite-only-deep-beta"
+    if product_surface == "lens-beta":
+        return "downstream-lens-beta"
+    if product_surface == "managed-oauth-beta":
+        return "managed-authorization-beta"
+    return "authorized-import-or-local-beta"
+
+
+def closeout_product_claim(entry: dict[str, Any]) -> str:
+    readiness = entry["readiness"]
+    if readiness == "production-candidate":
+        return "may_expose_as_guarded_collector_after_preflight"
+    if readiness == "deep-beta":
+        return "may_expose_to_invited_beta_users_with_caveats"
+    return "must_not_claim_production_without_real_validation"
+
+
+def closeout_item(entry: dict[str, Any]) -> dict[str, Any]:
+    contract = entry.get("invocation_contract") or {}
+    product_surface = contract.get("product_surface")
+    return {
+        "id": entry["id"],
+        "priority": entry["priority"],
+        "category": entry["category"],
+        "skill": entry["skill"],
+        "readiness": entry["readiness"],
+        "gate": entry["gate"],
+        "product_surface": product_surface,
+        "authorization_mode": contract.get("authorization_mode"),
+        "evidence_role": contract.get("evidence_role"),
+        "launch_tier": closeout_launch_tier(entry, product_surface),
+        "product_claim": closeout_product_claim(entry),
+        "requires_real_validation_before_production": entry["readiness"] != "production-candidate",
+        "production_gap": entry["production_gap"],
+        "cannot_claim": entry["must_not_collect"],
+        "failure_state": contract.get("failure_state"),
+    }
+
+
+def build_closeout_report(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    items = [closeout_item(entry) for entry in entries]
+    return {
+        "schema": "collectorx.finclaw_closeout_readiness.v1",
+        "total": len(items),
+        "summary": {
+            "by_priority": dict(sorted(Counter(item["priority"] for item in items).items())),
+            "by_category": dict(sorted(Counter(item["category"] for item in items).items())),
+            "by_readiness": dict(sorted(Counter(item["readiness"] for item in items).items())),
+            "by_product_surface": dict(sorted(Counter(item["product_surface"] for item in items).items())),
+            "by_launch_tier": dict(sorted(Counter(item["launch_tier"] for item in items).items())),
+            "production_candidates": sum(1 for item in items if item["readiness"] == "production-candidate"),
+            "requires_real_validation_before_production": sum(
+                1 for item in items if item["requires_real_validation_before_production"]
+            ),
+        },
+        "items": items,
+    }
+
+
+def print_human_closeout(report: dict[str, Any]) -> None:
+    print(f"total: {report['total']}")
+    print(f"production_candidates: {report['summary']['production_candidates']}")
+    print(
+        "requires_real_validation_before_production: "
+        f"{report['summary']['requires_real_validation_before_production']}"
+    )
+    items = report["items"]
+    if not items:
+        print("No entries matched.")
+        return
+    headers = ("id", "P", "readiness", "surface", "launch_tier", "claim")
+    rows = [
+        (
+            item["id"],
+            item["priority"],
+            item["readiness"],
+            item["product_surface"],
+            item["launch_tier"],
+            item["product_claim"],
+        )
+        for item in items
+    ]
+    widths = [
+        max(len(str(value)) for value in column)
+        for column in zip(headers, *rows, strict=False)
+    ]
+    print("  ".join(str(value).ljust(width) for value, width in zip(headers, widths, strict=False)))
+    print("  ".join("-" * width for width in widths))
+    for row in rows:
+        print("  ".join(str(value).ljust(width) for value, width in zip(row, widths, strict=False)))
+
+
+def cmd_closeout(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    report = build_closeout_report(entries)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_closeout(report)
+    return 0
+
+
 def print_human_runbook(runbook: dict[str, Any]) -> None:
     print(f"total: {runbook['total']}")
     for stage in runbook["stages"]:
@@ -672,6 +779,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 2 unless every selected entry is ready for ordinary command execution.",
     )
     doctor_parser.set_defaults(func=cmd_doctor)
+
+    closeout_parser = subparsers.add_parser(
+        "closeout",
+        help="Summarize product closeout tiers and remaining real-validation gaps.",
+    )
+    closeout_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    closeout_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    closeout_parser.add_argument("--readiness")
+    closeout_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    closeout_parser.set_defaults(func=cmd_closeout)
 
     runbook_parser = subparsers.add_parser("runbook", help="Build a staged FinClaw collector runbook.")
     runbook_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])

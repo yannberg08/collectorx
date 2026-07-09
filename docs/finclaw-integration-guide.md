@@ -80,6 +80,9 @@ python3 tools/finclaw_catalog.py doctor \
   --priority P0 \
   --out-dir-root /path/to/run \
   --json
+python3 tools/finclaw_catalog.py closeout \
+  --priority P0 \
+  --json
 python3 tools/finclaw_catalog.py runbook \
   --priority P0 \
   --out-dir-root /path/to/run \
@@ -105,7 +108,10 @@ The `plan` output includes `ready_to_run`, unresolved placeholders, the display
 and evidence role. The `doctor` output gives the same fields for every selected
 catalog entry, plus summary counts by priority, category, runner, and
 `next_action`; FinClaw should use it to render collector setup and authorization
-checklists.
+checklists. The `closeout` output is the product launch guardrail: it maps each
+entry to a launch tier, states whether the entry still requires real validation
+before production, and repeats the `production_gap` that must be cleared before
+raising readiness.
 
 For batch collection, FinClaw should use `runbook --json`. The runbook keeps the
 same item shape as `doctor` but groups entries into product execution stages:

@@ -111,9 +111,10 @@ P0 收口优先级：
 1. `collectors/finclaw-investor-catalog.json`
 2. `collectors/finclaw-invocation-contracts.json`
 3. `tools/finclaw_catalog.py doctor/runbook/batch-manifest/plan --json`
-4. `tools/run_finclaw_batch.py --json`，真实执行时再加 `--execute`
-5. `tools/validate_collector_package.py <out-dir> --collector <id>`
-6. `tools/validate_investor_wiki_evidence.py <investor_wiki_evidence.v1.json>`
+4. `tools/finclaw_catalog.py closeout --json`
+5. `tools/run_finclaw_batch.py --json`，真实执行时再加 `--execute`
+6. `tools/validate_collector_package.py <out-dir> --collector <id>`
+7. `tools/validate_investor_wiki_evidence.py <investor_wiki_evidence.v1.json>`
 
 FinClaw 可以展示的用户步骤来自 invocation contract：
 
@@ -126,6 +127,9 @@ FinClaw 可以展示的用户步骤来自 invocation contract：
 
 如果 helper 没返回可执行 `argv`，产品层不要自己拼命令。
 
+`closeout --json` 是产品发布闸门：它把每个条目映射到 launch tier，
+重复 `production_gap`，并明确是否仍需真实验证才能从 beta 升级为生产能力。
+
 ## 最终交付清单
 
 收口完成前只需要补齐这些证据：
@@ -136,7 +140,8 @@ FinClaw 可以展示的用户步骤来自 invocation contract：
 4. README、productization control board、production readiness 和本收口表互相引用。
 5. 对每个 `production-candidate` 和 `deep-beta` 条目有明确真实验证或剩余阻塞记录。
 6. 对每个 `baseline+audit` 条目有明确“可 beta 使用方式”和“不能宣称什么”。
-7. Git 工作区干净，最新 commit 已 push。
+7. `tools/finclaw_catalog.py closeout --json` 能输出机器可读 launch tier 和真实验证缺口。
+8. Git 工作区干净，最新 commit 已 push。
 
 ## 下一步不再扩张
 

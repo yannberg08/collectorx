@@ -42,6 +42,15 @@ stop expanding and move into real-user validation.
   alignment: production candidates must use guarded production, non-supporting
   deep beta entries must use deep beta, baseline generic/vertical entries must
   stay on import/managed beta surfaces, and lenses stay on lens beta.
+- `tools/finclaw_catalog.py closeout --json` now emits a machine-readable
+  launch-tier and real-validation-gap report so FinClaw product surfaces can
+  distinguish guarded production candidates, invite-only deep beta entries,
+  downstream lenses, managed-authorization beta entries, and authorized
+  import/local beta entries without reinterpreting prose docs.
+- `tools/test_finclaw_catalog.py` verifies the closeout report schema, the
+  30-entry catalog count, the 1/2/27 readiness distribution, the single guarded
+  production candidate, and the 29 entries that still require real validation
+  before production.
 
 ## Verification commands
 
@@ -51,6 +60,7 @@ To verify this pass, run:
 python3 -m json.tool collectors/finclaw-investor-catalog.json >/dev/null
 python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/validate_project.py
+.venv/bin/python tools/finclaw_catalog.py closeout --json
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```

@@ -226,6 +226,30 @@ def test_doctor_require_all_ready_fails_when_any_entry_is_blocked() -> None:
     assert report["not_ready"] > 0
 
 
+def test_closeout_report_tracks_product_tiers_and_real_validation_gaps() -> None:
+    report = run_json("closeout", "--json")
+    assert report["schema"] == "collectorx.finclaw_closeout_readiness.v1"
+    assert report["total"] == 30
+    assert report["summary"]["by_readiness"] == {
+        "baseline+audit": 27,
+        "deep-beta": 2,
+        "production-candidate": 1,
+    }
+    assert report["summary"]["production_candidates"] == 1
+    assert report["summary"]["requires_real_validation_before_production"] == 29
+
+    by_id = {item["id"]: item for item in report["items"]}
+    assert by_id["eastmoney-portfolio"]["launch_tier"] == "guarded-production-candidate"
+    assert by_id["eastmoney-portfolio"]["product_claim"] == "may_expose_as_guarded_collector_after_preflight"
+    assert by_id["eastmoney-portfolio"]["requires_real_validation_before_production"] is False
+    assert by_id["ths-portfolio"]["launch_tier"] == "invite-only-deep-beta"
+    assert by_id["ths-portfolio"]["requires_real_validation_before_production"] is True
+    assert by_id["wechat-investment-dialogue"]["launch_tier"] == "downstream-lens-beta"
+    assert by_id["ticktick"]["launch_tier"] == "managed-authorization-beta"
+    assert all(item["production_gap"].strip() for item in report["items"])
+    assert all(item["cannot_claim"].strip() for item in report["items"])
+
+
 def stage_by_name(runbook: dict[str, object], name: str) -> dict[str, object]:
     stages = runbook["stages"]
     assert isinstance(stages, list)
@@ -387,6 +411,7 @@ def main() -> int:
     test_doctor_reports_batch_readiness_summary()
     test_doctor_filters_priority()
     test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
+    test_closeout_report_tracks_product_tiers_and_real_validation_gaps()
     test_runbook_groups_p0_entries_by_product_stage()
     test_runbook_respects_explicit_lens_input_over_auto_link()
     test_runbook_can_disable_auto_upstream_linking()

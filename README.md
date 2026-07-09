@@ -78,7 +78,8 @@ Operational docs:
   entries, inspecting authorization/preflight details, rendering invocation
   plans, producing a batch readiness matrix, and building a staged runbook from
   the catalog plus invocation contracts. Product runners should use `doctor`
-  for setup screens, `runbook` for batch execution order, `batch-manifest` for
+  for setup screens, `closeout` for launch tier and real-validation gap
+  reporting, `runbook` for batch execution order, `batch-manifest` for
   compact product execution manifests, and
   `plan --require-ready` before executing a single collector, then execute the
   returned `argv` list rather than reparsing the display command string.
@@ -201,8 +202,8 @@ The suite currently checks:
 - Python syntax for all scripts
 - CLI `--help` for draft collectors
 - FinClaw catalog helper CLI, invocation-plan tests, safe `argv` rendering,
-  package-validation argv rendering, readiness doctor/runbook, and
-  ready-to-run gate
+  package-validation argv rendering, closeout readiness reporting, readiness
+  doctor/runbook, and ready-to-run gate
 - package-level validation for standard CollectorX outputs
 - FinClaw catalog entrypoints: collector YAML category, skill directory, script
   references, lens source ids, and output targets
