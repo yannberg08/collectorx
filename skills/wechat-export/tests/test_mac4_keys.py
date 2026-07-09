@@ -89,8 +89,8 @@ class TestKeyToDbMatching(unittest.TestCase):
                 if ext.verify_key_page1(eb, info["page1"]):
                     matched[os.path.normpath(rel)] = enc
 
-        self.assertEqual(matched.get("message/message_0.db"), k_a.hex())
-        self.assertEqual(matched.get("contact/contact.db"), k_b.hex())
+        self.assertEqual(matched.get(os.path.normpath("message/message_0.db")), k_a.hex())
+        self.assertEqual(matched.get(os.path.normpath("contact/contact.db")), k_b.hex())
         self.assertEqual(len(matched), 2)  # 噪声候选没匹配上任何库
 
 
