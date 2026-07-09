@@ -68,6 +68,41 @@ All 30 entries still have explicit remaining validation work recorded. The
 single production candidate is a guarded launch candidate, not a fully finished
 production claim.
 
+## Catalog Entry Inventory
+
+| Collector | Priority | Category | Readiness | Launch tier | Validation scope |
+| --- | --- | --- | --- | --- | --- |
+| `eastmoney-portfolio` | P0 | vertical | `production-candidate` | `guarded-production-candidate` | `post_guarded_launch_validation` |
+| `ths-portfolio` | P0 | vertical | `deep-beta` | `invite-only-deep-beta` | `pre_production_validation` |
+| `ths-watchlist` | P0 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `wechat` | P0 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `wechat-investment-dialogue` | P0 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `filesystem` | P0 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `research-documents` | P0 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `email` | P0 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `email-research` | P0 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `xueqiu-watchlist` | P0 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `xueqiu-investor-activity` | P0 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `china-wealth-assets` | P0 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `meeting-artifacts` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `dingtalk` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `wecom` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `feishu` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `meeting-minutes` | P1 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `notes` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `investment-notes` | P1 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `ticktick` | P1 | generic | `baseline+audit` | `managed-authorization-beta` | `pre_production_validation` |
+| `calendar` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `task-calendar-investor` | P1 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `wechat-favorites` | P1 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `wechat-article-favorites` | P1 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `financial-news-usage` | P1 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `hk-us-brokerage` | P2 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `pro-terminal-usage` | P2 | vertical | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `social-activity` | P2 | generic | `baseline+audit` | `authorized-import-or-local-beta` | `pre_production_validation` |
+| `social-investment-influence` | P2 | lens | `baseline+audit` | `downstream-lens-beta` | `pre_production_validation` |
+| `qq` | supporting | generic | `deep-beta` | `invite-only-deep-beta` | `pre_production_validation` |
+
 ## Launch Decisions
 
 | Launch class | Entries | Product wording |

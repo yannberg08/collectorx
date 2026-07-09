@@ -432,6 +432,14 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     for scope, count in report["summary"]["by_remaining_validation_scope"].items():
         assert f"| `{scope}` | {count} |" in handoff
 
+    for item in report["items"]:
+        expected_row = (
+            f"| `{item['id']}` | {item['priority']} | {item['category']} | "
+            f"`{item['readiness']}` | `{item['launch_tier']}` | "
+            f"`{item['remaining_validation_scope']}` |"
+        )
+        assert expected_row in handoff
+
     assert "`eastmoney-portfolio`" in handoff
     assert "`ths-portfolio`, `qq`" in handoff
     assert "production-candidate` as full production done" in handoff
