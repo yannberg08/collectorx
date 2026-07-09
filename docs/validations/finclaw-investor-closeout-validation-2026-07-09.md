@@ -38,6 +38,10 @@ stop expanding and move into real-user validation.
 - README and `docs/first-investor-loop.md` now use
   `PYTHON=.venv/bin/python bash test_collectors.sh`, matching the closeout
   checklist and avoiding host-Python 3.9 validation failures on this machine.
+- `tools/validate_project.py` now enforces readiness-to-product-surface
+  alignment: production candidates must use guarded production, non-supporting
+  deep beta entries must use deep beta, baseline generic/vertical entries must
+  stay on import/managed beta surfaces, and lenses stay on lens beta.
 
 ## Verification commands
 

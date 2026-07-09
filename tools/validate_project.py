@@ -388,6 +388,19 @@ def validate_finclaw_invocation_contracts() -> None:
 
         if entry["readiness"] == "production-candidate" and contract["product_surface"] != "guarded-production":
             raise SystemExit(f"Production-candidate contract {cid} must use guarded-production surface")
+        if (
+            entry["readiness"] == "deep-beta"
+            and entry["priority"] != "supporting"
+            and contract["product_surface"] != "deep-beta"
+        ):
+            raise SystemExit(f"Deep-beta contract {cid} must use deep-beta surface")
+        if entry["readiness"] in {"baseline", "baseline+audit"} and entry["category"] != "lens":
+            allowed_beta_surfaces = {"import-beta", "managed-oauth-beta"}
+            if contract["product_surface"] not in allowed_beta_surfaces:
+                raise SystemExit(
+                    f"Baseline contract {cid} must use one of "
+                    f"{sorted(allowed_beta_surfaces)}, not {contract['product_surface']}"
+                )
         if entry["priority"] == "supporting" and contract["product_surface"] != "supporting-beta":
             raise SystemExit(f"Supporting contract {cid} must use supporting-beta surface")
 
