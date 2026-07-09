@@ -320,7 +320,10 @@ def collect_events_with_audit(
         input_resolution=input_resolution,
     )
     if not paths:
-        events = [build_gap_event(source_id, collected_at=collected_at, collection_audit=audit)]
+        reason = "source_input_missing"
+        if input_list and int(audit.get("input_missing_count") or 0) < len(input_list):
+            reason = "no_readable_input"
+        events = [build_gap_event(source_id, collected_at=collected_at, reason=reason, collection_audit=audit)]
         finalize_collection_audit(audit, events, parsed_count=0)
         return CollectionResult(events=events, audit=audit)
 
@@ -330,18 +333,22 @@ def collect_events_with_audit(
         if limit is not None and len(events) >= limit:
             audit["limit_reached"] = True
             break
-        parsed = parse_path(
-            source_id,
-            path,
-            collected_at=collected_at,
-            include_content=include_content,
-            include_image_ocr=include_image_ocr,
-            min_score=min_score,
-            include_non_matches=include_non_matches,
-            source_policy=source_policy,
-            document_scope_policy=document_scope_policy,
-            audit=audit,
-        )
+        try:
+            parsed = parse_path(
+                source_id,
+                path,
+                collected_at=collected_at,
+                include_content=include_content,
+                include_image_ocr=include_image_ocr,
+                min_score=min_score,
+                include_non_matches=include_non_matches,
+                source_policy=source_policy,
+                document_scope_policy=document_scope_policy,
+                audit=audit,
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError, csv.Error, ET.ParseError, zipfile.BadZipFile) as exc:
+            record_unreadable_path_result(audit, path, exc)
+            continue
         parsed_count += len(parsed.candidates)
         events_to_add = parsed.events
         if limit is not None:
@@ -785,6 +792,29 @@ def record_path_parse_result(audit: Optional[Dict[str, Any]], path: Path, parsed
         else:
             audit["screenshot_metadata_only_file_count"] = int(audit.get("screenshot_metadata_only_file_count") or 0) + 1
             result["content_policy"] = "image_ocr_requested_but_not_performed" if ocr_requested else "screenshot_metadata_only_no_ocr"
+    audit.setdefault("path_results", []).append(result)
+
+
+def record_unreadable_path_result(audit: Optional[Dict[str, Any]], path: Path, exc: Exception) -> None:
+    if audit is None:
+        return
+    reason = "parse_error"
+    if isinstance(exc, OSError):
+        reason = "read_error"
+    elif isinstance(exc, json.JSONDecodeError):
+        reason = "invalid_json"
+    elif isinstance(exc, csv.Error):
+        reason = "invalid_csv"
+    elif isinstance(exc, ET.ParseError):
+        reason = "invalid_xml"
+    elif isinstance(exc, zipfile.BadZipFile):
+        reason = "invalid_zip"
+    elif isinstance(exc, UnicodeError):
+        reason = "decode_error"
+    audit["skipped_file_count"] = int(audit.get("skipped_file_count") or 0) + 1
+    audit_counter(audit, "skipped_reason_counts")[reason] += 1
+    result = path_result(path, status="unreadable", reason=reason)
+    result["error"] = str(exc)[:200] or type(exc).__name__
     audit.setdefault("path_results", []).append(result)
 
 

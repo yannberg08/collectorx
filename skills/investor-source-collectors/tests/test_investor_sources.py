@@ -1394,6 +1394,217 @@ def test_research_documents_scope_policy_filtered_all_has_explicit_gap() -> None
         assert json.loads(validator.stdout)["valid"] is True
 
 
+def test_research_documents_accepts_upstream_filesystem_events_with_cross_platform_paths() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "filesystem-events.jsonl"
+        out_dir = root / "out"
+        upstream_events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "filesystem:windows-model",
+                "collector": "filesystem",
+                "source": "Windows 授权文件元数据",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-09T09:00:00+08:00",
+                "collected_at": "2026-07-09T10:00:00+08:00",
+                "data": {
+                    "title": "半导体 DCF 估值模型",
+                    "path": "C:\\Users\\owner\\Documents\\投资研究\\半导体 DCF 估值模型.xlsx",
+                    "extension": ".xlsx",
+                    "source_platform": "windows",
+                    "metadata_only": True,
+                },
+                "raw_ref": {"path": "C:\\Users\\owner\\Documents\\投资研究\\半导体 DCF 估值模型.xlsx"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["file_metadata"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "filesystem:linux-report",
+                "collector": "filesystem",
+                "source": "Linux 授权文件元数据",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-09T09:10:00+08:00",
+                "collected_at": "2026-07-09T10:00:00+08:00",
+                "data": {
+                    "title": "新能源 财报 现金流 复盘",
+                    "path": "/home/owner/research/新能源 财报 现金流 复盘.pdf",
+                    "extension": ".pdf",
+                    "source_platform": "linux",
+                    "metadata_only": True,
+                },
+                "raw_ref": {"path": "/home/owner/research/新能源 财报 现金流 复盘.pdf"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["file_metadata"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "filesystem:mac-review",
+                "collector": "filesystem",
+                "source": "macOS 授权文件元数据",
+                "owner_scope": "personal",
+                "kind": "file",
+                "time": "2026-07-09T09:20:00+08:00",
+                "collected_at": "2026-07-09T10:00:00+08:00",
+                "data": {
+                    "title": "白酒 买入理由 复盘",
+                    "path": "/Users/owner/Documents/投资复盘/白酒 买入理由 复盘.md",
+                    "extension": ".md",
+                    "source_platform": "macos",
+                    "metadata_only": True,
+                },
+                "raw_ref": {"path": "/Users/owner/Documents/投资复盘/白酒 买入理由 复盘.md"},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["file_metadata"]},
+            },
+        ]
+        source_path.write_text(
+            "\n".join(json.dumps(event, ensure_ascii=False) for event in upstream_events) + "\n",
+            encoding="utf-8",
+        )
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-09T10:10:00+08:00",
+        )
+
+        events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(events) == 3
+        assert {event["raw_ref"]["upstream_event_id"] for event in events} == {
+            "filesystem:windows-model",
+            "filesystem:linux-report",
+            "filesystem:mac-review",
+        }
+        assert all(event["raw_ref"]["parser"] == "collectorx.event.v1" for event in events)
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        surface = manifest["lens_surface_summary"]
+        assert surface["path_style_counts"] == {
+            "linux_user_home": 1,
+            "macos_user_home": 1,
+            "windows_drive": 1,
+        }
+        assert surface["source_platform_counts"] == {"linux": 1, "macos": 1, "windows": 1}
+        assert surface["path_event_count"] == 3
+        assert surface["explicit_source_platform_event_count"] == 3
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "authorized_research_corpus_event_only"
+        assert proof["platform_path_boundary"]["path_style_counts"] == surface["path_style_counts"]
+        assert proof["platform_path_boundary"]["source_platform_counts"] == surface["source_platform_counts"]
+        assert proof["platform_path_boundary"]["cross_platform_path_style_count"] == 3
+        assert proof["platform_path_boundary"]["complete_cross_platform_validation_claimed"] is False
+        assert proof["platform_path_boundary"]["real_windows_device_validation_claimed"] is False
+        assert proof["platform_path_boundary"]["real_linux_device_validation_claimed"] is False
+        assert proof["complete_cross_platform_validation_claimed"] is False
+
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_proof = evidence["coverage_summary"]["source_boundary_proof_summary"]["research-documents"]
+        assert evidence_proof["platform_path_boundary"]["source_platform_counts"] == {"linux": 1, "macos": 1, "windows": 1}
+        validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
+
+
+def test_research_documents_empty_authorized_directory_is_no_readable_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        authorized = root / "authorized-empty"
+        authorized.mkdir()
+        out_dir = root / "out"
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(authorized),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-09T10:20:00+08:00",
+        )
+
+        event = json.loads((out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["kind"] == "profile"
+        assert event["data"]["status"] == "no_readable_input"
+        assert event["data"]["payload"]["gap"] == "no_readable_input"
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "no_readable_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["research_document_event_count"] == 0
+        audit = manifest["collection_audit"]
+        assert audit["input_count"] == 1
+        assert audit["requested_inputs"] == [str(authorized)]
+        assert audit["resolved_input_file_count"] == 0
+        assert audit["input_missing_count"] == 0
+        assert audit["candidate_record_count"] == 0
+        proof = manifest["research_corpus_boundary_proof"]
+        assert proof["proof_level"] == "no_readable_research_input"
+        assert proof["can_enter_finclaw"] is False
+        validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
+
+
+def test_research_documents_invalid_json_records_unreadable_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "broken-research-events.json"
+        out_dir = root / "out"
+        source_path.write_text("{not valid json", encoding="utf-8")
+
+        run_cli(
+            "collect",
+            "--source",
+            "research-documents",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--collected-at",
+            "2026-07-09T10:25:00+08:00",
+        )
+
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "no_readable_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        audit = manifest["collection_audit"]
+        assert audit["resolved_input_file_count"] == 1
+        assert audit["candidate_record_count"] == 0
+        assert audit["skipped_file_count"] == 1
+        assert audit["skipped_reason_counts"] == {"invalid_json": 1}
+        assert audit["path_results"][0]["status"] == "unreadable"
+        assert audit["path_results"][0]["reason"] == "invalid_json"
+
+        event = json.loads((out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["data"]["status"] == "no_readable_input"
+        assert event["data"]["payload"]["gap"] == "no_readable_input"
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+        validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
+
+
 def test_research_documents_image_ocr_requires_explicit_adapter_authorization() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -2962,6 +3173,9 @@ if __name__ == "__main__":
     test_research_documents_filters_broad_titles_and_skips_unsupported_files()
     test_research_documents_scope_policy_filters_authorized_surface()
     test_research_documents_scope_policy_filtered_all_has_explicit_gap()
+    test_research_documents_accepts_upstream_filesystem_events_with_cross_platform_paths()
+    test_research_documents_empty_authorized_directory_is_no_readable_gap()
+    test_research_documents_invalid_json_records_unreadable_gap()
     test_research_documents_image_ocr_requires_explicit_adapter_authorization()
     test_research_documents_image_ocr_extracts_when_explicitly_authorized()
     test_research_documents_limit_records_path_truncation()

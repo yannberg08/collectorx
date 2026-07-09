@@ -96,6 +96,16 @@ RESEARCH_DOCUMENT_SURFACE_ORDER = (
     "table_model",
     "unclassified_research_document",
 )
+RESEARCH_PATH_STYLE_ORDER = (
+    "windows_drive",
+    "windows_unc",
+    "macos_user_home",
+    "linux_user_home",
+    "posix_absolute",
+    "zip_member",
+    "relative",
+    "unknown",
+)
 EMAIL_RESEARCH_SURFACE_ORDER = (
     "morning_meeting",
     "broker_research_report",
@@ -119,6 +129,13 @@ SOCIAL_INFLUENCE_TOPIC_ORDER = (
     "hk_us_market",
     "unclassified_social_topic",
 )
+SOURCE_PRIMARY_EVENT_COUNT_KEYS = {
+    "china-wealth-assets": "asset_event_count",
+    "email-research": "email_research_event_count",
+    "research-documents": "research_document_event_count",
+    "social-investment-influence": "social_influence_event_count",
+    "xueqiu-investor-activity": "activity_event_count",
+}
 
 
 def now_iso() -> str:
@@ -331,8 +348,10 @@ def build_manifest(
         "gap_event_count": gap_event_count,
         "next_action": next_action_for_status(status),
     }
+    primary_event_count_key = SOURCE_PRIMARY_EVENT_COUNT_KEYS.get(source_id)
+    if primary_event_count_key:
+        collection_readiness[primary_event_count_key] = usable_event_count
     if source_id == "social-investment-influence":
-        collection_readiness["social_influence_event_count"] = usable_event_count
         collection_readiness["can_enter_social_investment_influence_lake"] = usable_event_count > 0
     lens_surface = lens_surface_summary(source_id, events)
     research_proof = (
@@ -406,12 +425,8 @@ def build_manifest(
         },
         "collection_audit": collection_audit or {},
     }
-    if source_id == "research-documents":
-        manifest["research_document_event_count"] = usable_event_count
-    if source_id == "email-research":
-        manifest["email_research_event_count"] = usable_event_count
-    if source_id == "social-investment-influence":
-        manifest["social_influence_event_count"] = usable_event_count
+    if primary_event_count_key:
+        manifest[primary_event_count_key] = usable_event_count
     if research_proof is not None:
         manifest["research_corpus_boundary_proof"] = research_proof
     if wechat_proof is not None:
@@ -465,6 +480,24 @@ def build_research_corpus_boundary_proof(
             "skipped_extension_counts": audit.get("skipped_extension_counts", {}),
             "parser_counts": audit.get("parser_counts", {}),
         },
+        "platform_path_boundary": {
+            "path_style_counts": surface.get("path_style_counts", {}),
+            "source_platform_counts": surface.get("source_platform_counts", {}),
+            "events_with_path": surface.get("path_event_count", 0),
+            "events_with_explicit_source_platform": surface.get("explicit_source_platform_event_count", 0),
+            "expected_path_styles": list(RESEARCH_PATH_STYLE_ORDER[:-1]),
+            "missing_expected_path_styles": surface.get("missing_expected_path_styles", []),
+            "cross_platform_path_style_count": len(
+                [
+                    style
+                    for style, count in (surface.get("path_style_counts") or {}).items()
+                    if style != "unknown" and int(count or 0) > 0
+                ]
+            ),
+            "complete_cross_platform_validation_claimed": False,
+            "real_windows_device_validation_claimed": False,
+            "real_linux_device_validation_claimed": False,
+        },
         "authorization_scope_boundary": {
             "enabled": document_scope_policy.get("enabled", False),
             "allow_extensions": document_scope_policy.get("allow_extensions", []),
@@ -499,6 +532,7 @@ def build_research_corpus_boundary_proof(
         },
         "research_document_surface_summary": surface,
         "complete_research_corpus_claimed": False,
+        "complete_cross_platform_validation_claimed": False,
         "whole_disk_scan_claimed": False,
         "public_report_database_crawl_claimed": False,
         "collector_writes_wiki_directly": False,
@@ -1438,6 +1472,16 @@ def source_boundary_proof_summary(events: List[Dict[str, Any]]) -> Dict[str, Any
                 "source_collection_scope": "partial_authorized_input" if source_events else "none",
             },
         )
+    if "research-documents" in by_source:
+        source_events = by_source["research-documents"]
+        summaries["research-documents"] = build_research_corpus_boundary_proof(
+            source_events,
+            audit={},
+            collection_readiness={
+                "status": "events_collected" if source_events else "no_investment_evidence_matched",
+                "source_collection_scope": "partial_authorized_input" if source_events else "none",
+            },
+        )
     return summaries
 
 
@@ -1627,12 +1671,15 @@ def research_document_surface_summary(events: List[Dict[str, Any]]) -> Dict[str,
     extension_counts: Counter[str] = Counter()
     parser_counts: Counter[str] = Counter()
     content_status_counts: Counter[str] = Counter()
+    path_style_counts: Counter[str] = Counter()
+    source_platform_counts: Counter[str] = Counter()
     content_read_event_count = 0
     metadata_only_event_count = 0
     image_ocr_event_count = 0
     screenshot_or_image_event_count = 0
     matched_symbol_event_count = 0
     path_event_count = 0
+    explicit_source_platform_event_count = 0
     for event in usable_events:
         data = event.get("data") or {}
         payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
@@ -1657,8 +1704,14 @@ def research_document_surface_summary(events: List[Dict[str, Any]]) -> Dict[str,
             screenshot_or_image_event_count += 1
         if classification.get("matched_symbols"):
             matched_symbol_event_count += 1
-        if payload.get("path") or raw_ref.get("path"):
+        document_path = research_document_path(event)
+        if document_path:
             path_event_count += 1
+        path_style_counts[research_document_path_style(event)] += 1
+        platform, explicit_platform = research_document_source_platform(event)
+        source_platform_counts[platform] += 1
+        if explicit_platform:
+            explicit_source_platform_event_count += 1
         surfaces = classify_research_document_surfaces(event)
         for surface in surfaces:
             surface_counts[surface] += 1
@@ -1673,6 +1726,11 @@ def research_document_surface_summary(events: List[Dict[str, Any]]) -> Dict[str,
         ],
         "extension_counts": dict(sorted(extension_counts.items())),
         "parser_counts": dict(sorted(parser_counts.items())),
+        "path_style_counts": ordered_counts(path_style_counts, RESEARCH_PATH_STYLE_ORDER),
+        "source_platform_counts": dict(sorted(source_platform_counts.items())),
+        "missing_expected_path_styles": [
+            style for style in RESEARCH_PATH_STYLE_ORDER[:-1] if path_style_counts.get(style, 0) == 0
+        ],
         "content_extract_status_counts": dict(sorted(content_status_counts.items())),
         "content_read_event_count": content_read_event_count,
         "metadata_only_event_count": metadata_only_event_count,
@@ -1680,6 +1738,7 @@ def research_document_surface_summary(events: List[Dict[str, Any]]) -> Dict[str,
         "screenshot_or_image_event_count": screenshot_or_image_event_count,
         "matched_symbol_event_count": matched_symbol_event_count,
         "path_event_count": path_event_count,
+        "explicit_source_platform_event_count": explicit_source_platform_event_count,
         "generic_filesystem_lens": True,
         "collector_writes_wiki_directly": False,
     }
@@ -1734,6 +1793,78 @@ def research_document_extension(event: Dict[str, Any]) -> str:
     if path:
         return Path(str(path)).suffix.lower()
     return ""
+
+
+def research_document_path(event: Dict[str, Any]) -> str:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref") if isinstance(raw_ref.get("upstream_raw_ref"), dict) else {}
+    value = payload.get("path") or payload.get("file_path") or raw_ref.get("path") or upstream_raw_ref.get("path")
+    return str(value or "")
+
+
+def research_document_path_style(event: Dict[str, Any]) -> str:
+    value = research_document_path(event).strip()
+    if not value:
+        return "unknown"
+    if "::" in value:
+        return "zip_member"
+    if re.match(r"^[a-zA-Z]:[\\/]", value):
+        return "windows_drive"
+    if value.startswith("\\\\") or value.startswith("//"):
+        return "windows_unc"
+    normalized = value.replace("\\", "/")
+    if normalized.startswith("/Users/") or normalized.startswith("~/"):
+        return "macos_user_home"
+    if normalized.startswith("/home/"):
+        return "linux_user_home"
+    if normalized.startswith("/"):
+        return "posix_absolute"
+    return "relative"
+
+
+def research_document_source_platform(event: Dict[str, Any]) -> tuple[str, bool]:
+    data = event.get("data") or {}
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    raw_ref = event.get("raw_ref") or {}
+    upstream_raw_ref = raw_ref.get("upstream_raw_ref") if isinstance(raw_ref.get("upstream_raw_ref"), dict) else {}
+    value = (
+        payload.get("source_platform")
+        or payload.get("platform")
+        or payload.get("source_app")
+        or raw_ref.get("source_platform")
+        or raw_ref.get("platform")
+        or upstream_raw_ref.get("source_platform")
+        or upstream_raw_ref.get("platform")
+        or upstream_raw_ref.get("source_app")
+    )
+    if value not in (None, ""):
+        return normalize_source_platform(str(value)), True
+    style = research_document_path_style(event)
+    if style in {"windows_drive", "windows_unc"}:
+        return "windows", False
+    if style == "macos_user_home":
+        return "macos", False
+    if style == "linux_user_home":
+        return "linux", False
+    return "unknown", False
+
+
+def normalize_source_platform(value: str) -> str:
+    normalized = value.strip().lower().replace(" ", "_").replace("-", "_")
+    aliases = {
+        "mac": "macos",
+        "osx": "macos",
+        "darwin": "macos",
+        "win": "windows",
+        "windows_nt": "windows",
+        "ubuntu": "linux",
+        "debian": "linux",
+        "centos": "linux",
+        "wsl": "linux",
+    }
+    return aliases.get(normalized, normalized or "unknown")
 
 
 def wechat_dialogue_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:

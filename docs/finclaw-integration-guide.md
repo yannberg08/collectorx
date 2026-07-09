@@ -503,7 +503,14 @@ Current status:
   summarize which authorized research corpus was actually covered, including
   report/financial-statement/valuation/announcement/review/screenshot/table
   surfaces, parser coverage, authorization scope, metadata-only files, content
-  reads, and OCR reads.
+  reads, OCR reads, upstream filesystem path styles, and explicit/inferred
+  source platforms.
+- When `research-documents` consumes upstream `filesystem` events, it records
+  Windows-drive, Windows-UNC, macOS-user-home, Linux-user-home, POSIX, ZIP-member,
+  relative, and unknown path-style counts in both manifest and Investor Wiki
+  evidence boundary summaries. These fields prove the lens can route
+  cross-platform metadata, but they do not claim real Windows/Linux device
+  validation without real-device samples.
 - Screenshots/images stay metadata-only by default. OCR is performed only when
   `--include-image-ocr` is explicitly supplied and a local `tesseract` engine is
   available through `PATH` or `COLLECTORX_TESSERACT_CMD`.

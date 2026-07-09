@@ -292,6 +292,26 @@ def test_collector_specific_primary_counts_are_validated() -> None:
             ), collector
 
 
+def test_known_collector_manifest_requires_primary_count() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        collector = "research-documents"
+        events = [sample_event(collector=collector, kind="file")]
+        manifest = {
+            "schema": "collectorx.investor_source_collect.manifest.v1",
+            "collector": collector,
+            "event_count": 1,
+            "usable_event_count": 1,
+            "gap_event_count": 0,
+        }
+        write_package(root, collector=collector, events=events, manifest=manifest)
+        _summary, errors = validate_package(root, collector=collector)
+        assert any(
+            "research_document_event_count is required for collector research-documents" in error
+            for error in errors
+        )
+
+
 def test_gap_event_must_route_to_data_quality_only() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -465,6 +485,7 @@ def main() -> None:
     test_gap_only_readiness_counts_and_evidence_are_valid()
     test_route_aware_data_quality_package_is_valid_for_collector()
     test_collector_specific_primary_counts_are_validated()
+    test_known_collector_manifest_requires_primary_count()
     test_gap_event_must_route_to_data_quality_only()
     test_manifest_counts_must_match_events()
     test_gap_only_readiness_cannot_claim_business_or_wiki()

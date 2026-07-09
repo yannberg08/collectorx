@@ -16,6 +16,32 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
+The latest completed wave hardens the P0 `research-documents` lens as an
+offline G2 readiness bridge from generic filesystem metadata to Investor Wiki
+evidence:
+
+- `investor-source-collectors` is upgraded to `0.1.29`.
+- `research-documents` now records upstream filesystem-event path-style counts
+  for Windows drive paths, Windows UNC paths, macOS user-home paths, Linux
+  user-home paths, POSIX absolute paths, ZIP members, relative paths, and
+  unknown paths.
+- Manifest and Investor Wiki evidence boundary summaries now expose
+  `source_platform_counts`, explicit source-platform coverage, and
+  `platform_path_boundary` while explicitly setting
+  `complete_cross_platform_validation_claimed=false`,
+  `real_windows_device_validation_claimed=false`, and
+  `real_linux_device_validation_claimed=false`.
+- Empty authorized directories and unreadable inputs such as invalid JSON now
+  produce validator-safe `no_readable_input` data-quality gap packages instead
+  of crashing or being mislabeled as missing authorization.
+- The shared package validator now requires known collector primary counters,
+  such as `research_document_event_count`, at the manifest level and still
+  verifies those counters against non-gap Lake events.
+
+This improves product gating for cross-platform filesystem-to-research routing,
+but it does not claim real Windows/Linux device validation or broad private
+research-corpus validation.
+
 The first parallel-agent productization batch has landed for P0/P1 readiness
 debt and the global package validator:
 

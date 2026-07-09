@@ -255,7 +255,14 @@ def validate_manifest_semantics(
 ) -> list[str]:
     errors: list[str] = []
     label = str(manifest_path)
-    validate_declared_counts(manifest, label=label, collector=collector, stats=stats, errors=errors)
+    validate_declared_counts(
+        manifest,
+        label=label,
+        collector=collector,
+        stats=stats,
+        errors=errors,
+        require_primary=True,
+    )
 
     readiness = manifest.get("collection_readiness")
     if readiness is None:
@@ -277,6 +284,7 @@ def validate_declared_counts(
     collector: str | None,
     stats: dict[str, Any],
     errors: list[str],
+    require_primary: bool = False,
 ) -> None:
     declared_event_count = declared_count(container, label, "event_count", errors)
     if declared_event_count is not None and declared_event_count != stats["event_count"]:
@@ -306,6 +314,8 @@ def validate_declared_counts(
             )
 
     primary_key = PRIMARY_USABLE_COUNT_KEY_BY_COLLECTOR.get(str(collector or ""))
+    if primary_key and require_primary and primary_key not in container:
+        errors.append(f"{label}.{primary_key} is required for collector {collector}")
     if primary_key and primary_key in container:
         declared = declared_count(container, label, primary_key, errors)
         if declared is not None and declared != stats["usable_event_count"]:

@@ -47,6 +47,12 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
   --deny-keyword "私人" \
   --out-dir ~/Desktop/research-scoped-investor-collect
 
+# 从 filesystem 的授权元数据 Lake 中筛选投研文件；不读取文件正文
+python <SKILL_DIR>/scripts/investor_sources.py collect \
+  --source research-documents \
+  --input ~/Desktop/filesystem-package/lake/filesystem/events.jsonl \
+  --out-dir ~/Desktop/research-from-filesystem-events
+
 # 从微信通用 collector 的授权导出里筛选投资讨论
 python <SKILL_DIR>/scripts/investor_sources.py collect \
   --source wechat-investment-dialogue \
@@ -100,7 +106,7 @@ python <SKILL_DIR>/scripts/investor_sources.py collect \
 P0 必做：
 
 - `wechat-investment-dialogue`：lens，读取 `wechat` lake，只筛投资讨论、交易理由、咨询对象。
-- `research-documents`：lens，读取 `filesystem`/`notes` lake，只筛研报、财报、公告批注、估值表。
+- `research-documents`：lens，读取 `filesystem`/`notes` lake，只筛研报、财报、公告批注、估值表；若上游 `filesystem` 事件来自 Windows/Linux/macOS 路径，manifest/evidence 会记录路径风格和来源平台边界，但不声明真实跨系统设备验证已经完成。
 - `xueqiu-investor-activity`：vertical，采雪球个人自选、关注、发帖、评论、收藏、组合活动。
 - `china-wealth-assets`：vertical，采支付宝、天天基金、蛋卷、且慢、银行理财等非股票账户资产。
 - `email-research`：lens，读取 `email` lake，只筛邮件研报、券商晨会、调研邀请；支持 sender、sender-domain、folder、mailbox、subject、attachment、email-surface、keyword 授权范围过滤，并输出晨会/研报/路演/IR/公告提醒/附件引用面谱、`email_research_scope_policy` 与 `email_research_boundary_proof.authorization_scope_boundary`。
@@ -157,7 +163,7 @@ data-quality gap。
 - 记录 `source_policy`：`--allow-chat`、`--deny-chat`、`--allow-sender`、`--deny-sender` 的配置和过滤数量。这个策略只收窄来源范围，不把普通聊天强行变成投资证据。
 - 对 `wechat-investment-dialogue` 输出 `wechat_dialogue_boundary_proof` 与对话面谱：汇总聊天/发送者范围、来源策略、本人/他人发言、群聊/私聊、交易意图、买卖理由、仓位、风险情绪、咨询网络、研究讨论和复盘线索；不声明完整微信历史或完整上下文。
 - 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM/XLS/PPTX 正文、表格或幻灯片读取必须显式传入 `--include-content`；`.xls` 会区分 XML Spreadsheet、HTML table、delimited/plain text、renamed OOXML 和 binary BIFF，经 `parser_counts` 写入 manifest；binary BIFF 需要 `xlrd`，不可用时必须记录 `xlrd-biff` / `extract_failed`，不能伪造内容；截图/图片默认只保留元数据；若用户显式传入 `--include-image-ocr` 且本机有 tesseract，才读取图片文字；OCR 不可用时必须在 manifest/path_results 中写明降级原因。
-- 对 `research-documents` 额外输出 `document_scope_policy`、`research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、扩展名/路径/文件名/解析器/研究主题/关键词授权范围、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描；若研究文档授权范围过滤后全空，gap 原因为 `research_documents_scope_policy_filtered_all`，readiness 为 `scope_policy_filtered_all`，只进入数据质量湖。
+- 对 `research-documents` 额外输出 `document_scope_policy`、`research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、扩展名/路径/文件名/解析器/研究主题/关键词授权范围、全文/元数据/OCR 边界、上游 filesystem 事件的 Windows/Linux/macOS 路径风格与来源平台、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库、全盘扫描或真实跨系统设备验证；若研究文档授权范围过滤后全空，gap 原因为 `research_documents_scope_policy_filtered_all`，readiness 为 `scope_policy_filtered_all`，只进入数据质量湖。
 - 对 `investment-notes` 输出 `investment_note_boundary_proof`：汇总授权输入、来源应用、预览/全文、标签/路径/URL、候选/命中/过滤数量和投资笔记类型面谱，并明确不声明完整笔记库或完整上下文。
 - 对 `task-calendar-investor` 输出 `task_calendar_boundary_proof`：汇总授权输入、上游任务/日历来源、候选/命中/过滤数量、时间/提醒/会议链接/日程质量面谱，并明确不声明完整任务清单、完整日历或完整上下文。
 - 对 `meeting-minutes` 输出 `meeting_minutes_boundary_proof`：汇总授权输入、上游会议/协作来源、候选/命中/过滤数量、参会人、会议链接、附件/录制指针和时间覆盖，并明确不声明完整会议历史、完整工作区或默认采集录制正文。

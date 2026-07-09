@@ -14,6 +14,9 @@ package checks to FinClaw investment-collector readiness checks.
   usage, collaboration, meeting-artifact, email-research, research-document,
   filesystem/file, Feishu, WeChat-favorite, favorite, calendar, task, email,
   and note counters when they are present.
+- Requires known collector packages to declare their primary usable business
+  counter at the manifest level, such as `research_document_event_count` for
+  `research-documents` and `asset_event_count` for `china-wealth-assets`.
 - Rejects gap events unless they route only to
   `collectorx.data_quality.collection_gaps`.
 - Rejects gap-only packages that claim business Lake entry or Investor Wiki
@@ -48,6 +51,7 @@ package checks to FinClaw investment-collector readiness checks.
   to `lake/data_quality/events.jsonl`
 - collector-specific primary counters for filesystem, Feishu, and
   WeChat-favorites
+- known collector packages missing their required primary manifest counter
 
 ## Boundaries
 
