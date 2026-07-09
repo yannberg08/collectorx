@@ -59,6 +59,23 @@ The first parallel audit lanes are:
 - P1 notes, tasks, collaboration, articles, and finance-news usage sources.
 - P2 brokerage, professional-terminal, social, and global contract hardening.
 
+## Active Parallel Batch: 2026-07-09
+
+This batch turns the protocol above into the current execution model. The main
+integrator remains the only owner of cross-collector architecture, shared docs,
+catalog state, final validation, commits, and GitHub pushes. Sub-agents may run
+in parallel only inside the write boundaries below.
+
+| Lane | Mode | Scope | Write boundary | Acceptance |
+| --- | --- | --- | --- | --- |
+| Global status audit | Read-only explorer | Re-check P0/P1/P2 implementation depth, fixture coverage, real-validation gaps, and SoulMirror migration opportunities | None | Status matrix with evidence file paths and next five safe parallel slices |
+| Notes E2E hardening | Worker | Add a fixed `notes` to `investment-notes` fixture gate proving generic notes do not enter Investor Wiki until the lens filters investment notes | `examples/fixtures/notes-investment-e2e/**`; `skills/notes-collector/tests/test_notes_collector.py` | Notes package validation, investment-notes package validation, decoy non-investment note exclusion, preview-only boundary proof, and targeted tests |
+| Main integration | Main Codex thread | Review worker output, update shared docs/catalog if needed, run targeted and project validation, commit, and push | Shared documentation, catalog, validation notes, final integration edits | Green targeted tests, package validators, `tools/validate_project.py`, `git diff --check`, one reviewed commit |
+
+Expansion rule: add at most two new worker lanes after the previous worker
+lane has been reviewed or merged. Prefer one P0/P1 real-source or fixture gate
+and one P2/contract-hardening lane per batch so validation remains tractable.
+
 ## Readiness Gates
 
 | Gate | Meaning | Proof |
