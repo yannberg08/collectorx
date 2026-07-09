@@ -122,9 +122,9 @@
       "gate": "G2",
       "finclaw_action": "authorized-imap-or-local-email-scan-or-import",
       "cli": "python3 skills/email-collector/scripts/email_api.py collect --account all --out-dir <out-dir>",
-      "collects": "Authorized IMAP, local email scan, or local email import metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, local scan/import path-level audit, Apple Mail/Maildir/Thunderbird mbox coverage, Thunderbird .msf index skip audit, skipped file reasons, ZIP member audit, email authorization scope-policy audit with filtered-all readiness, validator-safe filtered-all/no-input gap packages, email/gap event counts, email-lake/data-quality/email-research readiness gates, field coverage, archive provenance, and mailbox boundary proof.",
+      "collects": "Privacy-preserving preflight diagnosis for IMAP/local-root readiness, authorized IMAP, local email scan, or local email import metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, local scan/import path-level audit, Apple Mail/Maildir/Thunderbird mbox coverage, Thunderbird .msf index skip audit, skipped file reasons, ZIP member audit, email authorization scope-policy audit with filtered-all readiness, validator-safe filtered-all/no-input gap packages, email/gap event counts, email-lake/data-quality/email-research readiness gates, field coverage, archive provenance, and mailbox boundary proof.",
       "must_not_collect": "Full body unless explicitly authorized, attachment bodies by default, tokens, cookies, or passwords.",
-      "production_gap": "Register real mailbox credentials via password_env, validate real Apple Mail/Thunderbird/Maildir local roots, validate broker/IR sender matching, and run no-full-body leakage review."
+      "production_gap": "Use preflight diagnosis on real machines, register real mailbox credentials via password_env, validate real Apple Mail/Thunderbird/Maildir local roots, validate broker/IR sender matching, and run no-full-body leakage review."
     },
     {
       "id": "email-research",
@@ -159,11 +159,11 @@
       "skill": "xueqiu-investor-activity",
       "readiness": "baseline+audit",
       "gate": "G2",
-      "finclaw_action": "authorized-export-har-or-browser-history-import",
-      "cli": "python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect --input <authorized-xueqiu-export-har-or-browser-history-copy> --out-dir <out-dir> --sync-soulmirror",
-      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, authorized browser-history visits, source browser apps, visit/typed counts, browser transition types, domain-filtered URLs, source audit, pagination marker audit, fixed offline activity fixture coverage for watchlist/post/favorite/followed-user/portfolio activity, activity/source-surface/source-app/domain/symbol/author/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages routed to data-quality lake, gap/usable/activity manifest counts, explicit business/data-quality/Wiki readiness gates, activity-boundary proof with authorization scope boundary, browser-history boundary proof, pagination completeness summary, field coverage, and Investor Wiki evidence raw/gap/usable generated_from observability.",
-      "must_not_collect": "Trading facts unless corroborated by broker sources, login secrets, or platform-wide public scraping.",
-      "production_gap": "Real account adapter/export workflow, real pagination coverage, broader real browser-history samples, and rate/terms boundary review."
+      "finclaw_action": "diagnose-then-authorized-export-har-or-browser-history-import",
+      "cli": "python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py diagnose --input <authorized-xueqiu-source> --diagnose-out <json>; python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect --input <authorized-xueqiu-export-har-or-browser-history-copy> --out-dir <out-dir> --sync-soulmirror",
+      "collects": "Safe local-source preflight diagnosis, Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, authorized browser-history visits, source browser apps, visit/typed counts, browser transition types, domain-filtered URLs, source audit, pagination marker audit, fixed offline activity fixture coverage for watchlist/post/favorite/followed-user/portfolio activity, activity/source-surface/source-app/domain/symbol/author/keyword scope-policy audit, local-path/token/phone redaction, validator-safe filtered-all/no-input/preflight gap packages routed to data-quality lake, gap/usable/activity manifest counts, explicit business/data-quality/Wiki readiness gates, activity-boundary proof with authorization scope boundary, browser-history boundary proof, pagination completeness summary, field coverage, and Investor Wiki evidence raw/gap/usable generated_from observability.",
+      "must_not_collect": "Trading facts unless corroborated by broker sources, login secrets, local paths, phone numbers, browser cache files, direct browser-profile database contents without user-copied input, or platform-wide public scraping.",
+      "production_gap": "Run diagnose on real machines, validate real account export/HAR/browser-history workflows, real pagination coverage, broader real browser-history samples, and rate/terms boundary review."
     },
     {
       "id": "china-wealth-assets",
@@ -174,9 +174,9 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-package-import",
       "cli": "python3 skills/china-wealth-assets/scripts/china_wealth.py collect --input <authorized-fund-or-wealth-export> --out-dir <out-dir> --sync-soulmirror",
-      "collects": "Alipay, Tiantian Fund, Danjuan, Qieman, and bank-wealth holdings, transactions, asset snapshots, value fields, PnL, fees, Excel/legacy-XLS/HTML-table/PDF-statement exports, authorized HAR response bodies, platform/account/subtype/product-code/product-name/currency/side/keyword scope-policy audit, validator-safe no-input/filtered-all gap packages routed to data-quality lake, gap/usable/asset manifest counts, explicit business/data-quality/Wiki readiness gates, platform/field/account/asset-surface/currency coverage, source/PDF/HAR audit, asset value summary, and partial asset-boundary proof strength.",
+      "collects": "Alipay, Tiantian Fund, Danjuan, Qieman, and bank-wealth holdings, transactions, asset snapshots, value fields, PnL, fees, Excel/legacy-XLS/HTML-table/PDF-statement exports, authorized HAR response bodies, source preflight diagnostics, minimum asset-fact field-contract gates for asset/holding/cash-management/cashflow records, platform/account/subtype/product-code/product-name/currency/side/keyword scope-policy audit, validator-safe no-input/unsupported-source/filtered-all/field-contract gap packages routed to data-quality lake, gap/usable/asset manifest counts, explicit business/data-quality/Wiki readiness gates, platform/field/account/asset-surface/currency coverage, source/PDF/HAR audit, asset value summary, and partial asset-boundary proof strength.",
       "must_not_collect": "Payment passwords, bank credentials, complete asset-boundary claims from partial input, or account mutation.",
-      "production_gap": "Per-platform real export, PDF statement, HAR, or read-only screen samples plus complete account-boundary proof."
+      "production_gap": "Per-platform real export, PDF statement, HAR, or read-only screen samples, field-contract false-reject review, cross-check against broker/bank/cashflow sources, and complete account-boundary proof."
     },
     {
       "id": "meeting-artifacts",

@@ -247,8 +247,204 @@ def get_email_attachments(msg):
     return attachments
 
 
-def cmd_preflight(email_addrs: list[str]) -> None:
+def email_domain(email_addr: str) -> str:
+    return email_addr.split("@")[-1].lower() if "@" in email_addr else ""
+
+
+def sanitize_scan_summary_for_diagnosis(scan_summary: dict) -> dict:
+    sanitized_statuses = []
+    for status in scan_summary.get("root_statuses", []):
+        sanitized_statuses.append(
+            {
+                "exists": bool(status.get("exists")),
+                "readable": bool(status.get("readable")),
+                "kind": status.get("kind"),
+                "scanned_file_count": status.get("scanned_file_count", 0),
+                "truncated": bool(status.get("truncated")),
+            }
+        )
+    return {
+        "root_statuses": sanitized_statuses,
+        "root_count": len(sanitized_statuses),
+        "existing_root_count": sum(1 for status in sanitized_statuses if status["exists"]),
+        "readable_root_count": sum(1 for status in sanitized_statuses if status["readable"]),
+        "scanned_file_count": scan_summary.get("scanned_file_count", 0),
+        "supported_file_count": scan_summary.get("supported_file_count", 0),
+        "skipped_file_count": scan_summary.get("skipped_file_count", 0),
+        "skipped_reason_counts": scan_summary.get("skipped_reason_counts", {}),
+        "candidate_format_counts": scan_summary.get("candidate_format_counts", {}),
+        "root_type_counts": scan_summary.get("root_type_counts", {}),
+        "thunderbird_mbox_file_count": scan_summary.get("thunderbird_mbox_file_count", 0),
+        "thunderbird_summary_index_skipped_count": scan_summary.get("thunderbird_summary_index_skipped_count", 0),
+        "scan_truncated_root_count": scan_summary.get("scan_truncated_root_count", 0),
+    }
+
+
+def build_email_preflight_diagnosis(
+    email_addrs: list[str] = None,
+    *,
+    platform: str = "auto",
+    local_roots: list[str] = None,
+) -> dict:
+    state = _load_state()
+    accounts = _accounts_from_state(state)
+    enabled_accounts = [account for account in accounts if account.get("enabled", True)]
+    probe_emails = list(email_addrs or [])
+    if not probe_emails:
+        probe_emails = [account.get("email") for account in accounts if account.get("email")]
+
+    provider_suggestions = []
+    for email_addr in probe_emails:
+        inferred = infer_provider(email_addr)
+        provider_suggestions.append(
+            {
+                "mailbox_domain": email_domain(email_addr),
+                "provider": inferred["provider"],
+                "host": inferred["host"],
+                "matched": inferred["matched"],
+                "default_folders": list(DEFAULT_FOLDERS),
+                "note": inferred["note"],
+            }
+        )
+
+    account_diagnostics = []
+    for index, account in enumerate(accounts, start=1):
+        password_env = account.get("password_env")
+        account_diagnostics.append(
+            {
+                "index": index,
+                "mailbox_domain": email_domain(account.get("email", "")),
+                "provider": account.get("provider") or infer_provider(account.get("email", ""))["provider"],
+                "enabled": bool(account.get("enabled", True)),
+                "host_configured": bool(account.get("host")),
+                "password_env_configured": bool(password_env),
+                "password_env_present": bool(password_env and os.environ.get(password_env)),
+                "folder_count": len(account.get("folders") or []),
+                "days_configured": bool(account.get("days")),
+            }
+        )
+
+    roots = [Path(root).expanduser() for root in (local_roots or [])]
+    if not roots:
+        roots = local_email_scan_roots(platform=platform)
+    resolved_platform = resolve_local_email_scan_platform(platform)
+    local_scan_summary = sanitize_scan_summary_for_diagnosis(build_local_email_scan_summary(roots))
+
+    imap_ready_account_count = sum(
+        1
+        for account in enabled_accounts
+        if account.get("email")
+        and account.get("host")
+        and account.get("password_env")
+        and os.environ.get(account.get("password_env"))
+    )
+    configured_password_env_count = sum(1 for account in accounts if account.get("password_env"))
+    present_password_env_count = sum(1 for account in accounts if account.get("password_env") and os.environ.get(account.get("password_env")))
+    local_candidate_count = local_scan_summary["supported_file_count"]
+    can_attempt_imap_collect = imap_ready_account_count > 0
+    can_attempt_local_scan = local_candidate_count > 0
+
+    if can_attempt_imap_collect or can_attempt_local_scan:
+        status = "ready_for_imap_or_local_scan_attempt"
+    elif accounts and configured_password_env_count and present_password_env_count == 0:
+        status = "needs_password_env_or_local_email_root"
+    elif accounts:
+        status = "needs_enabled_account_password_env_or_local_email_root"
+    elif local_scan_summary["readable_root_count"] and local_candidate_count == 0:
+        status = "needs_email_files_in_authorized_root_or_mailbox_registration"
+    elif local_roots:
+        status = "needs_authorized_local_email_root_or_mailbox_registration"
+    else:
+        status = "needs_mailbox_registration_or_local_email_root"
+
+    return {
+        "schema": "collectorx.email_preflight.v1",
+        "collector": "email",
+        "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "diagnostic_scope": {
+            "imap_login_attempted": False,
+            "message_headers_read": False,
+            "message_bodies_read": False,
+            "attachments_read": False,
+            "local_file_contents_read": False,
+            "events_written": False,
+            "passwords_emitted": False,
+            "password_env_names_emitted": False,
+            "paths_emitted": False,
+            "email_addresses_emitted": False,
+        },
+        "mailbox_registration": {
+            "state_file_configured": bool(TOKEN_FILE),
+            "account_count": len(accounts),
+            "enabled_account_count": len(enabled_accounts),
+            "configured_password_env_count": configured_password_env_count,
+            "present_password_env_count": present_password_env_count,
+            "imap_ready_account_count": imap_ready_account_count,
+            "provider_counts": dict(sorted(Counter(item["provider"] for item in account_diagnostics).items())),
+            "mailbox_domains": sorted({item["mailbox_domain"] for item in account_diagnostics if item["mailbox_domain"]}),
+            "accounts": account_diagnostics,
+        },
+        "provider_suggestions": provider_suggestions,
+        "local_scan_probe": {
+            "platform": {
+                "requested": platform,
+                "resolved": resolved_platform,
+                "current_system": sys.platform,
+            },
+            "custom_roots_supplied": bool(local_roots),
+            "candidate_selection": {
+                "supported_import_extensions": sorted(SUPPORTED_IMPORT_EXTENSIONS),
+                "supported_local_mailbox_formats": ["eml", "emlx", "maildir", "mbox", "thunderbird_mbox"],
+                "max_scan_files_per_root": LOCAL_EMAIL_SCAN_MAX_FILES,
+                "content_parsing_performed": False,
+            },
+            "scan_summary": local_scan_summary,
+        },
+        "collection_readiness": {
+            "status": status,
+            "can_attempt_collect": can_attempt_imap_collect or can_attempt_local_scan,
+            "can_attempt_imap_collect": can_attempt_imap_collect,
+            "can_attempt_local_scan": can_attempt_local_scan,
+            "can_claim_real_validation": False,
+            "can_enter_finclaw": False,
+            "can_enter_email_lake": False,
+            "can_enter_data_quality_lake": False,
+            "can_feed_email_research_lens": False,
+            "reason": "preflight_diagnosis_only_no_email_events_collected",
+        },
+        "privacy_policy": {
+            "passwords": "not_read_or_emitted",
+            "password_env_names": "not_emitted",
+            "imap_login": "not_attempted",
+            "email_addresses": "domain_only",
+            "local_paths": "not_emitted",
+            "message_headers": "not_read",
+            "message_bodies": "not_read",
+            "attachment_bodies": "not_read",
+        },
+    }
+
+
+def cmd_preflight(
+    email_addrs: list[str],
+    *,
+    diagnose: bool = False,
+    diagnose_out: str = None,
+    platform: str = "auto",
+    local_roots: list[str] = None,
+) -> None:
     """前置识别：判断邮箱服务商、IMAP host 和授权提示。"""
+    if diagnose:
+        payload = build_email_preflight_diagnosis(
+            email_addrs,
+            platform=platform,
+            local_roots=local_roots,
+        )
+        if diagnose_out:
+            write_json(diagnose_out, payload)
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return
+
     if not email_addrs:
         state = _load_state()
         accounts = _accounts_from_state(state)
@@ -2272,6 +2468,10 @@ def main():
     # preflight命令
     preflight_parser = subparsers.add_parser("preflight", help="识别邮箱通道并生成接入建议")
     preflight_parser.add_argument("--email", action="append", dest="emails", help="待识别邮箱地址，可重复")
+    preflight_parser.add_argument("--diagnose", action="store_true", help="输出 FinClaw 授权前邮箱可采条件诊断，不登录邮箱、不读取邮件内容")
+    preflight_parser.add_argument("--diagnose-out", help="保存授权前邮箱可采条件诊断 JSON")
+    preflight_parser.add_argument("--platform", choices=sorted(SUPPORTED_LOCAL_SCAN_PLATFORMS), default="auto", help="诊断本机邮箱目录的平台适配器")
+    preflight_parser.add_argument("--local-root", action="append", help="用户授权的本机邮箱根目录，可重复；诊断只统计候选文件，不读取邮件内容")
     
     # register命令
     reg_parser = subparsers.add_parser("register", help="注册邮箱账户")
@@ -2320,7 +2520,13 @@ def main():
     args = parser.parse_args()
     
     if args.command == "preflight":
-        cmd_preflight(args.emails or [])
+        cmd_preflight(
+            args.emails or [],
+            diagnose=args.diagnose,
+            diagnose_out=args.diagnose_out,
+            platform=args.platform,
+            local_roots=args.local_root,
+        )
     elif args.command == "register":
         cmd_register(
             args.host,

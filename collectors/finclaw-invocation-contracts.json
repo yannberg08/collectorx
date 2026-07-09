@@ -110,7 +110,7 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Register an IMAP account through password_env, authorize a local mailbox root for read-only scanning, or provide a local email export; optionally narrow by mailbox, folder, sender, sender domain, recipient, subject, attachment name, or keyword.",
-      "preflight": "Mailbox credentials are referenced by environment variable, or a user-owned local mail root/export is selected; optional email scope filters are applied before Lake output; missing accounts/exports, no-message windows, collection failures, and filtered-all scope return validator-safe profile gap packages; manifest readiness separates email Lake, data-quality Lake, and email-research lens gates.",
+      "preflight": "Run `python3 skills/email-collector/scripts/email_api.py preflight --diagnose [--email <mailbox>] [--platform auto|mac|windows|linux|generic] [--local-root <authorized-root>] [--diagnose-out <json>]` to determine whether IMAP credentials or a user-owned local mail root are ready without logging into IMAP or reading mail content; mailbox credentials are referenced by environment variable, or a user-owned local mail root/export is selected; optional email scope filters are applied before Lake output; missing accounts/exports, no-message windows, collection failures, and filtered-all scope return validator-safe profile gap packages; manifest readiness separates email Lake, data-quality Lake, and email-research lens gates.",
       "failure_state": "needs_mailbox_or_email_root_or_export_or_scope_policy_retained_records_or_gap_package"
     },
     {
@@ -140,8 +140,8 @@
       "product_surface": "import-beta",
       "evidence_role": "attention-universe",
       "user_step": "Provide an authorized Xueqiu activity export, ZIP, saved page, workbook, browser-network HAR, or copied Chromium/Safari browser history file; optionally choose activity, source surface, source app, domain, symbol, author, and keyword allow/deny scope filters.",
-      "preflight": "Input belongs to the user; optional scope filters are applied before Lake output; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com; no-input and filtered-all runs emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_xueqiu_activity_lake=false, can_enter_data_quality_lake=true, and neither path is treated as broker trade evidence.",
-      "failure_state": "needs_authorized_xueqiu_activity_export_har_browser_history_or_scope_policy_retained_records"
+      "preflight": "Run `python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py diagnose --input <authorized-source> [--scan-browser-profiles] [--diagnose-out <json>] [--out-dir <gap-package>]` before collection when FinClaw needs readiness; diagnosis does not parse HAR response payloads into events, does not emit browser-history URLs/titles, cookies, tokens, local paths, or phone numbers, and can only produce a data-quality gap package. Collection input belongs to the user; optional scope filters are applied before Lake output; HAR parsing excludes request secrets, browser-history parsing is domain-filtered to xueqiu.com; no-input, preflight-only, and filtered-all runs emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_xueqiu_activity_lake=false, can_enter_data_quality_lake=true, and neither path is treated as broker trade evidence.",
+      "failure_state": "needs_authorized_xueqiu_activity_export_har_browser_history_or_scope_policy_retained_records_or_gap_package"
     },
     {
       "id": "china-wealth-assets",
@@ -149,8 +149,8 @@
       "product_surface": "import-beta",
       "evidence_role": "partial-asset-facts",
       "user_step": "Provide authorized fund, wealth, cash-management, bank wealth, workbook, PDF, ZIP, or HAR exports; optionally choose platform, account, subtype, product code/name, currency, side, and keyword allow/deny scope filters.",
-      "preflight": "Input is read-only and user-owned; optional scope filters are applied before Lake output; no-input and filtered-all results emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_china_wealth_lake=false, can_enter_data_quality_lake=true; passwords, consumption flows, and account mutation are out of scope.",
-      "failure_state": "needs_authorized_wealth_export_or_scope_policy_retained_records_or_gap_package"
+      "preflight": "Input is read-only and user-owned; source preflight records supported/unsupported file surfaces without treating unsupported files as asset facts; every candidate asset, holding, cash-management, or cashflow record must satisfy the minimum field contract before entering the China wealth Lake; optional scope filters are applied before Lake output; no-input, unsupported-source, filtered-all, and field-contract-rejected results emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false when no usable records remain; passwords, consumption flows, and account mutation are out of scope.",
+      "failure_state": "needs_authorized_wealth_export_supported_source_field_contract_or_scope_policy_retained_records_or_gap_package"
     },
     {
       "id": "meeting-artifacts",

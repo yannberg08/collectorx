@@ -54,6 +54,11 @@ SUPPORTED_EXTENSIONS = {
 }
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session", "paypass")
+SECRET_VALUE_PATTERNS = (
+    re.compile(r"\b(?:password|passwd|cookie|token|secret|credential|authorization|session|paypass)\s*[:=]", re.IGNORECASE),
+    re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+    re.compile(r"\b(?:JSESSIONID|ALIPAYJSESSIONID|sessionid)\b", re.IGNORECASE),
+)
 EXPECTED_P0_PLATFORMS = ("alipay", "tiantian-fund", "danjuan", "qieman", "bank-wealth")
 HAR_PLATFORM_DOMAINS = {
     "alipay": ("alipay.com", "antfortune.com", "antfin.com", "mybank.cn"),
@@ -78,6 +83,15 @@ HAR_PLATFORM_DOMAINS = {
         "psbc.com",
         "spdb.com.cn",
     ),
+}
+LOCAL_EXPORT_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm", ".xls"}
+TEXT_SNAPSHOT_EXTENSIONS = {".html", ".htm", ".txt", ".md", ".markdown"}
+SOURCE_SURFACE_BY_EXTENSION = {
+    ".har": "authorized_browser_network_har",
+    ".pdf": "official_statement_pdf",
+    ".zip": "authorized_archive_package",
+    **{extension: "authorized_platform_export_file" for extension in LOCAL_EXPORT_EXTENSIONS},
+    **{extension: "authorized_screen_or_text_snapshot" for extension in TEXT_SNAPSHOT_EXTENSIONS},
 }
 RECOMMENDED_FIELDS = (
     "platform",
@@ -117,6 +131,54 @@ VALUE_FIELDS = ("market_value", "total_asset", "transaction_amount", "available_
 EXPECTED_ASSET_SURFACES = ("asset_snapshot", "fund_holding", "wealth_holding", "cash_management", "fund_transaction")
 HOLDING_SUBTYPES = {"fund_holding", "wealth_holding", "cash_management"}
 TRADE_SUBTYPES = {"fund_transaction"}
+ASSET_VALUE_FIELDS = ("market_value", "total_asset", "available_cash", "cost", "pnl")
+TRANSACTION_VALUE_FIELDS = ("transaction_amount", "fee")
+FIELD_CONTRACTS = {
+    "asset_snapshot": {
+        "surface": "asset",
+        "required_any_groups": [
+            {"name": "known_platform", "fields": ["platform"]},
+            {"name": "asset_value", "fields": ["total_asset", "available_cash", "market_value"]},
+        ],
+        "recommended_fields": ["account", "currency", "total_asset", "available_cash", "market_value"],
+    },
+    "fund_holding": {
+        "surface": "holding",
+        "required_any_groups": [
+            {"name": "known_platform", "fields": ["platform"]},
+            {"name": "product_identity", "fields": ["product_code", "product_name"]},
+            {"name": "holding_value_or_units", "fields": ["market_value", "quantity", "nav", "cost", "pnl"]},
+        ],
+        "recommended_fields": ["account", "product_code", "product_name", "quantity", "nav", "market_value", "cost", "pnl", "pnl_rate"],
+    },
+    "wealth_holding": {
+        "surface": "holding",
+        "required_any_groups": [
+            {"name": "known_platform", "fields": ["platform"]},
+            {"name": "product_identity", "fields": ["product_code", "product_name"]},
+            {"name": "holding_value", "fields": ["market_value", "total_asset", "cost", "pnl"]},
+        ],
+        "recommended_fields": ["account", "product_code", "product_name", "product_type", "market_value", "cost", "pnl"],
+    },
+    "cash_management": {
+        "surface": "cash_management",
+        "required_any_groups": [
+            {"name": "known_platform", "fields": ["platform"]},
+            {"name": "product_or_cash_identity", "fields": ["product_code", "product_name", "product_type"]},
+            {"name": "cash_value", "fields": ["market_value", "total_asset", "available_cash", "quantity"]},
+        ],
+        "recommended_fields": ["account", "product_name", "product_type", "market_value", "available_cash", "pnl"],
+    },
+    "fund_transaction": {
+        "surface": "cashflow",
+        "required_any_groups": [
+            {"name": "known_platform", "fields": ["platform"]},
+            {"name": "cashflow_amount", "fields": ["transaction_amount"]},
+            {"name": "cashflow_direction_or_product", "fields": ["side", "product_code", "product_name"]},
+        ],
+        "recommended_fields": ["account", "product_code", "product_name", "side", "transaction_amount", "fee"],
+    },
+}
 ACCOUNT_PROOF_LEVEL_ORDER = (
     "strong_partial_account_boundary",
     "medium_partial_account_boundary",
@@ -209,10 +271,12 @@ def collect_from_inputs_with_audit(
     input_list = list(inputs)
     paths = list(iter_paths(input_list))
     policy = normalize_china_wealth_scope_policy(scope_policy)
+    source_preflight = preflight_authorized_sources(input_list, paths)
     audit = {
         "source_type": "authorized_local_china_wealth_export",
         "input_count": len(input_list),
         "resolved_input_file_count": len(paths),
+        "source_preflight": source_preflight,
         "extension_counts": {},
         "archive_member_count": 0,
         "archive_member_extension_counts": {},
@@ -253,10 +317,19 @@ def collect_from_inputs_with_audit(
         "scope_policy_filter_reason_counts": {},
         "china_wealth_scope_policy": policy,
         "china_wealth_scope_policy_filtered_all": False,
+        "field_contract_validation_supported": True,
+        "field_contract_version": "china_wealth_asset_fact_contract.v1",
+        "field_contracts": field_contract_specs(),
+        "field_contract_candidate_event_count": 0,
+        "field_contract_ready_event_count": 0,
+        "field_contract_rejected_record_count": 0,
+        "field_contract_reject_reason_counts": {},
+        "field_contract_missing_required_group_counts": {},
         "path_results": [],
     }
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="china_wealth_authorized_input_missing")]
+        reason = "china_wealth_authorized_input_missing" if not input_list else "china_wealth_supported_input_missing"
+        events = [gap_event(collected_at=collected_at, reason=reason, source_preflight=source_preflight)]
         audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
         return events, audit
@@ -268,8 +341,13 @@ def collect_from_inputs_with_audit(
             "parsed_record_count": 0,
             "candidate_record_count": 0,
             "scope_policy_filtered_record_count": 0,
+            "field_contract_candidate_event_count": 0,
+            "field_contract_ready_event_count": 0,
+            "field_contract_rejected_record_count": 0,
             "emitted_event_count": 0,
             "status": "parsed",
+            "source_surface": source_surface_for_extension(path.suffix.lower()),
+            "platform_hints": platform_hints_for_path(path),
         }
         audit["path_results"].append(path_result)
         increment_counter(audit, "extension_counts", path_result["extension"])
@@ -286,6 +364,18 @@ def collect_from_inputs_with_audit(
                 path_result["scope_policy_filtered_record_count"] += 1
                 increment_counter(audit, "scope_policy_filter_reason_counts", filter_reason)
                 continue
+            contract = event_field_contract_result(event)
+            audit["field_contract_candidate_event_count"] += 1
+            path_result["field_contract_candidate_event_count"] += 1
+            if not contract["can_enter_china_wealth_lake"]:
+                audit["field_contract_rejected_record_count"] += 1
+                path_result["field_contract_rejected_record_count"] += 1
+                increment_counter(audit, "field_contract_reject_reason_counts", str(contract["reject_reason"]))
+                for group in contract["missing_required_groups"]:
+                    increment_counter(audit, "field_contract_missing_required_group_counts", str(group))
+                continue
+            audit["field_contract_ready_event_count"] += 1
+            path_result["field_contract_ready_event_count"] += 1
             events.append(event)
             path_result["emitted_event_count"] += 1
             if limit is not None and len(events) >= limit:
@@ -295,8 +385,13 @@ def collect_from_inputs_with_audit(
             if policy["enabled"] and path_result["scope_policy_filtered_record_count"] == path_result["candidate_record_count"] and path_result["emitted_event_count"] == 0:
                 path_result["status"] = "filtered_by_scope_policy"
                 path_result["reason"] = "scope_policy_excluded_all_records"
+            elif path_result["field_contract_candidate_event_count"] and path_result["field_contract_rejected_record_count"] == path_result["field_contract_candidate_event_count"] and path_result["emitted_event_count"] == 0:
+                path_result["status"] = "rejected_by_field_contract"
+                path_result["reason"] = "field_contract_excluded_all_records"
             elif path_result["scope_policy_filtered_record_count"]:
                 path_result["scope_policy_filter_status"] = "partially_filtered"
+            if path_result["field_contract_rejected_record_count"] and path_result["emitted_event_count"]:
+                path_result["field_contract_status"] = "partially_rejected"
         if audit["limit_reached"]:
             break
     scope_policy_filtered_all = (
@@ -313,11 +408,226 @@ def collect_from_inputs_with_audit(
                 collected_at=collected_at,
             )
         ]
+    elif not events and audit["field_contract_rejected_record_count"]:
+        events = [
+            field_contract_gap_event(
+                collection_audit=audit,
+                collected_at=collected_at,
+                all_records_rejected=True,
+                retained_event_count=0,
+            )
+        ]
     elif not events:
-        events = [gap_event(collected_at=collected_at, reason="china_wealth_records_empty")]
+        events = [gap_event(collected_at=collected_at, reason="china_wealth_records_empty", source_preflight=source_preflight)]
+    elif audit["field_contract_rejected_record_count"]:
+        events.append(
+            field_contract_gap_event(
+                collection_audit=audit,
+                collected_at=collected_at,
+                all_records_rejected=False,
+                retained_event_count=len(events),
+            )
+        )
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
+
+
+def preflight_authorized_sources(inputs: Iterable[str], supported_paths: Iterable[Path]) -> Dict[str, Any]:
+    input_list = list(inputs)
+    supported_path_strings = {str(path) for path in supported_paths}
+    diagnostics = [source_diagnostic_for_input(raw, supported_path_strings) for raw in input_list]
+    source_surface_counts: Counter = Counter()
+    platform_hint_counts: Counter = Counter()
+    extension_counts: Counter = Counter()
+    supported_file_count = 0
+    unsupported_file_count = 0
+    missing_input_count = 0
+    for diagnostic in diagnostics:
+        supported_file_count += int(diagnostic.get("supported_file_count", 0))
+        unsupported_file_count += int(diagnostic.get("unsupported_file_count", 0))
+        if diagnostic.get("gap") == "input_path_missing":
+            missing_input_count += 1
+        for surface, count in (diagnostic.get("source_surface_counts") or {}).items():
+            source_surface_counts[str(surface)] += int(count)
+        for platform, count in (diagnostic.get("platform_hint_counts") or {}).items():
+            platform_hint_counts[str(platform)] += int(count)
+        for extension, count in (diagnostic.get("extension_counts") or {}).items():
+            extension_counts[str(extension)] += int(count)
+
+    if not input_list:
+        readiness_status = "no_input_provided"
+        gap_reasons = ["china_wealth_authorized_input_missing"]
+    elif supported_file_count == 0:
+        readiness_status = "no_supported_china_wealth_source"
+        gap_reasons = ["china_wealth_supported_input_missing"]
+    else:
+        readiness_status = "ready_for_parse"
+        gap_reasons = []
+
+    return {
+        "schema": "china_wealth.source_preflight.v1",
+        "requested_input_count": len(input_list),
+        "resolved_supported_file_count": len(supported_path_strings),
+        "supported_file_count": supported_file_count,
+        "unsupported_file_count": unsupported_file_count,
+        "missing_input_count": missing_input_count,
+        "source_surface_counts": dict(sorted(source_surface_counts.items())),
+        "platform_hint_counts": dict(sorted(platform_hint_counts.items())),
+        "extension_counts": dict(sorted(extension_counts.items())),
+        "readiness_status": readiness_status,
+        "gap_reasons": gap_reasons,
+        "can_attempt_parse": supported_file_count > 0,
+        "requires_user_authorization": True,
+        "read_only_collection": True,
+        "real_account_validation": False,
+        "complete_asset_boundary_claimed": False,
+        "secret_material_policy": "request_headers_cookies_authorization_query_strings_and_secret_like_values_are_not_written_as_asset_facts",
+        "allowed_source_surfaces": sorted(set(SOURCE_SURFACE_BY_EXTENSION.values())),
+        "diagnostics": diagnostics,
+    }
+
+
+def source_diagnostic_for_input(raw: str, supported_path_strings: set[str]) -> Dict[str, Any]:
+    path = Path(raw).expanduser()
+    diagnostic: Dict[str, Any] = {
+        "source_id": stable_id("authorized_source", path),
+        "extension": path.suffix.lower() or "<none>",
+        "exists": path.exists(),
+        "kind": "missing",
+        "supported": False,
+        "supported_file_count": 0,
+        "unsupported_file_count": 0,
+        "source_surface_counts": {},
+        "platform_hint_counts": {},
+        "extension_counts": {},
+        "gap": None,
+    }
+    if not path.exists():
+        diagnostic["gap"] = "input_path_missing"
+        return diagnostic
+    if path.is_dir():
+        supported_children = []
+        unsupported_children = []
+        surface_counts: Counter = Counter()
+        platform_counts: Counter = Counter()
+        extension_counts: Counter = Counter()
+        for child in sorted(path.rglob("*")):
+            if not child.is_file():
+                continue
+            suffix = child.suffix.lower() or "<none>"
+            extension_counts[suffix] += 1
+            hints = platform_hints_for_path(child)
+            for hint in hints:
+                platform_counts[hint] += 1
+            if child.suffix.lower() in SUPPORTED_EXTENSIONS:
+                supported_children.append(child)
+                surface_counts[source_surface_for_extension(child.suffix.lower())] += 1
+            else:
+                unsupported_children.append(child)
+        diagnostic.update(
+            {
+                "kind": "directory",
+                "supported": bool(supported_children),
+                "supported_file_count": len(supported_children),
+                "unsupported_file_count": len(unsupported_children),
+                "source_surface_counts": dict(sorted(surface_counts.items())),
+                "platform_hint_counts": dict(sorted(platform_counts.items())),
+                "extension_counts": dict(sorted(extension_counts.items())),
+                "gap": None if supported_children else "directory_has_no_supported_china_wealth_files",
+            }
+        )
+        return diagnostic
+    if path.is_file():
+        suffix = path.suffix.lower() or "<none>"
+        supported = str(path) in supported_path_strings or path.suffix.lower() in SUPPORTED_EXTENSIONS
+        platform_hints = platform_hints_for_path(path)
+        diagnostic.update(
+            {
+                "kind": "file",
+                "extension": suffix,
+                "supported": supported,
+                "supported_file_count": 1 if supported else 0,
+                "unsupported_file_count": 0 if supported else 1,
+                "source_surface": source_surface_for_extension(path.suffix.lower()) if supported else "unsupported_file",
+                "source_surface_counts": {source_surface_for_extension(path.suffix.lower()): 1} if supported else {},
+                "platform_hints": platform_hints,
+                "platform_hint_counts": {platform: 1 for platform in platform_hints},
+                "extension_counts": {suffix: 1},
+                "gap": None if supported else "unsupported_extension",
+            }
+        )
+        return diagnostic
+    diagnostic["kind"] = "special"
+    diagnostic["gap"] = "input_not_regular_file_or_directory"
+    return diagnostic
+
+
+def source_surface_for_extension(extension: str) -> str:
+    return SOURCE_SURFACE_BY_EXTENSION.get(extension.lower(), "unsupported_file")
+
+
+def platform_hints_for_path(path: Path) -> List[str]:
+    text = str(path).lower()
+    hints = []
+    for platform in EXPECTED_P0_PLATFORMS:
+        if platform in text:
+            hints.append(platform)
+    if "alipay" in text or "支付宝" in text or "蚂蚁" in text:
+        hints.append("alipay")
+    if "tiantian" in text or "eastmoney" in text or "天天基金" in text:
+        hints.append("tiantian-fund")
+    if "danjuan" in text or "蛋卷" in text:
+        hints.append("danjuan")
+    if "qieman" in text or "且慢" in text:
+        hints.append("qieman")
+    if any(token in text for token in ("bank", "银行", "招行", "工行", "建行", "农行", "理财")):
+        hints.append("bank-wealth")
+    return sorted(dict.fromkeys(hints))
+
+
+def field_contract_specs() -> Dict[str, Any]:
+    return {
+        subtype: {
+            "surface": spec["surface"],
+            "required_any_groups": spec["required_any_groups"],
+            "recommended_fields": spec["recommended_fields"],
+        }
+        for subtype, spec in sorted(FIELD_CONTRACTS.items())
+    }
+
+
+def event_field_contract_result(event: Dict[str, Any]) -> Dict[str, Any]:
+    data = event.get("data") or {}
+    subtype = str(data.get("subtype") or "fund_holding")
+    spec = FIELD_CONTRACTS.get(subtype, FIELD_CONTRACTS["fund_holding"])
+    missing_groups = []
+    satisfied_groups = []
+    for group in spec["required_any_groups"]:
+        fields = [str(field) for field in group["fields"]]
+        group_name = str(group["name"])
+        if any(field_present(data, field) for field in fields):
+            satisfied_groups.append(group_name)
+        else:
+            missing_groups.append(group_name)
+    can_enter = not missing_groups
+    return {
+        "contract": "china_wealth_asset_fact_contract.v1",
+        "subtype": subtype,
+        "surface": spec["surface"],
+        "can_enter_china_wealth_lake": can_enter,
+        "status": "ready" if can_enter else "rejected",
+        "satisfied_required_groups": satisfied_groups,
+        "missing_required_groups": missing_groups,
+        "reject_reason": "contract_ready" if can_enter else f"missing_{missing_groups[0]}",
+    }
+
+
+def field_present(data: Dict[str, Any], field: str) -> bool:
+    if field == "platform":
+        return str(data.get("platform") or "").strip() not in {"", "unknown"}
+    value = data.get(field)
+    return value not in (None, "", [], {})
 
 
 CHINA_WEALTH_SCOPE_POLICY_KEYS = (
@@ -1020,6 +1330,9 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "side": side,
         "raw": sanitized(record),
     }
+    if subtype == "fund_transaction" and data["transaction_amount"] is None and data["market_value"] is not None:
+        data["transaction_amount"] = data["market_value"]
+        data["market_value"] = None
     data = {key: value for key, value in data.items() if value not in (None, "", [], {})}
     raw_ref = {
         "path": str(path),
@@ -1041,7 +1354,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source": "中国基金理财用户授权资产数据",
         "owner_scope": "personal",
         "kind": kind_for_subtype(subtype),
-        "time": event_time,
+        "time": event_time or collected_at or now_iso(),
         "collected_at": collected_at or now_iso(),
         "data": data,
         "raw_ref": raw_ref,
@@ -1050,10 +1363,22 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    source_preflight: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     timestamp = collected_at or now_iso()
     statuses = {
         "china_wealth_authorized_input_missing": "needs_china_wealth_authorized_input",
+        "china_wealth_supported_input_missing": "needs_supported_china_wealth_source",
+        "china_wealth_records_empty": "needs_parseable_china_wealth_records",
+    }
+    messages = {
+        "china_wealth_authorized_input_missing": "No user-authorized fund or wealth-management export was provided.",
+        "china_wealth_supported_input_missing": "Inputs were provided, but none matched supported China wealth export, statement, archive, or browser-network formats.",
+        "china_wealth_records_empty": "Inputs were readable, but no parseable fund, wealth, cash-management, asset, transaction, income, or cashflow records were found.",
     }
     return {
         "schema": "collectorx.event.v1",
@@ -1082,9 +1407,71 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
             "order_or_redemption_performed": False,
             "consumption_flow_claimed": False,
             "read_only": True,
-            "message": "No user-authorized fund or wealth-management export was provided.",
+            "source_preflight_status": (source_preflight or {}).get("readiness_status"),
+            "requested_input_count": (source_preflight or {}).get("requested_input_count", 0),
+            "supported_input_file_count": (source_preflight or {}).get("supported_file_count", 0),
+            "unsupported_input_file_count": (source_preflight or {}).get("unsupported_file_count", 0),
+            "missing_input_count": (source_preflight or {}).get("missing_input_count", 0),
+            "source_surface_counts": (source_preflight or {}).get("source_surface_counts", {}),
+            "message": messages.get(reason, "No usable China wealth asset facts were collected."),
         },
         "raw_ref": {"preflight": True},
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "collection_gap"]},
+        "wiki_targets": [DATA_QUALITY_TARGET],
+    }
+
+
+def field_contract_gap_event(
+    *,
+    collection_audit: Dict[str, Any],
+    collected_at: Optional[str],
+    all_records_rejected: bool,
+    retained_event_count: int,
+) -> Dict[str, Any]:
+    timestamp = collected_at or now_iso()
+    gap = "china_wealth_field_contract_rejected_all" if all_records_rejected else "china_wealth_field_contract_rejected_records"
+    return {
+        "schema": "collectorx.event.v1",
+        "id": stable_id(
+            COLLECTOR,
+            gap,
+            json.dumps(collection_audit.get("field_contract_reject_reason_counts", {}), ensure_ascii=False, sort_keys=True),
+        ),
+        "collector": COLLECTOR,
+        "source": "中国基金理财字段契约",
+        "owner_scope": "personal",
+        "kind": "profile",
+        "time": timestamp,
+        "collected_at": timestamp,
+        "data": {
+            "subtype": "collector_gap",
+            "gap": gap,
+            "status": "field_contract_rejected_all" if all_records_rejected else "events_collected_with_field_contract_gaps",
+            "profile_type": gap,
+            "candidate_record_count": collection_audit.get("candidate_record_count", 0),
+            "retained_record_count": retained_event_count,
+            "filtered_record_count": collection_audit.get("scope_policy_filtered_record_count", 0),
+            "field_contract_candidate_event_count": collection_audit.get("field_contract_candidate_event_count", 0),
+            "field_contract_ready_event_count": collection_audit.get("field_contract_ready_event_count", 0),
+            "field_contract_rejected_record_count": collection_audit.get("field_contract_rejected_record_count", 0),
+            "field_contract_reject_reason_counts": collection_audit.get("field_contract_reject_reason_counts", {}),
+            "field_contract_missing_required_group_counts": collection_audit.get("field_contract_missing_required_group_counts", {}),
+            "policy_is_user_authorization_scope": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "business_records_written": retained_event_count > 0,
+            "complete_asset_boundary_claimed": False,
+            "payment_or_bank_credentials_collected": False,
+            "payment_or_transfer_performed": False,
+            "order_or_redemption_performed": False,
+            "consumption_flow_claimed": False,
+            "read_only": True,
+            "message": (
+                "All readable authorized rows lacked the minimum asset, holding, transaction, income, or cashflow fields required for China wealth facts."
+                if all_records_rejected
+                else "Some authorized rows were readable but lacked the minimum asset, holding, transaction, income, or cashflow fields required for China wealth facts."
+            ),
+        },
+        "raw_ref": {"field_contract": "china_wealth_asset_fact_contract.v1"},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "collection_gap"]},
         "wiki_targets": [DATA_QUALITY_TARGET],
     }
@@ -1191,7 +1578,6 @@ def build_manifest(
 ) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in events)
-    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
     collection_audit = collection_audit or {}
     gap_only = bool(events) and set(subtype_counts) == {"collector_gap"}
     no_events = not events
@@ -1200,8 +1586,10 @@ def build_manifest(
     usable_events = non_gap_events(events)
     usable_event_count = len(usable_events)
     asset_event_count = usable_event_count
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
+    field_contract = field_contract_summary(events, collection_audit=collection_audit)
     value_events = [
-        event for event in events
+        event for event in usable_events
         if any((event.get("data") or {}).get(key) is not None for key in ("market_value", "total_asset", "transaction_amount", "pnl"))
     ]
     return {
@@ -1219,9 +1607,10 @@ def build_manifest(
         "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
         "numeric_coverage": {
             "events_with_value_fields": len(value_events),
-            "events_without_value_fields": max(len(events) - len(value_events), 0),
+            "events_without_value_fields": max(usable_event_count - len(value_events), 0),
         },
         "field_coverage": field_coverage(events),
+        "field_contract": field_contract,
         "asset_value_summary": asset_value_summary(events),
         "currency_summary": currency_summary(events),
         "asset_surface_summary": asset_surface_summary(events),
@@ -1243,16 +1632,24 @@ def build_manifest(
                 gap_only=gap_only,
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
+                collection_audit=collection_audit,
+                gap_event_count=gap_event_count,
+                usable_event_count=usable_event_count,
             ),
             "can_enter_finclaw": usable_event_count > 0,
             "can_enter_china_wealth_lake": usable_event_count > 0,
             "can_enter_data_quality_lake": gap_event_count > 0,
             "can_feed_investor_wiki_evidence": usable_event_count > 0,
             "can_claim_complete_asset_boundary": False,
+            "source_preflight_status": (collection_audit.get("source_preflight") or {}).get("readiness_status"),
+            "field_contract_status": field_contract["status"],
+            "field_contract_ready_event_count": field_contract["ready_event_count"],
+            "field_contract_rejected_record_count": field_contract["rejected_record_count"],
             "asset_boundary_scope": china_wealth_asset_boundary_scope(
                 gap_only=gap_only,
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
+                collection_audit=collection_audit,
             ),
             "usable_event_count": usable_event_count,
             "asset_event_count": asset_event_count,
@@ -1261,31 +1658,72 @@ def build_manifest(
                 gap_only=gap_only,
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
+                collection_audit=collection_audit,
+                usable_event_count=usable_event_count,
             ),
         },
         "collection_audit": collection_audit,
     }
 
 
-def china_wealth_readiness_status(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+def china_wealth_readiness_status(
+    *,
+    gap_only: bool,
+    no_events: bool,
+    scope_policy_filtered_all: bool,
+    collection_audit: Dict[str, Any],
+    gap_event_count: int,
+    usable_event_count: int,
+) -> str:
     if scope_policy_filtered_all:
         return "scope_policy_filtered_all"
+    source_preflight_status = (collection_audit.get("source_preflight") or {}).get("readiness_status")
+    if source_preflight_status == "no_supported_china_wealth_source":
+        return "needs_supported_china_wealth_source"
+    if collection_audit.get("field_contract_rejected_record_count") and usable_event_count == 0:
+        return "field_contract_rejected_all"
+    if collection_audit.get("field_contract_rejected_record_count") and usable_event_count > 0:
+        return "events_collected_with_field_contract_gaps"
     if gap_only or no_events:
         return "needs_china_wealth_authorized_input"
+    if gap_event_count and usable_event_count > 0:
+        return "events_collected_with_gaps"
     return "events_collected"
 
 
-def china_wealth_asset_boundary_scope(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+def china_wealth_asset_boundary_scope(
+    *,
+    gap_only: bool,
+    no_events: bool,
+    scope_policy_filtered_all: bool,
+    collection_audit: Dict[str, Any],
+) -> str:
     if scope_policy_filtered_all:
         return "scope_policy_excluded_all"
+    if collection_audit.get("field_contract_rejected_record_count") and not collection_audit.get("field_contract_ready_event_count"):
+        return "field_contract_excluded_all"
     if gap_only or no_events:
         return "none"
     return "partial_authorized_input"
 
 
-def china_wealth_next_action(*, gap_only: bool, no_events: bool, scope_policy_filtered_all: bool) -> str:
+def china_wealth_next_action(
+    *,
+    gap_only: bool,
+    no_events: bool,
+    scope_policy_filtered_all: bool,
+    collection_audit: Dict[str, Any],
+    usable_event_count: int,
+) -> str:
     if scope_policy_filtered_all:
         return "放宽用户授权范围，或提供与当前平台/账户/产品/币种策略匹配的基金理财记录。"
+    source_preflight_status = (collection_audit.get("source_preflight") or {}).get("readiness_status")
+    if source_preflight_status == "no_supported_china_wealth_source":
+        return "提供受支持的支付宝/天天基金/蛋卷/且慢/银行理财导出、PDF 对账单、HAR 或 ZIP 授权包。"
+    if collection_audit.get("field_contract_rejected_record_count") and usable_event_count == 0:
+        return "提供包含平台、产品/账户、金额或申赎流水字段的真实基金理财资产记录；当前输入不会作为资产事实入湖。"
+    if collection_audit.get("field_contract_rejected_record_count") and usable_event_count > 0:
+        return "已保留满足字段契约的资产事实；请补齐被拒记录的平台、产品、金额、收益或流水字段后重跑。"
     if gap_only or no_events:
         return "提供支付宝/基金/理财授权导出后重跑。"
     return "可进入投资分身蒸馏；后续按平台做只读真机验证后，才能声明完整资产边界。"
@@ -1326,6 +1764,7 @@ def build_evidence(
             "platform_counts": dict(sorted(platform_counts.items())),
             "platform_coverage": platform_coverage(platform_counts),
             "field_coverage": field_coverage(usable_events),
+            "field_contract": field_contract_summary(usable_events, collection_audit=collection_audit),
             "asset_value_summary": asset_value_summary(usable_events),
             "currency_summary": currency_summary(usable_events),
             "asset_surface_summary": asset_surface_summary(usable_events),
@@ -1366,6 +1805,68 @@ def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
             for event in usable_events
             if (event.get("data") or {}).get("product_code") or (event.get("data") or {}).get("product_name")
         ),
+    }
+
+
+def field_contract_summary(
+    events: List[Dict[str, Any]],
+    *,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    usable_events = non_gap_events(events)
+    results = [event_field_contract_result(event) for event in usable_events]
+    ready_event_count = sum(1 for result in results if result["can_enter_china_wealth_lake"])
+    rejected_in_events = len(results) - ready_event_count
+    missing_group_counts: Counter = Counter()
+    surface_counts: Counter = Counter()
+    subtype_counts: Counter = Counter()
+    income_field_counts: Counter = Counter()
+    cashflow_field_counts: Counter = Counter()
+    for event, result in zip(usable_events, results):
+        data = event.get("data") or {}
+        surface_counts[str(result["surface"])] += 1
+        subtype_counts[str(result["subtype"])] += 1
+        for group in result["missing_required_groups"]:
+            missing_group_counts[str(group)] += 1
+        if data.get("pnl") is not None or data.get("pnl_rate") is not None or data.get("side") == "dividend":
+            income_field_counts["income_signal_events"] += 1
+        for field in ASSET_VALUE_FIELDS:
+            if data.get(field) is not None:
+                income_field_counts[field] += 1
+        if result["surface"] == "cashflow":
+            for field in ("transaction_amount", "fee", "side"):
+                if data.get(field) is not None:
+                    cashflow_field_counts[field] += 1
+
+    audit = collection_audit or {}
+    rejected_record_count = int(audit.get("field_contract_rejected_record_count", 0)) + rejected_in_events
+    if not usable_events and rejected_record_count:
+        status = "field_contract_rejected_all"
+    elif rejected_record_count:
+        status = "ready_with_field_contract_gaps" if ready_event_count else "field_contract_rejected_all"
+    elif usable_events:
+        status = "contract_ready"
+    else:
+        status = "no_usable_events"
+
+    audit_missing_counts = Counter({str(key): int(value) for key, value in (audit.get("field_contract_missing_required_group_counts") or {}).items()})
+    total_missing_counts = missing_group_counts + audit_missing_counts
+    return {
+        "contract": "china_wealth_asset_fact_contract.v1",
+        "status": status,
+        "contracts": field_contract_specs(),
+        "ready_event_count": ready_event_count,
+        "usable_event_count": len(usable_events),
+        "rejected_record_count": rejected_record_count,
+        "rejected_record_count_from_audit": int(audit.get("field_contract_rejected_record_count", 0)),
+        "missing_required_group_counts": dict(sorted(total_missing_counts.items())),
+        "reject_reason_counts": dict(sorted((audit.get("field_contract_reject_reason_counts") or {}).items())),
+        "surface_counts": dict(sorted(surface_counts.items())),
+        "subtype_counts": dict(sorted(subtype_counts.items())),
+        "income_and_return_field_counts": dict(sorted(income_field_counts.items())),
+        "cashflow_field_counts": dict(sorted(cashflow_field_counts.items())),
+        "minimum_contract_blocks_asset_fact_when_missing": True,
+        "does_not_promote_placeholder_rows_to_asset_facts": True,
     }
 
 
@@ -1515,9 +2016,22 @@ def asset_boundary_proof(
     audit = collection_audit or {}
     if not usable_events:
         scope_policy_filtered_all = bool(audit.get("china_wealth_scope_policy_filtered_all"))
+        field_contract_rejected_all = bool(audit.get("field_contract_rejected_record_count")) and not audit.get("field_contract_ready_event_count")
+        if scope_policy_filtered_all:
+            proof_scope = "scope_policy_excluded_all"
+            proof_level = "scope_policy_filtered_all"
+            missing_global_requirements = ["scope_policy_retained_records"]
+        elif field_contract_rejected_all:
+            proof_scope = "field_contract_excluded_all"
+            proof_level = "field_contract_rejected_all"
+            missing_global_requirements = ["minimum_asset_fact_field_contract"]
+        else:
+            proof_scope = "none"
+            proof_level = "no_authorized_asset_evidence"
+            missing_global_requirements = ["authorized_asset_input"]
         return {
-            "proof_scope": "scope_policy_excluded_all" if scope_policy_filtered_all else "none",
-            "overall_proof_level": "scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_asset_evidence",
+            "proof_scope": proof_scope,
+            "overall_proof_level": proof_level,
             "complete_asset_boundary_claimed": False,
             "requires_real_account_validation": True,
             "asset_event_count": 0,
@@ -1532,7 +2046,7 @@ def asset_boundary_proof(
             "platform_proofs": platform_boundary_proofs({}, platform_counts),
             "account_proofs": [],
             "authorization_scope_boundary": china_wealth_authorization_scope_boundary(audit),
-            "missing_global_requirements": ["scope_policy_retained_records"] if scope_policy_filtered_all else ["authorized_asset_input"],
+            "missing_global_requirements": missing_global_requirements,
         }
 
     grouped: Dict[tuple[str, str], List[Dict[str, Any]]] = defaultdict(list)
@@ -1869,8 +2383,14 @@ def sanitized(value: Any) -> Any:
     if isinstance(value, list):
         return [sanitized(item) for item in value[:200]]
     if isinstance(value, str):
+        if contains_secret_material(value):
+            return "[REDACTED]"
         return value[:2000]
     return value
+
+
+def contains_secret_material(value: str) -> bool:
+    return any(pattern.search(value) for pattern in SECRET_VALUE_PATTERNS)
 
 
 def increment_counter(audit: Dict[str, Any], key: str, value: str) -> None:
@@ -1887,6 +2407,8 @@ def finalize_audit(audit: Dict[str, Any]) -> None:
         "har_endpoint_counts",
         "har_platform_entry_counts",
         "scope_policy_filter_reason_counts",
+        "field_contract_reject_reason_counts",
+        "field_contract_missing_required_group_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
 

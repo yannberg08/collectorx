@@ -16,6 +16,7 @@ REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "china_wealth.py"
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 FIVE_PLATFORM_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "china-wealth-five-platform" / "five_platform_assets.json"
+PREFLIGHT_CONTRACT_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "china-wealth-preflight-contract" / "preflight_contract_assets.json"
 SENSITIVE_TERMS = ("cookie", "token", "authorization", "password", "session")
 SECRET_MARKER = "SHOULD_NOT_LEAK"
 
@@ -1053,6 +1054,150 @@ def test_scope_policy_filtered_all_readiness() -> None:
         )
 
 
+def test_preflight_reports_unsupported_authorized_source_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        unsupported = root / "fund-export.docx"
+        out = root / "out"
+        unsupported.write_text("not a supported fund export", encoding="utf-8")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(unsupported),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T19:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        event = read_events(out)[0]
+        assert event["kind"] == "profile"
+        assert event["data"]["subtype"] == "collector_gap"
+        assert event["data"]["gap"] == "china_wealth_supported_input_missing"
+        assert event["data"]["status"] == "needs_supported_china_wealth_source"
+        assert event["data"]["requested_input_count"] == 1
+        assert event["data"]["supported_input_file_count"] == 0
+        assert event["data"]["unsupported_input_file_count"] == 1
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        preflight = manifest["collection_audit"]["source_preflight"]
+        assert preflight["readiness_status"] == "no_supported_china_wealth_source"
+        assert preflight["requested_input_count"] == 1
+        assert preflight["supported_file_count"] == 0
+        assert preflight["unsupported_file_count"] == 1
+        assert preflight["diagnostics"][0]["gap"] == "unsupported_extension"
+        assert preflight["diagnostics"][0]["source_id"].startswith("china-wealth-assets:")
+        assert str(unsupported) not in json.dumps(preflight, ensure_ascii=False)
+        assert manifest["collection_readiness"]["status"] == "needs_supported_china_wealth_source"
+        assert manifest["collection_readiness"]["can_enter_china_wealth_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["field_contract"]["status"] == "no_usable_events"
+
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "china-wealth-assets"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+
+def test_field_contract_blocks_placeholder_rows_and_reports_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(PREFLIGHT_CONTRACT_FIXTURE),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T19:30:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = read_events(out)
+        assert len(events) == 3
+        asset_events = [event for event in events if event["data"]["subtype"] != "collector_gap"]
+        gap_events = [event for event in events if event["data"]["subtype"] == "collector_gap"]
+        assert [event["data"]["platform"] for event in asset_events] == ["alipay", "danjuan"]
+        assert [event["data"]["subtype"] for event in asset_events] == ["asset_snapshot", "fund_transaction"]
+        assert asset_events[0]["data"]["total_asset"] == 1000.0
+        assert asset_events[1]["data"]["transaction_amount"] == 800.0
+        assert gap_events[0]["data"]["gap"] == "china_wealth_field_contract_rejected_records"
+        assert gap_events[0]["data"]["retained_record_count"] == 2
+        assert gap_events[0]["data"]["field_contract_rejected_record_count"] == 1
+        assert gap_events[0]["data"]["field_contract_missing_required_group_counts"] == {"holding_value_or_units": 1}
+
+        serialized_events = json.dumps(events, ensure_ascii=False)
+        assert "字段契约占位基金" not in serialized_events
+        assert_secret_marker_absent_from_package(out)
+        for event in asset_events:
+            assert_sensitive_keys_absent(event["data"].get("raw", {}))
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 3
+        assert manifest["usable_event_count"] == 2
+        assert manifest["asset_event_count"] == 2
+        assert manifest["gap_event_count"] == 1
+        assert manifest["platform_counts"] == {"alipay": 1, "danjuan": 1}
+        assert manifest["collection_readiness"]["status"] == "events_collected_with_field_contract_gaps"
+        assert manifest["collection_readiness"]["can_enter_china_wealth_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["field_contract_status"] == "ready_with_field_contract_gaps"
+
+        preflight = manifest["collection_audit"]["source_preflight"]
+        assert preflight["readiness_status"] == "ready_for_parse"
+        assert preflight["source_surface_counts"] == {"authorized_platform_export_file": 1}
+        assert manifest["collection_audit"]["field_contract_candidate_event_count"] == 3
+        assert manifest["collection_audit"]["field_contract_ready_event_count"] == 2
+        assert manifest["collection_audit"]["field_contract_rejected_record_count"] == 1
+        assert manifest["collection_audit"]["field_contract_reject_reason_counts"] == {"missing_holding_value_or_units": 1}
+        assert manifest["collection_audit"]["field_contract_missing_required_group_counts"] == {"holding_value_or_units": 1}
+
+        contract = manifest["field_contract"]
+        assert contract["status"] == "ready_with_field_contract_gaps"
+        assert contract["ready_event_count"] == 2
+        assert contract["rejected_record_count"] == 1
+        assert contract["surface_counts"] == {"asset": 1, "cashflow": 1}
+        assert contract["cashflow_field_counts"] == {"side": 1, "transaction_amount": 1}
+        assert contract["does_not_promote_placeholder_rows_to_asset_facts"] is True
+        proof = manifest["asset_boundary_proof"]
+        assert proof["proof_scope"] == "partial_authorized_input"
+        assert proof["complete_asset_boundary_claimed"] is False
+        assert proof["can_enter_data_quality_lake"] is True
+
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 2
+        assert evidence["generated_from"]["raw_event_count"] == 3
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["field_contract"]["status"] == "ready_with_field_contract_gaps"
+        assert evidence["coverage_summary"]["field_contract"]["rejected_record_count"] == 1
+
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "china-wealth-assets"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+
 if __name__ == "__main__":
     test_collect_fund_holding_and_transaction()
     test_collect_without_input_gap()
@@ -1068,4 +1213,6 @@ if __name__ == "__main__":
     test_manifest_reports_account_asset_currency_and_transaction_boundaries()
     test_scope_policy_filters_authorized_asset_records()
     test_scope_policy_filtered_all_readiness()
+    test_preflight_reports_unsupported_authorized_source_gap()
+    test_field_contract_blocks_placeholder_rows_and_reports_gap()
     print("china-wealth-assets tests passed.")

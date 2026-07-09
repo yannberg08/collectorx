@@ -8,6 +8,7 @@ import csv
 import fnmatch
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -19,7 +20,7 @@ from html import unescape
 from pathlib import Path
 from pathlib import PurePosixPath
 from typing import Any, Dict, Iterable, Iterator, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 try:
     import openpyxl
@@ -37,6 +38,7 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 
 COLLECTOR = "xueqiu-investor-activity"
+PREFLIGHT_SCHEMA = "collectorx.xueqiu_activity_preflight.v1"
 CN_TZ = timezone(timedelta(hours=8))
 UTC = timezone.utc
 SUPPORTED_EXTENSIONS = {
@@ -61,6 +63,23 @@ SUPPORTED_EXTENSIONS = {
 ARCHIVE_MEMBER_EXTENSIONS = SUPPORTED_EXTENSIONS - {".zip"}
 BROWSER_HISTORY_NAMES = {"History", "History.db"}
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "authorization", "session")
+LOCAL_PATH_KEYS = {
+    "archive",
+    "archive_path",
+    "file",
+    "file_name",
+    "file_path",
+    "filename",
+    "filepath",
+    "local_file",
+    "local_path",
+    "path",
+    "source_file",
+    "source_path",
+}
+RAW_REF_PATH_KEYS = {"archive", "path"}
+CN_MOBILE_RE = re.compile(r"(?<!\d)(1[3-9]\d)\d{4}(\d{4})(?!\d)")
+INLINE_SECRET_RE = re.compile(r"(?i)\b(cookie|token|authorization|session|password|passwd|xq_[a-z_]*token)=([^\s&;,'\"<>]+)")
 EXPECTED_ACTIVITY_TYPES = ("watchlist", "follow_user", "follow_portfolio", "portfolio_activity", "comment", "favorite", "post", "saved_page")
 ACTIVITY_REQUIRED_FIELDS = {
     "watchlist": ("symbols", "name"),
@@ -140,6 +159,47 @@ def now_iso() -> str:
     return datetime.now(CN_TZ).isoformat(timespec="seconds")
 
 
+def source_id_for_path(path: Path) -> str:
+    try:
+        normalized = str(path.expanduser().resolve())
+    except OSError:
+        normalized = str(path)
+    digest = hashlib.sha256(normalized.encode("utf-8", errors="replace")).hexdigest()[:16]
+    return f"xqsrc_{digest}"
+
+
+def source_id_for_text(value: str) -> str:
+    digest = hashlib.sha256(value.encode("utf-8", errors="replace")).hexdigest()[:16]
+    return f"xqsrc_{digest}"
+
+
+def public_raw_ref(raw_ref: Dict[str, Any], *, source_path: Path) -> Dict[str, Any]:
+    cleaned: Dict[str, Any] = {
+        "source_id": source_id_for_path(source_path),
+        "source_extension": extension_label(source_path),
+    }
+    for key, value in raw_ref.items():
+        normalized = normalize_audit_key(key)
+        if normalized in RAW_REF_PATH_KEYS:
+            continue
+        cleaned[str(key)] = sanitized(value)
+    return cleaned
+
+
+def file_size_bucket(path: Path) -> str:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return "unknown"
+    if size == 0:
+        return "empty"
+    if size < 100 * 1024:
+        return "lt_100kb"
+    if size < 10 * 1024 * 1024:
+        return "100kb_to_10mb"
+    return "gt_10mb"
+
+
 def collect_from_inputs(inputs: Iterable[str], *, collected_at: Optional[str] = None, limit: Optional[int] = None) -> List[Dict[str, Any]]:
     events, _audit = collect_from_inputs_with_audit(inputs, collected_at=collected_at, limit=limit)
     return events
@@ -208,7 +268,7 @@ def collect_from_inputs_with_audit(
     events: List[Dict[str, Any]] = []
     for path in paths:
         path_result = {
-            "path": str(path),
+            "source_id": source_id_for_path(path),
             "extension": extension_label(path),
             "parser": parser_name_for_path(path),
             "parsed_record_count": 0,
@@ -510,6 +570,385 @@ def parse_browser_history(path: Path, *, audit: Optional[Dict[str, Any]] = None)
     return records
 
 
+def build_preflight_diagnosis(
+    inputs: Iterable[str],
+    *,
+    collected_at: Optional[str] = None,
+    scan_browser_profiles: bool = False,
+    browser_profile_roots: Optional[Iterable[str]] = None,
+) -> Dict[str, Any]:
+    input_list = list(inputs)
+    source_probe = probe_authorized_inputs(input_list)
+    browser_profile_probe = probe_browser_profile_candidates(
+        enabled=scan_browser_profiles,
+        roots=[Path(raw).expanduser() for raw in (browser_profile_roots or [])],
+    )
+    candidate_kinds = Counter(candidate["source_kind"] for candidate in source_probe["candidates"])
+    har_candidates = [candidate for candidate in source_probe["candidates"] if candidate["source_kind"] == "authorized_har"]
+    browser_history_candidates = [
+        candidate for candidate in source_probe["candidates"] if candidate["source_kind"] == "authorized_browser_history_copy"
+    ]
+    local_export_candidates = [
+        candidate
+        for candidate in source_probe["candidates"]
+        if candidate["source_kind"] in {"authorized_export_file", "authorized_saved_page", "authorized_zip_package"}
+    ]
+    can_attempt_har_collect = any(candidate.get("can_attempt_collect") for candidate in har_candidates)
+    can_attempt_browser_history_collect = any(candidate.get("can_attempt_collect") for candidate in browser_history_candidates)
+    can_attempt_local_export_collect = any(candidate.get("can_attempt_collect") for candidate in local_export_candidates)
+    can_attempt_collect = can_attempt_har_collect or can_attempt_browser_history_collect or can_attempt_local_export_collect
+    can_prepare_authorized_browser_history_copy = bool(browser_profile_probe.get("candidate_count"))
+    if can_attempt_collect:
+        status = "authorized_sources_detected"
+        next_action = "Run collect with the diagnosed user-authorized Xueqiu source files."
+    elif can_prepare_authorized_browser_history_copy:
+        status = "needs_authorized_browser_history_copy"
+        next_action = "Copy the browser History/History.db file to an authorized working folder, then rerun diagnose or collect with --input."
+    else:
+        status = "needs_authorized_xueqiu_source"
+        next_action = "Provide a Xueqiu export, saved page, HAR, ZIP package, or copied browser history file before collection."
+    return {
+        "schema": PREFLIGHT_SCHEMA,
+        "collector": COLLECTOR,
+        "diagnosed_at": collected_at or now_iso(),
+        "diagnostic_scope": {
+            "activity_events_collected": False,
+            "har_response_payloads_parsed": False,
+            "browser_history_urls_emitted": False,
+            "browser_history_titles_emitted": False,
+            "cookies_or_tokens_emitted": False,
+            "local_paths_emitted": False,
+            "phone_numbers_emitted": False,
+            "public_news_collected_as_personal_fact": False,
+            "direct_browser_profile_databases_read": False,
+            "real_account_network_adapter_used": False,
+        },
+        "authorized_source_policy": {
+            "official_or_user_export_files": "supported_when_user_provides_files; parsed as personal activity evidence only",
+            "authorized_web_har": "supported_for_user_exported_logged-in HAR; request headers, cookies, authorization, and query strings are never emitted",
+            "browser_history_copy": "supported_only_from user-copied Chromium/Safari history files; xueqiu.com domain-filtered",
+            "browser_cache": "not_collected; cache files are not treated as personal investment facts",
+            "local_saved_pages": "supported for user-saved pages or markdown/text snippets that mention Xueqiu",
+            "official_realtime_account_api": "not_implemented; no direct real-account adapter is claimed",
+            "public_news_or_market_timeline": "not_collected_as_personal_fact",
+            "broker_trade_records": "not_collected_by_xueqiu; use broker collectors for holdings, orders, executions, or fund flows",
+        },
+        "source_probe": {
+            **source_probe,
+            "candidate_kind_counts": dict(sorted(candidate_kinds.items())),
+            "har_candidate_count": len(har_candidates),
+            "browser_history_candidate_count": len(browser_history_candidates),
+            "local_export_candidate_count": len(local_export_candidates),
+            "har_xueqiu_entry_count": sum(int(candidate.get("har_xueqiu_entry_count") or 0) for candidate in har_candidates),
+            "browser_history_xueqiu_visit_count": sum(
+                int(candidate.get("browser_history_xueqiu_visit_count") or 0)
+                for candidate in browser_history_candidates
+            ),
+        },
+        "browser_profile_probe": browser_profile_probe,
+        "collection_readiness": {
+            "status": status,
+            "can_attempt_collect": can_attempt_collect,
+            "can_attempt_har_collect": can_attempt_har_collect,
+            "can_attempt_browser_history_collect": can_attempt_browser_history_collect,
+            "can_attempt_local_export_collect": can_attempt_local_export_collect,
+            "can_prepare_authorized_browser_history_copy": can_prepare_authorized_browser_history_copy,
+            "can_attempt_real_account_network_collect": False,
+            "can_claim_real_account_validation": False,
+            "can_claim_complete_xueqiu_activity_boundary": False,
+            "can_claim_broker_trade_collection": False,
+            "can_feed_investor_wiki_evidence": False,
+            "requires_collect_run_for_events": True,
+            "next_action": next_action,
+        },
+    }
+
+
+def probe_authorized_inputs(inputs: Iterable[str]) -> Dict[str, Any]:
+    counters: Dict[str, Any] = {
+        "input_count": 0,
+        "directory_input_count": 0,
+        "file_input_count": 0,
+        "missing_input_count": 0,
+        "resolved_input_file_count": 0,
+        "supported_input_file_count": 0,
+        "unsupported_input_file_count": 0,
+        "extension_counts": {},
+        "candidates": [],
+    }
+    for raw in inputs:
+        counters["input_count"] += 1
+        path = Path(raw).expanduser()
+        if path.is_dir():
+            counters["directory_input_count"] += 1
+            for child in sorted(path.rglob("*")):
+                if child.is_file():
+                    probe_input_file(child, counters)
+        elif path.is_file():
+            counters["file_input_count"] += 1
+            probe_input_file(path, counters)
+        else:
+            counters["missing_input_count"] += 1
+    counters["extension_counts"] = dict(sorted((counters.get("extension_counts") or {}).items()))
+    return counters
+
+
+def probe_input_file(path: Path, counters: Dict[str, Any]) -> None:
+    counters["resolved_input_file_count"] += 1
+    if not is_supported_input_path(path):
+        counters["unsupported_input_file_count"] += 1
+        return
+    counters["supported_input_file_count"] += 1
+    increment_counter(counters, "extension_counts", extension_label(path))
+    counters["candidates"].append(probe_authorized_source(path))
+
+
+def probe_authorized_source(path: Path) -> Dict[str, Any]:
+    parser = parser_name_for_path(path)
+    source_kind = preflight_source_kind(path, parser)
+    probe: Dict[str, Any] = {
+        "source_id": source_id_for_path(path),
+        "source_kind": source_kind,
+        "parser": parser,
+        "extension": extension_label(path),
+        "size_bucket": file_size_bucket(path),
+        "readable": os.access(path, os.R_OK),
+        "supported": True,
+        "can_attempt_collect": False,
+    }
+    if not probe["readable"]:
+        probe["status"] = "not_readable"
+        return probe
+    if parser == "har":
+        probe.update(probe_har_for_preflight(path))
+    elif parser == "browser_history":
+        probe.update(probe_browser_history_for_preflight(path))
+    elif parser == "zip":
+        probe.update(probe_zip_for_preflight(path))
+    else:
+        probe["status"] = "supported_local_source"
+        probe["can_attempt_collect"] = probe["size_bucket"] != "empty"
+    return probe
+
+
+def preflight_source_kind(path: Path, parser: str) -> str:
+    if parser == "har":
+        return "authorized_har"
+    if parser == "browser_history":
+        return "authorized_browser_history_copy"
+    if parser == "zip":
+        return "authorized_zip_package"
+    if path.suffix.lower() in {".html", ".htm", ".txt", ".md", ".markdown"}:
+        return "authorized_saved_page"
+    return "authorized_export_file"
+
+
+def probe_har_for_preflight(path: Path) -> Dict[str, Any]:
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError):
+        return {
+            "status": "har_unreadable_or_invalid_json",
+            "can_attempt_collect": False,
+            "har_entry_count": 0,
+            "har_xueqiu_entry_count": 0,
+        }
+    entries = loaded.get("log", {}).get("entries", []) if isinstance(loaded, dict) else []
+    endpoint_counts: Counter = Counter()
+    secret_count = 0
+    query_string_count = 0
+    xueqiu_count = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        secret_count += har_secret_material_count(entry)
+        request = entry.get("request") if isinstance(entry.get("request"), dict) else {}
+        url = str(request.get("url") or "")
+        parsed_url = urlparse(url)
+        if not is_xueqiu_url(parsed_url):
+            continue
+        xueqiu_count += 1
+        if parsed_url.query:
+            query_string_count += 1
+        endpoint_counts[har_endpoint(parsed_url)] += 1
+    return {
+        "status": "har_has_xueqiu_entries" if xueqiu_count else "har_has_no_xueqiu_entries",
+        "can_attempt_collect": xueqiu_count > 0,
+        "har_entry_count": len(entries),
+        "har_xueqiu_entry_count": xueqiu_count,
+        "har_endpoint_counts": dict(sorted(endpoint_counts.items())),
+        "har_secret_material_observed_count": secret_count,
+        "har_query_string_observed_count": query_string_count,
+        "har_response_payloads_parsed": False,
+    }
+
+
+def probe_browser_history_for_preflight(path: Path) -> Dict[str, Any]:
+    uri = f"{path.expanduser().resolve().as_uri()}?mode=ro"
+    try:
+        conn = sqlite3.connect(uri, uri=True)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        return {
+            "status": "browser_history_unreadable",
+            "can_attempt_collect": False,
+            "browser_history_schema_supported": False,
+            "browser_history_xueqiu_visit_count": 0,
+        }
+    try:
+        names = table_names(conn)
+        if {"urls", "visits"}.issubset(names):
+            source_app = "chromium_history"
+            count = browser_history_xueqiu_count(conn, source_app)
+        elif {"history_items", "history_visits"}.issubset(names):
+            source_app = "safari_history"
+            count = browser_history_xueqiu_count(conn, source_app)
+        else:
+            source_app = "unknown"
+            count = 0
+    except sqlite3.Error:
+        source_app = "unknown"
+        count = 0
+        schema_supported = False
+    else:
+        schema_supported = source_app != "unknown"
+    finally:
+        conn.close()
+    return {
+        "status": "browser_history_schema_supported" if schema_supported else "browser_history_schema_unsupported",
+        "can_attempt_collect": schema_supported,
+        "browser_history_schema_supported": schema_supported,
+        "browser_history_source_app": source_app,
+        "browser_history_xueqiu_visit_count": count,
+        "browser_history_urls_emitted": False,
+        "browser_history_titles_emitted": False,
+    }
+
+
+def browser_history_xueqiu_count(conn: sqlite3.Connection, source_app: str) -> int:
+    if source_app == "chromium_history":
+        query = f"""
+            SELECT COUNT(*) AS count
+            FROM urls
+            JOIN visits ON visits.url = urls.id
+            WHERE {xueqiu_domain_where('urls.url')}
+        """
+    else:
+        query = f"""
+            SELECT COUNT(*) AS count
+            FROM history_items
+            JOIN history_visits ON history_visits.history_item = history_items.id
+            WHERE {xueqiu_domain_where('history_items.url')}
+        """
+    row = conn.execute(query).fetchone()
+    return int(row["count"] or 0) if row is not None else 0
+
+
+def probe_zip_for_preflight(path: Path) -> Dict[str, Any]:
+    member_count = 0
+    supported_member_count = 0
+    skipped_member_count = 0
+    member_extension_counts: Counter = Counter()
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                member_count += 1
+                member_name = info.filename.replace("\\", "/")
+                member_path = PurePosixPath(member_name)
+                member_fs_path = Path(member_name)
+                extension = extension_label(member_fs_path)
+                member_extension_counts[extension] += 1
+                suffix = member_fs_path.suffix.lower()
+                if is_safe_archive_member(member_path) and (suffix in ARCHIVE_MEMBER_EXTENSIONS or member_fs_path.name in BROWSER_HISTORY_NAMES):
+                    supported_member_count += 1
+                else:
+                    skipped_member_count += 1
+    except (OSError, zipfile.BadZipFile):
+        return {
+            "status": "zip_unreadable",
+            "can_attempt_collect": False,
+            "archive_member_count": 0,
+            "supported_archive_member_count": 0,
+        }
+    return {
+        "status": "zip_has_supported_members" if supported_member_count else "zip_has_no_supported_members",
+        "can_attempt_collect": supported_member_count > 0,
+        "archive_member_count": member_count,
+        "supported_archive_member_count": supported_member_count,
+        "skipped_archive_member_count": skipped_member_count,
+        "archive_member_extension_counts": dict(sorted(member_extension_counts.items())),
+    }
+
+
+def probe_browser_profile_candidates(*, enabled: bool, roots: List[Path]) -> Dict[str, Any]:
+    if not enabled:
+        return {
+            "enabled": False,
+            "candidate_count": 0,
+            "copy_required_before_collect": True,
+            "direct_profile_databases_read": False,
+            "source_app_counts": {},
+        }
+    candidates = discover_browser_history_candidates(roots)
+    counts = Counter(browser_history_source_app_for_path(path) for path in candidates)
+    return {
+        "enabled": True,
+        "candidate_count": len(candidates),
+        "copy_required_before_collect": True,
+        "direct_profile_databases_read": False,
+        "source_app_counts": dict(sorted(counts.items())),
+    }
+
+
+def discover_browser_history_candidates(roots: List[Path]) -> List[Path]:
+    candidates: List[Path] = []
+    scan_roots = roots or default_browser_profile_roots()
+    for root in scan_roots:
+        try:
+            if root.is_file() and root.name in BROWSER_HISTORY_NAMES:
+                candidates.append(root)
+                continue
+            if not root.is_dir():
+                continue
+            for child in root.rglob("*"):
+                if child.is_file() and child.name in BROWSER_HISTORY_NAMES:
+                    candidates.append(child)
+        except OSError:
+            continue
+    return sorted(set(candidates), key=lambda item: str(item))
+
+
+def default_browser_profile_roots() -> List[Path]:
+    home = Path.home()
+    if sys.platform == "darwin":
+        return [
+            home / "Library" / "Application Support" / "Google" / "Chrome",
+            home / "Library" / "Application Support" / "Chromium",
+            home / "Library" / "Application Support" / "BraveSoftware" / "Brave-Browser",
+            home / "Library" / "Application Support" / "Microsoft Edge",
+            home / "Library" / "Safari",
+        ]
+    if sys.platform.startswith("win"):
+        local_app_data = Path(os.environ.get("LOCALAPPDATA", ""))
+        return [
+            local_app_data / "Google" / "Chrome" / "User Data",
+            local_app_data / "Microsoft" / "Edge" / "User Data",
+            local_app_data / "BraveSoftware" / "Brave-Browser" / "User Data",
+        ]
+    return [
+        home / ".config" / "google-chrome",
+        home / ".config" / "chromium",
+        home / ".config" / "BraveSoftware" / "Brave-Browser",
+        home / ".config" / "microsoft-edge",
+    ]
+
+
+def browser_history_source_app_for_path(path: Path) -> str:
+    return "safari_history" if path.name == "History.db" else "chromium_history"
+
+
 def table_names(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
     return {str(row["name"]) for row in rows}
@@ -629,12 +1068,13 @@ def browser_history_record(
     transition: Any,
     transition_type: Optional[str] = None,
 ) -> Dict[str, Any]:
+    output_url = safe_url_for_output(url) or url
     return {
         "activity_type": "saved_page",
         "source_surface": "browser_history",
-        "title": title or url,
-        "content": title or url,
-        "url": url,
+        "title": title or output_url,
+        "content": title or output_url,
+        "url": output_url,
         "time": event_time,
         "source_app": source_app,
         "visit_count": int_number(visit_count),
@@ -807,7 +1247,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         or first(cube, ["name", "cube_name", "title"])
     )
     content = first(record, ["text", "content", "description", "正文", "内容", "评论", "comment", "note", "备注"]) or ""
-    url = first(record, ["url", "link", "target_url", "链接"]) or build_xueqiu_url(record, user)
+    url = safe_url_for_output(first(record, ["url", "link", "target_url", "链接"]) or build_xueqiu_url(record, user))
     event_time = first(
         record,
         [
@@ -850,9 +1290,15 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "broker_confirmed_trade": False,
     }
     data = {key: value for key, value in data.items() if value not in (None, "", [], {})}
-    raw_ref = {"path": str(path), "row": row, "activity_type": activity_type, "source_surface": data.get("source_surface")}
+    raw_ref = {
+        "source_id": source_id_for_path(path),
+        "source_extension": extension_label(path),
+        "row": row,
+        "activity_type": activity_type,
+        "source_surface": data.get("source_surface"),
+    }
     if isinstance(record.get("_collectorx_raw_ref"), dict):
-        raw_ref.update(record["_collectorx_raw_ref"])
+        raw_ref.update(public_raw_ref(record["_collectorx_raw_ref"], source_path=path))
         raw_ref["row"] = row
         raw_ref["activity_type"] = activity_type
         raw_ref["source_surface"] = data.get("source_surface")
@@ -882,15 +1328,27 @@ def gap_event(
         "xueqiu_authorized_input_missing": "No user-authorized Xueqiu export or local input was provided.",
         "xueqiu_records_empty": "Authorized Xueqiu input did not contain usable activity records.",
         "xueqiu_scope_policy_filtered_all": "Xueqiu activity records were found, but every candidate was outside the configured authorization scope policy.",
+        "xueqiu_preflight_diagnosis_only": "Xueqiu preflight diagnosed local authorized-source readiness without collecting activity events.",
     }
     statuses = {
         "xueqiu_authorized_input_missing": "needs_xueqiu_authorized_input",
         "xueqiu_records_empty": "no_usable_xueqiu_activity_records",
         "xueqiu_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "xueqiu_preflight_diagnosis_only": "preflight_diagnosis_only",
     }
     audit = collection_audit or {}
     scope_audit = audit.get("xueqiu_activity_scope_policy") or {}
+    preflight = audit.get("xueqiu_preflight_diagnosis") or {}
+    preflight_readiness = preflight.get("collection_readiness") if isinstance(preflight.get("collection_readiness"), dict) else {}
+    source_probe = preflight.get("source_probe") if isinstance(preflight.get("source_probe"), dict) else {}
     timestamp = collected_at or now_iso()
+    raw_ref = {
+        "preflight": True,
+        "reason": reason,
+        "scope_policy_enabled": bool(scope_audit.get("configured", False)),
+    }
+    if reason == "xueqiu_preflight_diagnosis_only":
+        raw_ref["diagnosis_only"] = True
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
@@ -916,12 +1374,18 @@ def gap_event(
             "broker_trade_fact_claimed": False,
             "holding_fact_claimed": False,
             "order_or_fund_flow_claimed": False,
+            "preflight_diagnosis_status": preflight_readiness.get("status"),
+            "can_attempt_collect": preflight_readiness.get("can_attempt_collect", False),
+            "can_attempt_har_collect": preflight_readiness.get("can_attempt_har_collect", False),
+            "can_attempt_browser_history_collect": preflight_readiness.get("can_attempt_browser_history_collect", False),
+            "can_attempt_local_export_collect": preflight_readiness.get("can_attempt_local_export_collect", False),
+            "can_prepare_authorized_browser_history_copy": preflight_readiness.get("can_prepare_authorized_browser_history_copy", False),
+            "can_attempt_real_account_network_collect": False,
+            "diagnosed_source_count": source_probe.get("supported_input_file_count", 0),
+            "diagnosed_har_xueqiu_entry_count": source_probe.get("har_xueqiu_entry_count", 0),
+            "diagnosed_browser_history_xueqiu_visit_count": source_probe.get("browser_history_xueqiu_visit_count", 0),
         },
-        "raw_ref": {
-            "preflight": True,
-            "reason": reason,
-            "scope_policy_enabled": bool(scope_audit.get("configured", False)),
-        },
+        "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
@@ -1035,7 +1499,13 @@ def build_manifest(
     observed = sorted(activity for activity in activity_counts if activity != "collector_gap")
     missing = [activity for activity in EXPECTED_ACTIVITY_TYPES if activity not in activity_counts]
     audit = collection_audit or {}
-    if gap_only and audit.get("xueqiu_activity_scope_policy_filtered_all"):
+    preflight = audit.get("xueqiu_preflight_diagnosis") if isinstance(audit.get("xueqiu_preflight_diagnosis"), dict) else {}
+    preflight_readiness = preflight.get("collection_readiness") if isinstance(preflight.get("collection_readiness"), dict) else {}
+    if gap_only and preflight:
+        readiness_status = "preflight_diagnosis_only"
+        activity_boundary_scope = "preflight_only"
+        next_action = str(preflight_readiness.get("next_action") or "Run collect after providing an authorized Xueqiu source.")
+    elif gap_only and audit.get("xueqiu_activity_scope_policy_filtered_all"):
         readiness_status = "scope_policy_filtered_all"
         activity_boundary_scope = "scope_policy_excluded_all"
         next_action = "Review or relax Xueqiu activity scope policy, then rerun the collector."
@@ -1055,7 +1525,7 @@ def build_manifest(
         "usable_event_count": usable_event_count,
         "activity_event_count": activity_event_count,
         "gap_event_count": gap_event_count,
-        "source_file_count": len({(event.get("raw_ref") or {}).get("path") for event in events if (event.get("raw_ref") or {}).get("path")}),
+        "source_file_count": len({(event.get("raw_ref") or {}).get("source_id") for event in events if (event.get("raw_ref") or {}).get("source_id")}),
         "kind_counts": dict(sorted(counts.items())),
         "activity_counts": dict(sorted(activity_counts.items())),
         "surface_counts": dict(sorted(surface_counts.items())),
@@ -1082,6 +1552,13 @@ def build_manifest(
             "usable_event_count": usable_event_count,
             "activity_event_count": activity_event_count,
             "gap_event_count": gap_event_count,
+            "preflight_can_attempt_collect": bool(preflight_readiness.get("can_attempt_collect", False)),
+            "preflight_can_attempt_har_collect": bool(preflight_readiness.get("can_attempt_har_collect", False)),
+            "preflight_can_attempt_browser_history_collect": bool(preflight_readiness.get("can_attempt_browser_history_collect", False)),
+            "preflight_can_attempt_local_export_collect": bool(preflight_readiness.get("can_attempt_local_export_collect", False)),
+            "preflight_can_prepare_authorized_browser_history_copy": bool(
+                preflight_readiness.get("can_prepare_authorized_browser_history_copy", False)
+            ),
             "next_action": next_action,
         },
         "collection_audit": audit,
@@ -1385,9 +1862,11 @@ def activity_boundary_proof(
     audit = collection_audit or {}
     if not activity_events:
         scope_policy_filtered_all = bool(audit.get("xueqiu_activity_scope_policy_filtered_all"))
+        preflight = audit.get("xueqiu_preflight_diagnosis") if isinstance(audit.get("xueqiu_preflight_diagnosis"), dict) else {}
+        preflight_only = bool(preflight)
         return {
-            "proof_scope": "scope_policy_excluded_all" if scope_policy_filtered_all else "none",
-            "overall_proof_level": "scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_activity_evidence",
+            "proof_scope": "preflight_only" if preflight_only else ("scope_policy_excluded_all" if scope_policy_filtered_all else "none"),
+            "overall_proof_level": "preflight_diagnosis_only" if preflight_only else ("scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_activity_evidence"),
             "complete_xueqiu_activity_boundary_claimed": False,
             "xueqiu_is_broker_trade_source": False,
             "activity_event_count": 0,
@@ -1401,7 +1880,12 @@ def activity_boundary_proof(
             "activity_proofs": [],
             "authorization_scope_boundary": activity_authorization_scope_boundary(audit),
             "pagination_completeness": pagination_completeness_summary(activity_events, audit),
-            "missing_global_requirements": ["scope_policy_retained_records"] if scope_policy_filtered_all else ["authorized_xueqiu_activity_input"],
+            "preflight_readiness": preflight.get("collection_readiness", {}) if preflight_only else {},
+            "missing_global_requirements": (
+                ["authorized_xueqiu_activity_collection_not_run"]
+                if preflight_only
+                else (["scope_policy_retained_records"] if scope_policy_filtered_all else ["authorized_xueqiu_activity_input"])
+            ),
         }
 
     activity_counts = Counter(str((event.get("data") or {}).get("activity_type") or "unknown") for event in activity_events)
@@ -1553,7 +2037,12 @@ def dict_child(record: Dict[str, Any], key: str) -> Dict[str, Any]:
 def preview(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
-    return str(value)[:1200]
+    return redact_sensitive_text(str(value))[:1200]
+
+
+def redact_sensitive_text(value: str) -> str:
+    text = CN_MOBILE_RE.sub(r"\1****\2", value)
+    return INLINE_SECRET_RE.sub(r"\1=<redacted>", text)
 
 
 def number(value: Any) -> Optional[float]:
@@ -1689,14 +2178,18 @@ def sanitized(value: Any) -> Any:
             if str(key).startswith("_collectorx_"):
                 continue
             lowered = str(key).lower()
+            normalized_key = normalize_audit_key(key)
             if any(fragment in lowered for fragment in SECRET_KEY_FRAGMENTS):
+                continue
+            if normalized_key in LOCAL_PATH_KEYS:
                 continue
             cleaned[str(key)] = sanitized(item)
         return cleaned
     if isinstance(value, list):
         return [sanitized(item) for item in value[:200]]
     if isinstance(value, str):
-        return value[:2000]
+        text = safe_url_for_output(value) if re.match(r"^https?://", value.strip(), flags=re.IGNORECASE) else value
+        return redact_sensitive_text(text or value)[:2000]
     return value
 
 
@@ -1787,7 +2280,21 @@ def canonical_url(html: str) -> Optional[str]:
 
 def first_url(text: str) -> Optional[str]:
     match = re.search(r"https?://[^\s\"'<>]+", text)
-    return match.group(0) if match else None
+    return safe_url_for_output(match.group(0)) if match else None
+
+
+def safe_url_for_output(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return value
+    text = str(value)
+    parsed = urlparse(text)
+    query = str(parsed.query or "")
+    fragment = str(parsed.fragment or "")
+    if query and any(fragment_key in query.lower() for fragment_key in SECRET_KEY_FRAGMENTS):
+        parsed = parsed._replace(query="")
+    if fragment and any(fragment_key in fragment.lower() for fragment_key in SECRET_KEY_FRAGMENTS):
+        parsed = parsed._replace(fragment="")
+    return urlunparse(parsed)
 
 
 def infer_title(path: Path, text: str) -> str:

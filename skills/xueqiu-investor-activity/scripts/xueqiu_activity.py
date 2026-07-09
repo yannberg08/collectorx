@@ -9,7 +9,15 @@ import re
 import shutil
 from pathlib import Path
 
-from xueqiu_activity.parser import ACTIVITY_SCOPE_POLICY_KEYS, build_evidence, build_manifest, collect_from_inputs_with_audit, now_iso
+from xueqiu_activity.parser import (
+    ACTIVITY_SCOPE_POLICY_KEYS,
+    build_evidence,
+    build_manifest,
+    build_preflight_diagnosis,
+    collect_from_inputs_with_audit,
+    gap_event,
+    now_iso,
+)
 
 
 def write_json(path: Path, payload: object) -> None:
@@ -86,12 +94,11 @@ def sync_package_to_soulmirror(output_dir: Path, *, soulmirror_home: Path | None
         "schema": "finclaw.soulmirror_bridge.v1",
         "collector": "xueqiu-investor-activity",
         "synced_at": now_iso(),
-        "source_output": str(output_dir),
-        "soulmirror_home": str(soulmirror_root),
-        "run_dir": str(run_dir),
-        "latest_dir": str(latest_dir),
-        "root_event_file": str(root_event_file),
-        "copied_files": sorted(set(copied)),
+        "source_output_present": output_dir.exists(),
+        "soulmirror_home_configured": True,
+        "run_id": run_id,
+        "copied_file_count": len(set(copied)),
+        "copied_file_names": sorted({Path(path).name for path in copied}),
         "note": "Copied Xueqiu investor evidence into SoulMirror lake only; final wiki organization remains app-controlled.",
     }
     write_json(output_dir / "soulmirror_sync.json", bridge_manifest)
@@ -115,10 +122,39 @@ def collect(args: argparse.Namespace) -> int:
         write_package(package_dir, events, collected_at=collected_at, collection_audit=collection_audit)
         if args.sync_soulmirror:
             sync_report = sync_package_to_soulmirror(package_dir, soulmirror_home=Path(args.soulmirror_home).expanduser() if args.soulmirror_home else None)
-            print(f"SoulMirror lake 同步: {sync_report['latest_dir']}")
+            print(f"SoulMirror lake 同步完成: copied_file_count={sync_report['copied_file_count']}")
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
-    print(json.dumps({"event_count": len(events), "collector": "xueqiu-investor-activity", "out_dir": str(package_dir) if package_dir else None}, ensure_ascii=False, sort_keys=True))
+    print(json.dumps({"event_count": len(events), "collector": "xueqiu-investor-activity", "out_dir_written": package_dir is not None}, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def diagnose(args: argparse.Namespace) -> int:
+    collected_at = args.collected_at or now_iso()
+    payload = build_preflight_diagnosis(
+        args.input or [],
+        collected_at=collected_at,
+        scan_browser_profiles=args.scan_browser_profiles,
+        browser_profile_roots=args.browser_profile_root or [],
+    )
+    if args.diagnose_out:
+        write_json(Path(args.diagnose_out).expanduser(), payload)
+    if args.out_dir:
+        audit = {
+            "source_type": "xueqiu_activity_preflight_diagnosis",
+            "real_account_adapter_used": False,
+            "broker_trade_source": False,
+            "xueqiu_preflight_diagnosis": payload,
+        }
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason="xueqiu_preflight_diagnosis_only",
+                collection_audit=audit,
+            )
+        ]
+        write_package(Path(args.out_dir).expanduser(), events, collected_at=collected_at, collection_audit=audit)
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 
 
@@ -135,6 +171,14 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--collected-at")
     add_scope_policy_args(p)
     p.set_defaults(func=collect)
+    d = sub.add_parser("diagnose", help="Preflight local authorized Xueqiu sources without collecting activity events.")
+    d.add_argument("--input", action="append", help="Authorized Xueqiu export file/folder, HAR file, ZIP package, saved page, or copied browser history.")
+    d.add_argument("--diagnose-out", help="Write safe preflight diagnosis JSON to this file.")
+    d.add_argument("--out-dir", help="Optionally write a standard data-quality gap package for this preflight diagnosis.")
+    d.add_argument("--scan-browser-profiles", action="store_true", help="Count local browser history databases that could be copied by the user; does not read them.")
+    d.add_argument("--browser-profile-root", action="append", help="Optional root to scan for History/History.db candidates when --scan-browser-profiles is set.")
+    d.add_argument("--collected-at")
+    d.set_defaults(func=diagnose)
     return parser
 
 

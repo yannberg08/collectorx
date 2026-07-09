@@ -1,6 +1,6 @@
 {
   "slug": "china-wealth-assets",
-  "version": "0.4.8",
-  "status": "baseline+audit",
-  "description": "China fund and wealth asset collector for normalized Alipay, Tiantian Fund, Danjuan, Qieman, bank wealth, Excel/legacy-XLS/HTML-table/PDF-statement/JSON/CSV/ZIP/HAR exports, scope-policy audit, no-input/filtered-all data-quality gap packages, gap/usable/asset counts, business/data-quality/Wiki readiness gates, source audit, account/asset/currency summaries, asset-boundary proof, and SoulMirror lake packages."
+  "version": "0.4.9",
+  "status": "baseline+audit+preflight-contract",
+  "description": "China fund and wealth asset collector for normalized Alipay, Tiantian Fund, Danjuan, Qieman, bank wealth, Excel/legacy-XLS/HTML-table/PDF-statement/JSON/CSV/ZIP/HAR exports, source preflight diagnostics, field-contract gates for asset/holding/return/cashflow facts, scope-policy audit, no-input/unsupported-source/filtered-all/field-contract data-quality gap packages, gap/usable/asset counts, business/data-quality/Wiki readiness gates, privacy redaction, account/asset/currency summaries, asset-boundary proof, and SoulMirror lake packages."
 }

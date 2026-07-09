@@ -1168,6 +1168,137 @@ def test_local_email_client_e2e_feeds_email_research_lens_and_blocks_gap_wiki_fa
         assert run_package_validator(lens_gap_out, collector="email-research", require_evidence=True)["valid"] is True
 
 
+def test_email_preflight_diagnose_imap_readiness_without_secret_leaks():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_path = root / "email.json"
+        diagnose_out = root / "diagnose.json"
+        private_root = root / "private.owner@example.net" / "13800138000"
+        secret_value = "collectorx-test-secret"
+        env_name = "COLLECTORX_TEST_EMAIL_PASSWORD"
+        state_path.write_text(
+            json.dumps(
+                {
+                    "accounts": [
+                        {
+                            "id": "owner_example_com",
+                            "provider": "custom",
+                            "host": "imap.example.com",
+                            "email": "owner.secret@example.com",
+                            "password_env": env_name,
+                            "folders": ["INBOX", "Research"],
+                            "days": 30,
+                            "enabled": True,
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "preflight",
+                "--diagnose",
+                "--email",
+                "analyst@example.com",
+                "--platform",
+                "generic",
+                "--local-root",
+                str(private_root),
+                "--diagnose-out",
+                str(diagnose_out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+            env={**os.environ, "COLLECTORX_EMAIL_STATE": str(state_path), env_name: secret_value},
+        )
+
+        payload = json.loads(result.stdout)
+        saved_payload = json.loads(diagnose_out.read_text(encoding="utf-8"))
+        assert payload == saved_payload
+        assert payload["schema"] == "collectorx.email_preflight.v1"
+        assert payload["diagnostic_scope"]["imap_login_attempted"] is False
+        assert payload["diagnostic_scope"]["message_headers_read"] is False
+        assert payload["diagnostic_scope"]["message_bodies_read"] is False
+        assert payload["diagnostic_scope"]["local_file_contents_read"] is False
+        assert payload["diagnostic_scope"]["paths_emitted"] is False
+        assert payload["mailbox_registration"]["account_count"] == 1
+        assert payload["mailbox_registration"]["enabled_account_count"] == 1
+        assert payload["mailbox_registration"]["imap_ready_account_count"] == 1
+        assert payload["mailbox_registration"]["present_password_env_count"] == 1
+        assert payload["mailbox_registration"]["mailbox_domains"] == ["example.com"]
+        assert payload["mailbox_registration"]["accounts"][0]["password_env_present"] is True
+        assert payload["local_scan_probe"]["custom_roots_supplied"] is True
+        assert payload["local_scan_probe"]["scan_summary"]["root_count"] == 1
+        assert payload["local_scan_probe"]["scan_summary"]["supported_file_count"] == 0
+        assert payload["collection_readiness"]["status"] == "ready_for_imap_or_local_scan_attempt"
+        assert payload["collection_readiness"]["can_attempt_imap_collect"] is True
+        assert payload["collection_readiness"]["can_enter_email_lake"] is False
+        assert payload["collection_readiness"]["can_feed_email_research_lens"] is False
+
+        serialized = result.stdout + diagnose_out.read_text(encoding="utf-8")
+        assert secret_value not in serialized
+        assert env_name not in serialized
+        assert "owner.secret@example.com" not in serialized
+        assert "analyst@example.com" not in serialized
+        assert str(private_root) not in serialized
+        assert "13800138000" not in serialized
+
+
+def test_email_preflight_diagnose_local_scan_readiness_without_path_or_body_reads():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        state_path = root / "missing-email-state.json"
+        local_root = root / "Library" / "Mail" / "private.path.account@example.net" / "13800138000"
+        maildir_new = local_root / "Maildir" / "new"
+        maildir_new.mkdir(parents=True)
+        (maildir_new / "1720000000.M123P456Q789.host:2,S").write_text(
+            "Subject: should not be read by diagnosis\n\nprivate body",
+            encoding="utf-8",
+        )
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "preflight",
+                "--diagnose",
+                "--platform",
+                "mac",
+                "--local-root",
+                str(local_root),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+            env={**os.environ, "COLLECTORX_EMAIL_STATE": str(state_path)},
+        )
+
+        payload = json.loads(result.stdout)
+        assert payload["schema"] == "collectorx.email_preflight.v1"
+        assert payload["mailbox_registration"]["account_count"] == 0
+        assert payload["diagnostic_scope"]["local_file_contents_read"] is False
+        assert payload["diagnostic_scope"]["message_bodies_read"] is False
+        assert payload["local_scan_probe"]["scan_summary"]["supported_file_count"] == 1
+        assert payload["local_scan_probe"]["scan_summary"]["candidate_format_counts"] == {"maildir": 1}
+        assert payload["collection_readiness"]["status"] == "ready_for_imap_or_local_scan_attempt"
+        assert payload["collection_readiness"]["can_attempt_local_scan"] is True
+        assert payload["collection_readiness"]["can_enter_finclaw"] is False
+
+        serialized = result.stdout
+        assert "private.path.account@example.net" not in serialized
+        assert "13800138000" not in serialized
+        assert str(local_root) not in serialized
+        assert "private body" not in serialized
+
+
 def test_local_email_import_gap_event():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -1437,6 +1568,8 @@ if __name__ == "__main__":
     test_local_email_scan_package_masks_source_paths()
     test_local_email_scan_thunderbird_mbox_boundary()
     test_local_email_client_e2e_feeds_email_research_lens_and_blocks_gap_wiki_facts()
+    test_email_preflight_diagnose_imap_readiness_without_secret_leaks()
+    test_email_preflight_diagnose_local_scan_readiness_without_path_or_body_reads()
     test_local_email_import_gap_event()
     test_local_email_import_missing_input_gap_audit()
     test_local_email_import_zip_package()

@@ -19,6 +19,7 @@ REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "xueqiu_activity.py"
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 XUEQIU_ACTIVITY_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "xueqiu-investor-activity" / "activity_export.json"
+XUEQIU_PREFLIGHT_HAR_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "xueqiu-investor-activity" / "preflight_network.har"
 
 
 def read_events(out: Path) -> list[dict]:
@@ -675,6 +676,169 @@ def test_collects_har_network_export_without_leaking_secrets() -> None:
         assert evidence["coverage_summary"]["activity_boundary_proof"]["pagination_completeness"]["completeness_level"] == "paginated_partial_export"
 
 
+def test_diagnose_authorized_sources_writes_safe_preflight_package() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        history = root / "authorized History"
+        history.mkdir()
+        history_file = history / "History"
+        profile_root = root / "profile roots"
+        profile_history_dir = profile_root / "Chrome" / "Default"
+        profile_history_dir.mkdir(parents=True)
+        (profile_history_dir / "History").write_text("", encoding="utf-8")
+        diagnose_out = root / "diagnose.json"
+        package_out = root / "preflight-package"
+        write_chromium_history(
+            history_file,
+            [
+                (1, "https://xueqiu.com/S/SH600519?source=history", "贵州茅台讨论", 5, 1, 10, chromium_time(2026, 7, 8, 1, 0), 1),
+                (2, "https://example.com/not-xueqiu", "无关页面", 9, 0, 11, chromium_time(2026, 7, 8, 2, 0), 0),
+            ],
+        )
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "diagnose",
+                "--input",
+                str(XUEQIU_PREFLIGHT_HAR_FIXTURE),
+                "--input",
+                str(history_file),
+                "--diagnose-out",
+                str(diagnose_out),
+                "--out-dir",
+                str(package_out),
+                "--scan-browser-profiles",
+                "--browser-profile-root",
+                str(profile_root),
+                "--collected-at",
+                "2026-07-09T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        payload = json.loads(result.stdout)
+        disk_payload = json.loads(diagnose_out.read_text(encoding="utf-8"))
+        assert payload == disk_payload
+        assert payload["schema"] == "collectorx.xueqiu_activity_preflight.v1"
+        assert payload["diagnostic_scope"]["activity_events_collected"] is False
+        assert payload["diagnostic_scope"]["har_response_payloads_parsed"] is False
+        assert payload["diagnostic_scope"]["browser_history_urls_emitted"] is False
+        assert payload["diagnostic_scope"]["local_paths_emitted"] is False
+        readiness = payload["collection_readiness"]
+        assert readiness["status"] == "authorized_sources_detected"
+        assert readiness["can_attempt_collect"] is True
+        assert readiness["can_attempt_har_collect"] is True
+        assert readiness["can_attempt_browser_history_collect"] is True
+        assert readiness["can_attempt_local_export_collect"] is False
+        assert readiness["can_prepare_authorized_browser_history_copy"] is True
+        assert readiness["can_attempt_real_account_network_collect"] is False
+        assert readiness["can_claim_broker_trade_collection"] is False
+        probe = payload["source_probe"]
+        assert probe["candidate_kind_counts"] == {
+            "authorized_browser_history_copy": 1,
+            "authorized_har": 1,
+        }
+        assert probe["har_xueqiu_entry_count"] == 1
+        assert probe["browser_history_xueqiu_visit_count"] == 1
+        assert probe["candidates"][0]["source_id"].startswith("xqsrc_")
+        assert "path" not in probe["candidates"][0]
+        assert payload["browser_profile_probe"]["candidate_count"] == 1
+
+        assert_package_valid(package_out)
+        events = read_events(package_out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["data"]["gap"] == "xueqiu_preflight_diagnosis_only"
+        assert gap["data"]["preflight_diagnosis_status"] == "authorized_sources_detected"
+        assert gap["data"]["can_attempt_collect"] is True
+        assert gap["data"]["diagnosed_har_xueqiu_entry_count"] == 1
+        assert gap["data"]["diagnosed_browser_history_xueqiu_visit_count"] == 1
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "xueqiu_preflight_diagnosis_only",
+            "scope_policy_enabled": False,
+            "diagnosis_only": True,
+        }
+        manifest = json.loads((package_out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "preflight_diagnosis_only"
+        assert manifest["collection_readiness"]["can_enter_xueqiu_activity_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["preflight_can_attempt_collect"] is True
+        assert manifest["activity_boundary_proof"]["overall_proof_level"] == "preflight_diagnosis_only"
+        assert_evidence_generated_from(package_out, raw_event_count=1, usable_event_count=0, gap_event_count=1)
+
+        serialized = "\n".join(
+            [
+                result.stdout,
+                diagnose_out.read_text(encoding="utf-8"),
+                (package_out / "manifest.json").read_text(encoding="utf-8"),
+                (package_out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"),
+                (package_out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8"),
+            ]
+        )
+        assert str(root) not in serialized
+        assert "SHOULD_NOT_LEAK" not in serialized
+        assert "xq_a_token" not in serialized
+        assert "statuses/user_timeline.json?xq_a_token" not in serialized
+
+
+def test_collect_package_does_not_emit_local_paths_tokens_or_phone_numbers() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        json_path = root / "sensitive-local-name-13812345678.json"
+        out = root / "out"
+        json_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "type": "post",
+                        "text": "复盘联系 13812345678，token=SHOULD_NOT_LEAK，继续观察 $贵州茅台(SH600519)$。",
+                        "url": "https://xueqiu.com/1/2?xq_a_token=SHOULD_NOT_LEAK&source=fixture",
+                        "path": str(root / "must-not-emit"),
+                    }
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(json_path),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T12:30:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        assert_package_valid(out)
+        events = read_events(out)
+        assert events[0]["raw_ref"]["source_id"].startswith("xqsrc_")
+        assert "path" not in events[0]["raw_ref"]
+        assert events[0]["data"]["url"] == "https://xueqiu.com/1/2"
+        assert "138****5678" in events[0]["data"]["content_preview"]
+        serialized = "\n".join(
+            [
+                (out / "manifest.json").read_text(encoding="utf-8"),
+                (out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"),
+                (out / "lake" / "xueqiu-investor-activity" / "events.jsonl").read_text(encoding="utf-8"),
+            ]
+        )
+        assert str(root) not in serialized
+        assert "SHOULD_NOT_LEAK" not in serialized
+        assert "xq_a_token" not in serialized
+        assert "13812345678" not in serialized
+
+
 def test_collects_browser_history_copy_filters_xueqiu_domains() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -1025,6 +1189,8 @@ if __name__ == "__main__":
     test_activity_gap_event()
     test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets()
     test_collects_har_network_export_without_leaking_secrets()
+    test_diagnose_authorized_sources_writes_safe_preflight_package()
+    test_collect_package_does_not_emit_local_paths_tokens_or_phone_numbers()
     test_collects_browser_history_copy_filters_xueqiu_domains()
     test_collects_zipped_browser_history_copy_from_spaced_path()
     test_collects_safari_history_copy_without_optional_load_successful()

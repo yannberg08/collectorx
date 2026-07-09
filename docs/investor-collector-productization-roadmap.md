@@ -70,6 +70,9 @@ in parallel only inside the write boundaries below.
 | --- | --- | --- | --- | --- |
 | Global status audit | Read-only explorer | Re-check P0/P1/P2 implementation depth, fixture coverage, real-validation gaps, and SoulMirror migration opportunities | None | Status matrix with evidence file paths and next five safe parallel slices |
 | Notes E2E hardening | Worker | Add a fixed `notes` to `investment-notes` fixture gate proving generic notes do not enter Investor Wiki until the lens filters investment notes | `examples/fixtures/notes-investment-e2e/**`; `skills/notes-collector/tests/test_notes_collector.py` | Notes package validation, investment-notes package validation, decoy non-investment note exclusion, preview-only boundary proof, and targeted tests |
+| Email preflight diagnosis | Main thread | Add privacy-preserving IMAP/local-root readiness diagnosis before collection | `skills/email-collector/**`; email validation notes | Diagnosis JSON, no-secret/no-path tests, target tests, package/catalog validation |
+| Xueqiu preflight diagnosis | Worker then main integration | Add safe authorized-source diagnosis for exports/HAR/browser-history candidates | `skills/xueqiu-investor-activity/**`; Xueqiu fixture and validation note | Diagnosis gap package, no URL/token/path/phone leakage tests, target tests |
+| China wealth field contract | Worker then main integration | Add source preflight and minimum asset-fact field contract gates | `skills/china-wealth-assets/**`; China wealth fixture and validation note | Unsupported-source gap, placeholder-row rejection, target tests |
 | Main integration | Main Codex thread | Review worker output, update shared docs/catalog if needed, run targeted and project validation, commit, and push | Shared documentation, catalog, validation notes, final integration edits | Green targeted tests, package validators, `tools/validate_project.py`, `git diff --check`, one reviewed commit |
 
 Expansion rule: add at most two new worker lanes after the previous worker
@@ -85,6 +88,8 @@ scaffolding. The next safe parallel lanes are:
   notes.
 - Xueqiu real account/HAR/browser-history validation:
   `skills/xueqiu-watchlist/**` and `skills/xueqiu-investor-activity/**`.
+- China wealth real account/PDF/HAR/export validation:
+  `skills/china-wealth-assets/**`.
 - Collaboration/meeting real exports:
   `skills/feishu/**`, `skills/meeting-artifacts/**`, and
   `skills/collaboration-exports/**`.
@@ -581,6 +586,34 @@ Findings:
   Investor Wiki evidence required for normal, no-input, and filtered-all
   Xueqiu packages.
 
+### Wave B3i: P0 Xueqiu preflight diagnosis and redaction pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-xueqiu-preflight-diagnosis-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `xueqiu-investor-activity` to `0.3.8`.
+- Added `xueqiu_activity.py diagnose` for FinClaw-safe local-source readiness
+  checks before activity collection.
+- Diagnosis emits `collectorx.xueqiu_activity_preflight.v1` and can optionally
+  write a standard `xueqiu_preflight_diagnosis_only` data-quality gap package.
+- Diagnosis covers authorized exports, saved pages, ZIP packages, logged-in HAR
+  files, copied Chromium/Safari browser history files, and browser-history
+  profile candidates that still require explicit user copy before collection.
+- Diagnosis does not collect activity events, parse HAR response payloads into
+  events, emit browser-history URLs/titles, emit local paths, emit phone
+  numbers, or claim broker trade collection.
+- Event, manifest, diagnosis, and SoulMirror bridge output now avoid local path
+  emission and use `source_id`, extension, row, HAR entry, and ZIP member
+  metadata instead.
+- Fixture validation covers HAR secret/query stripping, copied browser-history
+  diagnosis, browser-profile candidate counting without direct database reads,
+  preflight gap packages, and no path/token/phone leakage.
+
 ### Wave B4: P0 China wealth assets productization pass 2
 
 Status: `completed-baseline`
@@ -805,6 +838,35 @@ Findings:
   boundary to FinClaw so partial asset facts remain explicitly user-authorized.
 - Fixture validation covers partial retention across platform/account/subtype/
   product/currency/keyword filters and filtered-all readiness.
+
+### Wave B4j: P0 China wealth preflight and field-contract pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-china-wealth-preflight-contract-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `china-wealth-assets` to `0.4.9`.
+- Added `manifest.collection_audit.source_preflight` so FinClaw can distinguish
+  supported authorized wealth sources from unsupported inputs before facts are
+  emitted.
+- Unsupported user-provided sources emit
+  `china_wealth_supported_input_missing` data-quality gap packages rather than
+  silent empty results or fabricated asset facts.
+- Added `china_wealth_asset_fact_contract.v1` minimum field gates for asset
+  snapshots, holdings, cash-management records, and fund/wealth cashflows.
+- Candidate rows missing platform, product/account identity, or numeric
+  value/cashflow evidence are blocked from China wealth Lake and represented by
+  `china_wealth_field_contract_rejected_records` or
+  `china_wealth_field_contract_rejected_all` gap events.
+- Manifest and Investor Wiki evidence include `field_contract` summaries so
+  FinClaw can see which asset, holding, income/return, and cashflow surfaces
+  are fact-ready.
+- Fixture validation proves a placeholder fund holding is excluded from asset
+  facts while a valid asset snapshot and cashflow remain usable evidence.
 
 ### Wave B5: P0 Email IMAP package and audit pass
 
@@ -1418,6 +1480,34 @@ Findings:
   `scope_policy_filtered_all` instead of a misleading missing-export gap.
 - Fixture validation covers IMAP post-fetch filtering, local import partial
   filtering, and local import filtered-all gap behavior.
+
+### Wave N9: P0 email preflight diagnosis pass
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p0-email-diagnose-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.9`.
+- Added `email_api.py preflight --diagnose` and `--diagnose-out` so FinClaw
+  can determine whether IMAP or a user-authorized local email root is ready for
+  a real collection attempt before running collection.
+- The diagnosis emits `collectorx.email_preflight.v1` and does not attempt
+  IMAP login, read message headers, message bodies, attachments, or local email
+  file contents.
+- Diagnosis output records mailbox account counts, provider/domain summaries,
+  password-environment presence counts, local email candidate counts, format
+  coverage, and readiness flags for `can_attempt_imap_collect` and
+  `can_attempt_local_scan`.
+- Diagnosis output deliberately does not emit full email addresses, password
+  environment variable names, secrets, local paths, long numeric account
+  fragments, or body text.
+- Fixture validation covers both ready IMAP configuration and local Maildir
+  candidate readiness without claiming real mailbox validation or writing email
+  events to Lake.
 
 ### Wave O: P0 filesystem cross-platform manifest pass 1
 

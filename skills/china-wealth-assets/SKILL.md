@@ -50,6 +50,10 @@ python <SKILL_DIR>/scripts/china_wealth.py collect \
 支持 CSV/TSV/JSON/JSONL/Excel/旧式 `.xls`/HTML 表格/PDF 官方账单/TXT/Markdown/HAR/ZIP。
 解析器会归一化支付宝、天天基金、蛋卷、且慢和银行理财的常见字段，保留资产、持仓、申赎、分红、
 成本、收益等数字字段，并剔除 cookie、token、password 等凭据类字段。
+采集前会写入 `manifest.collection_audit.source_preflight`，诊断用户授权来源属于
+平台导出文件、PDF 官方账单、浏览器 HAR、ZIP 授权包或屏幕/文本快照，并记录格式是否受支持、
+平台文件名提示、缺失/不支持输入和只读授权边界。用户给了文件但格式不支持时，只输出
+`china_wealth_supported_input_missing` 数据质量 gap，不写资产事实。
 PDF 账单通过本地 `pdfplumber` 读取文本和表格，不做远程 OCR；能提取表格时会保留页码、表格号、
 行号和 PDF parser 审计，无法结构化时只作为授权账单快照，不伪造资产数字。
 HAR 是用户已登录对应平台后、明确授权选择的浏览器网络导出文件。采集器只读取
@@ -63,6 +67,12 @@ manifest 会记录
 PDF 文件数、页数、表格数、PDF 表格记录数、发出事件数和路径级结果。
 没有授权输入时，只输出 validator-safe profile gap 事件，路由到
 `collectorx.data_quality.collection_gaps`。
+每条候选业务记录还会经过 `china_wealth_asset_fact_contract.v1` 最小字段契约：
+资产快照必须有已知平台和资产值；持仓必须有已知平台、产品身份和金额/份额/净值/成本/收益之一；
+现金管理必须有已知平台、现金/产品身份和现金值；申赎/分红流水必须有已知平台、流水金额和
+方向或产品身份。缺最小字段的记录不会进入资产湖；若部分记录被拒，会追加
+`china_wealth_field_contract_rejected_records` gap；若全部被拒，会输出
+`china_wealth_field_contract_rejected_all` gap。
 
 可用 platform、account、subtype、product-code、product-name、currency、side、
 keyword 的 allow/deny 授权范围过滤。`manifest.collection_audit.china_wealth_scope_policy`
@@ -76,6 +86,9 @@ manifest 会拆分 `usable_event_count`、`asset_event_count` 和 `gap_event_cou
 `collection_readiness.can_enter_data_quality_lake` 和
 `collection_readiness.can_feed_investor_wiki_evidence` 明确资产事实、数据质量缺口
 和 Wiki evidence 的入湖门禁。
+`manifest.field_contract` 会列出资产/持仓/收益/流水字段契约覆盖、被拒原因和
+`does_not_promote_placeholder_rows_to_asset_facts=true`；字段契约 gap 不会喂给
+Investor Wiki 作为资产事实。
 
 ## 完整性口径
 
