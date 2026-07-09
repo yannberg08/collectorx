@@ -16,7 +16,30 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-The latest completed wave hardens the P0 `research-documents` lens as an
+The latest completed wave adds stable offline fixture E2E gates for P0
+`xueqiu-investor-activity` and the P2 `social-activity` to
+`social-investment-influence` flow:
+
+- Added checked-in fixtures under
+  `examples/fixtures/xueqiu-investor-activity/` and
+  `examples/fixtures/social-activity/`.
+- `xueqiu-investor-activity` now has a repeatable fixture test covering
+  watchlist, post/review, favorite, followed user, and portfolio activity in
+  one package, with `activity_event_count`, non-broker-trade posture, evidence
+  raw/gap/usable counts, and 7/20 Investor Wiki evidence contract verified.
+- `social-activity` now has a repeatable fixture-to-lens E2E test: generic
+  Weibo/Bilibili/Xiaohongshu weak activity events first enter only
+  `internal.social.activity`, then
+  `social-investment-influence` retains the investment-topic weak influence
+  events while excluding an entertainment decoy and a plain creator follow from
+  lens facts.
+- Package validation now covers the Xueqiu fixture package, the generic social
+  package, and the downstream social-investment lens package.
+
+This improves repeatable product gating, but it does not claim real Xueqiu,
+Weibo, Bilibili, Xiaohongshu, Windows, Linux, or browser-history validation.
+
+The prior completed wave hardens the P0 `research-documents` lens as an
 offline G2 readiness bridge from generic filesystem metadata to Investor Wiki
 evidence:
 

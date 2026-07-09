@@ -1,0 +1,61 @@
+{
+  "activities": [
+    {
+      "platform": "微博",
+      "action": "收藏",
+      "source_app": "social_export",
+      "creator": "宏观研究员A",
+      "title": "宏观流动性与仓位策略复盘",
+      "url": "https://weibo.com/100/strategy",
+      "content": "关注政策、利率、仓位和市场主线。",
+      "favorite_count": "12",
+      "time": "2026-07-09T10:00:00+08:00"
+    },
+    {
+      "platform": "B站",
+      "action": "观看",
+      "source_app": "social_export",
+      "creator": "投研UP主",
+      "title": "半导体产业链财报与安全边际",
+      "url": "https://www.bilibili.com/video/BV1invest",
+      "tags": ["股票", "半导体", "财报"],
+      "view_count": "2.5万",
+      "duration": "1800",
+      "progress": "80%",
+      "content": "行业景气、基本面和风险控制复盘。",
+      "time": "2026-07-09T10:15:00+08:00"
+    },
+    {
+      "platform": "小红书",
+      "action": "收藏",
+      "source_app": "social_export",
+      "creator": "投教作者",
+      "title": "基金定投纪律与回撤控制",
+      "url": "https://www.xiaohongshu.com/explore/fund-discipline",
+      "content": "定投、基金、风险控制、纪律。",
+      "favorite_count": "86",
+      "time": "2026-07-09T10:30:00+08:00"
+    },
+    {
+      "platform": "微博",
+      "action": "关注",
+      "source_app": "social_export",
+      "creator": "财经博主B",
+      "title": "关注财经博主B",
+      "url": "https://weibo.com/u/finance-b",
+      "follower_count": "20000",
+      "time": "2026-07-09T10:40:00+08:00"
+    },
+    {
+      "platform": "B站",
+      "action": "点赞",
+      "source_app": "social_export",
+      "creator": "娱乐UP主",
+      "title": "游戏直播剪辑",
+      "url": "https://www.bilibili.com/video/BV1game",
+      "tags": ["游戏"],
+      "content": "娱乐内容，不作为投资影响源。",
+      "time": "2026-07-09T10:50:00+08:00"
+    }
+  ]
+}

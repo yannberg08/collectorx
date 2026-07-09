@@ -1,0 +1,55 @@
+{
+  "data": {
+    "items": [
+      {
+        "type": "watchlist",
+        "code": "600519",
+        "name": "贵州茅台",
+        "group": "白酒长期观察",
+        "note": "关注估值、现金流和安全边际",
+        "created_at": "2026-07-09T09:00:00+08:00"
+      },
+      {
+        "type": "status",
+        "id": 1001,
+        "max_id": 1001,
+        "text": "复盘 $贵州茅台(SH600519)$：财报质量稳定，但需要等待更好的估值赔率。",
+        "created_at": "2026-07-09T09:20:00+08:00",
+        "user": {
+          "id": 42,
+          "screen_name": "价值研究员"
+        },
+        "cookie": "SHOULD_NOT_LEAK_XUEQIU_COOKIE"
+      },
+      {
+        "type": "favorite",
+        "title": "白酒行业深度：需求、渠道和风险控制",
+        "url": "https://xueqiu.com/123/456",
+        "text": "收藏用于后续研究，不代表买入结论。",
+        "created_at": "2026-07-09T09:30:00+08:00",
+        "token": "SHOULD_NOT_LEAK_XUEQIU_TOKEN"
+      },
+      {
+        "type": "follow_user",
+        "screen_name": "低波红利研究员",
+        "url": "https://xueqiu.com/u/low-vol",
+        "created_at": "2026-07-09T09:40:00+08:00"
+      },
+      {
+        "type": "portfolio",
+        "cube_symbol": "ZH123456",
+        "cube_name": "低波红利组合",
+        "rebalancing_histories": [
+          {
+            "stock_symbol": "600519",
+            "stock_name": "贵州茅台",
+            "prev_weight": "8",
+            "target_weight": "10"
+          }
+        ],
+        "updated_at": "2026-07-09T09:50:00+08:00",
+        "authorization": "SHOULD_NOT_LEAK_XUEQIU_AUTH"
+      }
+    ]
+  }
+}

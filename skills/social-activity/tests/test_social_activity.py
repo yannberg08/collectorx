@@ -18,11 +18,17 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "social_activity.py"
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+INVESTOR_SOURCE_SCRIPT = REPO_ROOT / "skills" / "investor-source-collectors" / "scripts" / "investor_sources.py"
+SOCIAL_ACTIVITY_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "social-activity" / "social_activity_export.json"
 
 
 def read_events(out: Path) -> list[dict]:
     event_file = out / "lake" / "social-activity" / "events.jsonl"
     return [json.loads(line) for line in event_file.read_text(encoding="utf-8").splitlines()]
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def assert_package_valid(out: Path) -> None:
@@ -39,6 +45,21 @@ def assert_package_valid(out: Path) -> None:
         text=True,
         capture_output=True,
     )
+
+
+def assert_collector_package_valid(out: Path, *, collector: str, require_evidence: bool = False) -> dict:
+    argv = [
+        sys.executable,
+        str(PACKAGE_VALIDATOR),
+        str(out),
+        "--collector",
+        collector,
+        "--json",
+    ]
+    if require_evidence:
+        argv.append("--require-evidence")
+    result = subprocess.run(argv, check=True, text=True, capture_output=True)
+    return json.loads(result.stdout)
 
 
 def test_collect_social_activity_exports() -> None:
@@ -144,6 +165,119 @@ def test_collect_social_activity_exports() -> None:
         assert proof["content_boundary"]["full_platform_scrape"] is False
         assert proof["false_claims"]["investment_conclusion_claimed"] is False
         assert "missing_expected_actions:favorite,share" in proof["completion_blockers"]
+
+
+def test_fixed_social_fixture_feeds_social_investment_lens_without_direct_wiki_claims() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        social_out = root / "social-activity"
+        lens_out = root / "social-investment-influence"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(SOCIAL_ACTIVITY_FIXTURE),
+                "--out-dir",
+                str(social_out),
+                "--collected-at",
+                "2026-07-09T11:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        assert_collector_package_valid(social_out, collector="social-activity")
+        social_event_path = social_out / "lake" / "social-activity" / "events.jsonl"
+        social_events = read_jsonl(social_event_path)
+        assert len(social_events) == 5
+        assert {event["data"]["platform"] for event in social_events} == {"weibo", "bilibili", "xiaohongshu"}
+        assert {event["data"]["action_type"] for event in social_events} == {"favorite", "follow", "like", "watch"}
+        assert all(event["wiki_targets"] == ["internal.social.activity"] for event in social_events)
+        assert all(event["data"]["evidence_role"] == "weak_influence_signal" for event in social_events)
+        assert all(event["data"]["investment_claim_allowed"] is False for event in social_events)
+        entertainment = next(event for event in social_events if event["data"]["title"] == "游戏直播剪辑")
+        assert entertainment["data"]["primary_social_topic"] == "unclassified_social_topic"
+
+        social_manifest = json.loads((social_out / "manifest.json").read_text(encoding="utf-8"))
+        assert social_manifest["usable_event_count"] == 5
+        assert social_manifest["social_activity_event_count"] == 5
+        assert social_manifest["gap_event_count"] == 0
+        assert social_manifest["platform_coverage"]["observed_expected_platforms"] == [
+            "weibo",
+            "bilibili",
+            "xiaohongshu",
+        ]
+        assert social_manifest["collection_readiness"]["can_enter_social_activity_lake"] is True
+        assert social_manifest["collection_readiness"]["can_feed_social_investment_lens"] is True
+        assert social_manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
+        social_proof = social_manifest["social_activity_boundary_proof"]
+        assert social_proof["weak_evidence_only"] is True
+        assert social_proof["requires_social_investment_lens"] is True
+        assert social_proof["can_feed_investor_wiki_directly"] is False
+        assert social_proof["false_claims"]["investment_conclusion_claimed"] is False
+        assert social_proof["false_claims"]["complete_social_activity_history_claimed"] is False
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(INVESTOR_SOURCE_SCRIPT),
+                "collect",
+                "--source",
+                "social-investment-influence",
+                "--input",
+                str(social_event_path),
+                "--out-dir",
+                str(lens_out),
+                "--collected-at",
+                "2026-07-09T11:10:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        assert_collector_package_valid(lens_out, collector="social-investment-influence", require_evidence=True)
+        lens_events = read_jsonl(lens_out / "lake" / "social-investment-influence" / "events.jsonl")
+        assert len(lens_events) == 3
+        lens_titles = {event["data"]["payload"]["title"] for event in lens_events}
+        assert lens_titles == {
+            "宏观流动性与仓位策略复盘",
+            "半导体产业链财报与安全边际",
+            "基金定投纪律与回撤控制",
+        }
+        assert "游戏直播剪辑" not in lens_titles
+        assert "关注财经博主B" not in lens_titles
+        assert all(event["data"]["payload"]["upstream_collector"] == "social-activity" for event in lens_events)
+        assert all(event["data"]["payload"]["requires_corroboration"] is True for event in lens_events)
+
+        lens_manifest = json.loads((lens_out / "manifest.json").read_text(encoding="utf-8"))
+        assert lens_manifest["usable_event_count"] == 3
+        assert lens_manifest["social_influence_event_count"] == 3
+        assert lens_manifest["gap_event_count"] == 0
+        assert lens_manifest["collection_readiness"]["can_enter_social_investment_influence_lake"] is True
+        assert lens_manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert lens_manifest["lens_surface_summary"]["platform_counts"] == {
+            "bilibili": 1,
+            "weibo": 1,
+            "xiaohongshu": 1,
+        }
+        assert lens_manifest["lens_surface_summary"]["usable_as_investment_conclusion"] is False
+        lens_proof = lens_manifest["social_influence_boundary_proof"]
+        assert lens_proof["proof_level"] == "strong_partial_social_influence_boundary"
+        assert lens_proof["weak_evidence_only"] is True
+        assert lens_proof["requires_corroboration"] is True
+        assert lens_proof["can_claim_investment_conclusion"] is False
+        assert "strong_trade_research_corroboration_missing" in lens_proof["completion_blockers"]
+
+        evidence = json.loads((lens_out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 3
+        assert evidence["generated_from"]["gap_event_count"] == 0
+        assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+        evidence_proof = evidence["coverage_summary"]["source_boundary_proof_summary"]["social-investment-influence"]
+        assert evidence_proof["weak_evidence_only"] is True
+        assert evidence_proof["can_claim_investment_conclusion"] is False
 
 
 def test_collect_nested_sections_workbook_and_weak_policy() -> None:
@@ -810,6 +944,7 @@ def test_collect_missing_input_writes_gap_audit() -> None:
 
 if __name__ == "__main__":
     test_collect_social_activity_exports()
+    test_fixed_social_fixture_feeds_social_investment_lens_without_direct_wiki_claims()
     test_collect_nested_sections_workbook_and_weak_policy()
     test_collect_zip_limit_counts_only_emitted_records()
     test_collect_browser_history_copy_filters_social_domains()

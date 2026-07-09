@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "xueqiu_activity.py"
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+XUEQIU_ACTIVITY_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "xueqiu-investor-activity" / "activity_export.json"
 
 
 def read_events(out: Path) -> list[dict]:
@@ -215,6 +216,81 @@ def test_collect_posts_json() -> None:
         assert_package_valid(out)
         events = read_events(out)
         assert [event["kind"] for event in events] == ["note", "profile"]
+
+
+def test_collects_fixed_offline_fixture_with_evidence_boundary() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(XUEQIU_ACTIVITY_FIXTURE),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T11:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        assert_package_valid(out)
+        events = read_events(out)
+        assert len(events) == 5
+        assert [event["data"]["activity_type"] for event in events] == [
+            "watchlist",
+            "post",
+            "favorite",
+            "follow_user",
+            "portfolio_activity",
+        ]
+        assert {event["kind"] for event in events} == {"holding", "note", "profile", "watchlist"}
+        assert all(event["data"]["broker_confirmed_trade"] is False for event in events)
+        assert all("collectorx.data_quality.collection_gaps" not in event["wiki_targets"] for event in events)
+        serialized_events = json.dumps(events, ensure_ascii=False)
+        assert "SHOULD_NOT_LEAK" not in serialized_events
+        assert "cookie" not in serialized_events
+        assert "authorization" not in serialized_events
+        assert "SH600519" in serialized_events
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 5
+        assert manifest["usable_event_count"] == 5
+        assert manifest["activity_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
+        assert manifest["activity_counts"] == {
+            "favorite": 1,
+            "follow_user": 1,
+            "portfolio_activity": 1,
+            "post": 1,
+            "watchlist": 1,
+        }
+        assert manifest["collection_readiness"]["can_enter_xueqiu_activity_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["can_claim_broker_trade_collection"] is False
+        proof = manifest["activity_boundary_proof"]
+        assert proof["overall_proof_level"] == "medium_partial_activity_boundary"
+        assert proof["complete_xueqiu_activity_boundary_claimed"] is False
+        assert proof["xueqiu_is_broker_trade_source"] is False
+        assert proof["missing_expected_activity_types"] == ["follow_portfolio", "comment", "saved_page"]
+        assert proof["missing_global_requirements"] == ["expected_activity_surface_coverage", "validated_pagination"]
+        assert proof["pagination_completeness"]["completeness_level"] == "pagination_markers_observed_not_validated"
+        assert manifest["collection_audit"]["real_account_adapter_used"] is False
+
+        evidence = assert_evidence_generated_from(
+            out,
+            raw_event_count=manifest["event_count"],
+            usable_event_count=manifest["usable_event_count"],
+            gap_event_count=manifest["gap_event_count"],
+        )
+        assert evidence["coverage_summary"]["xueqiu_is_strong_trade_source"] is False
+        assert evidence["coverage_summary"]["activity_boundary_proof"]["complete_xueqiu_activity_boundary_claimed"] is False
+        assert evidence["coverage_summary"]["dimension_count"] == 7
+        assert evidence["coverage_summary"]["subdimension_count"] == 20
 
 
 def test_activity_scope_policy_filters_authorized_records() -> None:
@@ -943,6 +1019,7 @@ def test_activity_boundary_proof_reports_broad_partial_coverage() -> None:
 if __name__ == "__main__":
     test_collect_watchlist_csv()
     test_collect_posts_json()
+    test_collects_fixed_offline_fixture_with_evidence_boundary()
     test_activity_scope_policy_filters_authorized_records()
     test_activity_scope_policy_filtered_all_gap()
     test_activity_gap_event()
