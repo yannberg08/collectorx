@@ -23,6 +23,8 @@ except ImportError:  # pragma: no cover - optional dependency for runtime instal
     openpyxl = None
 
 COLLECTOR = "social-activity"
+SOCIAL_ACTIVITY_TARGET = "internal.social.activity"
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 CN_TZ = timezone(timedelta(hours=8))
 UTC = timezone.utc
 SUPPORTED_RECORD_EXTENSIONS = {
@@ -1252,7 +1254,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
             "local_only": True,
             "contains": ["personal_message", "contact"],
         },
-        "wiki_targets": ["internal.social.activity"],
+        "wiki_targets": [SOCIAL_ACTIVITY_TARGET],
     }
 
 
@@ -1301,6 +1303,8 @@ def gap_event(
             "full_content_mirrored": False,
             "unrelated_browser_history_collected": False,
             "private_platform_credentials_collected": False,
+            "business_records_written": False,
+            "read_only": True,
         },
         "raw_ref": {
             "preflight": True,
@@ -1308,7 +1312,7 @@ def gap_event(
             "scope_policy_enabled": bool((audit.get("social_activity_scope_policy") or {}).get("enabled")),
         },
         "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "collection_gap"]},
-        "wiki_targets": ["collectorx.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -1398,6 +1402,10 @@ def build_manifest(
     usable_events = usable_social_events(events)
     social_activity_event_count = len(usable_events)
     gap_event_count = len(events) - social_activity_event_count
+    can_enter_social_activity_lake = social_activity_event_count > 0 and not bool(
+        (collection_audit or {}).get("social_activity_scope_policy_filtered_all")
+    )
+    can_enter_data_quality_lake = gap_event_count > 0
     kind_counts = Counter(event["kind"] for event in events)
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in usable_events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
@@ -1426,6 +1434,7 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": social_activity_event_count,
         "social_activity_event_count": social_activity_event_count,
         "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
@@ -1484,7 +1493,14 @@ def build_manifest(
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
             ),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "usable_event_count": social_activity_event_count,
+            "social_activity_event_count": social_activity_event_count,
+            "gap_event_count": gap_event_count,
+            "can_enter_finclaw": can_enter_social_activity_lake,
+            "can_enter_social_activity_lake": can_enter_social_activity_lake,
+            "can_enter_data_quality_lake": can_enter_data_quality_lake,
+            "can_feed_social_investment_lens": can_enter_social_activity_lake,
+            "can_feed_investor_wiki_directly": False,
             "can_claim_investment_influence": False,
             "evidence_strength": "weak_attention",
             "requires_corroboration": True,
@@ -1616,6 +1632,9 @@ def social_activity_boundary_proof(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     usable_events = usable_social_events(events)
+    gap_event_count = max(len(events) - len(usable_events), 0)
+    can_enter_social_activity_lake = bool(usable_events)
+    can_enter_data_quality_lake = gap_event_count > 0
     action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in usable_events)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
     field_counts = Counter(
@@ -1690,9 +1709,15 @@ def social_activity_boundary_proof(
         "weak_evidence_only": True,
         "requires_social_investment_lens": True,
         "required_lens": "social-investment-influence",
-        "can_enter_finclaw_lake": bool(usable_events),
+        "can_enter_finclaw_lake": can_enter_social_activity_lake,
+        "can_enter_social_activity_lake": can_enter_social_activity_lake,
+        "can_enter_data_quality_lake": can_enter_data_quality_lake,
+        "can_feed_social_investment_lens": can_enter_social_activity_lake,
         "can_feed_investor_wiki_directly": False,
         "can_claim_investment_influence": False,
+        "usable_event_count": len(usable_events),
+        "social_activity_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
         "observed_event_count": len(usable_events),
         "platform_boundary": {
             "observed_platforms": observed_expected_platforms,
@@ -1952,6 +1977,10 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         f"- social_activity_event_count: {manifest.get('social_activity_event_count', 0)}",
         f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- social_activity_lake_ready: `{manifest['collection_readiness']['can_enter_social_activity_lake']}`",
+        f"- data_quality_lake_ready: `{manifest['collection_readiness']['can_enter_data_quality_lake']}`",
+        f"- social_investment_lens_ready: `{manifest['collection_readiness']['can_feed_social_investment_lens']}`",
+        f"- investor_wiki_direct_ready: `{manifest['collection_readiness']['can_feed_investor_wiki_directly']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
         f"- observed_actions: `{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",

@@ -115,11 +115,16 @@ def test_collect_social_activity_exports() -> None:
         game = next(event for event in events if event["data"].get("title") == "游戏直播剪辑")
         assert "social_topics" not in game["data"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 5
         assert manifest["social_activity_event_count"] == 5
         assert manifest["gap_event_count"] == 0
         assert manifest["influence_surface_summary"]["events_with_social_topics"] == 4
         assert manifest["influence_surface_summary"]["social_topic_counts"]["fund_wealth"] == 2
         assert manifest["collection_readiness"]["can_claim_investment_influence"] is False
+        assert manifest["collection_readiness"]["can_enter_social_activity_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_social_investment_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["collection_readiness"]["evidence_strength"] == "weak_attention"
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
         proof = manifest["social_activity_boundary_proof"]
@@ -128,7 +133,13 @@ def test_collect_social_activity_exports() -> None:
         assert proof["weak_evidence_only"] is True
         assert proof["requires_social_investment_lens"] is True
         assert proof["can_enter_finclaw_lake"] is True
+        assert proof["can_enter_social_activity_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
+        assert proof["can_feed_social_investment_lens"] is True
         assert proof["can_feed_investor_wiki_directly"] is False
+        assert proof["usable_event_count"] == 5
+        assert proof["social_activity_event_count"] == 5
+        assert proof["gap_event_count"] == 0
         assert proof["platform_boundary"]["observed_platforms"] == ["weibo", "bilibili", "xiaohongshu"]
         assert proof["content_boundary"]["full_platform_scrape"] is False
         assert proof["false_claims"]["investment_conclusion_claimed"] is False
@@ -231,6 +242,7 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         assert all(event["data"]["requires_corroboration"] is True for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 8
         assert manifest["social_activity_event_count"] == 8
         assert manifest["gap_event_count"] == 0
         assert manifest["action_counts"]["favorite"] == 2
@@ -289,6 +301,10 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert manifest["weak_evidence_policy"]["usable_as_investment_conclusion"] is False
         assert manifest["weak_evidence_policy"]["generic_collector"] is True
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
+        assert manifest["collection_readiness"]["can_enter_social_activity_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_social_investment_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["collection_readiness"]["action_coverage_status"] == "all_expected_actions_observed"
         assert manifest["collection_readiness"]["weak_signal_field_coverage_status"] == "all_expected_weak_signal_fields_observed"
         assert manifest["collection_readiness"]["collector_claims_investment_conclusion"] is False
@@ -583,6 +599,10 @@ def test_collect_respects_social_scope_policy() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["social_activity_event_count"] == 1
         assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_social_activity_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_social_investment_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 9
         assert source_audit["parsed_record_count"] == 9
@@ -611,6 +631,9 @@ def test_collect_respects_social_scope_policy() -> None:
         assert proof["authorization_scope_boundary"]["social_activity_scope_policy_filtered_all"] is False
         assert manifest["collection_readiness"]["status"] == "events_collected"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["can_enter_social_activity_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_social_investment_lens"] is True
 
 
 def test_collect_social_scope_policy_filtered_all_is_not_success() -> None:
@@ -680,6 +703,9 @@ def test_collect_social_scope_policy_filtered_all_is_not_success() -> None:
         assert gap["data"]["platform_wide_scrape_performed"] is False
         assert gap["data"]["full_content_mirrored"] is False
         assert gap["data"]["private_platform_credentials_collected"] is False
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert gap["raw_ref"] == {
             "preflight": True,
             "reason": "social_activity_scope_policy_filtered_all",
@@ -689,14 +715,23 @@ def test_collect_social_scope_policy_filtered_all_is_not_success() -> None:
         assert str(export) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["social_activity_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_social_activity_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_social_investment_lens"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["social_activity_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
         assert manifest["social_activity_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["social_activity_boundary_proof"]["can_enter_social_activity_lake"] is False
+        assert manifest["social_activity_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["social_activity_boundary_proof"]["can_feed_social_investment_lens"] is False
+        assert manifest["social_activity_boundary_proof"]["gap_event_count"] == 1
         assert "authorization_scope_excluded_all_records" in manifest["social_activity_boundary_proof"]["completion_blockers"]
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 1
@@ -745,13 +780,24 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert events[0]["data"]["social_activity_event_count"] == 0
         assert events[0]["data"]["social_activity_fact_claimed"] is False
         assert events[0]["data"]["investment_influence_fact_claimed"] is False
+        assert events[0]["data"]["business_records_written"] is False
+        assert events[0]["data"]["read_only"] is True
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert str(missing) not in json.dumps(events[0], ensure_ascii=False)
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["social_activity_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_social_activity_input"
+        assert manifest["collection_readiness"]["can_enter_social_activity_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_social_investment_lens"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["social_activity_boundary_proof"]["proof_level"] == "no_authorized_social_activity_input"
         assert manifest["social_activity_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["social_activity_boundary_proof"]["can_enter_social_activity_lake"] is False
+        assert manifest["social_activity_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["social_activity_boundary_proof"]["gap_event_count"] == 1
         assert manifest["social_activity_boundary_proof"]["source_boundary"]["input_missing_count"] == 1
         assert manifest["social_activity_boundary_proof"]["false_claims"]["platform_wide_scrape_performed"] is False
         assert manifest["source_audit"]["input_count"] == 1

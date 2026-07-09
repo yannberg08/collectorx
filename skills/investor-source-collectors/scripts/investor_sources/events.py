@@ -331,6 +331,9 @@ def build_manifest(
         "gap_event_count": gap_event_count,
         "next_action": next_action_for_status(status),
     }
+    if source_id == "social-investment-influence":
+        collection_readiness["social_influence_event_count"] = usable_event_count
+        collection_readiness["can_enter_social_investment_influence_lake"] = usable_event_count > 0
     lens_surface = lens_surface_summary(source_id, events)
     research_proof = (
         build_research_corpus_boundary_proof(events, audit=collection_audit or {}, collection_readiness=collection_readiness)
@@ -407,6 +410,8 @@ def build_manifest(
         manifest["research_document_event_count"] = usable_event_count
     if source_id == "email-research":
         manifest["email_research_event_count"] = usable_event_count
+    if source_id == "social-investment-influence":
+        manifest["social_influence_event_count"] = usable_event_count
     if research_proof is not None:
         manifest["research_corpus_boundary_proof"] = research_proof
     if wechat_proof is not None:
@@ -1115,6 +1120,9 @@ def build_social_influence_boundary_proof(
     collection_readiness: Dict[str, Any],
 ) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
+    gap_event_count = sum(1 for event in events if is_gap_event(event))
+    can_enter_social_investment_influence_lake = bool(usable_events)
+    can_enter_data_quality_lake = gap_event_count > 0
     scope_policy = audit.get("social_influence_scope_policy") if isinstance(audit.get("social_influence_scope_policy"), dict) else {}
     surface = social_influence_surface_summary(usable_events)
     topic_counts = surface["social_topic_counts"]
@@ -1173,9 +1181,14 @@ def build_social_influence_boundary_proof(
         "weak_evidence_only": True,
         "evidence_strength": "weak_attention",
         "requires_corroboration": True,
-        "can_enter_finclaw_lake": bool(usable_events),
-        "can_feed_investor_wiki_evidence": bool(usable_events),
+        "can_enter_finclaw_lake": can_enter_social_investment_influence_lake,
+        "can_enter_social_investment_influence_lake": can_enter_social_investment_influence_lake,
+        "can_enter_data_quality_lake": can_enter_data_quality_lake,
+        "can_feed_investor_wiki_evidence": can_enter_social_investment_influence_lake,
         "can_claim_investment_conclusion": False,
+        "usable_event_count": len(usable_events),
+        "social_influence_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
         "observed_event_count": len(usable_events),
         "social_topic_boundary": {
             "expected_social_topics": list(SOCIAL_INFLUENCE_TOPIC_ORDER[:-1]),

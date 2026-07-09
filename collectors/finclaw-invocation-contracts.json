@@ -309,7 +309,7 @@
       "product_surface": "import-beta",
       "evidence_role": "weak-influence",
       "user_step": "Provide authorized Weibo, Bilibili, or Xiaohongshu activity exports, saved pages, workbooks, ZIP packages, or copied Chromium/Safari browser history files; optionally choose platform, action, source-app, domain, creator, topic, or keyword allow/deny filters.",
-      "preflight": "Social traces and browser-history copies are domain-filtered weak influence only and cannot become standalone investment conclusions; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages with can_enter_finclaw=false.",
+      "preflight": "Social traces and browser-history copies are domain-filtered weak influence only and cannot become standalone investment conclusions; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_social_activity_lake=false, can_enter_data_quality_lake=true, can_feed_social_investment_lens=false, and can_feed_investor_wiki_directly=false.",
       "failure_state": "needs_authorized_social_activity_export_or_scope_policy_retained_records"
     },
     {
@@ -321,7 +321,7 @@
         "social-activity"
       ],
       "user_step": "Run after social activity Lake exists, optionally narrowing weak influence evidence by platform, action, source app, domain, creator, social topic, or keyword.",
-      "preflight": "Upstream social-activity events.jsonl exists; optional social influence scope filters are explicit when used; pure upstream gap packages and filtered-all lens packages must not become influence facts; stronger trade/research corroboration is still required.",
+      "preflight": "Upstream social-activity events.jsonl exists and upstream can_feed_social_investment_lens=true; optional social influence scope filters are explicit when used; pure upstream gap packages and filtered-all lens packages route to collectorx.data_quality.collection_gaps and must not become influence facts; retained lens evidence sets can_enter_social_investment_influence_lake=true and can_feed_investor_wiki_evidence=true, but stronger trade/research corroboration is still required.",
       "failure_state": "needs_social_activity_lake_or_scope_policy_retained_social_influence"
     },
     {

@@ -2521,6 +2521,12 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
         assert lens_events[0]["data"]["payload"]["title"].startswith("半导体投资复盘")
         assert lens_events[0]["raw_ref"]["upstream_event_id"] == "social-activity:1"
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 1
+        assert manifest["social_influence_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_social_investment_influence_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
         surface = manifest["lens_surface_summary"]
         assert surface["social_topic_counts"]["industry_theme"] == 1
         assert surface["social_topic_counts"]["company_fundamental"] == 1
@@ -2532,7 +2538,12 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
         assert proof["proof_level"] == "medium_partial_social_influence_boundary"
         assert proof["weak_evidence_only"] is True
         assert proof["requires_corroboration"] is True
+        assert proof["can_enter_social_investment_influence_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
+        assert proof["can_feed_investor_wiki_evidence"] is True
         assert proof["can_claim_investment_conclusion"] is False
+        assert proof["social_influence_event_count"] == 1
+        assert proof["gap_event_count"] == 0
         assert proof["social_topic_boundary"]["observed_social_topics"] == [
             "industry_theme",
             "company_fundamental",
@@ -2669,6 +2680,10 @@ def test_social_investment_influence_scope_policy_filters_weak_evidence() -> Non
         assert policy["matched_allow_social_keyword"] == "估值"
         assert policy["policy_does_not_assert_investment_relevance"] is True
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["social_influence_event_count"] == 1
+        assert manifest["collection_readiness"]["can_enter_social_investment_influence_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
         audit_policy = manifest["collection_audit"]["social_influence_scope_policy"]
         assert audit_policy["enabled"] is True
         assert audit_policy["allow_social_platforms"] == ["xiaohongshu"]
@@ -2683,6 +2698,8 @@ def test_social_investment_influence_scope_policy_filters_weak_evidence() -> Non
         assert proof["authorization_scope_boundary"]["filtered_candidate_count"] == 2
         assert proof["authorization_scope_boundary"]["filtered_all"] is False
         assert proof["authorization_scope_boundary"]["policy_is_user_authorization_scope"] is True
+        assert proof["can_enter_social_investment_influence_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
         assert proof["observed_event_count"] == 1
         validator = run_package_validator(str(out_dir), "--collector", "social-investment-influence", "--require-evidence", "--json")
         assert json.loads(validator.stdout)["valid"] is True
@@ -2742,8 +2759,14 @@ def test_social_investment_influence_scope_policy_filtered_all_gap() -> None:
         assert lake_events[0]["data"]["payload"]["gap"] == "social_influence_scope_policy_filtered_all"
         assert lake_events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 0
+        assert manifest["social_influence_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_social_investment_influence_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
         audit = manifest["collection_audit"]
         assert audit["social_influence_scope_policy_filtered_all"] is True
         assert audit["social_influence_scope_policy"]["filter_reason_counts"] == {"social_platform_not_allowed": 1}
@@ -2751,8 +2774,15 @@ def test_social_investment_influence_scope_policy_filtered_all_gap() -> None:
         assert proof["proof_level"] == "social_influence_scope_policy_filtered_all"
         assert proof["authorization_scope_boundary"]["filtered_all"] is True
         assert proof["can_enter_finclaw_lake"] is False
+        assert proof["can_enter_social_investment_influence_lake"] is False
+        assert proof["can_enter_data_quality_lake"] is True
+        assert proof["can_feed_investor_wiki_evidence"] is False
+        assert proof["social_influence_event_count"] == 0
+        assert proof["gap_event_count"] == 1
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
         validator = run_package_validator(str(out_dir), "--collector", "social-investment-influence", "--require-evidence", "--json")
         assert json.loads(validator.stdout)["valid"] is True

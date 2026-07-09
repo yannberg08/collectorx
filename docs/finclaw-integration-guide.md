@@ -1377,8 +1377,13 @@ Current status:
   `manifest.source_audit.social_activity_scope_policy` records the policy and
   filtered counts; if every candidate record is excluded, the package emits one
   validator-safe `social_activity_scope_policy_filtered_all` profile gap event,
-  readiness becomes `scope_policy_filtered_all`, and
-  `collection_readiness.can_enter_finclaw=false`.
+  readiness becomes `scope_policy_filtered_all`, routes only to
+  `collectorx.data_quality.collection_gaps`, and sets
+  `collection_readiness.can_enter_finclaw=false`,
+  `can_enter_social_activity_lake=false`,
+  `can_enter_data_quality_lake=true`,
+  `can_feed_social_investment_lens=false`, and
+  `can_feed_investor_wiki_directly=false`.
 - Adds per-event `social_topics`, `primary_social_topic`, and
   `social_topic_terms` so FinClaw can map weak influence signals to macro,
   strategy, industry, fundamental, fund/wealth, trading review, risk control,
@@ -1402,8 +1407,10 @@ Current status:
 - Does not claim investment influence directly.
 - `manifest.social_activity_event_count` and `manifest.gap_event_count`
   distinguish usable social activity weak signals from no-input or filtered-all
-  collection gaps. Pure gap packages must not be fed to
-  `social-investment-influence` as influence facts.
+  collection gaps. `manifest.usable_event_count` mirrors retained social
+  activity records, and `collection_readiness` exposes explicit
+  social-activity/data-quality/social-investment-lens gates. Pure gap packages
+  must not be fed to `social-investment-influence` as influence facts.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
   lens. The lens mirrors social-topic/platform/action/creator summaries and
   writes `social_influence_boundary_proof`, but resulting evidence remains weak
@@ -1426,11 +1433,15 @@ python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
   candidate counts, filtered counts, and reason counts.
 - If the lens policy excludes every social activity candidate, the run emits a
   `social_influence_scope_policy_filtered_all` gap, readiness reports
-  `scope_policy_filtered_all`, and `collection_readiness.can_enter_finclaw=false`.
+  `scope_policy_filtered_all`, and `collection_readiness.can_enter_finclaw=false`,
+  `can_enter_social_investment_influence_lake=false`,
+  `can_enter_data_quality_lake=true`, and
+  `can_feed_investor_wiki_evidence=false`.
 - `manifest.social_influence_boundary_proof.authorization_scope_boundary`
   exposes the same policy to FinClaw/SoulMirror. A filtered-all lens package
-  keeps `investor_wiki_evidence.v1.json.generated_from.event_count=0` and must
-  not become an influence fact.
+  keeps `investor_wiki_evidence.v1.json.generated_from.event_count=0`,
+  records `generated_from.raw_event_count=1` and
+  `generated_from.gap_event_count=1`, and must not become an influence fact.
 
 ### 投资 Lens / 分类工具
 

@@ -117,7 +117,7 @@ P2 必做：
 
 - `hk-us-brokerage`：vertical，采富途、老虎、盈透等港美股资产、持仓、成交、委托、资金流水、分红、换汇，并报告券商/交易表/字段覆盖。
 - `pro-terminal-usage`：vertical，采 Wind、Choice、同花顺 iFinD、Bloomberg 等专业终端工作台、自选、搜索、导出、模板、因子、数据集、字段和函数代码痕迹，并报告终端/活动/字段覆盖。
-- `social-investment-influence`：lens，读取微博/B站/小红书通用社交 activity，只筛投资内容影响源；支持 platform、action、source-app、domain、creator、topic、keyword 授权范围过滤，并汇总平台/动作/创作者/社交影响主题、`social_influence_scope_policy` 和 `social_influence_boundary_proof`；输出仍是弱证据，不能单独形成投资结论。
+- `social-investment-influence`：lens，读取微博/B站/小红书通用社交 activity，只筛投资内容影响源；支持 platform、action、source-app、domain、creator、topic、keyword 授权范围过滤，并汇总平台/动作/创作者/社交影响主题、`social_influence_event_count`、`social_influence_scope_policy`、social-influence/data-quality/Wiki readiness gates 和 `social_influence_boundary_proof`；输出仍是弱证据，不能单独形成投资结论。
 
 ## 采集边界
 
@@ -146,7 +146,10 @@ validator-safe `kind=profile` gap 事件，路由到
 manifest 会拆分 `event_count`、`usable_event_count` 和 `gap_event_count`；
 `research-documents` 还会额外写 `research_document_event_count`，因此 FinClaw 可以区分
 真实投研文档事实和采集状态证据；`email-research` 还会额外写
-`email_research_event_count`，因此 FinClaw 可以区分真实邮件研报事实和采集状态证据。
+`email_research_event_count`，因此 FinClaw 可以区分真实邮件研报事实和采集状态证据；
+`social-investment-influence` 还会额外写 `social_influence_event_count` 和
+`can_enter_social_investment_influence_lake`，因此 FinClaw 可以区分真实社交弱影响源和
+data-quality gap。
 
 `manifest.json` 会带 `collection_audit`：
 
