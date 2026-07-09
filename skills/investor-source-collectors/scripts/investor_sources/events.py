@@ -405,6 +405,8 @@ def build_manifest(
     }
     if source_id == "research-documents":
         manifest["research_document_event_count"] = usable_event_count
+    if source_id == "email-research":
+        manifest["email_research_event_count"] = usable_event_count
     if research_proof is not None:
         manifest["research_corpus_boundary_proof"] = research_proof
     if wechat_proof is not None:

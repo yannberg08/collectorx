@@ -283,6 +283,11 @@ def test_imap_collect_standard_package():
         assert manifest["email_event_count"] == 2
         assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["can_enter_email_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_email_research_lens"] is True
+        assert manifest["collection_readiness"]["email_event_count"] == 2
+        assert manifest["collection_readiness"]["gap_event_count"] == 0
         assert manifest["collection_readiness"]["source_collection_scope"] == "authorized_imap"
         assert manifest["collection_audit"]["source_type"] == "imap"
         assert manifest["collection_audit"]["account_status_counts"] == {"collected": 1}
@@ -293,6 +298,7 @@ def test_imap_collect_standard_package():
         assert proof["proof_level"] == "authorized_imap_folder_window"
         assert proof["source_type"] == "imap"
         assert proof["email_event_count"] == 2
+        assert proof["can_feed_email_research_lens"] is True
         assert proof["mailboxes"] == ["owner@gmail.com"]
         assert proof["folders"] == ["INBOX", "Sent"]
         assert proof["complete_mailbox_claimed"] is False
@@ -415,10 +421,16 @@ def test_imap_collect_gap_package_without_registered_account():
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "needs_email_registered_account"
+        assert manifest["collection_readiness"]["can_enter_email_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_email_research_lens"] is False
+        assert manifest["collection_readiness"]["email_event_count"] == 0
+        assert manifest["collection_readiness"]["gap_event_count"] == 1
         assert manifest["collection_audit"]["status"] == "no_registered_account"
         proof = manifest["mailbox_boundary_proof"]
         assert proof["proof_level"] == "no_authorized_mailbox"
         assert proof["can_enter_finclaw"] is False
+        assert proof["can_feed_email_research_lens"] is False
         assert proof["email_event_count"] == 0
         assert proof["imap_boundary"]["selected_account_count"] == 0
         assert run_package_validator(out)["valid"] is True

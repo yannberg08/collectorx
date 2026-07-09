@@ -1660,7 +1660,12 @@ def build_email_manifest(
     collection_readiness = {
         "status": status,
         "can_enter_finclaw": bool(events) and not gap_only,
+        "can_enter_email_lake": len(email_events) > 0,
+        "can_enter_data_quality_lake": len(gap_events) > 0,
+        "can_feed_email_research_lens": len(email_events) > 0,
         "source_collection_scope": source_scope,
+        "email_event_count": len(email_events),
+        "gap_event_count": len(gap_events),
         "full_body_included": body_policy["full_body_included"],
         "next_action": next_action,
     }
@@ -1831,6 +1836,7 @@ def build_mailbox_boundary_proof(
         "investor_wiki_requires_lens": "email-research",
         "collector_writes_investor_wiki_directly": False,
         "can_enter_finclaw": collection_readiness["can_enter_finclaw"],
+        "can_feed_email_research_lens": collection_readiness["can_feed_email_research_lens"],
     }
     if is_imap:
         proof["imap_boundary"] = imap_boundary_from_audit(audit)

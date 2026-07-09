@@ -3992,13 +3992,35 @@ Findings:
   filtered-all data-quality gap packages with the shared CollectorX package
   validator.
 
+### Wave BI: P0 email readiness gate hardening
+
+Validation record:
+
+- `docs/validations/investor-p0-email-readiness-gate-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `email-collector` to `0.5.8` and `investor-source-collectors` to
+  `0.1.27`.
+- Email manifests now expose `can_enter_email_lake`,
+  `can_enter_data_quality_lake`, and `can_feed_email_research_lens` in
+  `collection_readiness`, alongside `email_event_count` and `gap_event_count`.
+- `mailbox_boundary_proof` now mirrors `can_feed_email_research_lens` so
+  FinClaw can block `email-research` on no-account/no-message/filter gap
+  packages.
+- `email-research` manifests now expose `email_research_event_count` alongside
+  `usable_event_count` and `gap_event_count`.
+- Fixture validation covers normal IMAP packages, missing-account data-quality
+  gap packages, retained email-research packages, and filtered-all
+  email-research gap packages.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
 | 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, generic-to-lens evidence policy, validator-safe preflight/no-message data-quality gap packages, message/gap/usable counts, and package validation; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; filesystem metadata scope-policy audit with extension/path/file-name/directory/keyword filters, filtered-all/no-metadata gap packages, package validation, and filesystem boundary proof; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, validator-safe no-input/no-readable/no-match/filtered-all data-quality gap packages, research/gap/usable manifest counts, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
-| 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, email/email-research authorization scope-policy audit, filtered-all readiness, validator-safe profile gap packages, email/gap event counts, authorization scope boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
+| 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, email-lake/data-quality/email-research readiness gates, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, email/email-research authorization scope-policy audit, filtered-all readiness, validator-safe profile gap packages, email/gap and email-research/gap counts, authorization scope boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-portfolio` | G2/G3 partial on current macOS/local paths; CSV/Xcs historical executions, estimated holdings, personal metadata, GUI read-only snapshots, standard package, SoulMirror sync, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, sidecar policy filtering, exact-number preservation, and `ths_portfolio_boundary_proof.authorization_scope_boundary` are fixture-tested | G3/G4: more real Tonghuashun accounts, Windows/macOS path validation, GUI current asset/holding/order/execution/cashflow coverage review, and Wiki backtest against research/review records |
 | 5 | `ths-watchlist` | G1/G2 authorized Tonghuashun watchlist local-scan plus import path with standard Lake output, manifest, local-scan provenance, path-level source audit, ZIP provenance, skipped-reason accounting, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all/no-input gap packages, authorization scope boundary, field coverage, ths_watchlist_boundary_proof, 7/20 Investor Wiki evidence, and explicit attention-universe boundary; now discoverable through the FinClaw investor catalog and invocation contract | G2/G3: real Tonghuashun local-store validation, default app path validation, Windows/macOS/Linux path validation, trade/research corroboration backtest |
 | 6 | `xueqiu-watchlist` + `xueqiu-investor-activity` | G1/G2 strengthened local export/package paths with ZIP provenance, activity XLSX/XLSM/HAR support, copied Chromium/Safari browser-history support with Xueqiu-domain filtering, visit/typed counts, browser transition types, watchlist/activity authorization scope-policy audit, filtered-all/no-input gap packages, watchlist/activity authorization boundary proof, activity-boundary proof, browser-history boundary proof, pagination completeness summary, credential/query stripping audit, sanitization, SoulMirror sync, standard 7/20 evidence packages, and explicit non-broker-trade evidence policy; no one-click real account adapter | G2/G3: real Snowball account/HAR/browser-history samples, pagination, watchlist/favorites/posts/comments/follows/portfolio validation |

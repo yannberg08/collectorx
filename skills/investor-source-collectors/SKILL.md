@@ -145,7 +145,8 @@ validator-safe `kind=profile` gap 事件，路由到
 `collectorx.data_quality.collection_gaps`；这些 gap 会被证据包排除，不会变成投资事实。
 manifest 会拆分 `event_count`、`usable_event_count` 和 `gap_event_count`；
 `research-documents` 还会额外写 `research_document_event_count`，因此 FinClaw 可以区分
-真实投研文档事实和采集状态证据。
+真实投研文档事实和采集状态证据；`email-research` 还会额外写
+`email_research_event_count`，因此 FinClaw 可以区分真实邮件研报事实和采集状态证据。
 
 `manifest.json` 会带 `collection_audit`：
 

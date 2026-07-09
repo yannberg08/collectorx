@@ -114,7 +114,9 @@ python <SKILL_DIR>/scripts/email_api.py import \
 注册账户数、选中账户数、登录/搜索/抓取状态、匹配邮件数、抓取邮件数和失败原因。
 如果没有注册邮箱、授权失败或时间窗口没有邮件，也会输出 validator-safe
 `kind=profile` gap 事件和明确下一步；manifest 会把 `email_event_count` 与
-`gap_event_count` 分开，避免把采集缺口当成真实邮件事实。
+`gap_event_count` 分开，并用 `can_enter_email_lake`、`can_enter_data_quality_lake`
+和 `can_feed_email_research_lens` 区分真实邮件事实、数据质量缺口和下游
+`email-research` lens 的可运行状态，避免把采集缺口当成真实邮件事实。
 
 `import --local-scan` 可以扫描用户授权的本机邮箱目录，如 Apple Mail、Thunderbird、
 Evolution/Maildir 根目录，并在 manifest/probe 中记录平台、授权根、候选邮件文件和本机扫描边界。

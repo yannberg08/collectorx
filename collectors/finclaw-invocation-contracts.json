@@ -110,7 +110,7 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Register an IMAP account through password_env, authorize a local mailbox root for read-only scanning, or provide a local email export; optionally narrow by mailbox, folder, sender, sender domain, recipient, subject, attachment name, or keyword.",
-      "preflight": "Mailbox credentials are referenced by environment variable, or a user-owned local mail root/export is selected; optional email scope filters are applied before Lake output; missing accounts/exports, no-message windows, collection failures, and filtered-all scope return validator-safe profile gap packages.",
+      "preflight": "Mailbox credentials are referenced by environment variable, or a user-owned local mail root/export is selected; optional email scope filters are applied before Lake output; missing accounts/exports, no-message windows, collection failures, and filtered-all scope return validator-safe profile gap packages; manifest readiness separates email Lake, data-quality Lake, and email-research lens gates.",
       "failure_state": "needs_mailbox_or_email_root_or_export_or_scope_policy_retained_records_or_gap_package"
     },
     {
@@ -122,7 +122,7 @@
         "email"
       ],
       "user_step": "Run after email Lake exists to classify broker research, morning meetings, roadshows, IR mail, earnings alerts, and attachment signals; optionally narrow by sender, sender domain, folder, mailbox, subject, attachment filename, email surface, or keyword.",
-      "preflight": "Upstream email events.jsonl exists; optional email-research scope filters are explicit when used; full-body Wiki inclusion and attachment-body collection remain false by default; missing input, unreadable input, no investment match, or filtered-all scope emit validator-safe profile gap packages routed to data-quality collection gaps.",
+      "preflight": "Upstream email events.jsonl exists; optional email-research scope filters are explicit when used; full-body Wiki inclusion and attachment-body collection remain false by default; missing input, unreadable input, no investment match, or filtered-all scope emit validator-safe profile gap packages routed to data-quality collection gaps; manifest readiness separates retained email-research facts from gap events.",
       "failure_state": "needs_email_lake_or_scope_policy_retained_records_or_gap_package"
     },
     {

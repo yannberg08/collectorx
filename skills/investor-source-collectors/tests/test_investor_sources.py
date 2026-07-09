@@ -660,6 +660,10 @@ def test_email_research_reports_surface_and_boundary_proof() -> None:
         assert len(lens_events) == 3
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["event_count"] == 3
+        assert manifest["usable_event_count"] == 3
+        assert manifest["gap_event_count"] == 0
+        assert manifest["email_research_event_count"] == 3
         surface = manifest["lens_surface_summary"]
         assert surface["email_research_surface_counts"]["morning_meeting"] == 1
         assert surface["email_research_surface_counts"]["broker_research_report"] == 1
@@ -872,6 +876,13 @@ def test_email_research_scope_policy_filtered_all_gap() -> None:
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_investor_source_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["email_research_event_count"] == 0
         audit = manifest["collection_audit"]
         assert audit["email_research_scope_policy_filtered_all"] is True
         assert audit["email_research_scope_policy"]["filter_reason_counts"] == {"allow_email_sender_domain_not_matched": 1}

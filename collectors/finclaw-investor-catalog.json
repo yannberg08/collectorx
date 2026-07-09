@@ -122,7 +122,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-imap-or-local-email-scan-or-import",
       "cli": "python3 skills/email-collector/scripts/email_api.py collect --account all --out-dir <out-dir>",
-      "collects": "Authorized IMAP, local email scan, or local email import metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, local scan/import path-level audit, Apple Mail/Maildir/Thunderbird mbox coverage, Thunderbird .msf index skip audit, skipped file reasons, ZIP member audit, email authorization scope-policy audit with filtered-all readiness, validator-safe filtered-all/no-input gap packages, email/gap event counts, field coverage, archive provenance, and mailbox boundary proof.",
+      "collects": "Authorized IMAP, local email scan, or local email import metadata, body previews, sender/recipient fields, message IDs, attachment refs, account/folder audit, local scan/import path-level audit, Apple Mail/Maildir/Thunderbird mbox coverage, Thunderbird .msf index skip audit, skipped file reasons, ZIP member audit, email authorization scope-policy audit with filtered-all readiness, validator-safe filtered-all/no-input gap packages, email/gap event counts, email-lake/data-quality/email-research readiness gates, field coverage, archive provenance, and mailbox boundary proof.",
       "must_not_collect": "Full body unless explicitly authorized, attachment bodies by default, tokens, cookies, or passwords.",
       "production_gap": "Register real mailbox credentials via password_env, validate real Apple Mail/Thunderbird/Maildir local roots, validate broker/IR sender matching, and run no-full-body leakage review."
     },
@@ -135,7 +135,7 @@
       "gate": "G2",
       "finclaw_action": "run-after-email-lake",
       "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source email-research --input <email-events-jsonl> --out-dir <out-dir>",
-      "collects": "Broker research, morning notes, roadshow invitations, IR communications, earnings announcement alerts, research attachment signals, sender-domain/body-preview/attachment boundaries, sender-domain/folder/mailbox/subject/attachment/email-surface/keyword authorization scope-policy audit, filtered-all readiness, validator-safe profile gap packages routed to collection-gaps data quality, email research surface summary, and email research boundary proof with authorization scope boundary.",
+      "collects": "Broker research, morning notes, roadshow invitations, IR communications, earnings announcement alerts, research attachment signals, sender-domain/body-preview/attachment boundaries, sender-domain/folder/mailbox/subject/attachment/email-surface/keyword authorization scope-policy audit, filtered-all readiness, validator-safe profile gap packages routed to collection-gaps data quality, email-research/gap/usable manifest counts, email research surface summary, and email research boundary proof with authorization scope boundary.",
       "must_not_collect": "Generic personal mail as investor evidence, full bodies into Wiki by default, attachment bodies, mailbox credentials, or complete mailbox-history claims.",
       "production_gap": "Real mailbox validation, broader broker/IR sender backtest, and no-full-body Wiki leakage review on real mailboxes."
     },

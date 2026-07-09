@@ -46,6 +46,9 @@ scope:
     - validator_safe_no_input_gap_package
     - email_event_count
     - gap_event_count
+    - email_lake_readiness_gate
+    - data_quality_readiness_gate
+    - email_research_lens_readiness_gate
     - mailbox_boundary_proof
   excludes:
     - mailbox_passwords
@@ -97,4 +100,5 @@ prompt: |
   Mail/ImapMail 下或带 .msf 旁路证明的无后缀 mbox，并把 .msf 索引作为跳过原因记录。
   本机扫描/本地导入 manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir/Thunderbird 计数、
   授权范围策略、filtered-all 状态、validator-safe profile gap package、email/gap event count、
+  can_enter_email_lake、can_enter_data_quality_lake、can_feed_email_research_lens、
   limit 截断和 mailbox_boundary_proof。投资相关筛选必须交给 email-research lens。

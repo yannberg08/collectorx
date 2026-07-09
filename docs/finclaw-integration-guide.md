@@ -570,6 +570,10 @@ Current status:
   filtered-all email scope runs emit validator-safe `kind=profile` gap events
   under `lake/email/events.jsonl`; manifest separates `email_event_count` from
   `gap_event_count`.
+- `collection_readiness.can_enter_email_lake`,
+  `can_enter_data_quality_lake`, and `can_feed_email_research_lens` tell
+  FinClaw whether the package contains real email facts, only collection-state
+  evidence, or usable upstream input for the `email-research` lens.
 - Local scan probe, manifest, and raw refs mask path email addresses and long
   numeric account fragments.
 - `manifest.mailbox_boundary_proof` tells FinClaw which account/folder/time
@@ -596,7 +600,9 @@ Current status:
 - `email-research` missing-input, unreadable-input, no-investment-match, and
   filtered-all packages emit validator-safe profile gap events routed to
   `collectorx.data_quality.collection_gaps`; generated Investor Wiki evidence
-  still counts only non-gap retained research-mail events.
+  still counts only non-gap retained research-mail events. Manifest output
+  separates `email_research_event_count`, `usable_event_count`, and
+  `gap_event_count`.
 
 ### 雪球投资活动
 
