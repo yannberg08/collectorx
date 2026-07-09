@@ -945,6 +945,59 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def artifact_output_path(path: Path, artifact_root: Path | None) -> str:
+    if artifact_root:
+        root = artifact_root.resolve()
+        resolved = path if path.is_absolute() else root / path
+        resolved = resolved.resolve()
+        try:
+            return resolved.relative_to(root).as_posix()
+        except ValueError:
+            return str(resolved)
+    return path.as_posix() if not path.is_absolute() else str(path)
+
+
+def artifact_manifest_item(raw_path: str, *, artifact_root: Path | None) -> dict[str, Any]:
+    path = Path(raw_path)
+    resolved = path if path.is_absolute() else (artifact_root or Path.cwd()) / path
+    resolved = resolved.resolve()
+    if not resolved.is_file():
+        raise SystemExit(f"artifact path is not a file: {raw_path}")
+    return {
+        "kind": "validation_artifact",
+        "path": artifact_output_path(path, artifact_root),
+        "sha256": sha256_file(resolved),
+        "size_bytes": resolved.stat().st_size,
+    }
+
+
+def build_artifact_manifest(paths: list[str], *, artifact_root: Path | None) -> dict[str, Any]:
+    if not paths:
+        raise SystemExit("artifact-manifest requires at least one --path")
+    return {
+        "schema": "collectorx.finclaw_validation_artifact_manifest.v1",
+        "artifact_root": str(artifact_root.resolve()) if artifact_root else None,
+        "total": len(paths),
+        "artifacts": [artifact_manifest_item(path, artifact_root=artifact_root) for path in paths],
+    }
+
+
+def print_human_artifact_manifest(manifest: dict[str, Any]) -> None:
+    print(f"total: {manifest['total']}")
+    for artifact in manifest["artifacts"]:
+        print(f"{artifact['sha256']}  {artifact['path']}")
+
+
+def cmd_artifact_manifest(args: argparse.Namespace) -> int:
+    artifact_root = Path(args.artifact_root) if args.artifact_root else None
+    manifest = build_artifact_manifest(args.paths or [], artifact_root=artifact_root)
+    if args.json:
+        print(json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_artifact_manifest(manifest)
+    return 0
+
+
 def artifact_integrity_issues(artifacts: list[Any], *, artifact_root: Path | None) -> list[str]:
     issues: list[str] = []
     for artifact in artifacts:
@@ -1676,6 +1729,24 @@ def build_parser() -> argparse.ArgumentParser:
     validation_template_parser.add_argument("--readiness")
     validation_template_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     validation_template_parser.set_defaults(func=cmd_validation_template)
+
+    artifact_manifest_parser = subparsers.add_parser(
+        "artifact-manifest",
+        help="Generate sha256 artifact refs for validation evidence ledgers.",
+    )
+    artifact_manifest_parser.add_argument(
+        "--path",
+        dest="paths",
+        action="append",
+        default=[],
+        help="Artifact file path. Repeat for multiple artifacts.",
+    )
+    artifact_manifest_parser.add_argument(
+        "--artifact-root",
+        help="Resolve relative paths under this directory and output root-relative paths.",
+    )
+    artifact_manifest_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    artifact_manifest_parser.set_defaults(func=cmd_artifact_manifest)
 
     validation_evidence_parser = subparsers.add_parser(
         "validation-evidence",

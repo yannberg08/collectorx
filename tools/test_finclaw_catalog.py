@@ -497,6 +497,46 @@ def test_validation_evidence_can_verify_artifact_sha256() -> None:
     assert packet["summary"]["blocked_from_human_review"] == 11
 
 
+def test_artifact_manifest_generates_evidence_refs() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        artifact_root = Path(tmp) / "artifacts"
+        artifact = artifact_root / "eastmoney" / "manifest.json"
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text('{"collector":"eastmoney-portfolio"}', encoding="utf-8")
+        expected_sha256 = hashlib.sha256(artifact.read_bytes()).hexdigest()
+
+        manifest = run_json(
+            "artifact-manifest",
+            "--artifact-root",
+            str(artifact_root),
+            "--path",
+            "eastmoney/manifest.json",
+            "--json",
+        )
+        missing = run_proc(
+            "artifact-manifest",
+            "--artifact-root",
+            str(artifact_root),
+            "--path",
+            "missing.json",
+            "--json",
+        )
+
+    assert manifest["schema"] == "collectorx.finclaw_validation_artifact_manifest.v1"
+    assert manifest["artifact_root"] == str(artifact_root.resolve())
+    assert manifest["total"] == 1
+    assert manifest["artifacts"] == [
+        {
+            "kind": "validation_artifact",
+            "path": "eastmoney/manifest.json",
+            "sha256": expected_sha256,
+            "size_bytes": len('{"collector":"eastmoney-portfolio"}'.encode("utf-8")),
+        }
+    ]
+    assert missing.returncode != 0
+    assert "artifact path is not a file" in missing.stderr
+
+
 def test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         evidence_path = Path(tmp) / "validation-evidence.json"
@@ -930,12 +970,14 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     assert "production-candidate` as full production done" in handoff
     assert "The next phase is real validation, not more collector expansion." in handoff
     assert "validation-template --json" in handoff
+    assert "artifact-manifest --artifact-root" in handoff
     assert "validation-evidence --evidence" in handoff
     assert "--verify-artifacts --artifact-root" in handoff
     assert "readiness-review --evidence" in handoff
     assert "readiness-change-audit --candidate-catalog" in handoff
     assert "collectorx.finclaw_real_validation_evidence.v1" in evidence_ledger
     assert "validation-template" in evidence_ledger
+    assert "artifact-manifest" in evidence_ledger
     assert "insufficient_evidence" in evidence_ledger
     assert "readiness-change-audit" in evidence_ledger
     assert "sha256" in evidence_ledger
@@ -962,6 +1004,7 @@ def main() -> int:
     test_validation_template_matches_backlog_and_is_not_accepted_as_evidence()
     test_validation_evidence_audits_real_validation_records()
     test_validation_evidence_can_verify_artifact_sha256()
+    test_artifact_manifest_generates_evidence_refs()
     test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps()
     test_readiness_review_packet_requires_audited_evidence()
     test_readiness_review_require_any_eligible_fails_without_valid_evidence()

@@ -14,6 +14,10 @@ collector has enough evidence to enter a human readiness review.
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 .venv/bin/python tools/finclaw_catalog.py validation-template \
   --json > docs/validations/real-validation-evidence.json
+.venv/bin/python tools/finclaw_catalog.py artifact-manifest \
+  --artifact-root docs/validations/artifacts \
+  --path eastmoney-win-real-001/manifest.json \
+  --json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence \
   --evidence docs/validations/real-validation-evidence.json \
   --verify-artifacts \
@@ -47,6 +51,10 @@ backlog item must have enough evidence for readiness review:
 `validation-evidence` without replacing the placeholders, setting
 `covers_production_gap=true`, adding real artifacts, and setting `result=pass`,
 every record remains blocked as `insufficient_evidence`.
+
+Use `artifact-manifest` after storing local QA artifacts under the artifact
+root. It emits ledger-ready `path`, `sha256`, and `size_bytes` values so hashes
+do not need to be copied by hand.
 
 ## Ledger Shape
 

@@ -66,6 +66,8 @@ stop expanding and move into real-user validation.
 - `tools/finclaw_catalog.py validation-template --json` generates a fillable
   real-validation evidence ledger from the backlog. The unfilled template is
   intentionally blocked by `validation-evidence`.
+- `tools/finclaw_catalog.py artifact-manifest --artifact-root <root> --path
+  <artifact> --json` generates ledger-ready artifact paths and sha256 hashes.
 - `tools/finclaw_catalog.py validation-evidence --evidence <ledger> --json`
   audits a QA evidence ledger against that backlog and only permits
   `ready_for_readiness_review` when a record passes, covers the production gap,
@@ -95,6 +97,7 @@ python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/finclaw_catalog.py closeout --json
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 .venv/bin/python tools/finclaw_catalog.py validation-template --json
+.venv/bin/python tools/finclaw_catalog.py artifact-manifest --artifact-root <artifact-root> --path <artifact-file> --json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --verify-artifacts --artifact-root <artifact-root> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --json

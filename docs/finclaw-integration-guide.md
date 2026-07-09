@@ -89,6 +89,10 @@ python3 tools/finclaw_catalog.py validation-backlog \
 python3 tools/finclaw_catalog.py validation-template \
   --priority P0 \
   --json
+python3 tools/finclaw_catalog.py artifact-manifest \
+  --artifact-root docs/validations/artifacts \
+  --path eastmoney-win-real-001/manifest.json \
+  --json
 python3 tools/finclaw_catalog.py validation-evidence \
   --priority P0 \
   --evidence docs/validations/real-validation-evidence.json \
@@ -142,8 +146,9 @@ state; it lists each remaining real user, real device, real export, or Wiki
 backtest gap without changing collector readiness. The `validation-template`
 output generates a fillable ledger skeleton from that backlog; an unfilled
 template is intentionally rejected by `validation-evidence`. The
-`validation-evidence` output audits a QA-maintained evidence ledger and marks
-each item as `missing_evidence`, `insufficient_evidence`, or
+`artifact-manifest` output generates ledger-ready local artifact paths and
+sha256 hashes. The `validation-evidence` output audits a QA-maintained evidence
+ledger and marks each item as `missing_evidence`, `insufficient_evidence`, or
 `ready_for_readiness_review`; it still does not edit readiness or close gaps by
 itself. When release QA uses `--verify-artifacts`, local artifact paths and
 sha256 hashes must match before a record can pass. The `readiness-review` output
