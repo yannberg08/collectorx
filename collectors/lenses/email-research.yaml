@@ -29,6 +29,7 @@ scope:
     - attachment_ref_boundary
     - email_research_scope_policy
     - scope_policy_filtered_all_readiness
+    - validator_safe_profile_gap_package
     - authorization_scope_boundary
   excludes:
     - mailbox_credentials
@@ -46,4 +47,5 @@ description: |
   --allow-email-folder/--deny-email-folder、--allow-email-mailbox/--deny-email-mailbox、
   --allow-email-subject/--deny-email-subject、--allow-email-attachment/--deny-email-attachment、
   --allow-email-surface/--deny-email-surface、--allow-email-keyword/--deny-email-keyword
-  收窄用户授权范围；filtered-all 时不会伪造可用邮件研报证据。
+  收窄用户授权范围；filtered-all 时输出 validator-safe profile gap package，
+  不会伪造可用邮件研报证据。

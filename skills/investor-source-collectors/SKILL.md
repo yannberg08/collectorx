@@ -140,6 +140,9 @@ P2 必做：
 ```
 
 事件使用 `collectorx.event.v1`，证据包使用 `finclaw.investor_wiki_evidence.v1`，并按投资分身七大维度、20 个子维度提供覆盖情况。
+当缺少授权输入、输入不可读、没有投资证据或授权范围过滤后全空时，lens 会输出
+validator-safe `kind=profile` gap 事件，路由到
+`collectorx.data_quality.collection_gaps`；这些 gap 会被证据包排除，不会变成投资事实。
 
 `manifest.json` 会带 `collection_audit`：
 
@@ -167,8 +170,8 @@ P2 必做：
 - `wechat-article-favorites` 会额外标注文章信息源面谱：券商研究、公司基本面、市场策略、行业主题、估值方法、组合案例、风险预警和宏观政策，并汇总收藏/阅读/保存/转发动作、公众号来源类型、收藏理由、分享对象、阅读时长/进度、互动计数和标的线索。
 - 默认阈值是 `--min-score 0.30`。
 - `--include-non-matches` 只用于审计和回测，会把未命中记录也输出，但仍带分类结果。
-- 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` 缺口事件，不会污染 Wiki 覆盖率。
-- 如果所有候选都被来源范围策略或投研文档授权范围策略排除，输出 `source_policy_filtered_all` 缺口事件，提示检查本次白名单和黑名单。
+- 如果授权输入可读但没有投资证据，输出 `no_investment_evidence_matched` profile 缺口事件，不会污染 Wiki 覆盖率。
+- 如果所有候选都被来源范围策略、邮件研报授权范围策略、社交影响授权范围策略或投研文档授权范围策略排除，输出对应 profile 缺口事件，提示检查本次白名单和黑名单。
 
 `vertical` 类型的数据源是金融原生通道，默认视为投资证据，但仍会附分类元数据。后续每个 vertical collector 还必须做真实账号/平台验证。
 

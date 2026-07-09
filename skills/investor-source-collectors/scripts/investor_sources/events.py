@@ -193,7 +193,14 @@ def build_event(
     }
 
 
-def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reason: str = "source_input_missing") -> Dict[str, Any]:
+def build_gap_event(
+    source_id: str,
+    *,
+    collected_at: Optional[str] = None,
+    reason: str = "source_input_missing",
+    collection_audit: Optional[Dict[str, Any]] = None,
+    parsed_count: int = 0,
+) -> Dict[str, Any]:
     profile = get_profile(source_id)
     message = {
         "source_input_missing": "No authorized input was provided; collector did not fabricate source data.",
@@ -210,23 +217,72 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
         "accepted_inputs": profile.get("accepted_inputs", []),
         "authorization": profile.get("authorization", ""),
     }
+    audit = collection_audit or {}
+    if reason == "email_research_scope_policy_filtered_all":
+        policy_keys = ("email_research_scope_policy",)
+    elif reason == "social_influence_scope_policy_filtered_all":
+        policy_keys = ("social_influence_scope_policy",)
+    elif reason == "source_policy_filtered_all" and source_id == "research-documents":
+        policy_keys = ("document_scope_policy",)
+    elif reason == "source_policy_filtered_all":
+        policy_keys = ("source_policy",)
+    else:
+        policy_keys = ()
+    filtered_candidate_count = 0
+    filter_reason_counts: Counter[str] = Counter()
+    for key in policy_keys:
+        policy = audit.get(key) if isinstance(audit.get(key), dict) else {}
+        filtered_candidate_count += int(policy.get("filtered_candidate_count") or 0)
+        for reason_key, count in (policy.get("filter_reason_counts") or {}).items():
+            filter_reason_counts[str(reason_key)] += int(count or 0)
+    candidate_record_count = int(audit.get("candidate_record_count") or parsed_count or 0)
+    matched_event_count = int(audit.get("matched_event_count") or 0)
     event = build_event(
         source_id=source_id,
         source_label=f"{profile['display_name']} preflight",
         record=record,
         raw_ref={"preflight": True, "reason": reason},
         collected_at=collected_at,
-        event_kind="other",
+        event_kind="profile",
     )
     event["data"]["investor_subdimensions"] = []
     event["data"]["evidence_level"] = "none"
+    event["data"]["profile_type"] = "investor_lens_collection_gap"
+    event["data"]["subtype"] = "collector_gap"
+    event["data"]["action_type"] = "collector_gap"
+    event["data"]["gap"] = reason
+    event["data"]["status"] = {
+        "source_input_missing": "needs_source_authorization_or_input",
+        "no_readable_input": "no_readable_input",
+        "no_investment_evidence_matched": "no_investment_evidence_matched",
+        "source_policy_filtered_all": "source_policy_filtered_all",
+        "email_research_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "social_influence_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }.get(reason, "collection_gap")
+    event["data"]["candidate_record_count"] = candidate_record_count
+    event["data"]["matched_event_count"] = matched_event_count
+    event["data"]["filtered_candidate_count"] = filtered_candidate_count
+    event["data"]["filter_reason_counts"] = dict(sorted(filter_reason_counts.items()))
+    event["data"]["input_count"] = int(audit.get("input_count") or 0)
+    event["data"]["resolved_input_file_count"] = int(audit.get("resolved_input_file_count") or 0)
+    event["data"]["input_missing_count"] = int(audit.get("input_missing_count") or 0)
+    event["data"]["policy_is_user_authorization_scope"] = True
+    event["data"]["policy_does_not_assert_investment_relevance"] = True
+    event["data"]["investment_fact_claimed"] = False
+    event["data"]["investment_conclusion_claimed"] = False
+    event["data"]["complete_source_collection_claimed"] = False
+    event["data"]["upstream_service_token_collected"] = False
+    event["data"]["collector_writes_investor_wiki_directly"] = False
     event["data"]["classification"] = {
         "is_investment_evidence": False,
         "confidence": 0,
         "reasons": [reason],
         "classifier": "collector-preflight-gap",
     }
-    event["wiki_targets"] = []
+    contains = set((event.get("privacy") or {}).get("contains") or [])
+    contains.add("collection_gap")
+    event["privacy"]["contains"] = sorted(contains)
+    event["wiki_targets"] = ["collectorx.data_quality.collection_gaps"]
     return event
 
 

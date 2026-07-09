@@ -542,6 +542,10 @@ Current status:
   `collection_audit.email_scope_policy` records configured filters, candidate
   count, retained count, filtered count, reason counts, and
   `email_scope_policy_filtered_all`.
+- Missing accounts/exports, no-message windows, collection failures, and
+  filtered-all email scope runs emit validator-safe `kind=profile` gap events
+  under `lake/email/events.jsonl`; manifest separates `email_event_count` from
+  `gap_event_count`.
 - Local scan probe, manifest, and raw refs mask path email addresses and long
   numeric account fragments.
 - `manifest.mailbox_boundary_proof` tells FinClaw which account/folder/time
@@ -552,10 +556,11 @@ Current status:
 - Attachment bodies are never written; only filename, content type, and size are
   retained.
 - If no mailbox is registered, IMAP authorization fails, or the selected folders
-  have no matching mail, the collector writes an explicit gap event and next
-  action instead of pretending the mailbox was collected.
+  have no matching mail, the collector writes an explicit data-quality gap event
+  and next action instead of pretending the mailbox was collected.
 - If authorized email exists but every candidate is outside the configured
-  email scope policy, readiness reports `scope_policy_filtered_all`.
+  email scope policy, readiness reports `scope_policy_filtered_all` and
+  `collection_readiness.can_enter_finclaw=false`.
 - Feed `lake/email/events.jsonl` into `email-research` before using broker
   research, IR, roadshow, or research-attachment evidence in the investor Wiki.
 - `email-research` writes `manifest.lens_surface_summary` and
@@ -564,6 +569,10 @@ Current status:
   alerts, research attachment refs, sender domains, body-preview coverage, and
   attachment boundaries. It keeps complete-mailbox claims, full-body Wiki
   inclusion, and attachment-body collection false.
+- `email-research` missing-input, unreadable-input, no-investment-match, and
+  filtered-all packages emit validator-safe profile gap events routed to
+  `collectorx.data_quality.collection_gaps`; generated Investor Wiki evidence
+  still counts only non-gap retained research-mail events.
 
 ### 雪球投资活动
 

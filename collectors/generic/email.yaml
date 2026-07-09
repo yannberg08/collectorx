@@ -42,6 +42,10 @@ scope:
     - archive_member_provenance
     - email_authorization_scope_policy_audit
     - scope_policy_filtered_all_readiness
+    - validator_safe_filtered_all_gap_package
+    - validator_safe_no_input_gap_package
+    - email_event_count
+    - gap_event_count
     - mailbox_boundary_proof
   excludes:
     - mailbox_passwords
@@ -92,4 +96,5 @@ prompt: |
   长度前缀后解析，Maildir 只采 cur/new 下的 RFC822 邮件文件，Thunderbird 只采
   Mail/ImapMail 下或带 .msf 旁路证明的无后缀 mbox，并把 .msf 索引作为跳过原因记录。
   本机扫描/本地导入 manifest 记录缺失输入、逐文件解析结果、跳过原因、Apple Mail/Maildir/Thunderbird 计数、
-  授权范围策略、filtered-all 状态、limit 截断和 mailbox_boundary_proof。投资相关筛选必须交给 email-research lens。
+  授权范围策略、filtered-all 状态、validator-safe profile gap package、email/gap event count、
+  limit 截断和 mailbox_boundary_proof。投资相关筛选必须交给 email-research lens。

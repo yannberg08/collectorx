@@ -133,7 +133,13 @@ def test_collect_without_input_writes_gap_event() -> None:
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "needs_source_authorization_or_input"
         event = json.loads((out_dir / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["kind"] == "profile"
+        assert event["data"]["profile_type"] == "investor_lens_collection_gap"
+        assert event["data"]["status"] == "needs_source_authorization_or_input"
         assert event["data"]["payload"]["signal_type"] == "collector_preflight_gap"
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        validator = run_package_validator(str(out_dir), "--collector", "china-wealth-assets", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
 
 
 def test_wechat_lens_keeps_only_investment_dialogue() -> None:
@@ -373,8 +379,13 @@ def test_wechat_lens_source_policy_filtered_all_has_explicit_gap() -> None:
         assert proof["source_policy_boundary"]["filtered_candidate_count"] == 1
         assert proof["dialogue_boundary"]["event_count"] == 0
         event = json.loads((out_dir / "lake" / "wechat-investment-dialogue" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        assert event["kind"] == "profile"
+        assert event["data"]["profile_type"] == "investor_lens_collection_gap"
+        assert event["data"]["status"] == "source_policy_filtered_all"
+        assert event["data"]["candidate_record_count"] == 1
+        assert event["data"]["filtered_candidate_count"] == 1
         assert event["data"]["payload"]["gap"] == "source_policy_filtered_all"
-        assert event["wiki_targets"] == []
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
 
 
 def test_lens_without_investment_match_does_not_fill_wiki_coverage() -> None:
@@ -851,7 +862,13 @@ def test_email_research_scope_policy_filtered_all_gap() -> None:
             for line in (out_dir / "lake" / "email-research" / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         assert len(lake_events) == 1
+        assert lake_events[0]["kind"] == "profile"
+        assert lake_events[0]["data"]["profile_type"] == "investor_lens_collection_gap"
+        assert lake_events[0]["data"]["status"] == "scope_policy_filtered_all"
+        assert lake_events[0]["data"]["candidate_record_count"] == 1
+        assert lake_events[0]["data"]["filtered_candidate_count"] == 1
         assert lake_events[0]["data"]["payload"]["gap"] == "email_research_scope_policy_filtered_all"
+        assert lake_events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
@@ -862,6 +879,8 @@ def test_email_research_scope_policy_filtered_all_gap() -> None:
         assert proof["proof_level"] == "email_research_scope_policy_filtered_all"
         assert proof["authorization_scope_boundary"]["filtered_all"] is True
         assert proof["can_enter_finclaw"] is False
+        validator = run_package_validator(str(out_dir), "--collector", "email-research", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
 
 
 def test_research_documents_extracts_office_and_pdf_content_when_authorized() -> None:
@@ -2681,8 +2700,13 @@ def test_social_investment_influence_scope_policy_filtered_all_gap() -> None:
             for line in (out_dir / "lake" / "social-investment-influence" / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         assert len(lake_events) == 1
+        assert lake_events[0]["kind"] == "profile"
+        assert lake_events[0]["data"]["profile_type"] == "investor_lens_collection_gap"
+        assert lake_events[0]["data"]["status"] == "scope_policy_filtered_all"
+        assert lake_events[0]["data"]["candidate_record_count"] == 1
+        assert lake_events[0]["data"]["filtered_candidate_count"] == 1
         assert lake_events[0]["data"]["payload"]["gap"] == "social_influence_scope_policy_filtered_all"
-        assert lake_events[0]["wiki_targets"] == []
+        assert lake_events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False

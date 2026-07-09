@@ -351,7 +351,13 @@ def cmd_collect(
             )
             _empty_emails, scope_audit = apply_email_scope_policy([], email_scope_policy)
             attach_email_scope_policy_audit(audit, scope_audit)
-            events = [gap_event(collected_at=collected_at, reason="email_imap_account_missing")]
+            events = [
+                gap_event(
+                    collected_at=collected_at,
+                    reason="email_imap_account_missing",
+                    collection_audit=audit,
+                )
+            ]
             if event_export:
                 write_events_jsonl(event_export, events)
             if out_dir:
@@ -416,7 +422,13 @@ def cmd_collect(
                 include_body=event_include_body,
             )
         elif event_export or out_dir:
-            events = [gap_event(collected_at=collected_at, reason=gap_reason_for_imap_audit(audit_status))]
+            events = [
+                gap_event(
+                    collected_at=collected_at,
+                    reason=gap_reason_for_imap_audit(audit_status),
+                    collection_audit=collection_audit,
+                )
+            ]
 
         if event_export:
             write_events_jsonl(event_export, events)
@@ -471,7 +483,7 @@ def cmd_import(
     )
     if not emails:
         reason = "email_scope_policy_filtered_all" if import_audit.get("email_scope_policy_filtered_all") else "email_authorized_export_missing"
-        events = [gap_event(collected_at=collected_at, reason=reason)]
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=import_audit)]
     else:
         events = emails_to_events(
             emails,
@@ -1614,9 +1626,11 @@ def build_email_manifest(
     package_schema: str,
 ) -> dict:
     kind_counts = Counter(event["kind"] for event in events)
-    folder_counts = Counter((event.get("data") or {}).get("folder", "unknown") for event in events if event["kind"] == "email")
-    mailbox_counts = Counter((event.get("data") or {}).get("mailbox", "unknown") for event in events if event["kind"] == "email")
-    gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    email_events = [event for event in events if event.get("kind") == "email"]
+    gap_events = [event for event in events if is_email_gap_event(event)]
+    folder_counts = Counter((event.get("data") or {}).get("folder", "unknown") for event in email_events)
+    mailbox_counts = Counter((event.get("data") or {}).get("mailbox", "unknown") for event in email_events)
+    gap_only = bool(events) and len(gap_events) == len(events)
     audit = collection_audit or {}
     is_imap = package_schema == "collectorx.email_collect.manifest.v1"
     if gap_only:
@@ -1655,6 +1669,8 @@ def build_email_manifest(
         "collector": "email",
         "collected_at": collected_at or datetime.now().astimezone().isoformat(timespec="seconds"),
         "event_count": len(events),
+        "email_event_count": len(email_events),
+        "gap_event_count": len(gap_events),
         "kind_counts": dict(sorted(kind_counts.items())),
         "folder_counts": dict(sorted(folder_counts.items())),
         "mailbox_counts": dict(sorted(mailbox_counts.items())),
@@ -1745,6 +1761,11 @@ def build_email_field_coverage(events: list[dict]) -> dict:
         "email_event_count": len(email_events),
         "fields": coverage,
     }
+
+
+def is_email_gap_event(event: dict) -> bool:
+    data = event.get("data") if isinstance(event.get("data"), dict) else {}
+    return bool(data.get("gap")) and data.get("profile_type") == "email_collection_gap"
 
 
 def build_mailbox_boundary_proof(
@@ -1964,6 +1985,8 @@ def write_email_summary(path: Path, manifest: dict) -> None:
         "",
         "- collector: `email`",
         f"- event_count: {manifest['event_count']}",
+        f"- email_event_count: {manifest.get('email_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- source_scope: `{manifest['collection_readiness']['source_collection_scope']}`",
         f"- mailbox_boundary: `{manifest['mailbox_boundary_proof']['proof_level']}`",

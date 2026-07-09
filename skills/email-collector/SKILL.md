@@ -112,7 +112,9 @@ python <SKILL_DIR>/scripts/email_api.py import \
 
 `collect` 通过已注册的 IMAP 邮箱读取邮件，并在 manifest 中记录账户/文件夹审计：
 注册账户数、选中账户数、登录/搜索/抓取状态、匹配邮件数、抓取邮件数和失败原因。
-如果没有注册邮箱、授权失败或时间窗口没有邮件，也会输出 gap 事件和明确下一步。
+如果没有注册邮箱、授权失败或时间窗口没有邮件，也会输出 validator-safe
+`kind=profile` gap 事件和明确下一步；manifest 会把 `email_event_count` 与
+`gap_event_count` 分开，避免把采集缺口当成真实邮件事实。
 
 `import --local-scan` 可以扫描用户授权的本机邮箱目录，如 Apple Mail、Thunderbird、
 Evolution/Maildir 根目录，并在 manifest/probe 中记录平台、授权根、候选邮件文件和本机扫描边界。
@@ -130,7 +132,9 @@ mbox 文件数、Thunderbird `.msf` 索引跳过数、ZIP 成员数量、ZIP 成
 sender-domain、recipient、subject、attachment 和 keyword 的 allow/deny 规则。
 `manifest.collection_audit.email_scope_policy` 会记录配置、候选邮件数、保留数、
 过滤数、原因计数和 `filtered_all` 状态。若授权范围把所有候选邮件排除，采集器会输出
-`email_scope_policy_filtered_all` gap，而不是误报为没有邮箱或没有导出文件。
+`email_scope_policy_filtered_all` profile gap，而不是误报为没有邮箱或没有导出文件。
+gap 事件路由到 `collectorx.data_quality.collection_gaps`，并显式声明不代表邮件事实、
+邮件研报事实、投资结论、完整邮箱历史、正文/附件正文采集或直接写入投资 Wiki。
 `manifest.mailbox_boundary_proof` 会把本轮采集边界提升为稳定接口：IMAP 路径记录
 账号/文件夹/天数窗口/匹配与抓取数量；本地导入路径记录授权输入、格式覆盖、ZIP 成员、
 Apple Mail/Maildir/Thunderbird 计数、跳过原因、本机扫描根目录状态、邮箱授权范围、

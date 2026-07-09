@@ -16,7 +16,30 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`social-investment-influence` now supports lens-level authorization scope
+`email` and `email-research` now emit validator-safe collection gap packages:
+
+- Generic email IMAP/local-scan/local-import missing-account, missing-export,
+  no-message, collection-failure, and filtered-all scope runs now emit
+  `kind=profile` gap events under `lake/email/events.jsonl`.
+- Email manifests separate `event_count`, `email_event_count`, and
+  `gap_event_count`, so FinClaw can ingest a traceable package without
+  promoting a mailbox collection gap as a real email fact.
+- Email gap events include candidate/retained/filtered counts, filter reason
+  counts, data-quality routing, and false-claim flags for email facts,
+  email-research facts, investment conclusions, complete mailbox history,
+  full-body capture, attachment-body capture, mailbox passwords, OAuth tokens,
+  and direct investor Wiki writes.
+- Generic investor-source lens gaps, including `email-research`, now emit
+  validator-safe `kind=profile` events routed to
+  `collectorx.data_quality.collection_gaps`.
+- `email-research` filtered-all packages keep
+  `collection_readiness.can_enter_finclaw=false`; generated Investor Wiki
+  evidence still counts only non-gap retained research-mail events.
+- Fixture tests now run the shared CollectorX package validator for normal,
+  no-input/missing-account, missing-export, and filtered-all email packages,
+  plus filtered-all `email-research` lens packages.
+
+The prior completed wave: `social-investment-influence` now supports lens-level authorization scope
 filters before weak social evidence enters Investor Wiki evidence packages:
 
 - The lens accepts platform, action, source-app, domain, creator, topic, and
@@ -308,7 +331,7 @@ Lake/package output:
   authorized reading/source scope, while `wechat-article-favorites` still
   performs investment relevance classification.
 
-The latest completed wave: `meeting-artifacts` and `collaboration-exports` now
+The prior completed wave: `meeting-artifacts` and `collaboration-exports` now
 emit traceable meeting/collaboration collection gap events:
 
 - Meeting artifact missing-input, empty-record, and filtered-all runs now emit
@@ -374,7 +397,7 @@ scope-policy filters before planning evidence enters the Lake/package output:
   authorized planning scope, while `task-calendar-investor` still performs
   investment relevance classification.
 
-The latest completed wave: `notes-collector` now emits validator-safe gap
+A prior completed wave: `notes-collector` now emits validator-safe gap
 packages when authorized note collection has no retained note events:
 
 - Missing user-selected note input now produces one `kind=profile` event with
@@ -457,7 +480,7 @@ Chromium history copies:
   `source_archive`, and `archive_member`; temporary extraction paths are not
   exposed in events.
 
-The latest completed wave: `china-wealth-assets` now exposes explicit
+A prior completed wave: `china-wealth-assets` now exposes explicit
 authorization scope-policy boundaries:
 
 - `china_wealth.py collect` accepts platform, account, subtype, product code,
@@ -580,7 +603,7 @@ The prior completed wave: FinClaw catalog coverage and invocation contracts are 
 - This improves FinClaw call safety and user-facing precondition handling, but
   it does not claim new real-account validation for any collector.
 
-The latest completed wave: `xueqiu-watchlist` and
+A prior completed wave: `xueqiu-watchlist` and
 `xueqiu-investor-activity` now expose explicit authorization scope-policy
 boundaries:
 
@@ -738,7 +761,7 @@ The prior completed wave: FinClaw catalog validation now checks runnable invocat
 - This improves product-entry safety; QQ's full standard package path is now
   covered by the later QQ package wave above.
 
-The latest completed wave: `ths-portfolio` now has explicit filtered-all gap
+A prior completed wave: `ths-portfolio` now has explicit filtered-all gap
 events for authorization-scope package ingestion:
 
 - `ths-portfolio` is upgraded to `0.5.2`.
@@ -858,7 +881,7 @@ collection audit coverage for authorized research files and folders:
   across real Chinese screenshots, or Wiki backtest against real
   trades/reviews.
 
-The latest completed wave: `research-documents` now exposes audited binary-XLS boundaries:
+A prior completed wave: `research-documents` now exposes audited binary-XLS boundaries:
 
 - Legacy `.xls` parser results are now split in `parser_counts` instead of
   being collapsed into one label: XML Spreadsheet, HTML table, delimited text,
@@ -1250,7 +1273,7 @@ for registered IMAP mailboxes as it already had for local authorized exports:
   mailbox validation on the current machine because no mailbox is registered in
   the local email collector state.
 
-The latest completed wave: `email-research` now has a lens-level surface and
+A prior completed wave: `email-research` now has a lens-level surface and
 boundary proof for investor Wiki gating:
 
 - `manifest.lens_surface_summary` classifies broker research, morning meetings,
@@ -1264,7 +1287,7 @@ boundary proof for investor Wiki gating:
   personal mail, validates the generated package with `--require-evidence`, and
   confirms the lens remains dependent on the generic `email` collector.
 
-The latest completed wave: `wechat` now has standard preflight/no-message gap
+A prior completed wave: `wechat` now has standard preflight/no-message gap
 packages for FinClaw:
 
 - `wechat-export` is upgraded to `0.11.2`.

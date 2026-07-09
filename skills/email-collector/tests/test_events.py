@@ -22,6 +22,20 @@ from email_collector.events import emails_to_events, write_events_jsonl
 from email_api import _account_id, _accounts_from_state, _collect_account_emails, infer_provider
 
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def run_package_validator(package_dir: Path, *, collector: str = "email") -> dict:
+    result = subprocess.run(
+        [sys.executable, str(PACKAGE_VALIDATOR), str(package_dir), "--collector", collector, "--json"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return json.loads(result.stdout)
+
+
 def test_email_event_without_full_body():
     emails = [
         {
@@ -265,6 +279,9 @@ def test_imap_collect_standard_package():
         assert len(events) == 2
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["schema"] == "collectorx.email_collect.manifest.v1"
+        assert manifest["event_count"] == 2
+        assert manifest["email_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
         assert manifest["collection_readiness"]["source_collection_scope"] == "authorized_imap"
         assert manifest["collection_audit"]["source_type"] == "imap"
@@ -285,6 +302,7 @@ def test_imap_collect_standard_package():
         assert proof["imap_boundary"]["requested_folders"] == ["INBOX", "Sent"]
         assert proof["imap_boundary"]["matched_message_count"] == 2
         assert proof["imap_boundary"]["password_material_in_output"] is False
+        assert run_package_validator(out)["valid"] is True
 
 
 def test_imap_collect_scope_policy_filters_authorized_folder():
@@ -383,8 +401,19 @@ def test_imap_collect_gap_package_without_registered_account():
             json.loads(line)
             for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T13:10:00+08:00"
         assert events[0]["data"]["gap"] == "email_imap_account_missing"
+        assert events[0]["data"]["status"] == "needs_email_registered_account"
+        assert events[0]["data"]["profile_type"] == "email_collection_gap"
+        assert events[0]["data"]["email_fact_claimed"] is False
+        assert events[0]["data"]["email_research_fact_claimed"] is False
+        assert set(events[0]["privacy"]["contains"]) == {"email", "collection_gap"}
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["email_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "needs_email_registered_account"
         assert manifest["collection_audit"]["status"] == "no_registered_account"
         proof = manifest["mailbox_boundary_proof"]
@@ -392,6 +421,7 @@ def test_imap_collect_gap_package_without_registered_account():
         assert proof["can_enter_finclaw"] is False
         assert proof["email_event_count"] == 0
         assert proof["imap_boundary"]["selected_account_count"] == 0
+        assert run_package_validator(out)["valid"] is True
 
 
 def test_local_email_import_package():
@@ -469,6 +499,9 @@ def test_local_email_import_package():
         assert "morning-note.pdf" in serialized
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["event_count"] == 3
+        assert manifest["email_event_count"] == 3
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["full_body_included"] is False
         assert manifest["collection_audit"]["source_type"] == "authorized_email_export"
         assert manifest["collection_audit"]["input_count"] == 1
@@ -495,6 +528,7 @@ def test_local_email_import_package():
         assert proof["attachment_capture"]["attachment_bodies_included"] is False
         assert proof["local_export_boundary"]["resolved_input_file_count"] == 3
         assert proof["local_export_boundary"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert run_package_validator(out)["valid"] is True
 
 
 def test_local_email_import_scope_policy_filters_authorized_records():
@@ -651,9 +685,23 @@ def test_local_email_import_scope_policy_filtered_all_gap():
             for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         assert len(events) == 1
-        assert events[0]["kind"] == "other"
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"]
         assert events[0]["data"]["gap"] == "email_scope_policy_filtered_all"
+        assert events[0]["data"]["status"] == "scope_policy_filtered_all"
+        assert events[0]["data"]["profile_type"] == "email_collection_gap"
+        assert events[0]["data"]["candidate_email_count"] == 1
+        assert events[0]["data"]["retained_email_count"] == 0
+        assert events[0]["data"]["filtered_email_count"] == 1
+        assert events[0]["data"]["filter_reason_counts"] == {"allow_sender_domain_mismatch": 1}
+        assert events[0]["data"]["complete_mailbox_claimed"] is False
+        assert events[0]["data"]["collector_writes_investor_wiki_directly"] is False
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["email_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         audit = manifest["collection_audit"]
@@ -664,6 +712,7 @@ def test_local_email_import_scope_policy_filtered_all_gap():
         assert proof["proof_level"] == "email_scope_policy_filtered_all"
         assert proof["authorization_scope_boundary"]["filtered_all"] is True
         assert proof["local_export_boundary"]["scope_policy_candidate_email_count"] == 1
+        assert run_package_validator(out)["valid"] is True
 
 
 def test_local_email_import_apple_mail_emlx_and_maildir():
@@ -941,12 +990,18 @@ def test_local_email_import_gap_event():
             for line in (out / "lake" / "email" / "events.jsonl").read_text(encoding="utf-8").splitlines()
         ]
         assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"]
         assert events[0]["data"]["gap"] == "email_authorized_export_missing"
+        assert events[0]["data"]["status"] == "needs_email_authorized_export"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["email_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_audit"]["input_count"] == 0
         assert manifest["collection_audit"]["resolved_input_file_count"] == 0
         assert manifest["collection_audit"]["imported_email_count"] == 0
         assert manifest["mailbox_boundary_proof"]["proof_level"] == "no_authorized_email_export"
+        assert run_package_validator(out)["valid"] is True
 
 
 def test_local_email_import_missing_input_gap_audit():
@@ -1180,8 +1235,11 @@ if __name__ == "__main__":
     test_provider_inference_and_multi_account_state()
     test_fake_imap_multi_folder_collection()
     test_imap_collect_standard_package()
+    test_imap_collect_scope_policy_filters_authorized_folder()
     test_imap_collect_gap_package_without_registered_account()
     test_local_email_import_package()
+    test_local_email_import_scope_policy_filters_authorized_records()
+    test_local_email_import_scope_policy_filtered_all_gap()
     test_local_email_import_apple_mail_emlx_and_maildir()
     test_local_email_scan_package_masks_source_paths()
     test_local_email_scan_thunderbird_mbox_boundary()

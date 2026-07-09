@@ -320,7 +320,7 @@ def collect_events_with_audit(
         input_resolution=input_resolution,
     )
     if not paths:
-        events = [build_gap_event(source_id, collected_at=collected_at)]
+        events = [build_gap_event(source_id, collected_at=collected_at, collection_audit=audit)]
         finalize_collection_audit(audit, events, parsed_count=0)
         return CollectionResult(events=events, audit=audit)
 
@@ -369,7 +369,15 @@ def collect_events_with_audit(
             reason = "source_policy_filtered_all"
         else:
             reason = "no_investment_evidence_matched"
-        events = [build_gap_event(source_id, collected_at=collected_at, reason=reason)]
+        events = [
+            build_gap_event(
+                source_id,
+                collected_at=collected_at,
+                reason=reason,
+                collection_audit=audit,
+                parsed_count=parsed_count,
+            )
+        ]
     finalize_collection_audit(audit, events, parsed_count=parsed_count)
     return CollectionResult(events=events, audit=audit)
 

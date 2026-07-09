@@ -174,7 +174,12 @@ def is_sensitive_key(key: Any) -> bool:
     return any(secret in normalized for secret in SENSITIVE_KEYS)
 
 
-def gap_event(*, collected_at: Optional[str] = None, reason: str = "email_authorized_input_missing") -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str] = None,
+    reason: str = "email_authorized_input_missing",
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     collected = collected_at or datetime.now(CN_TZ).isoformat(timespec="seconds")
     messages = {
         "email_authorized_export_missing": "No user-authorized local email export was provided.",
@@ -183,21 +188,69 @@ def gap_event(*, collected_at: Optional[str] = None, reason: str = "email_author
         "email_imap_collection_failed": "IMAP collection did not fetch messages; inspect collection_audit for account and folder errors.",
         "email_scope_policy_filtered_all": "Email messages were found, but every candidate was outside the configured authorization scope policy.",
     }
+    status = {
+        "email_authorized_export_missing": "needs_email_authorized_export",
+        "email_imap_account_missing": "needs_email_registered_account",
+        "email_imap_no_messages": "no_matching_mail_in_time_window",
+        "email_imap_collection_failed": "imap_collection_failed",
+        "email_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }.get(reason, "collection_gap")
+    audit = collection_audit or {}
+    scope_policy = audit.get("email_scope_policy") if isinstance(audit.get("email_scope_policy"), dict) else {}
+    candidate_email_count = int(
+        audit.get("scope_policy_candidate_email_count")
+        or scope_policy.get("candidate_email_count")
+        or audit.get("pre_scope_policy_email_count")
+        or audit.get("collected_email_count")
+        or audit.get("imported_email_count")
+        or 0
+    )
+    retained_email_count = int(
+        audit.get("scope_policy_retained_email_count")
+        or scope_policy.get("retained_email_count")
+        or 0
+    )
+    filtered_email_count = int(
+        audit.get("scope_policy_filtered_email_count")
+        or scope_policy.get("filtered_email_count")
+        or 0
+    )
     return {
         "schema": "collectorx.event.v1",
         "id": f"{COLLECTOR_ID}:gap:{reason}",
         "collector": COLLECTOR_ID,
         "source": "邮箱授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
+        "kind": "profile",
+        "time": collected,
         "collected_at": collected,
         "data": {
             "gap": reason,
+            "status": status,
+            "profile_type": "email_collection_gap",
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "message": messages.get(reason, "No user-authorized mailbox account or local email export was provided."),
+            "candidate_email_count": candidate_email_count,
+            "retained_email_count": retained_email_count,
+            "filtered_email_count": filtered_email_count,
+            "filter_reason_counts": scope_policy.get("filter_reason_counts") or audit.get("scope_policy_filter_reason_counts", {}),
+            "source_type": audit.get("source_type") or "unknown",
+            "policy_is_user_authorization_scope": scope_policy.get("policy_is_user_authorization_scope", True),
+            "policy_does_not_assert_investment_relevance": scope_policy.get("policy_does_not_assert_investment_relevance", True),
+            "email_fact_claimed": False,
+            "email_research_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_mailbox_claimed": False,
+            "complete_account_history_claimed": False,
+            "mailbox_password_collected": False,
+            "oauth_token_collected": False,
+            "attachment_body_collected": False,
+            "full_body_collected_by_default": False,
+            "collector_writes_investor_wiki_directly": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["email"]},
+        "raw_ref": {"preflight": True, "reason": reason, "source_type": audit.get("source_type")},
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["email", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
