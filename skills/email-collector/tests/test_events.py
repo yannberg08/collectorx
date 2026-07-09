@@ -750,10 +750,10 @@ def test_local_email_import_apple_mail_emlx_and_maildir():
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         apple_dir = root / "Apple Mail"
-        maildir_cur = root / "Maildir" / "cur"
+        maildir_new = root / "Maildir" / "new"
         out = root / "out"
         apple_dir.mkdir()
-        maildir_cur.mkdir(parents=True)
+        maildir_new.mkdir(parents=True)
 
         apple_msg = EmailMessage()
         apple_msg["Message-ID"] = "<apple-mail-research@example.com>"
@@ -777,7 +777,7 @@ def test_local_email_import_apple_mail_emlx_and_maildir():
         maildir_msg["Subject"] = str(Header("Maildir 调研邀请", "utf-8"))
         maildir_msg["Date"] = "Wed, 08 Jul 2026 10:00:00 +0800"
         maildir_msg.set_content("邀请参加线上调研。")
-        (maildir_cur / "1720000000.M123P456Q789.host:2,S").write_bytes(maildir_msg.as_bytes())
+        (maildir_new / "1720000000.M123P456Q789.host").write_bytes(maildir_msg.as_bytes())
         (root / "README").write_text("not an email export", encoding="utf-8")
 
         script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
@@ -861,7 +861,7 @@ def test_local_email_scan_package_masks_source_paths():
         maildir_msg["Subject"] = str(Header("本机 Maildir 路演邀请", "utf-8"))
         maildir_msg["Date"] = "Wed, 08 Jul 2026 10:00:00 +0800"
         maildir_msg.set_content("邀请参加线上调研。")
-        (maildir_new / "1720000000.M123P456Q789.host:2,S").write_bytes(maildir_msg.as_bytes())
+        (maildir_new / "1720000000.M123P456Q789.host").write_bytes(maildir_msg.as_bytes())
         (local_root / "not-mail.txt").write_text("not an email export", encoding="utf-8")
 
         script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
@@ -1259,7 +1259,7 @@ def test_email_preflight_diagnose_local_scan_readiness_without_path_or_body_read
         local_root = root / "Library" / "Mail" / "private.path.account@example.net" / "13800138000"
         maildir_new = local_root / "Maildir" / "new"
         maildir_new.mkdir(parents=True)
-        (maildir_new / "1720000000.M123P456Q789.host:2,S").write_text(
+        (maildir_new / "1720000000.M123P456Q789.host").write_text(
             "Subject: should not be read by diagnosis\n\nprivate body",
             encoding="utf-8",
         )
