@@ -135,6 +135,7 @@ FinClaw should call the catalog helper instead of hand-building commands:
 ```bash
 .venv/bin/python tools/finclaw_catalog.py closeout --json
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
+.venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence docs/validations/real-validation-evidence.json --json
 .venv/bin/python tools/finclaw_catalog.py doctor --json
 .venv/bin/python tools/finclaw_catalog.py runbook --json
 .venv/bin/python tools/finclaw_catalog.py batch-manifest --json
@@ -144,6 +145,8 @@ FinClaw should call the catalog helper instead of hand-building commands:
 Execution runners should use the returned `argv` array, not the display command
 string. After a collector exits, run the returned `package_validation.argv`
 before ingesting its output into Lake or running Investor Wiki distillation.
+Use `docs/real-validation-evidence-ledger.md` for the QA evidence ledger before
+asking to raise any collector readiness.
 
 ## Package Acceptance Checklist
 
@@ -171,6 +174,7 @@ The closeout state has been verified with:
 ```bash
 .venv/bin/python tools/finclaw_catalog.py closeout --json
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
+.venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <evidence-ledger.json> --json
 .venv/bin/python tools/test_finclaw_catalog.py
 .venv/bin/python tools/validate_project.py
 PYTHON=.venv/bin/python bash test_collectors.sh

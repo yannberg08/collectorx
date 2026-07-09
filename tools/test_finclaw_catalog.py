@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 from collections import Counter
 from pathlib import Path
 
@@ -281,6 +282,121 @@ def test_validation_backlog_matches_closeout_gap_scope() -> None:
         assert item["requires_real_validation_before_production"] == source["requires_real_validation_before_production"]
 
 
+def test_validation_evidence_audits_real_validation_records() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        evidence_path = Path(tmp) / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [
+                        {
+                            "record_id": "em-real-001",
+                            "collector_id": "eastmoney-portfolio",
+                            "result": "pass",
+                            "decision": "post_guarded_gap_closed",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_account", "real_device", "wiki_backtest"],
+                            "artifacts": [{"path": "/qa/eastmoney/manifest.json"}],
+                            "validated_at": "2026-07-09T18:00:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                        {
+                            "record_id": "ths-real-001",
+                            "collector_id": "ths-portfolio",
+                            "result": "partial",
+                            "decision": "gap_closed",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_account"],
+                            "artifacts": [],
+                            "validated_at": "2026-07-09T18:05:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                        {
+                            "record_id": "not-selected-001",
+                            "collector_id": "qq",
+                            "result": "pass",
+                            "decision": "gap_closed",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_export"],
+                            "artifacts": [{"path": "/qa/qq/package.json"}],
+                            "validated_at": "2026-07-09T18:10:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        report = run_json("validation-evidence", "--priority", "P0", "--evidence", str(evidence_path), "--json")
+
+    assert report["schema"] == "collectorx.finclaw_real_validation_evidence_audit.v1"
+    assert report["evidence_schema"] == "collectorx.finclaw_real_validation_evidence.v1"
+    assert report["validation_backlog_schema"] == "collectorx.finclaw_real_validation_backlog.v1"
+    assert report["total"] == 12
+    assert report["ledger_issues"] == []
+    assert report["summary"]["by_evidence_status"] == {
+        "insufficient_evidence": 1,
+        "missing_evidence": 10,
+        "ready_for_readiness_review": 1,
+    }
+    assert report["summary"]["blocked_before_production"] == 11
+    assert report["summary"]["guarded_post_launch_remaining"] == 0
+    assert report["summary"]["unmatched_evidence_records"] == 1
+    assert report["unmatched_records"][0]["collector_id"] == "qq"
+
+    by_id = {item["id"]: item for item in report["items"]}
+    eastmoney = by_id["eastmoney-portfolio"]
+    assert eastmoney["evidence_status"] == "ready_for_readiness_review"
+    assert eastmoney["readiness_review_allowed"] is True
+    assert eastmoney["accepted_evidence"]["record_id"] == "em-real-001"
+    assert eastmoney["accepted_evidence"]["artifact_count"] == 1
+    assert eastmoney["accepted_evidence"]["evidence_types"] == [
+        "real_account",
+        "real_device",
+        "wiki_backtest",
+    ]
+
+    ths = by_id["ths-portfolio"]
+    assert ths["evidence_status"] == "insufficient_evidence"
+    assert ths["readiness_review_allowed"] is False
+    assert "result_not_pass" in ths["issues"]
+    assert "missing_artifacts" in ths["issues"]
+
+    assert by_id["wechat"]["evidence_status"] == "missing_evidence"
+    assert by_id["wechat"]["issues"] == ["missing_validation_evidence"]
+
+
+def test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        evidence_path = Path(tmp) / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        proc = run_proc(
+            "validation-evidence",
+            "--priority",
+            "P0",
+            "--evidence",
+            str(evidence_path),
+            "--json",
+            "--require-all-review-ready",
+        )
+
+    assert proc.returncode == 2
+    report = json.loads(proc.stdout)
+    assert report["summary"]["not_ready_for_readiness_review"] == 12
+
+
 def stage_by_name(runbook: dict[str, object], name: str) -> dict[str, object]:
     stages = runbook["stages"]
     assert isinstance(stages, list)
@@ -436,8 +552,10 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     production_readiness = (ROOT / "docs" / "production-readiness.md").read_text(encoding="utf-8")
     roadmap = (ROOT / "docs" / "investor-collector-productization-roadmap.md").read_text(encoding="utf-8")
     handoff = (ROOT / "docs" / "final-handoff-checklist.md").read_text(encoding="utf-8")
+    evidence_ledger = (ROOT / "docs" / "real-validation-evidence-ledger.md").read_text(encoding="utf-8")
 
     assert "docs/final-handoff-checklist.md" in readme
+    assert "docs/real-validation-evidence-ledger.md" in readme
     assert "docs/final-handoff-checklist.md" in closeout
     assert "docs/final-handoff-checklist.md" in productization
     assert "docs/final-handoff-checklist.md" in production_readiness
@@ -467,6 +585,9 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     assert "`ths-portfolio`, `qq`" in handoff
     assert "production-candidate` as full production done" in handoff
     assert "The next phase is real validation, not more collector expansion." in handoff
+    assert "validation-evidence --evidence" in handoff
+    assert "collectorx.finclaw_real_validation_evidence.v1" in evidence_ledger
+    assert "does not edit" in evidence_ledger
 
 
 def main() -> int:
@@ -485,6 +606,8 @@ def main() -> int:
     test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
     test_closeout_report_tracks_product_tiers_and_real_validation_gaps()
     test_validation_backlog_matches_closeout_gap_scope()
+    test_validation_evidence_audits_real_validation_records()
+    test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps()
     test_runbook_groups_p0_entries_by_product_stage()
     test_runbook_respects_explicit_lens_input_over_auto_link()
     test_runbook_can_disable_auto_upstream_linking()

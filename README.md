@@ -71,6 +71,8 @@ Operational docs:
 - `docs/final-handoff-checklist.md` is the final FinClaw handoff checklist:
   current counts, launch decisions, invocation checklist, package acceptance
   checklist, and remaining real-validation work.
+- `docs/real-validation-evidence-ledger.md` defines the QA evidence ledger used
+  to audit real validation records before any readiness review.
 - `docs/production-readiness.md` records what is genuinely runnable versus what
   is still a placeholder or lens.
 - `docs/finclaw-integration-guide.md` describes how FinClaw should discover,
@@ -83,7 +85,8 @@ Operational docs:
   the catalog plus invocation contracts. Product runners should use `doctor`
   for setup screens, `closeout` for launch tier and real-validation gap
   reporting, `validation-backlog` for the next real-user/device/export
-  validation queue, `runbook` for batch execution order, `batch-manifest` for
+  validation queue, `validation-evidence` to audit QA evidence records before a
+  readiness review, `runbook` for batch execution order, `batch-manifest` for
   compact product execution manifests, and
   `plan --require-ready` before executing a single collector, then execute the
   returned `argv` list rather than reparsing the display command string.

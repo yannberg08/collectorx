@@ -766,6 +766,249 @@ def cmd_validation_backlog(args: argparse.Namespace) -> int:
     return 0
 
 
+VALIDATION_EVIDENCE_SCHEMA = "collectorx.finclaw_real_validation_evidence.v1"
+REAL_VALIDATION_TYPES = {
+    "real_user_authorization",
+    "real_account",
+    "real_device",
+    "real_export",
+    "real_readonly_screen",
+    "real_api_response",
+    "wiki_backtest",
+    "package_validation",
+}
+GAP_CLOSING_DECISIONS = {
+    "gap_closed",
+    "post_guarded_gap_closed",
+    "ready_for_readiness_review",
+}
+
+
+def load_validation_evidence(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise SystemExit(f"validation evidence file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"validation evidence file is not valid JSON: {path}: {exc}") from exc
+
+    issues: list[str] = []
+    if isinstance(payload, list):
+        records = payload
+        issues.append("missing_top_level_schema")
+    elif isinstance(payload, dict):
+        if payload.get("schema") != VALIDATION_EVIDENCE_SCHEMA:
+            issues.append("invalid_or_missing_schema")
+        records = payload.get("records", [])
+    else:
+        raise SystemExit("validation evidence must be a JSON object or list")
+
+    if not isinstance(records, list):
+        raise SystemExit("validation evidence records must be a list")
+    normalized: list[dict[str, Any]] = []
+    for index, record in enumerate(records, start=1):
+        if isinstance(record, dict):
+            normalized.append(record)
+        else:
+            issues.append(f"record_{index}_is_not_object")
+    return normalized, issues
+
+
+def validation_record_collector_id(record: dict[str, Any]) -> str:
+    return str(record.get("collector_id") or record.get("id") or "").strip()
+
+
+def validation_record_artifacts(record: dict[str, Any]) -> list[Any]:
+    artifacts = record.get("artifacts")
+    if artifacts is None:
+        artifacts = record.get("artifact_refs")
+    return artifacts if isinstance(artifacts, list) else []
+
+
+def validation_record_types(record: dict[str, Any]) -> set[str]:
+    raw_types = record.get("evidence_types")
+    if raw_types is None:
+        raw_types = record.get("evidence_type")
+    if isinstance(raw_types, str):
+        return {raw_types}
+    if isinstance(raw_types, list):
+        return {str(value) for value in raw_types if str(value).strip()}
+    return set()
+
+
+def validation_record_timestamp(record: dict[str, Any]) -> str:
+    return str(record.get("validated_at") or record.get("checked_at") or "").strip()
+
+
+def validation_record_reviewer(record: dict[str, Any]) -> str:
+    return str(record.get("validated_by") or record.get("reviewer") or "").strip()
+
+
+def validation_record_issues(record: dict[str, Any], item: dict[str, Any]) -> list[str]:
+    issues: list[str] = []
+    collector_id = validation_record_collector_id(record)
+    if collector_id != item["id"]:
+        issues.append("collector_id_mismatch")
+    if record.get("result") != "pass":
+        issues.append("result_not_pass")
+    if record.get("decision") not in GAP_CLOSING_DECISIONS:
+        issues.append("decision_not_gap_closing")
+    if record.get("covers_production_gap") is not True:
+        issues.append("does_not_cover_production_gap")
+    evidence_types = validation_record_types(record)
+    if not evidence_types:
+        issues.append("missing_evidence_types")
+    elif not evidence_types.intersection(REAL_VALIDATION_TYPES):
+        issues.append("missing_real_validation_type")
+    if not validation_record_artifacts(record):
+        issues.append("missing_artifacts")
+    if not validation_record_timestamp(record):
+        issues.append("missing_validated_at")
+    if not validation_record_reviewer(record):
+        issues.append("missing_validated_by")
+    return issues
+
+
+def accepted_validation_record_summary(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "record_id": record.get("record_id") or record.get("id"),
+        "decision": record.get("decision"),
+        "result": record.get("result"),
+        "validated_at": validation_record_timestamp(record),
+        "validated_by": validation_record_reviewer(record),
+        "evidence_types": sorted(validation_record_types(record)),
+        "artifact_count": len(validation_record_artifacts(record)),
+    }
+
+
+def validation_evidence_item(item: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
+    candidate_records = [record for record in records if validation_record_collector_id(record) == item["id"]]
+    if not candidate_records:
+        status = "missing_evidence"
+        accepted_record = None
+        issues = ["missing_validation_evidence"]
+    else:
+        evaluations = [(record, validation_record_issues(record, item)) for record in candidate_records]
+        accepted = [record for record, record_issues in evaluations if not record_issues]
+        if accepted:
+            status = "ready_for_readiness_review"
+            accepted_record = accepted[-1]
+            issues = []
+        else:
+            status = "insufficient_evidence"
+            accepted_record = None
+            issue_set = {issue for _, record_issues in evaluations for issue in record_issues}
+            issues = sorted(issue_set)
+
+    return {
+        **item,
+        "evidence_status": status,
+        "readiness_review_allowed": status == "ready_for_readiness_review",
+        "evidence_record_count": len(candidate_records),
+        "accepted_evidence": accepted_validation_record_summary(accepted_record) if accepted_record else None,
+        "issues": issues,
+    }
+
+
+def build_validation_evidence_report(
+    entries: list[dict[str, Any]],
+    *,
+    evidence_path: Path,
+) -> dict[str, Any]:
+    records, ledger_issues = load_validation_evidence(evidence_path)
+    backlog = build_validation_backlog(entries)
+    backlog_by_id = {item["id"]: item for item in backlog["items"]}
+    items = [validation_evidence_item(item, records) for item in backlog["items"]]
+    matched_ids = {item["id"] for item in items}
+    unmatched_records = [
+        {
+            "record_index": index,
+            "collector_id": validation_record_collector_id(record),
+            "issue": "not_in_selected_validation_backlog",
+        }
+        for index, record in enumerate(records, start=1)
+        if validation_record_collector_id(record) not in matched_ids
+    ]
+    by_status = Counter(item["evidence_status"] for item in items)
+    not_review_ready = [item for item in items if not item["readiness_review_allowed"]]
+    return {
+        "schema": "collectorx.finclaw_real_validation_evidence_audit.v1",
+        "evidence_schema": VALIDATION_EVIDENCE_SCHEMA,
+        "validation_backlog_schema": backlog["schema"],
+        "evidence_path": str(evidence_path),
+        "ledger_issues": ledger_issues,
+        "total": len(items),
+        "summary": {
+            "by_evidence_status": dict(sorted(by_status.items())),
+            "ready_for_readiness_review": by_status.get("ready_for_readiness_review", 0),
+            "missing_evidence": by_status.get("missing_evidence", 0),
+            "insufficient_evidence": by_status.get("insufficient_evidence", 0),
+            "not_ready_for_readiness_review": len(not_review_ready),
+            "blocked_before_production": sum(
+                1
+                for item in not_review_ready
+                if item["remaining_validation_scope"] == "pre_production_validation"
+            ),
+            "guarded_post_launch_remaining": sum(
+                1
+                for item in not_review_ready
+                if item["remaining_validation_scope"] == "post_guarded_launch_validation"
+            ),
+            "unmatched_evidence_records": len(unmatched_records),
+        },
+        "unmatched_records": unmatched_records,
+        "items": items,
+        "catalog_backlog_ids": sorted(backlog_by_id),
+    }
+
+
+def print_human_validation_evidence(report: dict[str, Any]) -> None:
+    summary = report["summary"]
+    print(f"total: {report['total']}")
+    print(f"ready_for_readiness_review: {summary['ready_for_readiness_review']}")
+    print(f"not_ready_for_readiness_review: {summary['not_ready_for_readiness_review']}")
+    if report["ledger_issues"]:
+        print(f"ledger issues: {', '.join(report['ledger_issues'])}")
+    if report["unmatched_records"]:
+        print(f"unmatched evidence records: {len(report['unmatched_records'])}")
+    items = report["items"]
+    if not items:
+        print("No validation backlog entries matched.")
+        return
+    headers = ("id", "P", "scope", "evidence_status", "records", "issues")
+    rows = [
+        (
+            item["id"],
+            item["priority"],
+            item["remaining_validation_scope"],
+            item["evidence_status"],
+            item["evidence_record_count"],
+            ",".join(item["issues"]),
+        )
+        for item in items
+    ]
+    widths = [
+        max(len(str(value)) for value in column)
+        for column in zip(headers, *rows, strict=False)
+    ]
+    print("  ".join(str(value).ljust(width) for value, width in zip(headers, widths, strict=False)))
+    print("  ".join("-" * width for width in widths))
+    for row in rows:
+        print("  ".join(str(value).ljust(width) for value, width in zip(row, widths, strict=False)))
+
+
+def cmd_validation_evidence(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    report = build_validation_evidence_report(entries, evidence_path=Path(args.evidence))
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_validation_evidence(report)
+    if args.require_all_review_ready and report["summary"]["not_ready_for_readiness_review"]:
+        return 2
+    return 0
+
+
 def print_human_runbook(runbook: dict[str, Any]) -> None:
     print(f"total: {runbook['total']}")
     for stage in runbook["stages"]:
@@ -901,6 +1144,22 @@ def build_parser() -> argparse.ArgumentParser:
     validation_backlog_parser.add_argument("--readiness")
     validation_backlog_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     validation_backlog_parser.set_defaults(func=cmd_validation_backlog)
+
+    validation_evidence_parser = subparsers.add_parser(
+        "validation-evidence",
+        help="Audit a real-validation evidence ledger against the remaining backlog.",
+    )
+    validation_evidence_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    validation_evidence_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    validation_evidence_parser.add_argument("--readiness")
+    validation_evidence_parser.add_argument("--evidence", required=True, help="Path to validation evidence JSON.")
+    validation_evidence_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    validation_evidence_parser.add_argument(
+        "--require-all-review-ready",
+        action="store_true",
+        help="Exit with status 2 unless every selected backlog item has enough evidence for readiness review.",
+    )
+    validation_evidence_parser.set_defaults(func=cmd_validation_evidence)
 
     runbook_parser = subparsers.add_parser("runbook", help="Build a staged FinClaw collector runbook.")
     runbook_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
