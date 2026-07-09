@@ -9,7 +9,7 @@ production claims still require real validation evidence.
 
 ## Evidence
 
-- Git head: `45d37c6`
+- Recorded green CI baseline head: `45d37c6`
 - GitHub Actions run:
   <https://github.com/yannberg08/collectorx/actions/runs/29036855861>
 - Result: success

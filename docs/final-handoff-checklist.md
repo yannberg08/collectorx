@@ -24,8 +24,8 @@ This handoff was rechecked after the 2026-07-10 scope correction that stops
 P0/P1/P2 expansion and treats the remaining work as validation evidence
 collection.
 
-- Current head: `45d37c6`
-- Latest GitHub Actions run:
+- Recorded green CI baseline head: `45d37c6`
+- Recorded GitHub Actions run:
   <https://github.com/yannberg08/collectorx/actions/runs/29036855861>
 - Result: success
 - Workflow coverage: Ubuntu, macOS, and Windows project validation across the
@@ -36,9 +36,10 @@ collection.
 .venv/bin/python tools/validate_project.py
 ```
 
-The green project gate proves the checked-in collector contracts, fixtures,
-package validators, catalog helper, and cross-platform test harness are
-consistent. It does not prove that every catalog entry has real-account or
+This green project gate proves the collector contracts, fixtures, package
+validators, catalog helper, and cross-platform test harness at that baseline are
+consistent. Documentation-only closeout commits should still run the same gate.
+No green project gate proves that every catalog entry has real-account or
 real-device production validation.
 
 ## Current Catalog Counts
