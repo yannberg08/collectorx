@@ -282,6 +282,44 @@ def test_validation_backlog_matches_closeout_gap_scope() -> None:
         assert item["requires_real_validation_before_production"] == source["requires_real_validation_before_production"]
 
 
+def test_validation_template_matches_backlog_and_is_not_accepted_as_evidence() -> None:
+    backlog = run_json("validation-backlog", "--priority", "P0", "--json")
+    template = run_json("validation-template", "--priority", "P0", "--json")
+    assert template["schema"] == "collectorx.finclaw_real_validation_evidence.v1"
+    assert template["template_schema"] == "collectorx.finclaw_real_validation_evidence_template.v1"
+    assert template["validation_backlog_schema"] == backlog["schema"]
+    assert template["template_only"] is True
+    assert template["total"] == backlog["total"] == 12
+    assert template["summary"] == backlog["summary"]
+    assert [record["collector_id"] for record in template["records"]] == [
+        item["id"] for item in backlog["items"]
+    ]
+
+    by_id = {record["collector_id"]: record for record in template["records"]}
+    eastmoney = by_id["eastmoney-portfolio"]
+    assert eastmoney["decision"] == "post_guarded_gap_closed"
+    assert eastmoney["covers_production_gap"] is False
+    assert eastmoney["artifacts"] == []
+    assert "real_account" in eastmoney["required_evidence_type_options"]
+    assert "package_validation" in eastmoney["required_evidence_type_options"]
+
+    ths = by_id["ths-portfolio"]
+    assert ths["decision"] == "ready_for_readiness_review"
+    assert ths["remaining_validation_scope"] == "pre_production_validation"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        evidence_path = Path(tmp) / "validation-template.json"
+        evidence_path.write_text(json.dumps(template, ensure_ascii=False), encoding="utf-8")
+        audit = run_json("validation-evidence", "--priority", "P0", "--evidence", str(evidence_path), "--json")
+
+    assert audit["summary"]["by_evidence_status"] == {"insufficient_evidence": 12}
+    assert audit["summary"]["ready_for_readiness_review"] == 0
+    assert audit["summary"]["not_ready_for_readiness_review"] == 12
+    assert all("result_not_pass" in item["issues"] for item in audit["items"])
+    assert all("does_not_cover_production_gap" in item["issues"] for item in audit["items"])
+    assert all("missing_artifacts" in item["issues"] for item in audit["items"])
+
+
 def test_validation_evidence_audits_real_validation_records() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         evidence_path = Path(tmp) / "validation-evidence.json"
@@ -683,9 +721,12 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     assert "`ths-portfolio`, `qq`" in handoff
     assert "production-candidate` as full production done" in handoff
     assert "The next phase is real validation, not more collector expansion." in handoff
+    assert "validation-template --json" in handoff
     assert "validation-evidence --evidence" in handoff
     assert "readiness-review --evidence" in handoff
     assert "collectorx.finclaw_real_validation_evidence.v1" in evidence_ledger
+    assert "validation-template" in evidence_ledger
+    assert "insufficient_evidence" in evidence_ledger
     assert "catalog_update_allowed_by_tool" in evidence_ledger
     assert "does not edit" in evidence_ledger
 
@@ -706,6 +747,7 @@ def main() -> int:
     test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
     test_closeout_report_tracks_product_tiers_and_real_validation_gaps()
     test_validation_backlog_matches_closeout_gap_scope()
+    test_validation_template_matches_backlog_and_is_not_accepted_as_evidence()
     test_validation_evidence_audits_real_validation_records()
     test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps()
     test_readiness_review_packet_requires_audited_evidence()

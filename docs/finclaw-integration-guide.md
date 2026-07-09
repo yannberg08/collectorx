@@ -86,6 +86,9 @@ python3 tools/finclaw_catalog.py closeout \
 python3 tools/finclaw_catalog.py validation-backlog \
   --priority P0 \
   --json
+python3 tools/finclaw_catalog.py validation-template \
+  --priority P0 \
+  --json
 python3 tools/finclaw_catalog.py validation-evidence \
   --priority P0 \
   --evidence docs/validations/real-validation-evidence.json \
@@ -126,8 +129,10 @@ after guarded launch, and repeats the `production_gap` that must be cleared
 before raising readiness beyond the current tier. The `validation-backlog`
 output is the next-phase QA queue derived from the same catalog and closeout
 state; it lists each remaining real user, real device, real export, or Wiki
-backtest gap without changing collector readiness. The `validation-evidence`
-output audits a QA-maintained evidence ledger against that backlog and marks
+backtest gap without changing collector readiness. The `validation-template`
+output generates a fillable ledger skeleton from that backlog; an unfilled
+template is intentionally rejected by `validation-evidence`. The
+`validation-evidence` output audits a QA-maintained evidence ledger and marks
 each item as `missing_evidence`, `insufficient_evidence`, or
 `ready_for_readiness_review`; it still does not edit readiness or close gaps by
 itself. The `readiness-review` output turns that audit into a human review

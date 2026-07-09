@@ -784,6 +784,70 @@ GAP_CLOSING_DECISIONS = {
 }
 
 
+def template_decision_for_item(item: dict[str, Any]) -> str:
+    if item["remaining_validation_scope"] == "post_guarded_launch_validation":
+        return "post_guarded_gap_closed"
+    return "ready_for_readiness_review"
+
+
+def validation_template_record(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "record_id": f"{item['id']}-real-validation-001",
+        "collector_id": item["id"],
+        "priority": item["priority"],
+        "category": item["category"],
+        "current_readiness": item["readiness"],
+        "launch_tier": item["launch_tier"],
+        "remaining_validation_scope": item["remaining_validation_scope"],
+        "production_gap": item["production_gap"],
+        "result": "<pass|fail|partial>",
+        "decision": template_decision_for_item(item),
+        "covers_production_gap": False,
+        "evidence_types": [],
+        "required_evidence_type_options": sorted(REAL_VALIDATION_TYPES),
+        "artifacts": [],
+        "validated_at": "<YYYY-MM-DDTHH:MM:SS+08:00>",
+        "validated_by": "<qa-owner>",
+        "notes": "",
+    }
+
+
+def build_validation_template(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    backlog = build_validation_backlog(entries)
+    return {
+        "schema": VALIDATION_EVIDENCE_SCHEMA,
+        "template_schema": "collectorx.finclaw_real_validation_evidence_template.v1",
+        "validation_backlog_schema": backlog["schema"],
+        "template_only": True,
+        "instructions": [
+            "Fill one record after real user authorization and real validation artifacts exist.",
+            "Set result=pass only after package, scope, read-only, and Wiki evidence checks pass.",
+            "Set covers_production_gap=true only when the artifacts address the recorded production_gap.",
+            "Leave unknown or incomplete records as non-pass; validation-evidence will keep them blocked.",
+        ],
+        "total": backlog["total"],
+        "summary": backlog["summary"],
+        "records": [validation_template_record(item) for item in backlog["items"]],
+    }
+
+
+def print_human_validation_template(template: dict[str, Any]) -> None:
+    print(f"schema: {template['schema']}")
+    print(f"template_schema: {template['template_schema']}")
+    print(f"total_records: {template['total']}")
+    print("Use --json to write the fillable ledger template.")
+
+
+def cmd_validation_template(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    template = build_validation_template(entries)
+    if args.json:
+        print(json.dumps(template, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_validation_template(template)
+    return 0
+
+
 def load_validation_evidence(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -1259,6 +1323,16 @@ def build_parser() -> argparse.ArgumentParser:
     validation_backlog_parser.add_argument("--readiness")
     validation_backlog_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     validation_backlog_parser.set_defaults(func=cmd_validation_backlog)
+
+    validation_template_parser = subparsers.add_parser(
+        "validation-template",
+        help="Generate a fillable real-validation evidence ledger template from the backlog.",
+    )
+    validation_template_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    validation_template_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    validation_template_parser.add_argument("--readiness")
+    validation_template_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    validation_template_parser.set_defaults(func=cmd_validation_template)
 
     validation_evidence_parser = subparsers.add_parser(
         "validation-evidence",

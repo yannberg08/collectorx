@@ -63,6 +63,9 @@ stop expanding and move into real-user validation.
   real-user/device/export validation queue derived from the catalog and
   closeout report. It is a QA planning view only; it does not add collectors or
   raise readiness.
+- `tools/finclaw_catalog.py validation-template --json` generates a fillable
+  real-validation evidence ledger from the backlog. The unfilled template is
+  intentionally blocked by `validation-evidence`.
 - `tools/finclaw_catalog.py validation-evidence --evidence <ledger> --json`
   audits a QA evidence ledger against that backlog and only permits
   `ready_for_readiness_review` when a record passes, covers the production gap,
@@ -84,6 +87,7 @@ python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/validate_project.py
 .venv/bin/python tools/finclaw_catalog.py closeout --json
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
+.venv/bin/python tools/finclaw_catalog.py validation-template --json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --json
 PYTHON=.venv/bin/python bash test_collectors.sh

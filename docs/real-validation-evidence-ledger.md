@@ -12,6 +12,8 @@ collector has enough evidence to enter a human readiness review.
 
 ```bash
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
+.venv/bin/python tools/finclaw_catalog.py validation-template \
+  --json > docs/validations/real-validation-evidence.json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence \
   --evidence docs/validations/real-validation-evidence.json \
   --json
@@ -30,6 +32,11 @@ backlog item must have enough evidence for readiness review:
   --json \
   --require-all-review-ready
 ```
+
+`validation-template` is only a fillable starting point. If it is passed to
+`validation-evidence` without replacing the placeholders, setting
+`covers_production_gap=true`, adding real artifacts, and setting `result=pass`,
+every record remains blocked as `insufficient_evidence`.
 
 ## Ledger Shape
 

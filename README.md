@@ -85,7 +85,8 @@ Operational docs:
   the catalog plus invocation contracts. Product runners should use `doctor`
   for setup screens, `closeout` for launch tier and real-validation gap
   reporting, `validation-backlog` for the next real-user/device/export
-  validation queue, `validation-evidence` to audit QA evidence records before a
+  validation queue, `validation-template` to generate a fillable QA ledger from
+  that queue, `validation-evidence` to audit QA evidence records before a
   readiness review, `readiness-review` to generate a human review packet that
   still cannot edit catalog readiness, `runbook` for batch execution order,
   `batch-manifest` for compact product execution manifests, and
