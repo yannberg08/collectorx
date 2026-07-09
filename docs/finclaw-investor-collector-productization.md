@@ -4,9 +4,10 @@
 `collectors/finclaw-investor-catalog.json`。如果两者冲突，以 JSON 目录为调度
 入口，以 `docs/production-readiness.md` 为诚实状态说明。
 
-收口交付时先读 `docs/investor-collector-closeout.md`。该文档冻结 P0/P1/P2 范围，
-按可投产、deep beta、导入/本地 beta、lens beta 分级，并列出每个采集器当前不能
-宣称的能力。后续新增功能或新采集器不应进入本轮收口。
+收口交付时先读 `docs/final-handoff-checklist.md`，再按
+`docs/investor-collector-closeout.md` 追溯验收口径。closeout 文档冻结 P0/P1/P2
+范围，按可投产、deep beta、导入/本地 beta、lens beta 分级，并列出每个采集器
+当前不能宣称的能力。后续新增功能或新采集器不应进入本轮收口。
 
 ## 当前结论
 
