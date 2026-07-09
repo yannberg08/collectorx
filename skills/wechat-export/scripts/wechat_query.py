@@ -86,6 +86,8 @@ os.makedirs(_log_dir, exist_ok=True)
 _log_file = os.path.join(_log_dir, 'wechat_export.log')
 
 logger = logging.getLogger('wechat_query')
+
+DATA_QUALITY_TARGET = 'collectorx.data_quality.collection_gaps'
 logger.setLevel(logging.DEBUG)
 if not logger.handlers:
     _fh = logging.FileHandler(_log_file, encoding='utf-8')
@@ -1740,9 +1742,16 @@ def _write_jsonl(path: Path, rows) -> None:
             f.write(_json.dumps(row, ensure_ascii=False, sort_keys=True) + '\n')
 
 
+def _is_gap_event(event: dict) -> bool:
+    data = event.get('data') or {}
+    return isinstance(data, dict) and bool(data.get('gap'))
+
+
 def _build_collect_manifest(records, events, *, collected_at: str, args, platform: str, gap: dict = None) -> dict:
     chats = sorted({(r.get('data') or {}).get('chat') for r in records if (r.get('data') or {}).get('chat')})
     message_events = [event for event in events if event.get('kind') == 'message']
+    gap_events = [event for event in events if _is_gap_event(event)]
+    usable_events = [event for event in events if not _is_gap_event(event)]
     owner_sent = sum(1 for event in message_events if event.get('data', {}).get('sender_is_owner'))
     text_lengths = [event.get('data', {}).get('text_length', 0) for event in message_events]
     readiness_status = (gap or {}).get('status') or ('baseline+audit' if message_events else 'gap')
@@ -1752,6 +1761,9 @@ def _build_collect_manifest(records, events, *, collected_at: str, args, platfor
         'collector': 'wechat',
         'collected_at': collected_at,
         'event_count': len(events),
+        'message_event_count': len(message_events),
+        'usable_event_count': len(usable_events),
+        'gap_event_count': len(gap_events),
         'source_record_count': len(records),
         'collection_readiness': {
             'status': readiness_status,
@@ -1760,6 +1772,8 @@ def _build_collect_manifest(records, events, *, collected_at: str, args, platfor
             'reason': readiness_reason,
             'gap_event': bool(gap),
             'can_enter_finclaw_lake': bool(events),
+            'can_enter_personal_channel_lake': bool(message_events),
+            'can_enter_data_quality_lake': bool(gap_events),
             'can_enter_investor_lens': bool(message_events),
             'can_enter_investor_wiki': False,
             'next_action': (gap or {}).get('next_action'),
@@ -1841,7 +1855,9 @@ def _collect_gap_event(*, status: str, reason: str, collected_at: str, platform:
         'time': collected_at,
         'collected_at': collected_at,
         'data': {
-            'profile_type': 'wechat_collect_preflight_gap',
+            'profile_type': 'wechat_collection_gap',
+            'subtype': 'collector_gap',
+            'action_type': 'collector_gap',
             'gap': status,
             'status': status,
             'reason': reason,
@@ -1852,8 +1868,11 @@ def _collect_gap_event(*, status: str, reason: str, collected_at: str, platform:
             'investment_claim_allowed': False,
             'writes_investor_wiki_evidence_directly': False,
             'raw_database_access_performed': False,
+            'raw_database_pages_collected': False,
             'credentials_collected': False,
             'message_text_collected': False,
+            'personal_message_fact_collected': False,
+            'direct_investment_conclusion_claimed': False,
         },
         'raw_ref': {'derived_from': 'wechat_collect_preflight'},
         'privacy': {
@@ -1862,7 +1881,7 @@ def _collect_gap_event(*, status: str, reason: str, collected_at: str, platform:
             'contains': ['collection_gap'],
         },
         'wiki_targets': [
-            'internal.communication.wechat',
+            DATA_QUALITY_TARGET,
         ],
     }
 
@@ -1875,6 +1894,8 @@ def _write_collect_summary(path: Path, manifest: dict) -> None:
         f"- Collector: `{manifest['collector']}`",
         f"- Collected at: `{manifest['collected_at']}`",
         f"- Events: `{manifest['event_count']}`",
+        f"- Messages: `{manifest.get('message_event_count', 0)}`",
+        f"- Gaps: `{manifest.get('gap_event_count', 0)}`",
         f"- Chats: `{manifest['message_surface_summary']['chat_count']}`",
         f"- Readiness: `{manifest['collection_readiness']['status']}`",
         '',

@@ -29,8 +29,12 @@ scope:
     - filter_policy_manifest
     - source_audit_manifest
     - generic_to_lens_evidence_policy
-    - preflight_gap_package
-    - no_message_gap_package
+    - validator_safe_preflight_gap_package
+    - validator_safe_no_message_gap_package
+    - message_event_count
+    - usable_event_count
+    - gap_event_count
+    - data_quality_gap_routing
   excludes:
     - wechat_password
     - encryption_keys
@@ -41,5 +45,5 @@ scope:
     - direct_investment_conclusions
 
 # 采集逻辑由skill定义。
-# skill会处理：数据库解密、数据查询、CollectorX 标准包输出、前置条件/空消息 gap 包。
+# skill会处理：数据库解密、数据查询、CollectorX 标准包输出、前置条件/空消息 data-quality gap 包。
 # generic wechat 只进入 lake/wechat/events.jsonl；投资讨论由 wechat-investment-dialogue lens 筛选。

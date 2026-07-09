@@ -1,6 +1,6 @@
 {
   "slug": "wechat-export",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "status": "baseline+audit",
-  "description": "WeChat generic communication collector with authorized local package output, preflight/no-message gap packages, field coverage, filter policy, source audit, privacy boundaries, and downstream investment-dialogue lens routing."
+  "description": "WeChat generic communication collector with authorized local package output, validator-safe preflight/no-message data-quality gap packages, message/gap/usable event counts, field coverage, filter policy, source audit, privacy boundaries, and downstream investment-dialogue lens routing."
 }

@@ -371,6 +371,10 @@ Current status:
   retained messages write one profile gap event such as
   `needs_readable_wechat_db_dir` or `no_wechat_messages_collected`; these gap
   packages validate as CollectorX packages but cannot enter the investor lens.
+- WeChat gap events route to `collectorx.data_quality.collection_gaps`, not to
+  `internal.communication.wechat`; manifests separate `message_event_count`,
+  `usable_event_count`, and `gap_event_count` so FinClaw can distinguish
+  communication facts from collection state.
 - Does not output WeChat encryption keys, passwords, cookies, tokens, raw
   database pages, or direct investment conclusions.
 - This is a generic communication collector. Feed `lake/wechat/events.jsonl`

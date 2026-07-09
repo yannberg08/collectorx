@@ -70,7 +70,7 @@
       "gate": "G2-blocked-on-current-mac-real-source",
       "finclaw_action": "authorized-local-wechat-collect-package-before-investor-lens",
       "cli": "python3 skills/wechat-export/scripts/wechat_query.py --collect --out-dir <out-dir>",
-      "collects": "Authorized WeChat messages, contacts, groups, compact owner-relevant chat evidence, CollectorX event package, preflight/no-message gap packages, field coverage, filter policy, source audit, and generic-to-lens evidence boundary.",
+      "collects": "Authorized WeChat messages, contacts, groups, compact owner-relevant chat evidence, CollectorX event package, validator-safe preflight/no-message data-quality gap packages, message/gap/usable event counts, field coverage, filter policy, source audit, and generic-to-lens evidence boundary.",
       "must_not_collect": "Secrets, decrypted keys in output, unrelated raw payload dumps, or automatic investment conclusions.",
       "production_gap": "Prepare authorized WeChat 4.x keys or supported platform path, then validate real lake output and contact/group allowlists."
     },

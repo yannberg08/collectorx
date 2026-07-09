@@ -16,7 +16,25 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`eastmoney-portfolio` now emits validator-safe strong-trade collection gap
+`wechat` now routes generic communication collection gaps to data quality and
+separates message/gap counts:
+
+- Upgraded `wechat-export` to `0.11.3`.
+- Normal WeChat messages still emit `kind=message` events routed to
+  `internal.communication.wechat`.
+- Preflight/no-message gap packages now emit `kind=profile` events with
+  `data.profile_type=wechat_collection_gap`, `data.subtype=collector_gap`, and
+  `data.action_type=collector_gap`.
+- WeChat gap events route to `collectorx.data_quality.collection_gaps` and do
+  not enter the personal-message route or the `wechat-investment-dialogue`
+  lens as usable conversation evidence.
+- Manifests now separate `event_count`, `message_event_count`,
+  `usable_event_count`, and `gap_event_count`; readiness also distinguishes
+  `can_enter_personal_channel_lake` from `can_enter_data_quality_lake`.
+- Fixture validation now runs the shared CollectorX package validator for
+  normal message packages, no-message packages, and preflight gap packages.
+
+The prior completed wave: `eastmoney-portfolio` now emits validator-safe strong-trade collection gap
 packages and keeps those gaps out of Investor Wiki business evidence:
 
 - Upgraded `eastmoney-portfolio` to `0.7.4`.
@@ -1351,7 +1369,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Need | Current implementation | Status | Gap to reach Tonghuashun/EastMoney standard |
 | --- | --- | --- | --- |
-| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, WeChat dialogue boundary proof, dialogue surface summary, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
+| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package with message/gap/usable counts and validator-safe data-quality gap packages for preflight/no-message runs; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, WeChat dialogue boundary proof, dialogue surface summary, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons, per-root results, filtered-all/no-metadata gap packages, and metadata-only boundary proof; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, filtered-all status, extraction policy, parser counts, content-read counts, limit truncation, screenshot metadata-only/default policy, explicit `--include-image-ocr` tesseract adapter audit, legacy XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide-text extraction, research document surface summary, and research corpus boundary proof | Broader private PDF/XLS/XLSX/DOCX/PPTX/image samples, real binary `.xls` with xlrd validation, OCR quality review on real Chinese screenshots, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, authorization scope-policy audit, validator-safe filtered-all/no-input gap packages, and explicit non-broker-trade evidence policy; watchlist emits attention-universe boundary proof for symbol/market/group/industry/tag/keyword scope; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, activity/source/domain/symbol/author/keyword scope boundaries, activity-boundary proof, pagination completeness summary, HAR browser-network export parsing for `xueqiu.com` response bodies, copied Chromium/Safari browser history with Xueqiu-domain filtering, visit/typed counts, transition types, credential/query stripping audit, raw sanitization, and SoulMirror sync; not yet a one-click real account adapter | Real Xueqiu account/HAR/browser-history samples, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/legacy `.xls`/Excel XML/HTML table/PDF statement/JSON/CSV/ZIP plus HAR browser-network export parsing for whitelisted fund/wealth domains, platform inference, numeric asset fields, platform/account/subtype/product/currency/side/keyword scope-policy audit, filtered-all gap packages, platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, authorization scope boundary, asset surface summary, currency summary, transaction-side summary, source/PDF/HAR audit, asset value summary, credential/query stripping, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no one-click real account adapter yet | Real platform PDF/HAR/export samples, per-platform UI adapters, real account validation, complete account-boundary proof |
