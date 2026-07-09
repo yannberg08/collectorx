@@ -1,0 +1,20 @@
+Message-ID: <maildir-roadshow@fixture.local>
+From: Company IR Research <ir@company.example>
+To: Owner <owner@example.com>
+Subject: Roadshow invite: quarterly earnings call
+Date: Thu, 09 Jul 2026 09:20:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="roadshow-boundary"
+
+--roadshow-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Investor relations roadshow invite for quarterly earnings discussion.
+
+--roadshow-boundary
+Content-Type: text/calendar
+Content-Disposition: attachment; filename="roadshow-invite.ics"
+
+BEGIN:VCALENDAR
+END:VCALENDAR
+--roadshow-boundary--

@@ -1,0 +1,20 @@
+Message-ID: <maildir-alert@fixture.local>
+From: Strategy Alerts <alerts@broker.example>
+To: Owner <owner@example.com>
+Subject: Watchlist alert: earnings announcement research report
+Date: Thu, 09 Jul 2026 10:30:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="alert-boundary"
+
+--alert-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Portfolio watchlist alert for earnings announcement and valuation update.
+
+--alert-boundary
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="earnings-report.pdf"
+Content-Transfer-Encoding: base64
+
+cGRm
+--alert-boundary--

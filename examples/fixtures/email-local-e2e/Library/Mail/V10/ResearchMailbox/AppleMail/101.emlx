@@ -1,0 +1,22 @@
+612
+Message-ID: <apple-morning@fixture.local>
+From: Broker Research <morning@broker.example>
+To: Owner <owner@example.com>
+Subject: Morning meeting semiconductor broker research report
+Date: Thu, 09 Jul 2026 08:10:00 +0800
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="apple-boundary"
+
+--apple-boundary
+Content-Type: text/plain; charset="utf-8"
+
+Morning meeting covers semiconductor earnings, valuation, and portfolio risk.
+
+--apple-boundary
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="morning-research-report.pdf"
+Content-Transfer-Encoding: base64
+
+cGRm
+--apple-boundary--
+<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"></plist>

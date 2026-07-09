@@ -24,16 +24,34 @@ from email_api import _account_id, _accounts_from_state, _collect_account_emails
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+INVESTOR_SOURCE_SCRIPT = REPO_ROOT / "skills" / "investor-source-collectors" / "scripts" / "investor_sources.py"
+EMAIL_LOCAL_E2E_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "email-local-e2e"
 
 
-def run_package_validator(package_dir: Path, *, collector: str = "email") -> dict:
+def run_package_validator(package_dir: Path, *, collector: str = "email", require_evidence: bool = False) -> dict:
+    argv = [sys.executable, str(PACKAGE_VALIDATOR), str(package_dir), "--collector", collector, "--json"]
+    if require_evidence:
+        argv.append("--require-evidence")
     result = subprocess.run(
-        [sys.executable, str(PACKAGE_VALIDATOR), str(package_dir), "--collector", collector, "--json"],
+        argv,
         check=True,
         text=True,
         capture_output=True,
     )
     return json.loads(result.stdout)
+
+
+def run_investor_source_cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(INVESTOR_SOURCE_SCRIPT), *args],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
 
 def test_email_event_without_full_body():
@@ -987,6 +1005,169 @@ def test_local_email_scan_thunderbird_mbox_boundary():
         assert probe_payload["scan_summary"]["thunderbird_summary_index_skipped_count"] == 1
 
 
+def test_local_email_client_e2e_feeds_email_research_lens_and_blocks_gap_wiki_facts():
+    assert EMAIL_LOCAL_E2E_FIXTURE.exists()
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        email_out = root / "email-out"
+        lens_out = root / "email-research-out"
+        lens_gap_out = root / "email-research-gap-out"
+        probe = root / "local-email-probe.json"
+
+        script = Path(__file__).resolve().parents[1] / "scripts" / "email_api.py"
+        subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "import",
+                "--local-scan",
+                "--platform",
+                "mac",
+                "--container-root",
+                str(EMAIL_LOCAL_E2E_FIXTURE),
+                "--probe-export",
+                str(probe),
+                "--out-dir",
+                str(email_out),
+                "--collected-at",
+                "2026-07-09T13:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        email_event_path = email_out / "lake" / "email" / "events.jsonl"
+        email_events = read_jsonl(email_event_path)
+        assert len(email_events) == 4
+        assert {event["source"] for event in email_events} == {"授权本机邮箱扫描"}
+        assert {event["raw_ref"]["format"] for event in email_events} == {"emlx", "maildir", "thunderbird_mbox"}
+        assert sum(1 for event in email_events if event["raw_ref"]["format"] == "maildir") == 2
+        assert all(event["raw_ref"]["local_scan"] is True for event in email_events)
+        assert all(event["raw_ref"]["source_platform"] == "mac" for event in email_events)
+        assert all("body_preview" in event["data"] for event in email_events)
+        assert all("body" not in event["data"] for event in email_events)
+
+        email_subjects = {event["data"]["subject"] for event in email_events}
+        assert {
+            "Morning meeting semiconductor broker research report",
+            "Roadshow invite: quarterly earnings call",
+            "Watchlist alert: earnings announcement research report",
+            "Weekend lunch photos",
+        } == email_subjects
+        serialized_email = json.dumps(email_events, ensure_ascii=False)
+        assert "morning-research-report.pdf" in serialized_email
+        assert "roadshow-invite.ics" in serialized_email
+        assert "earnings-report.pdf" in serialized_email
+
+        email_manifest = json.loads((email_out / "manifest.json").read_text(encoding="utf-8"))
+        email_audit = email_manifest["collection_audit"]
+        assert email_manifest["collection_readiness"]["can_enter_email_lake"] is True
+        assert email_manifest["collection_readiness"]["can_feed_email_research_lens"] is True
+        assert email_manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_local_scan_or_input"
+        assert email_audit["source_type"] == "authorized_email_export_or_local_scan"
+        assert email_audit["resolved_input_file_count"] == 4
+        assert email_audit["imported_email_count"] == 4
+        assert email_audit["apple_mail_emlx_file_count"] == 1
+        assert email_audit["maildir_message_file_count"] == 2
+        assert email_audit["thunderbird_mbox_file_count"] == 1
+        assert email_audit["local_scan_candidate_file_count"] == 4
+        assert email_audit["local_scan_candidate_format_counts"] == {
+            "emlx": 1,
+            "maildir": 2,
+            "thunderbird_mbox": 1,
+        }
+        assert email_audit["local_scan_root_type_counts"] == {
+            "apple_mail": 1,
+            "maildir": 2,
+            "thunderbird": 1,
+        }
+        assert email_audit["local_scan_skipped_reason_counts"] == {"thunderbird_summary_index": 1}
+        proof = email_manifest["mailbox_boundary_proof"]
+        assert proof["proof_level"] == "authorized_local_email_scan_boundary"
+        assert proof["local_export_boundary"]["local_scan_imported_email_count"] == 4
+        assert proof["collector_writes_investor_wiki_directly"] is False
+        assert proof["investor_wiki_requires_lens"] == "email-research"
+        assert run_package_validator(email_out)["valid"] is True
+
+        probe_payload = json.loads(probe.read_text(encoding="utf-8"))
+        assert probe_payload["mail_candidates"]["file_count"] == 4
+        assert probe_payload["scan_summary"]["candidate_format_counts"] == {
+            "emlx": 1,
+            "maildir": 2,
+            "thunderbird_mbox": 1,
+        }
+        assert probe_payload["scan_summary"]["thunderbird_summary_index_skipped_count"] == 1
+        assert probe_payload["privacy_policy"]["credentials"] == "not_read"
+
+        run_investor_source_cli(
+            "collect",
+            "--source",
+            "email-research",
+            "--input",
+            str(email_event_path),
+            "--out-dir",
+            str(lens_out),
+            "--collected-at",
+            "2026-07-09T13:10:00+08:00",
+        )
+        lens_events = read_jsonl(lens_out / "lake" / "email-research" / "events.jsonl")
+        assert len(lens_events) == 3
+        lens_subjects = {event["data"]["payload"]["subject"] for event in lens_events}
+        assert "Weekend lunch photos" not in lens_subjects
+        assert "Morning meeting semiconductor broker research report" in lens_subjects
+        assert all(event["raw_ref"]["parser"] == "collectorx.event.v1" for event in lens_events)
+        assert all(event["data"]["payload"]["upstream_collector"] == "email" for event in lens_events)
+
+        lens_manifest = json.loads((lens_out / "manifest.json").read_text(encoding="utf-8"))
+        assert lens_manifest["collection_readiness"]["status"] == "events_collected"
+        assert lens_manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert lens_manifest["email_research_event_count"] == 3
+        assert lens_manifest["collection_audit"]["candidate_record_count"] == 4
+        assert lens_manifest["collection_audit"]["matched_event_count"] == 3
+        assert lens_manifest["collection_audit"]["filtered_candidate_count"] == 1
+        lens_proof = lens_manifest["email_research_boundary_proof"]
+        assert lens_proof["requires_upstream_email_collector"] is True
+        assert lens_proof["complete_mailbox_claimed"] is False
+        assert lens_proof["content_boundary"]["full_body_in_wiki_by_default"] is False
+        assert lens_proof["content_boundary"]["attachment_bodies_collected"] is False
+        assert lens_proof["mailbox_boundary"]["upstream_collector_counts"] == {"email": 3}
+        assert lens_manifest["lens_surface_summary"]["email_research_surface_counts"]["research_attachment"] == 3
+        assert run_package_validator(lens_out, collector="email-research", require_evidence=True)["valid"] is True
+
+        run_investor_source_cli(
+            "collect",
+            "--source",
+            "email-research",
+            "--input",
+            str(email_event_path),
+            "--out-dir",
+            str(lens_gap_out),
+            "--allow-email-sender-domain",
+            "missing.example",
+            "--collected-at",
+            "2026-07-09T13:20:00+08:00",
+        )
+        gap_events = read_jsonl(lens_gap_out / "lake" / "email-research" / "events.jsonl")
+        assert len(gap_events) == 1
+        assert gap_events[0]["kind"] == "profile"
+        assert gap_events[0]["data"]["payload"]["gap"] == "email_research_scope_policy_filtered_all"
+        assert gap_events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        gap_manifest = json.loads((lens_gap_out / "manifest.json").read_text(encoding="utf-8"))
+        assert gap_manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert gap_manifest["collection_readiness"]["can_enter_investor_source_lake"] is False
+        assert gap_manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert gap_manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert gap_manifest["email_research_event_count"] == 0
+        gap_evidence = json.loads((lens_gap_out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert gap_evidence["generated_from"]["event_count"] == 0
+        assert gap_evidence["generated_from"]["gap_event_count"] == 1
+        gap_route_counts = gap_evidence["coverage_summary"].get("route_counts", {})
+        assert "collectorx.data_quality.collection_gaps" not in gap_route_counts
+        assert gap_evidence["coverage_summary"]["usable_for_wiki_now"] == []
+        assert run_package_validator(lens_gap_out, collector="email-research", require_evidence=True)["valid"] is True
+
+
 def test_local_email_import_gap_event():
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
@@ -1255,6 +1436,7 @@ if __name__ == "__main__":
     test_local_email_import_apple_mail_emlx_and_maildir()
     test_local_email_scan_package_masks_source_paths()
     test_local_email_scan_thunderbird_mbox_boundary()
+    test_local_email_client_e2e_feeds_email_research_lens_and_blocks_gap_wiki_facts()
     test_local_email_import_gap_event()
     test_local_email_import_missing_input_gap_audit()
     test_local_email_import_zip_package()
