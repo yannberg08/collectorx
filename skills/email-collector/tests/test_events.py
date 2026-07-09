@@ -36,6 +36,7 @@ def run_package_validator(package_dir: Path, *, collector: str = "email", requir
         argv,
         check=True,
         text=True,
+        encoding="utf-8",
         capture_output=True,
     )
     return json.loads(result.stdout)
@@ -46,6 +47,7 @@ def run_investor_source_cli(*args: str) -> subprocess.CompletedProcess[str]:
         [sys.executable, str(INVESTOR_SOURCE_SCRIPT), *args],
         check=True,
         text=True,
+        encoding="utf-8",
         capture_output=True,
     )
 
@@ -514,6 +516,7 @@ def test_local_email_import_package():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -640,6 +643,7 @@ def test_local_email_import_scope_policy_filters_authorized_records():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
 
@@ -708,6 +712,7 @@ def test_local_email_import_scope_policy_filtered_all_gap():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
 
@@ -795,6 +800,7 @@ def test_local_email_import_apple_mail_emlx_and_maildir():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -884,6 +890,7 @@ def test_local_email_scan_package_masks_source_paths():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
 
@@ -970,6 +977,7 @@ def test_local_email_scan_thunderbird_mbox_boundary():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
 
@@ -1035,6 +1043,7 @@ def test_local_email_client_e2e_feeds_email_research_lens_and_blocks_gap_wiki_fa
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
 
@@ -1216,6 +1225,7 @@ def test_email_preflight_diagnose_imap_readiness_without_secret_leaks():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
             env={**os.environ, "COLLECTORX_EMAIL_STATE": str(state_path), env_name: secret_value},
         )
@@ -1278,6 +1288,7 @@ def test_email_preflight_diagnose_local_scan_readiness_without_path_or_body_read
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
             env={**os.environ, "COLLECTORX_EMAIL_STATE": str(state_path)},
         )
@@ -1308,6 +1319,7 @@ def test_local_email_import_gap_event():
             [sys.executable, str(script), "import", "--out-dir", str(out)],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -1339,6 +1351,7 @@ def test_local_email_import_missing_input_gap_audit():
             [sys.executable, str(script), "import", "--input", str(missing), "--out-dir", str(out)],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -1391,6 +1404,7 @@ def test_local_email_import_zip_package():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -1464,6 +1478,7 @@ def test_local_email_import_zip_supports_emlx_and_maildir_members():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -1516,6 +1531,7 @@ def test_local_email_import_zip_limit_counts_only_imported_records():
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = [
@@ -1546,6 +1562,7 @@ def test_register_refuses_local_password_storage():
                 "must-not-store",
             ],
             text=True,
+            encoding="utf-8",
             capture_output=True,
             env=env,
         )
