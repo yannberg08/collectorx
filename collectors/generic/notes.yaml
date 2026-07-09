@@ -30,6 +30,8 @@ scope:
     - path_level_collection_audit
     - skipped_file_reason_counts
     - skipped_archive_member_reason_counts
+    - source_policy_filtered_all_gap_package
+    - no_input_gap_package
   excludes:
     - note_service_tokens
     - unrelated_investment_classification
@@ -40,4 +42,6 @@ scope:
 # 采集逻辑由 skill 定义。
 # skill 会处理：Notion API、Obsidian 本地 Markdown/Canvas vault、有道云/印象笔记/Markdown/HTML/JSON/CSV/TSV/ZIP 授权导出。
 # generic notes 只进入 lake/notes/events.jsonl；manifest 记录字段覆盖、内容策略、
-# 表格/Canvas 导入审计、授权范围策略、逐输入来源审计、ZIP 跳过原因和路径安全边界；投资笔记由 investment-notes lens 筛选。
+# 表格/Canvas 导入审计、授权范围策略、逐输入来源审计、ZIP 跳过原因和路径安全边界；
+# 如果授权输入缺失或 source policy 过滤为空，skill 仍输出 profile gap event，方便 FinClaw 记录缺口。
+# 投资笔记由 investment-notes lens 筛选。

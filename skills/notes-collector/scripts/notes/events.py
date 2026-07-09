@@ -66,7 +66,8 @@ def note_to_event(
     content = first(note, ["content", "text", "body", "正文", "内容"]) or ""
     path = first(note, ["path", "file", "url", "id"])
     url = first(note, ["url", "link", "链接"])
-    event_time = normalize_time(first(note, ["updated", "last_edited", "last_edited_time", "mtime", "created", "created_time"]))
+    resolved_collected_at = collected_at or now_iso()
+    event_time = normalize_time(first(note, ["updated", "last_edited", "last_edited_time", "mtime", "created", "created_time"])) or resolved_collected_at
     data = {
         "source_app": actual_source_app,
         "note_format": first(note, ["note_format", "format"]),
@@ -103,7 +104,7 @@ def note_to_event(
         "owner_scope": "personal",
         "kind": "note",
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -122,8 +123,11 @@ def build_manifest(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = usable_note_events(events)
+    note_event_count = len(usable_events)
+    gap_event_count = len(events) - note_event_count
     kind_counts = Counter(event["kind"] for event in events)
-    source_app_counts = Counter(source_app_for(event) for event in events)
+    source_app_counts = Counter(source_app_for(event) for event in usable_events)
     observed_platforms = sorted(source for source, count in source_app_counts.items() if count)
     observed_expected = [platform for platform in EXPECTED_P1_NOTE_PLATFORMS if source_app_counts.get(platform)]
     missing_expected = [platform for platform in EXPECTED_P1_NOTE_PLATFORMS if not source_app_counts.get(platform)]
@@ -139,6 +143,8 @@ def build_manifest(
         "source_app": source_app,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "note_event_count": note_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "platform_coverage": {
             "expected_p1_platforms": list(EXPECTED_P1_NOTE_PLATFORMS),
@@ -149,9 +155,9 @@ def build_manifest(
             "unknown_event_count": unknown_event_count,
             "real_account_validation": False,
         },
-        "field_coverage": field_coverage(events),
-        "source_audit": source_audit(events, collection_audit=collection_audit),
-        "content_policy": content_policy(events),
+        "field_coverage": field_coverage(usable_events),
+        "source_audit": source_audit(usable_events, collection_audit=collection_audit),
+        "content_policy": content_policy(usable_events),
         "evidence_policy": {
             "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
@@ -161,7 +167,7 @@ def build_manifest(
         },
         "collection_readiness": {
             "status": readiness_status,
-            "can_enter_finclaw": bool(events),
+            "can_enter_finclaw": bool(usable_events),
             "can_claim_investment_notes": False,
             "platform_coverage_status": platform_coverage_status(events, missing_expected),
             "next_action": notes_next_action(readiness_status),
@@ -190,6 +196,11 @@ def write_package(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> None:
+    if not events:
+        reason = notes_gap_reason(collection_audit)
+        events = [gap_event(source_app=source_app, collected_at=collected_at, reason=reason, collection_audit=collection_audit)]
+        if collection_audit is not None:
+            collection_audit["emitted_event_count"] = len(events)
     write_jsonl(out_dir / "lake" / COLLECTOR / "events.jsonl", events)
     manifest = build_manifest(events, source_app=source_app, collected_at=collected_at, collection_audit=collection_audit)
     write_json(out_dir / "manifest.json", manifest)
@@ -199,6 +210,8 @@ def write_package(
         f"- collector: `{COLLECTOR}`",
         f"- source_app: `{source_app}`",
         f"- event_count: {len(events)}",
+        f"- note_event_count: {manifest.get('note_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",
@@ -217,6 +230,15 @@ def source_app_for(event: Dict[str, Any]) -> str:
     return str(value)
 
 
+def is_gap_event(event: Dict[str, Any]) -> bool:
+    data = event.get("data") or {}
+    return data.get("subtype") == "collector_gap" or data.get("action_type") == "collector_gap"
+
+
+def usable_note_events(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if not is_gap_event(event)]
+
+
 def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: List[str]) -> str:
     if not events:
         return "no_platform_observed"
@@ -226,10 +248,12 @@ def platform_coverage_status(events: List[Dict[str, Any]], missing_expected: Lis
 
 
 def notes_readiness_status(events: List[Dict[str, Any]], collection_audit: Optional[Dict[str, Any]]) -> str:
-    if events:
+    if usable_note_events(events):
         return "events_collected"
     if collection_audit and collection_audit.get("note_source_policy_filtered_all"):
         return "source_policy_filtered_all"
+    if collection_audit and not collection_audit.get("input_exists", True):
+        return "needs_authorized_notes_input"
     return "no_notes_collected"
 
 
@@ -238,7 +262,95 @@ def notes_next_action(status: str) -> str:
         return "Feed notes events into investment-notes lens for investor-specific routing."
     if status == "source_policy_filtered_all":
         return "Check note source-app/path/tag allow and deny filters, or provide a broader authorized notes export."
+    if status == "needs_authorized_notes_input":
+        return "Provide a readable user-authorized notes vault or export path."
     return "Provide an authorized notes vault/export."
+
+
+def notes_gap_reason(collection_audit: Optional[Dict[str, Any]]) -> str:
+    audit = collection_audit or {}
+    if audit.get("note_source_policy_filtered_all"):
+        return "notes_source_policy_filtered_all"
+    if not audit.get("input_exists", True):
+        return "notes_authorized_input_missing"
+    if int(audit.get("candidate_note_count") or 0) == 0:
+        return "notes_no_readable_records"
+    return "notes_no_retained_records"
+
+
+def gap_event(
+    *,
+    source_app: str,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    status_by_reason = {
+        "notes_source_policy_filtered_all": "source_policy_filtered_all",
+        "notes_authorized_input_missing": "needs_authorized_notes_input",
+        "notes_no_readable_records": "no_notes_collected",
+        "notes_no_retained_records": "no_notes_collected",
+    }
+    policy = audit.get("note_source_policy") if isinstance(audit.get("note_source_policy"), dict) else {}
+    data = {
+        "subtype": "collector_gap",
+        "action_type": "collector_gap",
+        "gap": reason,
+        "status": status_by_reason.get(reason, reason),
+        "profile_type": "notes_collection_gap",
+        "message": notes_gap_message(reason),
+        "source_app": source_app,
+        "candidate_note_count": int(audit.get("candidate_note_count") or 0),
+        "note_event_count": 0,
+        "retained_note_count": 0,
+        "source_policy_filtered_note_count": int(policy.get("filtered_note_count") or 0),
+        "source_policy_filter_reason_counts": policy.get("filter_reason_counts") or {},
+        "policy_is_user_authorization_scope": bool(policy.get("enabled")),
+        "policy_does_not_assert_investment_relevance": True,
+        "note_fact_claimed": False,
+        "investment_note_fact_claimed": False,
+        "investment_conclusion_claimed": False,
+        "complete_notes_vault_claimed": False,
+        "full_content_collected": False,
+        "note_service_token_collected": False,
+        "archive_path_traversal_members_collected": False,
+        "windows_drive_archive_members_collected": False,
+        "collector_writes_investor_wiki_directly": False,
+    }
+    return {
+        "schema": "collectorx.event.v1",
+        "id": stable_id(COLLECTOR, "gap", reason, event_time),
+        "collector": COLLECTOR,
+        "source": "Notes collector authorization status",
+        "owner_scope": "personal",
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
+        "data": data,
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "source_policy_enabled": bool(policy.get("enabled")),
+        },
+        "privacy": {
+            "sensitive": True,
+            "local_only": True,
+            "contains": ["personal_note", "collection_gap"],
+        },
+        "wiki_targets": ["collectorx.data_quality.collection_gaps"],
+    }
+
+
+def notes_gap_message(reason: str) -> str:
+    messages = {
+        "notes_source_policy_filtered_all": "All user-authorized note records were excluded by the note source authorization policy.",
+        "notes_authorized_input_missing": "No readable user-authorized notes vault or export was provided.",
+        "notes_no_readable_records": "The authorized notes input did not contain readable note records.",
+        "notes_no_retained_records": "The authorized notes input produced no retained note events.",
+    }
+    return messages.get(reason, "Notes collection produced a traceable gap.")
 
 
 def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:

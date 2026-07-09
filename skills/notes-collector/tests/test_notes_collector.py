@@ -12,7 +12,30 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "notes_api.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def read_events(out: Path) -> list[dict]:
+    event_file = out / "lake" / "notes" / "events.jsonl"
+    return [json.loads(line) for line in event_file.read_text(encoding="utf-8").splitlines()]
+
+
+def assert_package_valid(out: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "notes",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_obsidian_outputs_collectorx_events_without_full_content_by_default() -> None:
@@ -52,7 +75,7 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 2
         event = next(item for item in events if item["data"]["title"] == "investment")
         assert event["schema"] == "collectorx.event.v1"
@@ -74,6 +97,9 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         assert canvas_event["data"]["tags"] == ["估值"]
         assert "安全边际" in canvas_event["data"]["content_preview"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 2
+        assert manifest["note_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_investment_notes"] is False
         assert manifest["content_policy"]["full_content_event_count"] == 0
         assert manifest["content_policy"]["preview_only_event_count"] == 2
@@ -92,6 +118,7 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         assert manifest["source_audit"]["parsed_note_count"] == 2
         assert manifest["source_audit"]["emitted_event_count"] == 2
         assert manifest["source_audit"]["path_results"][0]["status"] == "parsed"
+        assert_package_valid(out)
 
 
 def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
@@ -154,7 +181,7 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 4
         assert {event["data"]["source_app"] for event in events} == {"youdao", "evernote", "markdown", "obsidian"}
         assert {event["data"]["title"] for event in events} == {"半导体复盘", "白酒跟踪", "交易规则", "obsidian"}
@@ -162,6 +189,9 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
         assert any("现金流和估值复盘" in event["data"]["content_preview"] for event in events)
         assert any(event["data"].get("note_format") == "obsidian_canvas" for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 4
+        assert manifest["note_event_count"] == 4
+        assert manifest["gap_event_count"] == 0
         assert manifest["platform_coverage"]["source_app_counts"] == {
             "evernote": 1,
             "markdown": 1,
@@ -179,6 +209,7 @@ def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
         assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
         assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
         assert len(manifest["source_audit"]["path_results"]) == 5
+        assert_package_valid(out)
 
 
 def test_import_notion_csv_database_and_tsv_zip_tables() -> None:
@@ -221,7 +252,7 @@ def test_import_notion_csv_database_and_tsv_zip_tables() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 3
         assert {event["data"]["source_app"] for event in events} == {"notion"}
         assert {event["data"]["title"] for event in events} == {"买入规则", "复盘模板", "估值假设"}
@@ -233,6 +264,9 @@ def test_import_notion_csv_database_and_tsv_zip_tables() -> None:
         zip_event = next(event for event in events if event["data"]["title"] == "估值假设")
         assert zip_event["raw_ref"]["archive_member"] == "Notion Export/valuation.tsv"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 3
+        assert manifest["note_event_count"] == 3
+        assert manifest["gap_event_count"] == 0
         audit = manifest["source_audit"]
         assert audit["extension_counts"] == {".csv": 1, ".zip": 1}
         assert audit["table_import_supported"] is True
@@ -244,6 +278,7 @@ def test_import_notion_csv_database_and_tsv_zip_tables() -> None:
         assert audit["archive_member_event_count"] == 1
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["notion"]
         assert manifest["content_policy"]["full_content_event_count"] == 0
+        assert_package_valid(out)
 
 
 def test_import_note_source_policy_filters_by_source_path_and_tag() -> None:
@@ -294,7 +329,7 @@ def test_import_note_source_policy_filters_by_source_path_and_tag() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 2
         assert {event["data"]["source_app"] for event in events} == {"notion"}
         assert {event["data"]["title"] for event in events} == {"买入规则", "估值规则"}
@@ -307,6 +342,9 @@ def test_import_note_source_policy_filters_by_source_path_and_tag() -> None:
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         audit = manifest["source_audit"]
         policy = audit["note_source_policy"]
+        assert manifest["event_count"] == 2
+        assert manifest["note_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["status"] == "events_collected"
         assert audit["candidate_note_count"] == 4
         assert audit["parsed_note_count"] == 2
@@ -320,6 +358,7 @@ def test_import_note_source_policy_filters_by_source_path_and_tag() -> None:
         assert policy["filter_reason_counts"] == {"source_app_not_allowed": 1, "tag_denied": 1}
         assert policy["policy_does_not_assert_investment_relevance"] is True
         assert audit["note_source_policy_filtered_all"] is False
+        assert_package_valid(out)
 
 
 def test_import_note_source_policy_filtered_all_status() -> None:
@@ -350,18 +389,50 @@ def test_import_note_source_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        events_path = out / "lake" / "notes" / "events.jsonl"
-        assert events_path.read_text(encoding="utf-8") == ""
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["schema"] == "collectorx.event.v1"
+        assert gap["collector"] == "notes"
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["collected_at"]
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "notes_source_policy_filtered_all"
+        assert gap["data"]["status"] == "source_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "notes_collection_gap"
+        assert gap["data"]["candidate_note_count"] == 1
+        assert gap["data"]["note_event_count"] == 0
+        assert gap["data"]["source_policy_filtered_note_count"] == 1
+        assert gap["data"]["source_policy_filter_reason_counts"] == {"tag_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["policy_does_not_assert_investment_relevance"] is True
+        assert gap["data"]["investment_note_fact_claimed"] is False
+        assert gap["data"]["complete_notes_vault_claimed"] is False
+        assert gap["data"]["full_content_collected"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "notes_source_policy_filtered_all",
+            "source_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["note_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "source_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         audit = manifest["source_audit"]
         assert audit["candidate_note_count"] == 1
         assert audit["parsed_note_count"] == 0
+        assert audit["emitted_event_count"] == 1
         assert audit["note_source_policy_filtered_all"] is True
         assert audit["note_source_policy"]["filtered_note_count"] == 1
         assert audit["note_source_policy"]["filter_reason_counts"] == {"tag_not_allowed": 1}
+        assert_package_valid(out)
 
 
 def test_import_zip_and_all_expected_platform_coverage() -> None:
@@ -412,7 +483,7 @@ def test_import_zip_and_all_expected_platform_coverage() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 4
         assert {event["data"]["source_app"] for event in events} == {"obsidian", "notion", "youdao", "evernote"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
@@ -423,6 +494,9 @@ def test_import_zip_and_all_expected_platform_coverage() -> None:
         assert notion_event["raw_ref"]["archive_member"] == "Notion Export/半导体研究.md"
         assert notion_event["data"]["path"] == f"{zip_path}::Notion Export/半导体研究.md"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 4
+        assert manifest["note_event_count"] == 4
+        assert manifest["gap_event_count"] == 0
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["obsidian", "notion", "youdao", "evernote"]
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
         assert manifest["collection_readiness"]["platform_coverage_status"] == "all_expected_platforms_observed"
@@ -439,6 +513,7 @@ def test_import_zip_and_all_expected_platform_coverage() -> None:
         assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["content_policy"]["full_content_event_count"] == 0
         assert manifest["content_policy"]["investment_classification_done"] is False
+        assert_package_valid(out)
 
 
 def test_import_missing_input_has_source_audit_gap() -> None:
@@ -465,13 +540,31 @@ def test_import_missing_input_has_source_audit_gap() -> None:
             text=True,
             capture_output=True,
         )
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["gap"] == "notes_authorized_input_missing"
+        assert gap["data"]["status"] == "needs_authorized_notes_input"
+        assert gap["data"]["candidate_note_count"] == 0
+        assert gap["data"]["note_event_count"] == 0
+        assert gap["data"]["policy_does_not_assert_investment_relevance"] is True
+        assert gap["data"]["complete_notes_vault_claimed"] is False
+        assert gap["raw_ref"]["reason"] == "notes_authorized_input_missing"
+        assert "collection_gap" in gap["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
-        assert manifest["collection_readiness"]["status"] == "no_notes_collected"
+        assert manifest["event_count"] == 1
+        assert manifest["note_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["collection_readiness"]["status"] == "needs_authorized_notes_input"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["source_audit"]["input_exists"] is False
         assert manifest["source_audit"]["input_kind"] == "missing"
+        assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+        assert_package_valid(out)
 
 
 if __name__ == "__main__":

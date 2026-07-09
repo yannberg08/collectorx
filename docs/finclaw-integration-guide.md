@@ -745,6 +745,10 @@ Current status:
   source-app/path/tag authorization filters were applied, how many candidate
   notes were filtered by policy, and whether the run used preview-only or
   full-content authorization.
+- If the user-selected input is missing, or if source-policy filters exclude
+  every candidate note, the package still contains one `kind=profile` gap event
+  with `data.profile_type=notes_collection_gap`. FinClaw should route this to
+  `collectorx.data_quality.collection_gaps`, not to investor facts.
 - Does not claim investment-note status directly.
 - Feed `lake/notes/events.jsonl` into `investment-notes` lens for investor Wiki
   evidence.

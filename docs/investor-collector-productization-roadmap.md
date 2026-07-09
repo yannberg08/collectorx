@@ -1544,6 +1544,28 @@ Findings:
 - This strengthens user authorization boundaries before notes enter Lake; the
   `investment-notes` lens still performs investment relevance classification.
 
+### Wave Q3e: P1 notes gap package hardening
+
+Status: `completed-baseline+audit`
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-gap-package-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `notes-collector` to `0.2.7`.
+- Missing authorized note input now emits one validator-safe profile gap event
+  with `gap=notes_authorized_input_missing` and
+  `status=needs_authorized_notes_input`.
+- Source-policy filtered-all runs now emit one profile gap event with
+  `gap=notes_source_policy_filtered_all` instead of an empty `events.jsonl`.
+- Manifest separates `event_count`, `note_event_count`, and `gap_event_count`
+  so FinClaw can ingest collection gaps without routing them as note facts.
+- Gap packages route to `collectorx.data_quality.collection_gaps`; generic
+  notes still do not classify investment relevance or write investor Wiki
+  conclusions.
+
 ### Wave Q4: P1 investment notes surface pass
 
 Status: `completed-baseline+audit`
@@ -3829,7 +3851,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source-app/path/tag authorization filters, table import audit, Canvas import audit, source audit, content policy, ZIP provenance, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote exports/APIs, real-user allowlist tuning, false-positive review, Windows/Linux vault path validation |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source-app/path/tag authorization filters, table import audit, Canvas import audit, source audit, content policy, ZIP provenance, filtered-all/no-input gap packages, note/gap event counts, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote exports/APIs, real-user allowlist tuning, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; TickTick/Dida task events now preserve timezone, all-day, repeat frequency, reminders, checklist items, checklist completed/pending counts, completion rate, and source-app/project/tag/keyword scope-policy audit for offline packages; calendar reports duration/multi-day/invalid-time/conflict quality plus source-platform/calendar/attendee/keyword scope-policy audit; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, reminder/time/timezone/repeat coverage, task checklist execution surface, calendar time-quality surface, and task/calendar boundary proof | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, checklist-heavy trading-plan backtest, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, participant-role hints, action items, decision points, risk items, mentioned symbols, source audit, meeting/collaboration scope-policy audits, filtered-all states, missing/unsupported input accounting, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries plus meeting-minutes and decision/action boundary proof; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant identity normalization, speaker/role resolution, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, article behavior summary, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, filtered-all status, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries plus article/behavior boundary proof | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
