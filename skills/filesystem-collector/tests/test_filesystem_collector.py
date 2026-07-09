@@ -37,6 +37,7 @@ def assert_filesystem_package_valid(out: Path) -> None:
         [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "filesystem"],
         check=True,
         text=True,
+        encoding="utf-8",
         capture_output=True,
     )
 
@@ -64,6 +65,7 @@ def test_collect_metadata_only() -> None:
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         events = read_filesystem_events(out)
@@ -158,6 +160,7 @@ def test_filesystem_scope_policy_filters_metadata_only() -> None:
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
 
@@ -218,6 +221,7 @@ def test_filesystem_scope_policy_filtered_all_status() -> None:
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         assert not (out / "lake" / "filesystem" / "events.jsonl").exists()
@@ -295,6 +299,7 @@ def test_collect_missing_root_has_source_audit() -> None:
             ],
             check=True,
             text=True,
+            encoding="utf-8",
             capture_output=True,
         )
         assert not (out / "lake" / "filesystem" / "events.jsonl").exists()
