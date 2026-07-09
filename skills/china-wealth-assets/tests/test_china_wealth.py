@@ -12,8 +12,60 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "china_wealth.py"
-PACKAGE_VALIDATOR = ROOT.parents[1] / "tools" / "validate_collector_package.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+FIVE_PLATFORM_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "china-wealth-five-platform" / "five_platform_assets.json"
+SENSITIVE_TERMS = ("cookie", "token", "authorization", "password", "session")
+SECRET_MARKER = "SHOULD_NOT_LEAK"
+
+
+def read_events(out: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (out / "lake" / "china-wealth-assets" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+
+
+def string_values(payload: object) -> list[str]:
+    if isinstance(payload, dict):
+        values: list[str] = []
+        for value in payload.values():
+            values.extend(string_values(value))
+        return values
+    if isinstance(payload, list):
+        values = []
+        for item in payload:
+            values.extend(string_values(item))
+        return values
+    return [payload] if isinstance(payload, str) else []
+
+
+def assert_sensitive_terms_absent_from_values(payload: object) -> None:
+    for value in string_values(payload):
+        lowered = value.lower()
+        assert not any(term in lowered for term in SENSITIVE_TERMS), value
+
+
+def assert_sensitive_keys_absent(payload: object) -> None:
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            lowered = str(key).lower()
+            assert not any(term in lowered for term in SENSITIVE_TERMS), key
+            assert_sensitive_keys_absent(value)
+    elif isinstance(payload, list):
+        for item in payload:
+            assert_sensitive_keys_absent(item)
+
+
+def assert_secret_marker_absent_from_package(out: Path) -> None:
+    for path in [
+        out / "lake" / "china-wealth-assets" / "events.jsonl",
+        out / "manifest.json",
+        out / "investor_wiki_evidence.v1.json",
+        out / "SUMMARY.md",
+    ]:
+        assert SECRET_MARKER not in path.read_text(encoding="utf-8")
 
 
 def test_collect_fund_holding_and_transaction() -> None:
@@ -536,6 +588,152 @@ def test_manifest_reports_expected_platform_coverage() -> None:
         assert coverage["real_account_validation"] is False
 
 
+def test_collects_five_platform_offline_fixture_with_boundary_and_secret_guards() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(FIVE_PLATFORM_FIXTURE),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-09T18:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = read_events(out)
+        assert len(events) == 5
+        assert [event["data"]["platform"] for event in events] == [
+            "alipay",
+            "tiantian-fund",
+            "danjuan",
+            "qieman",
+            "bank-wealth",
+        ]
+        assert [event["data"]["subtype"] for event in events] == [
+            "asset_snapshot",
+            "fund_holding",
+            "fund_transaction",
+            "cash_management",
+            "wealth_holding",
+        ]
+        assert [event["kind"] for event in events] == ["other", "holding", "trade", "holding", "holding"]
+
+        by_platform = {event["data"]["platform"]: event for event in events}
+        assert by_platform["alipay"]["data"]["total_asset"] == 12500.5
+        assert by_platform["alipay"]["data"]["available_cash"] == 350.25
+        assert by_platform["tiantian-fund"]["data"]["product_code"] == "000001"
+        assert by_platform["tiantian-fund"]["data"]["quantity"] == 1000.0
+        assert by_platform["tiantian-fund"]["data"]["nav"] == 1.234
+        assert by_platform["tiantian-fund"]["data"]["market_value"] == 1234.0
+        assert by_platform["danjuan"]["data"]["side"] == "buy"
+        assert by_platform["danjuan"]["data"]["transaction_amount"] == 800.0
+        assert by_platform["danjuan"]["data"]["fee"] == 1.2
+        assert by_platform["qieman"]["data"]["subtype"] == "cash_management"
+        assert by_platform["qieman"]["data"]["market_value"] == 5000.0
+        assert by_platform["bank-wealth"]["data"]["product_code"] == "CMB-WM-008"
+        assert by_platform["bank-wealth"]["data"]["market_value"] == 20000.0
+
+        for event in events:
+            assert_sensitive_terms_absent_from_values(event["data"])
+            assert_sensitive_keys_absent(event["data"].get("raw", {}))
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 5
+        assert manifest["usable_event_count"] == 5
+        assert manifest["asset_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
+        assert manifest["platform_counts"] == {
+            "alipay": 1,
+            "bank-wealth": 1,
+            "danjuan": 1,
+            "qieman": 1,
+            "tiantian-fund": 1,
+        }
+        coverage = manifest["platform_coverage"]
+        assert coverage["observed_platforms"] == ["alipay", "bank-wealth", "danjuan", "qieman", "tiantian-fund"]
+        assert coverage["missing_expected_platforms"] == []
+        assert coverage["complete_expected_platforms_observed"] is True
+        assert coverage["real_account_validation"] is False
+
+        field_counts = manifest["field_coverage"]["field_counts"]
+        assert field_counts["platform"] == 5
+        assert field_counts["account"] == 5
+        assert field_counts["product_code"] == 4
+        assert field_counts["product_name"] == 4
+        assert field_counts["market_value"] == 3
+        assert field_counts["total_asset"] == 1
+        assert field_counts["available_cash"] == 1
+        assert field_counts["cost"] == 2
+        assert field_counts["pnl"] == 3
+        assert field_counts["transaction_amount"] == 1
+        assert field_counts["fee"] == 1
+        assert field_counts["side"] == 5
+
+        surface_summary = manifest["asset_surface_summary"]
+        assert surface_summary["missing_expected_asset_surfaces"] == []
+        assert surface_summary["kind_counts"] == {"holding": 3, "other": 1, "trade": 1}
+        assert surface_summary["holding_event_count"] == 3
+        assert surface_summary["transaction_event_count"] == 1
+        assert surface_summary["asset_snapshot_event_count"] == 1
+        assert surface_summary["transaction_side_counts"] == {"buy": 1}
+        assert surface_summary["platform_surface_matrix"] == {
+            "alipay": {"asset_snapshot": 1},
+            "bank-wealth": {"wealth_holding": 1},
+            "danjuan": {"fund_transaction": 1},
+            "qieman": {"cash_management": 1},
+            "tiantian-fund": {"fund_holding": 1},
+        }
+
+        account_summary = manifest["account_boundary_summary"]
+        assert account_summary["observed_account_group_count"] == 5
+        assert account_summary["observed_named_account_group_count"] == 5
+        assert account_summary["unknown_account_event_count"] == 0
+        assert account_summary["complete_account_boundary_claimed"] is False
+        assert account_summary["requires_real_account_validation"] is True
+
+        proof = manifest["asset_boundary_proof"]
+        assert proof["proof_scope"] == "partial_authorized_input"
+        assert proof["overall_proof_level"] == "medium_partial_asset_boundary"
+        assert proof["complete_asset_boundary_claimed"] is False
+        assert proof["requires_real_account_validation"] is True
+        assert proof["missing_expected_platforms"] == []
+        assert proof["missing_global_requirements"] == []
+        assert proof["account_proof_level_counts"] == {"medium_partial_account_boundary": 5}
+        assert manifest["evidence_policy"]["complete_asset_boundary_claimed"] is False
+        assert manifest["evidence_policy"]["real_account_validation"] is False
+        assert manifest["evidence_policy"]["does_not_place_orders"] is True
+        assert manifest["evidence_policy"]["does_not_move_money"] is True
+
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 5
+        assert evidence["generated_from"]["gap_event_count"] == 0
+        assert evidence["coverage_summary"]["platform_coverage"]["missing_expected_platforms"] == []
+        assert evidence["coverage_summary"]["platform_coverage"]["real_account_validation"] is False
+        assert evidence["coverage_summary"]["asset_boundary_proof"]["complete_asset_boundary_claimed"] is False
+        assert evidence["coverage_summary"]["asset_surface_summary"]["missing_expected_asset_surfaces"] == []
+
+        manifest_without_audit = {key: value for key, value in manifest.items() if key != "collection_audit"}
+        assert_sensitive_terms_absent_from_values(events)
+        assert_sensitive_terms_absent_from_values(manifest_without_audit)
+        assert_sensitive_terms_absent_from_values(evidence)
+        assert_secret_marker_absent_from_package(out)
+
+        subprocess.run(
+            [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "china-wealth-assets"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+
 def test_collects_zip_package_with_value_summary() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -865,6 +1063,7 @@ if __name__ == "__main__":
     test_collects_pdf_statement_tables_with_pdf_audit()
     test_syncs_package_to_soulmirror_lake()
     test_manifest_reports_expected_platform_coverage()
+    test_collects_five_platform_offline_fixture_with_boundary_and_secret_guards()
     test_collects_zip_package_with_value_summary()
     test_manifest_reports_account_asset_currency_and_transaction_boundaries()
     test_scope_policy_filters_authorized_asset_records()
