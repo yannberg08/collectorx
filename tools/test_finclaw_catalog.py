@@ -405,6 +405,29 @@ def test_closeout_handoff_matches_catalog_counts_and_ids() -> None:
         assert f"`{entry['id']}`" in closeout
 
 
+def test_final_handoff_checklist_matches_closeout_report() -> None:
+    report = run_json("closeout", "--json")
+    handoff = (ROOT / "docs" / "final-handoff-checklist.md").read_text(encoding="utf-8")
+
+    assert f"CollectorX currently exposes {report['total']} FinClaw investor catalog entries." in handoff
+
+    for priority, count in report["summary"]["by_priority"].items():
+        assert f"| {priority} | {count} |" in handoff
+    for category, count in report["summary"]["by_category"].items():
+        assert f"| {category} | {count} |" in handoff
+    for readiness, count in report["summary"]["by_readiness"].items():
+        assert f"| `{readiness}` | {count} |" in handoff
+    for launch_tier, count in report["summary"]["by_launch_tier"].items():
+        assert f"| `{launch_tier}` | {count} |" in handoff
+    for scope, count in report["summary"]["by_remaining_validation_scope"].items():
+        assert f"| `{scope}` | {count} |" in handoff
+
+    assert "`eastmoney-portfolio`" in handoff
+    assert "`ths-portfolio`, `qq`" in handoff
+    assert "production-candidate` as full production done" in handoff
+    assert "The next phase is real validation, not more collector expansion." in handoff
+
+
 def main() -> int:
     test_list_includes_catalog_and_contract_fields()
     test_show_lens_includes_upstream_contract()
@@ -427,6 +450,7 @@ def main() -> int:
     test_batch_manifest_can_disable_auto_upstream_linking()
     test_runbook_require_all_ready_fails_when_any_entry_is_blocked()
     test_closeout_handoff_matches_catalog_counts_and_ids()
+    test_final_handoff_checklist_matches_closeout_report()
     print("finclaw catalog tests passed.")
     return 0
 
