@@ -32,6 +32,11 @@ scope:
     - field_coverage_manifest
     - article_surface_summary
     - article_behavior_summary
+    - usable_event_count
+    - wechat_favorite_event_count
+    - favorite_event_count
+    - gap_event_count
+    - wechat_favorites_data_quality_article_lens_readiness_gates
     - wechat_favorites_scope_policy_audit
     - source_account_allow_deny_filters
     - source_account_type_allow_deny_filters
@@ -39,6 +44,10 @@ scope:
     - tag_allow_deny_filters
     - domain_allow_deny_filters
     - keyword_allow_deny_filters
+    - scope_policy_filtered_all_readiness
+    - filtered_all_data_quality_gap_package
+    - no_input_data_quality_gap_package
+    - no_readable_data_quality_gap_package
     - source_audit_manifest
     - content_policy_manifest
     - archive_member_provenance
@@ -55,5 +64,6 @@ scope:
 description: |
   微信收藏和公众号文章动作的通用采集器。它采用户自己的收藏、保存、阅读、转发和文章指针；
   支持本地文件、导出目录和 ZIP 授权包，并在 manifest 中报告动作覆盖、字段覆盖、文章可用面、
-  行为强度、授权范围过滤、来源审计、逐文件解析结果、跳过原因、内容策略和 ZIP 成员溯源。
+  行为强度、授权范围过滤、usable/wechat-favorite/gap 计数、业务/数据质量/文章 lens/Wiki readiness gates、
+  validator-safe filtered-all/no-input/no-readable data-quality gap package、来源审计、逐文件解析结果、跳过原因、内容策略和 ZIP 成员溯源。
   wechat-article-favorites lens 只筛投资类公众号和炒股文章。

@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 
 COLLECTOR = "wechat-favorites"
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 CN_TZ = timezone(timedelta(hours=8))
 SECRET_KEY_FRAGMENTS = ("password", "passwd", "cookie", "token", "secret", "credential", "key")
 EXPECTED_WECHAT_ACTIONS = ("favorite", "read", "share", "saved_file")
@@ -136,10 +137,15 @@ def finalize_wechat_favorites_scope_policy_audit(audit: Dict[str, Any]) -> Dict[
     policy = audit.get("wechat_favorites_scope_policy") or {}
     if policy:
         policy["filter_reason_counts"] = dict(sorted((policy.get("filter_reason_counts") or {}).items()))
+    audit["scope_policy_filtered_record_count"] = int(policy.get("filtered_record_count") or 0)
+    audit["scope_policy_filter_reason_counts"] = policy.get("filter_reason_counts") or {}
     candidate_count = int(audit.get("candidate_record_count") or 0)
-    emitted_count = int(audit.get("emitted_event_count") or 0)
+    emitted_count = int(audit.get("wechat_favorite_event_count", audit.get("emitted_event_count") or 0) or 0)
     audit["wechat_favorites_scope_policy_filtered_all"] = bool(
-        policy.get("enabled") and candidate_count > 0 and emitted_count == 0
+        policy.get("enabled")
+        and candidate_count > 0
+        and int(policy.get("filtered_record_count") or 0) == candidate_count
+        and emitted_count == 0
     )
     return audit
 
@@ -254,6 +260,8 @@ def favorite_to_event(
     read_progress = progress_value(first(record, ["read_progress", "progress", "read_percent", "阅读进度", "阅读比例"]))
     symbols = symbols_for(record, title=title, text=text, url=url)
     engagement = engagement_for(record)
+    collection_time = collected_at or now_iso()
+    event_time = action_time or collection_time
     data = {
         "item_type": item_type,
         "action_type": action_type,
@@ -289,13 +297,13 @@ def favorite_to_event(
     raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [], {})}
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(path_label, row, title, url, action_time, action_type),
+        "id": stable_id(path_label, row, title, url, action_time or event_time, action_type),
         "collector": COLLECTOR,
         "source": "微信收藏/公众号文章",
         "owner_scope": "personal",
         "kind": "file",
-        "time": action_time,
-        "collected_at": collected_at or now_iso(),
+        "time": event_time,
+        "collected_at": collection_time,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -307,28 +315,82 @@ def favorite_to_event(
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    policy = audit.get("wechat_favorites_scope_policy") or {}
+    status_by_reason = {
+        "wechat_favorites_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "wechat_favorites_input_missing": "needs_wechat_favorites_input",
+        "wechat_favorites_no_readable_records": "no_readable_wechat_favorites_records",
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "微信收藏授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized WeChat favorites or public-account article export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "wechat_favorites_collection_gap",
+            "message": gap_message(reason),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "parsed_record_count": int(audit.get("parsed_record_count") or 0),
+            "wechat_favorite_event_count": 0,
+            "scope_policy_filtered_record_count": int(
+                audit.get("scope_policy_filtered_record_count")
+                or policy.get("filtered_record_count")
+                or 0
+            ),
+            "scope_policy_filter_reason_counts": (
+                audit.get("scope_policy_filter_reason_counts")
+                or policy.get("filter_reason_counts")
+                or {}
+            ),
+            "wechat_favorites_scope_policy_filtered_all": bool(
+                audit.get("wechat_favorites_scope_policy_filtered_all")
+            ),
+            "policy_is_user_authorization_scope": bool(policy.get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "business_records_written": False,
+            "read_only": True,
+            "collector_writes_investor_wiki_directly": False,
+            "can_feed_wechat_article_favorites_lens": False,
+            "public_account_full_crawl_claimed": False,
+            "public_article_body_mirrored": False,
         },
-        "raw_ref": {"preflight": True},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(policy.get("enabled")),
+        },
         "privacy": {
             "sensitive": True,
             "local_only": True,
-            "contains": ["personal_message"],
+            "contains": ["personal_message", "collection_gap"],
         },
-        "wiki_targets": ["collectorx.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
+
+
+def gap_message(reason: str) -> str:
+    messages = {
+        "wechat_favorites_scope_policy_filtered_all": "All user-authorized WeChat favorites/article records were excluded by the authorization scope policy.",
+        "wechat_favorites_input_missing": "No user-authorized WeChat favorites or public-account article export was provided.",
+        "wechat_favorites_no_readable_records": "The authorized WeChat favorites input did not contain readable favorite or article records.",
+    }
+    return messages.get(reason, "WeChat favorites collection produced a traceable data-quality gap.")
 
 
 def build_manifest(
@@ -337,16 +399,25 @@ def build_manifest(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = usable_wechat_favorite_events(events)
+    wechat_favorite_event_count = len(usable_events)
+    favorite_event_count = sum(1 for event in usable_events if (event.get("data") or {}).get("action_type") == "favorite")
+    gap_event_count = len(events) - wechat_favorite_event_count
+    can_enter_wechat_favorites_lake = wechat_favorite_event_count > 0 and not bool(
+        (collection_audit or {}).get("wechat_favorites_scope_policy_filtered_all")
+    )
     kind_counts = Counter(event["kind"] for event in events)
-    action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
-    item_counts = Counter((event.get("data") or {}).get("item_type", "unknown") for event in events)
+    action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in usable_events)
+    item_counts = Counter((event.get("data") or {}).get("item_type", "unknown") for event in usable_events)
     source_accounts = {
         str((event.get("data") or {}).get("source_account"))
-        for event in events
+        for event in usable_events
         if (event.get("data") or {}).get("source_account")
     }
-    gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    gap_only = bool(events) and wechat_favorite_event_count == 0 and gap_event_count == len(events)
     scope_policy_filtered_all = bool((collection_audit or {}).get("wechat_favorites_scope_policy_filtered_all"))
+    no_events = not events
+    gap_reason = next(((event.get("data") or {}).get("gap") for event in events if (event.get("data") or {}).get("gap")), None)
     observed_actions = sorted(action for action, count in action_counts.items() if count and action != "unknown")
     observed_expected = [action for action in EXPECTED_WECHAT_ACTIONS if action_counts.get(action)]
     missing_expected = [action for action in EXPECTED_WECHAT_ACTIONS if not action_counts.get(action)]
@@ -356,6 +427,10 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": wechat_favorite_event_count,
+        "wechat_favorite_event_count": wechat_favorite_event_count,
+        "favorite_event_count": favorite_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "action_type_counts": dict(sorted(action_counts.items())),
         "item_type_counts": dict(sorted(item_counts.items())),
@@ -388,11 +463,20 @@ def build_manifest(
         },
         "collection_readiness": {
             "status": wechat_favorites_readiness_status(
-                events,
                 gap_only=gap_only,
+                no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
+                gap_reason=gap_reason,
             ),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "usable_event_count": wechat_favorite_event_count,
+            "wechat_favorite_event_count": wechat_favorite_event_count,
+            "favorite_event_count": favorite_event_count,
+            "gap_event_count": gap_event_count,
+            "can_enter_finclaw": can_enter_wechat_favorites_lake,
+            "can_enter_wechat_favorites_lake": can_enter_wechat_favorites_lake,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_wechat_article_favorites_lens": can_enter_wechat_favorites_lake,
+            "can_feed_investor_wiki_directly": False,
             "can_claim_investment_article_favorites": False,
             "source_collection_scope": wechat_favorites_source_collection_scope(
                 gap_only=gap_only,
@@ -402,22 +486,26 @@ def build_manifest(
             "next_action": wechat_favorites_next_action(
                 gap_only=gap_only,
                 scope_policy_filtered_all=scope_policy_filtered_all,
+                gap_reason=gap_reason,
             ),
         },
     }
 
 
 def wechat_favorites_readiness_status(
-    events: List[Dict[str, Any]],
     *,
     gap_only: bool,
+    no_events: bool,
     scope_policy_filtered_all: bool,
+    gap_reason: Optional[str],
 ) -> str:
     if scope_policy_filtered_all:
         return "scope_policy_filtered_all"
+    if gap_only and gap_reason == "wechat_favorites_no_readable_records":
+        return "no_readable_wechat_favorites_records"
     if gap_only:
         return "needs_wechat_favorites_input"
-    if not events:
+    if no_events:
         return "records_empty"
     return "events_collected"
 
@@ -430,9 +518,16 @@ def wechat_favorites_source_collection_scope(*, gap_only: bool, scope_policy_fil
     return "partial_authorized_input"
 
 
-def wechat_favorites_next_action(*, gap_only: bool, scope_policy_filtered_all: bool) -> str:
+def wechat_favorites_next_action(
+    *,
+    gap_only: bool,
+    scope_policy_filtered_all: bool,
+    gap_reason: Optional[str],
+) -> str:
     if scope_policy_filtered_all:
         return "Broaden WeChat favorites scope policy or provide authorized article records inside the allowed scope."
+    if gap_only and gap_reason == "wechat_favorites_no_readable_records":
+        return "Provide a readable WeChat favorites/public-account article export in JSON, CSV, HTML, Markdown, text, or ZIP format."
     if gap_only:
         return "Provide authorized WeChat favorites or public-account article exports."
     return "Feed events into wechat-article-favorites lens."
@@ -447,7 +542,7 @@ def action_coverage_status(events: List[Dict[str, Any]], missing_expected: List[
 
 
 def field_coverage(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    favorite_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "file"]
+    favorite_events = usable_wechat_favorite_events(events)
     field_counts = {
         field: sum(1 for event in favorite_events if favorite_field_present(event, field))
         for field in WECHAT_FAVORITE_RECOMMENDED_FIELDS
@@ -468,7 +563,7 @@ def favorite_field_present(event: Dict[str, Any], field: str) -> bool:
 
 
 def article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    favorite_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "file"]
+    favorite_events = usable_wechat_favorite_events(events)
     source_account_type_counts = Counter(
         str((event.get("data") or {}).get("source_account_type"))
         for event in favorite_events
@@ -500,7 +595,7 @@ def article_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def article_behavior_summary(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    favorite_events = [event for event in events if event.get("collector") == COLLECTOR and event.get("kind") == "file"]
+    favorite_events = usable_wechat_favorite_events(events)
     durations = [
         int((event.get("data") or {}).get("read_duration_seconds"))
         for event in favorite_events
@@ -541,6 +636,9 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     }
     if collection_audit:
         audit.update(collection_audit)
+        audit["usable_event_count"] = len(usable_wechat_favorite_events(events))
+        audit["wechat_favorite_event_count"] = len(usable_wechat_favorite_events(events))
+        audit["gap_event_count"] = len(events) - len(usable_wechat_favorite_events(events))
         audit["source_ref_count"] = max(
             int(audit.get("source_ref_count") or 0),
             sum(1 for event in events if (event.get("raw_ref") or {}).get("path") or (event.get("raw_ref") or {}).get("url")),
@@ -552,6 +650,17 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
         audit["archive_path_traversal_members_collected"] = False
         audit["windows_drive_archive_members_collected"] = False
     return audit
+
+
+def usable_wechat_favorite_events(events: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        event
+        for event in events
+        if event.get("collector") == COLLECTOR
+        and event.get("kind") == "file"
+        and not (event.get("data") or {}).get("gap")
+        and (event.get("data") or {}).get("action_type") != "collector_gap"
+    ]
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -573,7 +682,14 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         "",
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
+        f"- usable_event_count: {manifest['usable_event_count']}",
+        f"- wechat_favorite_event_count: {manifest['wechat_favorite_event_count']}",
+        f"- gap_event_count: {manifest['gap_event_count']}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- wechat_favorites_lake_ready: `{manifest['collection_readiness']['can_enter_wechat_favorites_lake']}`",
+        f"- data_quality_lake_ready: `{manifest['collection_readiness']['can_enter_data_quality_lake']}`",
+        f"- article_favorites_lens_ready: `{manifest['collection_readiness']['can_feed_wechat_article_favorites_lens']}`",
+        f"- investor_wiki_direct_ready: `{manifest['collection_readiness']['can_feed_investor_wiki_directly']}`",
         f"- observed_actions: `{', '.join(manifest['action_coverage']['observed_actions']) or 'none'}`",
         f"- missing_expected_actions: `{', '.join(manifest['action_coverage']['missing_expected_actions']) or 'none'}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",

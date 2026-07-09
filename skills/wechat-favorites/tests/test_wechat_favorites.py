@@ -12,7 +12,26 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "wechat_favorites.py"
+VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def load_events(out: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in (out / "lake" / "wechat-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def assert_validator_passes(out: Path) -> None:
+    subprocess.run(
+        [sys.executable, str(VALIDATOR), str(out), "--collector", "wechat-favorites"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_json_and_html_events() -> None:
@@ -103,10 +122,11 @@ def test_collect_json_and_html_events() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "wechat-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = load_events(out)
         assert len(events) == 4
         assert all(event["collector"] == "wechat-favorites" for event in events)
         assert all(event["kind"] == "file" for event in events)
+        assert all(isinstance(event["time"], str) and event["time"] for event in events)
         assert all(event["wiki_targets"] == ["internal.knowledge.saved_articles"] for event in events)
         assert {event["data"]["action_type"] for event in events} == {"favorite", "read", "share", "saved_file"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
@@ -129,6 +149,15 @@ def test_collect_json_and_html_events() -> None:
         assert favorite_event["data"]["engagement"]["like_count"] == 56
         assert "must-not-leak" not in json.dumps(events, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 4
+        assert manifest["usable_event_count"] == 4
+        assert manifest["wechat_favorite_event_count"] == 4
+        assert manifest["favorite_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_wechat_favorites_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_wechat_article_favorites_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["collection_readiness"]["can_claim_investment_article_favorites"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
         assert manifest["action_coverage"]["observed_expected_actions"] == ["favorite", "read", "share", "saved_file"]
@@ -164,6 +193,8 @@ def test_collect_json_and_html_events() -> None:
         assert manifest["source_audit"]["resolved_input_file_count"] == 3
         assert manifest["source_audit"]["parsed_record_count"] == 4
         assert manifest["source_audit"]["emitted_event_count"] == 4
+        assert manifest["source_audit"]["wechat_favorite_event_count"] == 4
+        assert manifest["source_audit"]["gap_event_count"] == 0
         assert manifest["source_audit"]["skipped_file_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
         assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
@@ -174,6 +205,7 @@ def test_collect_json_and_html_events() -> None:
         assert manifest["content_policy"]["full_content_included_by_default"] is False
         assert manifest["evidence_policy"]["required_lens"] == "wechat-article-favorites"
         assert manifest["source_account_count"] == 4
+        assert_validator_passes(out)
 
 
 def test_collect_missing_input_writes_gap_audit() -> None:
@@ -197,17 +229,81 @@ def test_collect_missing_input_writes_gap_audit() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "wechat-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = load_events(out)
         assert len(events) == 1
-        assert events[0]["data"]["gap"] == "wechat_favorites_input_missing"
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T02:00:00+08:00"
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "wechat_favorites_input_missing"
+        assert gap["data"]["status"] == "needs_wechat_favorites_input"
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["wechat_favorite_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_wechat_favorites_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_wechat_favorites_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_wechat_article_favorites_lens"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["input_missing_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 0
         assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+        assert_validator_passes(out)
+
+
+def test_collect_no_readable_input_writes_gap_audit() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        out = root / "out"
+        unsupported = root / "favorites.bin"
+        unsupported.write_bytes(b"not readable as a supported favorite export")
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(unsupported),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T02:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        events = load_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T02:00:00+08:00"
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        assert gap["data"]["gap"] == "wechat_favorites_no_readable_records"
+        assert gap["data"]["status"] == "no_readable_wechat_favorites_records"
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["wechat_favorite_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["collection_readiness"]["status"] == "no_readable_wechat_favorites_records"
+        assert manifest["collection_readiness"]["can_enter_wechat_favorites_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_wechat_article_favorites_lens"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
+        assert manifest["source_audit"]["skipped_reason_counts"] == {"unsupported_extension": 1}
+        assert manifest["source_audit"]["skipped_extension_counts"] == {".bin": 1}
+        assert_validator_passes(out)
 
 
 def test_collect_scope_policy_filters_account_action_tag_domain_and_keyword() -> None:
@@ -285,7 +381,7 @@ def test_collect_scope_policy_filters_account_action_tag_domain_and_keyword() ->
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "wechat-favorites" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = load_events(out)
         assert len(events) == 1
         assert events[0]["data"]["title"] == "半导体行业景气跟踪"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -340,20 +436,42 @@ def test_collect_scope_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        events_path = out / "lake" / "wechat-favorites" / "events.jsonl"
-        assert events_path.read_text(encoding="utf-8") == ""
+        events = load_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "wechat_favorites_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"tag_not_allowed": 1}
+        assert gap["data"]["wechat_favorites_scope_policy_filtered_all"] is True
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["wechat_favorite_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_wechat_favorites_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_wechat_article_favorites_lens"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["source_audit"]["wechat_favorites_scope_policy"]["filter_reason_counts"] == {"tag_not_allowed": 1}
         assert manifest["source_audit"]["wechat_favorites_scope_policy_filtered_all"] is True
+        assert manifest["source_audit"]["path_results"][0]["status"] == "filtered_by_scope_policy"
+        assert_validator_passes(out)
 
 
 if __name__ == "__main__":
     test_collect_json_and_html_events()
     test_collect_missing_input_writes_gap_audit()
+    test_collect_no_readable_input_writes_gap_audit()
     test_collect_scope_policy_filters_account_action_tag_domain_and_keyword()
     test_collect_scope_policy_filtered_all_status()
     print("wechat-favorites tests passed.")

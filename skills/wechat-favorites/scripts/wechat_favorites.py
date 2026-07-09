@@ -44,12 +44,13 @@ def collect(args: argparse.Namespace) -> int:
     collection_audit["candidate_record_count"] = len(records)
     collection_audit["wechat_favorites_scope_policy"] = wechat_favorites_scope_policy
     collection_audit["wechat_favorites_scope_policy_filtered_all"] = False
+    collection_audit["scope_policy_filtered_record_count"] = 0
+    collection_audit["scope_policy_filter_reason_counts"] = {}
     for result in collection_audit.get("path_results") or []:
         result["candidate_record_count"] = int(result.get("parsed_record_count") or 0)
         result["scope_policy_filtered_record_count"] = 0
-    if not records:
-        events = [gap_event(collected_at=collected_at, reason="wechat_favorites_input_missing")]
-    else:
+        result["emitted_record_count"] = int(result.get("parsed_record_count") or 0)
+    if records:
         row_counts: dict[str, int] = {}
         for path, record in records:
             key = str(path)
@@ -63,9 +64,33 @@ def collect(args: argparse.Namespace) -> int:
                 increment_path_scope_filter_count(collection_audit, path)
                 continue
             events.append(event)
+    collection_audit["wechat_favorite_event_count"] = len(events)
+    collection_audit["usable_event_count"] = len(events)
+    collection_audit["scope_policy_filtered_record_count"] = int(
+        wechat_favorites_scope_policy.get("filtered_record_count") or 0
+    )
+    collection_audit["scope_policy_filter_reason_counts"] = dict(
+        sorted((wechat_favorites_scope_policy.get("filter_reason_counts") or {}).items())
+    )
     collection_audit["emitted_event_count"] = len(events)
     finalize_path_scope_policy_status(collection_audit)
     finalize_wechat_favorites_scope_policy_audit(collection_audit)
+    if not events:
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason=gap_reason_for_audit(collection_audit, input_list=args.input or []),
+                collection_audit=collection_audit,
+            )
+        ]
+    collection_audit["gap_event_count"] = sum(1 for event in events if (event.get("data") or {}).get("gap"))
+    collection_audit["wechat_favorite_event_count"] = sum(
+        1
+        for event in events
+        if event.get("collector") == COLLECTOR and event.get("kind") == "file" and not (event.get("data") or {}).get("gap")
+    )
+    collection_audit["usable_event_count"] = collection_audit["wechat_favorite_event_count"]
+    collection_audit["emitted_event_count"] = len(events)
 
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)
@@ -117,8 +142,23 @@ def finalize_path_scope_policy_status(collection_audit: dict) -> None:
     for result in collection_audit.get("path_results") or []:
         candidate_count = int(result.get("candidate_record_count") or 0)
         filtered_count = int(result.get("scope_policy_filtered_record_count") or 0)
+        result["emitted_record_count"] = max(candidate_count - filtered_count, 0)
         if candidate_count > 0 and filtered_count == candidate_count:
             result["status"] = "filtered_by_scope_policy"
+            result["reason"] = "scope_policy_excluded_all_records"
+        elif filtered_count:
+            result["scope_policy_filter_status"] = "partially_filtered"
+
+
+def gap_reason_for_audit(collection_audit: dict, *, input_list: list[str]) -> str:
+    if collection_audit.get("wechat_favorites_scope_policy_filtered_all"):
+        return "wechat_favorites_scope_policy_filtered_all"
+    if not input_list or (
+        int(collection_audit.get("input_missing_count") or 0) > 0
+        and int(collection_audit.get("resolved_input_file_count") or 0) == 0
+    ):
+        return "wechat_favorites_input_missing"
+    return "wechat_favorites_no_readable_records"
 
 
 def main() -> int:
