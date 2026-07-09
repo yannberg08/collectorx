@@ -3,7 +3,10 @@
 同花顺交割单CSV解析测试
 """
 import json
+import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
@@ -40,10 +43,19 @@ from ths.scope import (
 from ths_query import _build_events, build_gui_collection_gap
 
 
+def ths_tmp(name: str, filename: str | None = None) -> Path:
+    root = Path(tempfile.gettempdir()) / f"{name}_{os.getpid()}"
+    shutil.rmtree(root, ignore_errors=True)
+    if filename is None:
+        return root
+    root.mkdir(parents=True, exist_ok=True)
+    return root / filename
+
+
 def test_parse_csv():
     """测试CSV解析"""
     # 创建测试CSV
-    test_csv = Path("/tmp/test_ths.csv")
+    test_csv = ths_tmp("test_ths_csv", "test_ths.csv")
     test_csv.write_text("""成交日期,成交时间,证券代码,证券名称,买卖方向,成交价格,成交数量,成交金额,手续费,印花税,过户费
 2024-01-15,09:30:00,600519,贵州茅台,买入,1800.00,100,180000.00,54.00,0.00,1.80
 2024-01-16,10:00:00,600519,贵州茅台,卖出,1850.00,100,185000.00,55.50,185.00,1.85
@@ -61,7 +73,7 @@ def test_parse_csv():
 
 def test_parse_empty_csv():
     """测试空CSV"""
-    test_csv = Path("/tmp/test_ths_empty.csv")
+    test_csv = ths_tmp("test_ths_empty_csv", "test_ths_empty.csv")
     test_csv.write_text("成交日期,成交时间,证券代码,证券名称,买卖方向,成交价格,成交数量,成交金额,手续费,印花税,过户费\n")
     
     records = parse_portfolio_csv(str(test_csv))
@@ -73,7 +85,7 @@ def test_parse_empty_csv():
 
 def test_records_to_events():
     """测试CollectorX事件输出"""
-    test_csv = Path("/tmp/test_ths_events.csv")
+    test_csv = ths_tmp("test_ths_events_csv", "test_ths_events.csv")
     test_csv.write_text("""成交日期,成交时间,证券代码,证券名称,买卖方向,成交价格,成交数量,成交金额,手续费,印花税,过户费
 2024-01-15,09:30:00,600519,贵州茅台,买入,1800.00,100,180000.00,54.00,0.00,1.80
 """)
@@ -101,7 +113,7 @@ def test_records_to_events():
 
 def test_parse_xcs_lscj_and_infer_holdings():
     """测试同花顺Mac本机XcsLscj历史成交解析和估算持仓"""
-    test_xcs = Path("/tmp/test_ths_xcs_lscj.json")
+    test_xcs = ths_tmp("test_ths_xcs_lscj", "test_ths_xcs_lscj.json")
     test_xcs.write_text(
         """{
   "startdate": "20240101",
@@ -321,10 +333,11 @@ def test_gui_snapshot_to_events():
 
 
 def test_gui_collection_gap_event():
+    screenshot_dir = str(ths_tmp("ths_gui_gap"))
     gap = build_gui_collection_gap(
         RuntimeError("macOS Accessibility APIs are unavailable"),
         platform="mac",
-        screenshot_dir="/tmp/ths-gui",
+        screenshot_dir=screenshot_dir,
         collected_at="2026-07-07T15:00:00+08:00",
     )
     events = _build_events(
@@ -342,7 +355,7 @@ def test_gui_collection_gap_event():
         include_gui_events=True,
         container_root=None,
         platform="mac",
-        gui_screenshot_dir="/tmp/ths-gui",
+        gui_screenshot_dir=screenshot_dir,
     )
 
     assert len(events) == 1
@@ -381,10 +394,7 @@ def test_write_collection_package_and_sync():
         )
     )
 
-    output = Path("/tmp/ths_portfolio_package_test")
-    if output.exists():
-        import shutil
-        shutil.rmtree(output)
+    output = ths_tmp("ths_portfolio_package_test")
     manifest = write_collection_package(
         output,
         events=events,
@@ -401,10 +411,7 @@ def test_write_collection_package_and_sync():
     assert (output / "lake" / "ths-portfolio" / "events.jsonl").exists()
     assert (output / "investor_wiki_evidence.v1.json").exists()
 
-    soulmirror_home = Path("/tmp/ths_portfolio_soulmirror_test")
-    if soulmirror_home.exists():
-        import shutil
-        shutil.rmtree(soulmirror_home)
+    soulmirror_home = ths_tmp("ths_portfolio_soulmirror_test")
     sync_report = sync_package_to_soulmirror(output, soulmirror_home=soulmirror_home)
     assert sync_report["collector"] == "ths-portfolio"
     assert (soulmirror_home / "lake" / "ths-portfolio" / "events.jsonl").exists()
@@ -482,10 +489,7 @@ def test_ths_scope_policy_filters_trade_package():
         "allow_symbol_not_matched": 1,
     }
 
-    output = Path("/tmp/ths_portfolio_scope_policy_package_test")
-    if output.exists():
-        import shutil
-        shutil.rmtree(output)
+    output = ths_tmp("ths_portfolio_scope_policy_package_test")
     manifest = write_collection_package(
         output,
         events=filtered_events,
@@ -548,10 +552,7 @@ def test_ths_scope_policy_filtered_all_package_status():
     assert audit["ths_scope_policy_filtered_all"] is True
     assert audit["ths_scope_policy"]["filter_reason_counts"] == {"allow_symbol_not_matched": 2}
 
-    output = Path("/tmp/ths_portfolio_scope_policy_filtered_all_test")
-    if output.exists():
-        import shutil
-        shutil.rmtree(output)
+    output = ths_tmp("ths_portfolio_scope_policy_filtered_all_test")
     manifest = write_collection_package(
         output,
         events=filtered_events,

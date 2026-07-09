@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -33,6 +35,12 @@ from qq.parser import (
 )
 
 
+def qq_tmp(name: str) -> Path:
+    root = Path(tempfile.gettempdir()) / f"{name}_{os.getpid()}"
+    shutil.rmtree(root, ignore_errors=True)
+    return root
+
+
 def test_normalize_message():
     msg = normalize_message(
         {
@@ -54,8 +62,7 @@ def test_normalize_message():
 
 
 def test_sqlite_read_and_event_export():
-    root = Path("/tmp/collectorx_qq_test")
-    shutil.rmtree(root, ignore_errors=True)
+    root = qq_tmp("collectorx_qq_test")
     root.mkdir(parents=True)
     db_path = root / "Msg_test.db"
     conn = sqlite3.connect(str(db_path))
@@ -127,8 +134,7 @@ def test_sqlite_read_and_event_export():
 def test_collect_standard_package_output():
     from tools.validate_collector_package import validate_package
 
-    root = Path("/tmp/collectorx_qq_collect_package")
-    shutil.rmtree(root, ignore_errors=True)
+    root = qq_tmp("collectorx_qq_collect_package")
     db_dir = root / "db"
     db_dir.mkdir(parents=True)
     db_path = db_dir / "Msg_test.db"
@@ -190,8 +196,7 @@ def test_collect_standard_package_output():
 def test_collect_gap_package_when_database_is_missing():
     from tools.validate_collector_package import validate_package
 
-    root = Path("/tmp/collectorx_qq_collect_gap")
-    shutil.rmtree(root, ignore_errors=True)
+    root = qq_tmp("collectorx_qq_collect_gap")
     db_dir = root / "empty"
     db_dir.mkdir(parents=True)
     out_dir = root / "package"
@@ -224,8 +229,7 @@ def test_collect_gap_package_when_database_is_missing():
 
 
 def test_nt_wrapped_probe_and_prepare():
-    root = Path("/tmp/collectorx_qq_nt_probe/nt_qq_abcdef0123456789/nt_db")
-    shutil.rmtree(root.parents[1], ignore_errors=True)
+    root = qq_tmp("collectorx_qq_nt_probe") / "nt_qq_abcdef0123456789" / "nt_db"
     root.mkdir(parents=True)
 
     for name in ("nt_msg.db", "profile_info.db", "group_info.db", "recent_contact.db"):
@@ -246,8 +250,7 @@ def test_nt_wrapped_probe_and_prepare():
     assert probe["requires_passphrase"] is True
     assert probe["candidate_key_material"]["account_hash_present"] is True
 
-    out = Path("/tmp/collectorx_qq_nt_clean")
-    shutil.rmtree(out, ignore_errors=True)
+    out = qq_tmp("collectorx_qq_nt_clean")
     manifest = prepare_nt_clean_copies(root, out, include_roles=["messages"])
     assert len(manifest["files"]) == 1
     clean_path = Path(manifest["files"][0]["output"])
@@ -315,8 +318,7 @@ def test_keyprobe_version_compatibility_blocks_missing_qq_offset():
 
 
 def test_read_decrypted_nt_message_tables():
-    root = Path("/tmp/collectorx_qq_nt_plain")
-    shutil.rmtree(root, ignore_errors=True)
+    root = qq_tmp("collectorx_qq_nt_plain")
     root.mkdir(parents=True)
     db_path = root / "nt_msg.db"
     conn = sqlite3.connect(str(db_path))
@@ -372,8 +374,7 @@ def test_read_decrypted_nt_message_tables():
 
 
 def test_read_decrypted_nt_entities():
-    root = Path("/tmp/collectorx_qq_nt_entities")
-    shutil.rmtree(root, ignore_errors=True)
+    root = qq_tmp("collectorx_qq_nt_entities")
     root.mkdir(parents=True)
 
     profile_db = root / "profile_info.db"
