@@ -33,6 +33,7 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 COLLECTOR = "china-wealth-assets"
 CN_TZ = timezone(timedelta(hours=8))
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 SUPPORTED_EXTENSIONS = {
     ".csv",
     ".tsv",
@@ -1051,6 +1052,9 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
 
 def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
     timestamp = collected_at or now_iso()
+    statuses = {
+        "china_wealth_authorized_input_missing": "needs_china_wealth_authorized_input",
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
@@ -1063,11 +1067,26 @@ def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
         "data": {
             "subtype": "collector_gap",
             "gap": reason,
+            "status": statuses.get(reason, "needs_china_wealth_authorized_input"),
+            "profile_type": reason,
+            "candidate_record_count": 0,
+            "retained_record_count": 0,
+            "filtered_record_count": 0,
+            "filter_reason_counts": {},
+            "policy_is_user_authorization_scope": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "business_records_written": False,
+            "complete_asset_boundary_claimed": False,
+            "payment_or_bank_credentials_collected": False,
+            "payment_or_transfer_performed": False,
+            "order_or_redemption_performed": False,
+            "consumption_flow_claimed": False,
+            "read_only": True,
             "message": "No user-authorized fund or wealth-management export was provided.",
         },
         "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio"]},
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "collection_gap"]},
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -1108,7 +1127,7 @@ def scope_policy_filtered_all_event(
         },
         "raw_ref": {"scope_policy_enabled": True},
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "collection_gap"]},
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -1161,7 +1180,7 @@ def wiki_targets_for_subtype(subtype: str) -> List[str]:
         return ["investor.risk_portfolio.current_positions", "investor.risk_portfolio.portfolio_constraints", "external.capital.assets"]
     if subtype == "asset_snapshot":
         return ["investor.risk_portfolio.current_assets", "external.capital.assets"]
-    return ["investor.data_quality.collection_gaps"]
+    return [DATA_QUALITY_TARGET]
 
 
 def build_manifest(
@@ -1177,6 +1196,10 @@ def build_manifest(
     gap_only = bool(events) and set(subtype_counts) == {"collector_gap"}
     no_events = not events
     scope_policy_filtered_all = bool(collection_audit.get("china_wealth_scope_policy_filtered_all"))
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("subtype") == "collector_gap")
+    usable_events = non_gap_events(events)
+    usable_event_count = len(usable_events)
+    asset_event_count = usable_event_count
     value_events = [
         event for event in events
         if any((event.get("data") or {}).get(key) is not None for key in ("market_value", "total_asset", "transaction_amount", "pnl"))
@@ -1186,6 +1209,9 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": usable_event_count,
+        "asset_event_count": asset_event_count,
+        "gap_event_count": gap_event_count,
         "source_file_count": len({(event.get("raw_ref") or {}).get("path") for event in events if (event.get("raw_ref") or {}).get("path")}),
         "kind_counts": dict(sorted(kind_counts.items())),
         "subtype_counts": dict(sorted(subtype_counts.items())),
@@ -1218,13 +1244,19 @@ def build_manifest(
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
             ),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "can_enter_finclaw": usable_event_count > 0,
+            "can_enter_china_wealth_lake": usable_event_count > 0,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": usable_event_count > 0,
             "can_claim_complete_asset_boundary": False,
             "asset_boundary_scope": china_wealth_asset_boundary_scope(
                 gap_only=gap_only,
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
             ),
+            "usable_event_count": usable_event_count,
+            "asset_event_count": asset_event_count,
+            "gap_event_count": gap_event_count,
             "next_action": china_wealth_next_action(
                 gap_only=gap_only,
                 no_events=no_events,
@@ -1259,11 +1291,18 @@ def china_wealth_next_action(*, gap_only: bool, no_events: bool, scope_policy_fi
     return "可进入投资分身蒸馏；后续按平台做只读真机验证后，才能声明完整资产边界。"
 
 
-def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+def build_evidence(
+    events: List[Dict[str, Any]],
+    *,
+    generated_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    usable_events = non_gap_events(events)
+    gap_event_count = max(len(events) - len(usable_events), 0)
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in events)
-    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
-    for event in events:
+    subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in usable_events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
+    for event in usable_events:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
     evidence = {
@@ -1272,7 +1311,9 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         "generated_from": {
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
-            "event_count": len(events),
+            "event_count": len(usable_events),
+            "raw_event_count": len(events),
+            "gap_event_count": gap_event_count,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1284,17 +1325,17 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "subtype_counts": dict(sorted(subtype_counts.items())),
             "platform_counts": dict(sorted(platform_counts.items())),
             "platform_coverage": platform_coverage(platform_counts),
-            "field_coverage": field_coverage(events),
-            "asset_value_summary": asset_value_summary(events),
-            "currency_summary": currency_summary(events),
-            "asset_surface_summary": asset_surface_summary(events),
-            "account_boundary_summary": account_boundary_summary(events),
-            "asset_boundary_proof": asset_boundary_proof(events),
+            "field_coverage": field_coverage(usable_events),
+            "asset_value_summary": asset_value_summary(usable_events),
+            "currency_summary": currency_summary(usable_events),
+            "asset_surface_summary": asset_surface_summary(usable_events),
+            "account_boundary_summary": account_boundary_summary(usable_events),
+            "asset_boundary_proof": asset_boundary_proof(usable_events, collection_audit=collection_audit),
             "asset_boundary_source": True,
             "complete_asset_boundary_claimed": False,
         },
     }
-    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
+    return augment_evidence_with_dimensions(evidence, usable_events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def platform_coverage(platform_counts: Counter) -> Dict[str, Any]:
@@ -1469,6 +1510,7 @@ def asset_boundary_proof(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     usable_events = non_gap_events(events)
+    gap_event_count = max(len(events) - len(usable_events), 0)
     platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
     audit = collection_audit or {}
     if not usable_events:
@@ -1478,6 +1520,11 @@ def asset_boundary_proof(
             "overall_proof_level": "scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_asset_evidence",
             "complete_asset_boundary_claimed": False,
             "requires_real_account_validation": True,
+            "asset_event_count": 0,
+            "gap_event_count": gap_event_count,
+            "can_enter_china_wealth_lake": False,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": False,
             "requirements": asset_boundary_proof_requirements(),
             "account_proof_level_counts": {},
             "expected_p0_platforms": list(EXPECTED_P0_PLATFORMS),
@@ -1525,6 +1572,11 @@ def asset_boundary_proof(
         "overall_proof_level": overall_boundary_proof_level(level_counts),
         "complete_asset_boundary_claimed": False,
         "requires_real_account_validation": True,
+        "asset_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
+        "can_enter_china_wealth_lake": len(usable_events) > 0,
+        "can_enter_data_quality_lake": gap_event_count > 0,
+        "can_feed_investor_wiki_evidence": len(usable_events) > 0,
         "requirements": asset_boundary_proof_requirements(),
         "account_proof_level_counts": dict(sorted(level_counts.items())),
         "expected_p0_platforms": list(EXPECTED_P0_PLATFORMS),

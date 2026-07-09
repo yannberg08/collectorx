@@ -149,8 +149,8 @@
       "product_surface": "import-beta",
       "evidence_role": "partial-asset-facts",
       "user_step": "Provide authorized fund, wealth, cash-management, bank wealth, workbook, PDF, ZIP, or HAR exports; optionally choose platform, account, subtype, product code/name, currency, side, and keyword allow/deny scope filters.",
-      "preflight": "Input is read-only and user-owned; optional scope filters are applied before Lake output; filtered-all results emit a traceable gap package; passwords and account mutation are out of scope.",
-      "failure_state": "needs_authorized_wealth_export_or_scope_policy_retained_records"
+      "preflight": "Input is read-only and user-owned; optional scope filters are applied before Lake output; no-input and filtered-all results emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_china_wealth_lake=false, can_enter_data_quality_lake=true; passwords, consumption flows, and account mutation are out of scope.",
+      "failure_state": "needs_authorized_wealth_export_or_scope_policy_retained_records_or_gap_package"
     },
     {
       "id": "meeting-artifacts",

@@ -29,7 +29,7 @@ def write_package(out: Path, events: list[dict], *, collected_at: str, collectio
     out = out.expanduser()
     write_jsonl(out / "lake" / "china-wealth-assets" / "events.jsonl", events)
     manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
-    evidence = build_evidence(events, generated_at=collected_at)
+    evidence = build_evidence(events, generated_at=collected_at, collection_audit=collection_audit)
     write_json(out / "manifest.json", manifest)
     write_json(out / "investor_wiki_evidence.v1.json", evidence)
     (out / "SUMMARY.md").write_text(

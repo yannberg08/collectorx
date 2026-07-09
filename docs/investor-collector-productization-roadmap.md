@@ -723,9 +723,9 @@ Findings:
   filters, candidate count, retained/emitted count, filtered count, filter
   reason counts, and filtered-all status.
 - Filtered-all runs report `collection_readiness.status=scope_policy_filtered_all`
-  and, as of version `0.4.7`, emit a
-  `china_wealth_scope_policy_filtered_all` profile gap event instead of an
-  empty Lake file.
+  and, as of version `0.4.8`, emit a
+  `china_wealth_scope_policy_filtered_all` profile gap event with data-quality
+  routing and readiness gates instead of an empty Lake file.
 - `asset_boundary_proof.authorization_scope_boundary` exposes the same policy
   boundary to FinClaw so partial asset facts remain explicitly user-authorized.
 - Fixture validation covers partial retention across platform/account/subtype/
@@ -3783,7 +3783,7 @@ Validation record:
 
 Findings:
 
-- Upgraded `china-wealth-assets` to `0.4.7`.
+- Upgraded `china-wealth-assets` to `0.4.8`.
 - Added explicit filtered-all package behavior: when every fund/wealth
   candidate record is outside the user authorization policy, the package emits
   a `china_wealth_scope_policy_filtered_all` profile gap event instead of an
@@ -3791,8 +3791,16 @@ Findings:
 - Standardized no-input and filtered-all gap events with non-empty `time`
   values so `tools/validate_collector_package.py --collector
   china-wealth-assets` can validate the packages.
+- Added `manifest.usable_event_count`, `manifest.asset_event_count`, and
+  `manifest.gap_event_count`, plus explicit `can_enter_china_wealth_lake`,
+  `can_enter_data_quality_lake`, and `can_feed_investor_wiki_evidence`
+  readiness gates.
+- Routed no-input and filtered-all gap events to
+  `collectorx.data_quality.collection_gaps`.
 - Kept `collection_readiness.can_enter_finclaw=false` and all 20 Investor Wiki
-  subdimensions at `support_level=none` for filtered-all packages.
+  subdimensions at `support_level=none` for no-input/filtered-all packages.
+- Investor Wiki evidence now counts only non-gap asset events and records
+  `generated_from.raw_event_count` plus `generated_from.gap_event_count`.
 - The gap event carries only policy counts and reason counts; it does not write
   product identity, amount, transaction, credential, payment password, bank
   password, account mutation, or raw input path.

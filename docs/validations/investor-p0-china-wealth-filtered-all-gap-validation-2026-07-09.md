@@ -1,14 +1,15 @@
 # P0 China Wealth Filtered-All Gap Validation - 2026-07-09
 
 This validation covers the P0 `china-wealth-assets` collector after hardening
-scope-policy filtered-all package behavior. A readable fund/wealth input that
-is fully outside the user's authorization scope now emits a traceable gap event
-instead of an empty Lake file.
+no-input and scope-policy filtered-all package behavior. A missing input or a
+readable fund/wealth input that is fully outside the user's authorization scope
+now emits a traceable data-quality gap event instead of an empty or misleading
+asset Lake file.
 
 ## Scope
 
 - Collector: `china-wealth-assets`
-- Version: `0.4.7`
+- Version: `0.4.8`
 - FinClaw route: partial fund, wealth, cash-management, and bank-wealth asset
   facts for the Investor Wiki.
 - Boundary: no complete asset-boundary claim, no payment password, no bank
@@ -25,15 +26,26 @@ instead of an empty Lake file.
   mutation, credential, cookie, token, or raw input path.
 - No-input and filtered-all gap events now carry a non-empty `time` value so
   `tools/validate_collector_package.py` can validate the package.
+- No-input and filtered-all gap events route to
+  `collectorx.data_quality.collection_gaps`.
+- Manifest output separates `usable_event_count`, `asset_event_count`, and
+  `gap_event_count`.
+- `collection_readiness.can_enter_china_wealth_lake` gates retained asset
+  events; `can_enter_data_quality_lake` gates collection gaps; and
+  `can_feed_investor_wiki_evidence=false` blocks gaps from becoming Wiki facts.
 - Manifest readiness remains `scope_policy_filtered_all` with
   `can_enter_finclaw=false`.
-- Investor Wiki evidence still ignores gap events for 7/20 support, so a
-  filtered-all package does not create fake asset, portfolio, or execution
-  evidence.
+- Investor Wiki evidence ignores gap events for 7/20 support and records
+  `generated_from.raw_event_count` plus `generated_from.gap_event_count`, so a
+  no-input or filtered-all package does not create fake asset, portfolio, or
+  execution evidence.
 
 ## Fixture Coverage
 
 - No-input fixture verifies a valid profile gap event and package validation.
+- No-input fixture verifies `data.gap=china_wealth_authorized_input_missing`,
+  `can_enter_china_wealth_lake=false`, `can_enter_data_quality_lake=true`, and
+  Wiki evidence `generated_from.event_count=0`.
 - Filtered-all fixture verifies:
   - one profile gap event in `lake/china-wealth-assets/events.jsonl`
   - `data.gap=china_wealth_scope_policy_filtered_all`
@@ -42,6 +54,11 @@ instead of an empty Lake file.
   - no retained product or money fields in the gap event
   - `manifest.collection_readiness.status=scope_policy_filtered_all`
   - `manifest.collection_readiness.can_enter_finclaw=false`
+  - `manifest.usable_event_count=0`, `manifest.asset_event_count=0`, and
+    `manifest.gap_event_count=1`
+  - `manifest.collection_readiness.can_enter_china_wealth_lake=false`
+  - `manifest.collection_readiness.can_enter_data_quality_lake=true`
+  - `event.wiki_targets=["collectorx.data_quality.collection_gaps"]`
   - `investor_wiki_evidence.v1.json` keeps all 20 subdimensions at
     `support_level=none`
   - package validation passes with

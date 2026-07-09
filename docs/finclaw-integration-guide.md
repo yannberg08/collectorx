@@ -715,6 +715,13 @@ Current status:
   bank wealth exports, preserves numeric asset/trade fields from workbook,
   legacy `.xls`, Excel XML, HTML table, and PDF statement exports, records ZIP member
   provenance, and strips credential-like raw keys.
+- Manifest separates `usable_event_count`, `asset_event_count`, and
+  `gap_event_count`; `collection_readiness.can_enter_china_wealth_lake` gates
+  retained asset evidence, while `can_enter_data_quality_lake` gates no-input
+  and filtered-all gaps routed to `collectorx.data_quality.collection_gaps`.
+- Investor Wiki evidence counts only non-gap fund/wealth asset events and
+  records `generated_from.raw_event_count` plus `generated_from.gap_event_count`
+  for package observability.
 - Per-platform one-click adapters for Alipay/Tiantian/Danjuan/Qieman/banks still
   need real validation; the HAR path is an authorized browser export baseline
   for real-account responses.

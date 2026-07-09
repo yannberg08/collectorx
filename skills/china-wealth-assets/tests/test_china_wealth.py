@@ -39,10 +39,24 @@ def test_collect_fund_holding_and_transaction() -> None:
         assert events[0]["data"]["market_value"] == 1234.0
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["usable_event_count"] == 2
+        assert manifest["asset_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_china_wealth_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["usable_event_count"] == 2
         assert manifest["collection_readiness"]["can_claim_complete_asset_boundary"] is False
         assert manifest["collection_readiness"]["asset_boundary_scope"] == "partial_authorized_input"
         assert manifest["platform_counts"] == {"tiantian-fund": 2}
         assert manifest["platform_coverage"]["missing_expected_platforms"] == ["alipay", "danjuan", "qieman", "bank-wealth"]
+        proof = manifest["asset_boundary_proof"]
+        assert proof["can_enter_china_wealth_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
+        assert proof["can_feed_investor_wiki_evidence"] is True
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == manifest["usable_event_count"]
+        assert evidence["generated_from"]["gap_event_count"] == 0
 
 
 def test_collect_without_input_gap() -> None:
@@ -53,14 +67,36 @@ def test_collect_without_input_gap() -> None:
         assert event["kind"] == "profile"
         assert event["time"]
         assert event["data"]["subtype"] == "collector_gap"
+        assert event["data"]["gap"] == "china_wealth_authorized_input_missing"
+        assert event["data"]["status"] == "needs_china_wealth_authorized_input"
+        assert event["data"]["profile_type"] == "china_wealth_authorized_input_missing"
+        assert event["data"]["business_records_written"] is False
+        assert event["data"]["payment_or_transfer_performed"] is False
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["asset_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_china_wealth_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
         assert manifest["collection_audit"]["resolved_input_file_count"] == 0
         assert manifest["collection_audit"]["complete_asset_boundary_claimed"] is False
         proof = manifest["asset_boundary_proof"]
         assert proof["proof_scope"] == "none"
         assert proof["overall_proof_level"] == "no_authorized_asset_evidence"
         assert proof["complete_asset_boundary_claimed"] is False
+        assert proof["can_enter_china_wealth_lake"] is False
+        assert proof["can_enter_data_quality_lake"] is True
+        assert proof["can_feed_investor_wiki_evidence"] is False
         assert proof["missing_global_requirements"] == ["authorized_asset_input"]
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["asset_value_summary"] == {}
         subprocess.run(
             [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "china-wealth-assets"],
             check=True,
@@ -705,6 +741,12 @@ def test_scope_policy_filters_authorized_asset_records() -> None:
 
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["usable_event_count"] == 1
+        assert manifest["asset_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_china_wealth_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
         audit = manifest["collection_audit"]
         assert audit["candidate_record_count"] == 8
         assert audit["parsed_record_count"] == 8
@@ -770,12 +812,20 @@ def test_scope_policy_filtered_all_readiness() -> None:
         assert event["data"]["filtered_record_count"] == 1
         assert event["data"]["filter_reason_counts"] == {"platform_not_allowed": 1}
         assert event["data"]["business_records_written"] is False
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert "product_code" not in event["data"]
         assert "market_value" not in event["data"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["asset_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_china_wealth_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
         assert manifest["collection_readiness"]["asset_boundary_scope"] == "scope_policy_excluded_all"
         audit = manifest["collection_audit"]
         assert audit["candidate_record_count"] == 1
@@ -786,9 +836,15 @@ def test_scope_policy_filtered_all_readiness() -> None:
         proof = manifest["asset_boundary_proof"]
         assert proof["overall_proof_level"] == "scope_policy_filtered_all"
         assert proof["proof_scope"] == "scope_policy_excluded_all"
+        assert proof["can_enter_china_wealth_lake"] is False
+        assert proof["can_enter_data_quality_lake"] is True
+        assert proof["can_feed_investor_wiki_evidence"] is False
         assert proof["authorization_scope_boundary"]["china_wealth_scope_policy_filtered_all"] is True
         assert proof["missing_global_requirements"] == ["scope_policy_retained_records"]
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
         assert evidence["coverage_summary"]["support_level_counts"] == {"none": 20}
         assert evidence["coverage_summary"]["asset_value_summary"] == {}
         subprocess.run(

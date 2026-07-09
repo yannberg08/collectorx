@@ -300,7 +300,7 @@ The prior completed wave: `filesystem` now emits validator-safe metadata gap pac
   claim.
 
 The prior completed wave: `china-wealth-assets` now emits validator-safe
-filtered-all gap packages:
+no-input and filtered-all gap packages:
 
 - When a readable fund/wealth input is fully excluded by platform, account,
   subtype, product, currency, side, or keyword authorization filters, the Lake
@@ -309,14 +309,22 @@ filtered-all gap packages:
 - Manifest readiness remains `scope_policy_filtered_all` with
   `can_enter_finclaw=false`, so filtered-out inputs cannot become usable asset,
   portfolio, or execution evidence.
+- Manifests now separate `event_count`, `usable_event_count`,
+  `asset_event_count`, and `gap_event_count`.
+- `collection_readiness.can_enter_china_wealth_lake` gates retained asset
+  events, `can_enter_data_quality_lake` gates collection gaps, and
+  `can_feed_investor_wiki_evidence=false` prevents no-input/filtered-all gaps
+  from becoming Investor Wiki facts.
+- Gap events route to `collectorx.data_quality.collection_gaps`.
 - The gap event carries candidate, retained, filtered, and reason counts but no
   product identity, amount, transaction, credential, cookie, token, payment
   password, bank password, account mutation, or raw input path.
 - No-input and filtered-all gap packages now carry non-empty event `time`
   values and pass `tools/validate_collector_package.py --collector
   china-wealth-assets`.
-- Investor Wiki evidence keeps all 20 subdimensions at `support_level=none`
-  for filtered-all packages.
+- Investor Wiki evidence counts only non-gap asset events, records raw/gap
+  package counts, and keeps all 20 subdimensions at `support_level=none` for
+  no-input and filtered-all packages.
 
 Earlier EastMoney scope-policy wave: `eastmoney-portfolio` added event-level
 authorization scope filters before production-candidate strong trading
@@ -578,9 +586,10 @@ authorization scope-policy boundaries:
 - Manifest `collection_audit` records configured filters, candidate record
   count, retained/emitted count, filtered count, reason counts, and
   `china_wealth_scope_policy_filtered_all`.
-- As of version `0.4.7`, filtered-all runs produce one
+- As of version `0.4.8`, filtered-all runs produce one
   `china_wealth_scope_policy_filtered_all` profile gap event with
-  `scope_policy_filtered_all` readiness, so FinClaw can ingest a traceable
+  `scope_policy_filtered_all` readiness, data-quality routing, and explicit
+  business/data-quality/Wiki gates, so FinClaw can ingest a traceable
   authorization-boundary package instead of an empty Lake file.
 - `asset_boundary_proof.authorization_scope_boundary` exposes the same policy
   boundary to FinClaw so partial asset facts remain user-authorized and do not

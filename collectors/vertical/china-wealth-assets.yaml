@@ -37,6 +37,10 @@ scope:
     - transaction_surface_summary
     - scope_policy_audit
     - scope_policy_filtered_all_gap_package
+    - no_input_gap_package
+    - business_lake_readiness_gate
+    - data_quality_lake_readiness_gate
+    - investor_wiki_evidence_readiness_gate
     - source_audit
     - pdf_statement_audit
     - browser_network_response_audit
@@ -59,5 +63,5 @@ description: |
   投资/基金/理财平台域名白名单内的响应体，不写入请求头、Cookie、
   Authorization 或 URL 查询串，也不碰支付和银行凭证。manifest 会报告字段覆盖、
   平台覆盖、账户边界、资产边界证明强度、资产面、币种、交易方向、授权范围策略、
-  filtered-all gap 包、PDF/HAR/来源审计
-  和本次输入内的资产金额汇总，但不声明完整资产边界。
+  no-input/filtered-all gap 包、业务 Lake / 数据质量 Lake / Investor Wiki evidence
+  readiness gate、PDF/HAR/来源审计和本次输入内的资产金额汇总，但不声明完整资产边界。
