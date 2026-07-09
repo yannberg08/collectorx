@@ -42,8 +42,9 @@ def collect(args: argparse.Namespace) -> int:
     collection_audit["meeting_scope_policy"] = meeting_scope_policy
     collection_audit["meeting_scope_policy_filtered_all"] = False
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="meeting_artifact_input_missing")]
+        gap_reason = "meeting_artifact_input_missing"
     else:
+        gap_reason = "meeting_artifact_records_empty"
         for path in paths:
             path_result = {
                 "path": str(path),
@@ -80,6 +81,11 @@ def collect(args: argparse.Namespace) -> int:
     collection_audit["emitted_event_count"] = len(events)
     finalize_collection_audit(collection_audit)
     finalize_meeting_scope_policy_audit(collection_audit)
+    if not events:
+        if collection_audit.get("meeting_scope_policy_filtered_all"):
+            gap_reason = "meeting_scope_policy_filtered_all"
+        events = [gap_event(collected_at=collected_at, reason=gap_reason, collection_audit=collection_audit)]
+        collection_audit["emitted_event_count"] = len(events)
 
     if args.event_export:
         write_jsonl(Path(args.event_export).expanduser(), events)

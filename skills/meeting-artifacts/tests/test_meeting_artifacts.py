@@ -12,7 +12,29 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "meeting_artifacts.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def read_events(out: Path) -> list[dict]:
+    return [json.loads(line) for line in (out / "lake" / "meeting-artifacts" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+
+
+def assert_package_valid(out: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "meeting-artifacts",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_minutes_and_transcript_events() -> None:
@@ -51,13 +73,16 @@ def test_collect_minutes_and_transcript_events() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "meeting-artifacts" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 2
         assert {event["data"]["artifact_type"] for event in events} == {"minutes", "transcript"}
         assert all(event["collector"] == "meeting-artifacts" for event in events)
         assert all(event["kind"] == "note" for event in events)
         assert all(event["wiki_targets"] == ["internal.collaboration.meetings"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 2
+        assert manifest["meeting_artifact_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_investment_meeting_minutes"] is False
         assert manifest["platform_coverage"]["observed_platforms"] == ["local-file"]
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
@@ -81,6 +106,7 @@ def test_collect_minutes_and_transcript_events() -> None:
         assert manifest["source_audit"]["parsed_record_count"] == 2
         assert manifest["source_audit"]["emitted_event_count"] == 2
         assert manifest["evidence_policy"]["required_lens"] == "meeting-minutes"
+        assert_package_valid(out)
 
 
 def test_collect_platform_exports_and_sanitizes_raw() -> None:
@@ -130,7 +156,7 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "meeting-artifacts" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 4
         assert {event["data"]["platform"] for event in events} == {"feishu", "dingtalk", "wecom", "tencent-meeting"}
         assert all("../unsafe" not in (event["raw_ref"].get("path") or "") for event in events)
@@ -153,6 +179,9 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 4
+        assert manifest["meeting_artifact_event_count"] == 4
+        assert manifest["gap_event_count"] == 0
         assert manifest["platform_counts"]["tencent-meeting"] == 1
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["feishu", "dingtalk", "wecom", "tencent-meeting"]
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
@@ -174,6 +203,7 @@ def test_collect_platform_exports_and_sanitizes_raw() -> None:
         assert len(manifest["source_audit"]["path_results"]) == 4
         assert manifest["source_audit"]["archive_count"] == 1
         assert manifest["source_audit"]["archive_path_traversal_members_collected"] is False
+        assert_package_valid(out)
 
 
 def test_collect_meeting_scope_policy_filters_platform_participant_and_keyword() -> None:
@@ -229,11 +259,14 @@ def test_collect_meeting_scope_policy_filters_platform_participant_and_keyword()
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "meeting-artifacts" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 1
         assert events[0]["data"]["title"] == "投委会讨论半导体"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         policy = manifest["source_audit"]["meeting_scope_policy"]
+        assert manifest["event_count"] == 1
+        assert manifest["meeting_artifact_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         assert manifest["source_audit"]["candidate_record_count"] == 3
         assert manifest["source_audit"]["emitted_event_count"] == 1
         assert policy["enabled"] is True
@@ -241,6 +274,7 @@ def test_collect_meeting_scope_policy_filters_platform_participant_and_keyword()
         assert policy["filter_reason_counts"] == {"keyword_denied": 1, "source_platform_not_allowed": 1}
         assert manifest["source_audit"]["meeting_scope_policy_filtered_all"] is False
         assert manifest["source_audit"]["path_results"][0]["scope_policy_filtered_record_count"] == 2
+        assert_package_valid(out)
 
 
 def test_collect_meeting_scope_policy_filtered_all_status() -> None:
@@ -271,15 +305,68 @@ def test_collect_meeting_scope_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        events_path = out / "lake" / "meeting-artifacts" / "events.jsonl"
-        assert events_path.read_text(encoding="utf-8") == ""
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["schema"] == "collectorx.event.v1"
+        assert gap["collector"] == "meeting-artifacts"
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "meeting_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "meeting_artifact_collection_gap"
+        assert gap["data"]["candidate_record_count"] == 1
+        assert gap["data"]["meeting_artifact_event_count"] == 0
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"participant_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["investment_meeting_fact_claimed"] is False
+        assert gap["data"]["complete_meeting_corpus_claimed"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "meeting_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["meeting_artifact_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["source_audit"]["meeting_scope_policy"]["filter_reason_counts"] == {"participant_not_allowed": 1}
         assert manifest["source_audit"]["meeting_scope_policy_filtered_all"] is True
+        assert_package_valid(out)
+
+
+def test_collect_without_input_gap_package() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp) / "out"
+        subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["data"]["gap"] == "meeting_artifact_input_missing"
+        assert gap["data"]["status"] == "needs_meeting_artifact_input"
+        assert gap["data"]["candidate_record_count"] == 0
+        assert gap["data"]["meeting_artifact_event_count"] == 0
+        assert "collection_gap" in gap["privacy"]["contains"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["meeting_artifact_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["source_audit"]["input_count"] == 0
+        assert manifest["source_audit"]["resolved_input_file_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert_package_valid(out)
 
 
 if __name__ == "__main__":
@@ -287,4 +374,5 @@ if __name__ == "__main__":
     test_collect_platform_exports_and_sanitizes_raw()
     test_collect_meeting_scope_policy_filters_platform_participant_and_keyword()
     test_collect_meeting_scope_policy_filtered_all_status()
+    test_collect_without_input_gap_package()
     print("meeting-artifacts tests passed.")

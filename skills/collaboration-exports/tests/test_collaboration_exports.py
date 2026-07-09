@@ -12,7 +12,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "collaboration_exports.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 
 
 def read_events(out: Path, collector: str) -> list[dict]:
@@ -20,6 +22,22 @@ def read_events(out: Path, collector: str) -> list[dict]:
         json.loads(line)
         for line in (out / "lake" / collector / "events.jsonl").read_text(encoding="utf-8").splitlines()
     ]
+
+
+def assert_package_valid(out: Path, collector: str) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            collector,
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_dingtalk_package() -> None:
@@ -92,6 +110,9 @@ def test_collect_dingtalk_package() -> None:
         assert message["wiki_targets"] == ["internal.collaboration.messages"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collector"] == "dingtalk"
+        assert manifest["event_count"] == 5
+        assert manifest["collaboration_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_investment_collaboration"] is False
         assert manifest["field_coverage"]["field_counts"]["platform"] == 5
         assert manifest["collaboration_surface_summary"]["meeting_event_count"] == 2
@@ -104,6 +125,7 @@ def test_collect_dingtalk_package() -> None:
         assert manifest["source_audit"]["emitted_event_count"] == 5
         assert len(manifest["source_audit"]["path_results"]) == 3
         assert manifest["source_audit"]["archive_count"] == 1
+        assert_package_valid(out, "dingtalk")
 
 
 def test_collect_wecom_csv_and_gap() -> None:
@@ -130,6 +152,9 @@ def test_collect_wecom_csv_and_gap() -> None:
         assert {event["data"]["record_kind"] for event in events} == {"meeting", "message"}
         assert any(event["data"].get("meeting_url") == "https://work.weixin.qq.com/meeting" for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 2
+        assert manifest["collaboration_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
         assert manifest["field_coverage"]["field_counts"]["record_kind"] == 2
         assert manifest["collaboration_surface_summary"]["meeting_event_count"] == 1
         assert manifest["source_audit"]["input_count"] == 1
@@ -137,6 +162,7 @@ def test_collect_wecom_csv_and_gap() -> None:
         assert manifest["source_audit"]["extension_counts"] == {".csv": 1}
         assert manifest["source_audit"]["parsed_record_count"] == 2
         assert manifest["source_audit"]["emitted_event_count"] == 2
+        assert_package_valid(out, "wecom")
 
         subprocess.run(
             [sys.executable, str(SCRIPT), "collect", "--platform", "wecom", "--out-dir", str(gap_out)],
@@ -146,13 +172,25 @@ def test_collect_wecom_csv_and_gap() -> None:
         )
         gap_events = read_events(gap_out, "wecom")
         assert len(gap_events) == 1
+        assert gap_events[0]["kind"] == "profile"
+        assert gap_events[0]["time"]
         assert gap_events[0]["data"]["record_kind"] == "collector_gap"
+        assert gap_events[0]["data"]["gap"] == "wecom_authorized_input_missing"
+        assert gap_events[0]["data"]["status"] == "needs_wecom_authorized_input"
+        assert gap_events[0]["data"]["profile_type"] == "collaboration_collection_gap"
+        assert gap_events[0]["data"]["candidate_record_count"] == 0
+        assert gap_events[0]["data"]["collaboration_event_count"] == 0
+        assert "collection_gap" in gap_events[0]["privacy"]["contains"]
         gap_manifest = json.loads((gap_out / "manifest.json").read_text(encoding="utf-8"))
+        assert gap_manifest["event_count"] == 1
+        assert gap_manifest["collaboration_event_count"] == 0
+        assert gap_manifest["gap_event_count"] == 1
         assert gap_manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert gap_manifest["source_audit"]["input_count"] == 0
         assert gap_manifest["source_audit"]["resolved_input_file_count"] == 0
         assert gap_manifest["source_audit"]["parsed_record_count"] == 0
         assert gap_manifest["source_audit"]["emitted_event_count"] == 1
+        assert_package_valid(gap_out, "wecom")
 
 
 def test_collect_collaboration_scope_policy_filters_platform_chat_sender_and_keyword() -> None:
@@ -220,6 +258,9 @@ def test_collect_collaboration_scope_policy_filters_platform_chat_sender_and_key
         assert events[0]["data"]["content_preview"] == "讨论半导体订单和估值。"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         policy = manifest["source_audit"]["collaboration_scope_policy"]
+        assert manifest["event_count"] == 1
+        assert manifest["collaboration_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         assert manifest["source_audit"]["candidate_record_count"] == 3
         assert manifest["source_audit"]["emitted_event_count"] == 1
         assert policy["enabled"] is True
@@ -227,6 +268,7 @@ def test_collect_collaboration_scope_policy_filters_platform_chat_sender_and_key
         assert policy["filter_reason_counts"] == {"keyword_denied": 1, "source_platform_not_allowed": 1}
         assert manifest["source_audit"]["collaboration_scope_policy_filtered_all"] is False
         assert manifest["source_audit"]["path_results"][0]["scope_policy_filtered_record_count"] == 2
+        assert_package_valid(out, "dingtalk")
 
 
 def test_collect_collaboration_scope_policy_filtered_all_status() -> None:
@@ -268,15 +310,44 @@ def test_collect_collaboration_scope_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        events_path = out / "lake" / "dingtalk" / "events.jsonl"
-        assert events_path.read_text(encoding="utf-8") == ""
+        events = read_events(out, "dingtalk")
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["schema"] == "collectorx.event.v1"
+        assert gap["collector"] == "dingtalk"
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["record_kind"] == "collector_gap"
+        assert gap["data"]["gap"] == "collaboration_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "collaboration_collection_gap"
+        assert gap["data"]["candidate_record_count"] == 1
+        assert gap["data"]["collaboration_event_count"] == 0
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"chat_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["investment_collaboration_fact_claimed"] is False
+        assert gap["data"]["complete_collaboration_archive_claimed"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "collaboration_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["collaboration_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
+        assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["source_audit"]["collaboration_scope_policy"]["filter_reason_counts"] == {"chat_not_allowed": 1}
         assert manifest["source_audit"]["collaboration_scope_policy_filtered_all"] is True
+        assert_package_valid(out, "dingtalk")
 
 
 if __name__ == "__main__":

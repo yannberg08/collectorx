@@ -159,9 +159,9 @@ def collect_from_inputs_with_audit(
         "path_results": [],
     }
     if not paths:
-        events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_authorized_input_missing")]
-        audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
+        events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_authorized_input_missing", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
         return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
@@ -201,9 +201,15 @@ def collect_from_inputs_with_audit(
     if not events and audit["candidate_record_count"] and collaboration_scope_policy.get("enabled"):
         audit["emitted_event_count"] = 0
         finalize_audit(audit)
+        events = [gap_event(platform=platform, collected_at=collected_at, reason="collaboration_scope_policy_filtered_all", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
         return events, audit
     if not events:
-        events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_records_empty")]
+        audit["emitted_event_count"] = 0
+        finalize_audit(audit)
+        events = [gap_event(platform=platform, collected_at=collected_at, reason=f"{platform}_records_empty", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
+        return events, audit
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
@@ -629,6 +635,7 @@ def record_to_event(
         "archive_member": first(record, [SOURCE_MEMBER_KEY]),
     }
     raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
+    resolved_collected_at = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(platform, path, row, kind, title, event_time, text[:160]),
@@ -636,8 +643,8 @@ def record_to_event(
         "source": f"{display_platform(platform)}用户授权协作导出",
         "owner_scope": "personal",
         "kind": event_kind_for_record(kind),
-        "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "time": event_time or resolved_collected_at,
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -649,23 +656,63 @@ def record_to_event(
     }
 
 
-def gap_event(*, platform: str, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    platform: str,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    policy = audit.get("collaboration_scope_policy") if isinstance(audit.get("collaboration_scope_policy"), dict) else {}
+    status_by_reason = {
+        f"{platform}_authorized_input_missing": f"needs_{platform}_authorized_input",
+        f"{platform}_records_empty": "records_empty",
+        "collaboration_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    messages = {
+        f"{platform}_authorized_input_missing": f"No user-authorized {platform} collaboration export was provided.",
+        f"{platform}_records_empty": f"The authorized {platform} collaboration input did not contain readable records.",
+        "collaboration_scope_policy_filtered_all": "All user-authorized collaboration records were excluded by the authorization scope policy.",
+    }
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(platform, reason),
+        "id": stable_id(platform, "gap", reason, event_time),
         "collector": platform,
         "source": f"{display_platform(platform)}授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "record_kind": "collector_gap",
             "gap": reason,
-            "message": f"No user-authorized {platform} collaboration export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "collaboration_collection_gap",
+            "message": messages.get(reason, "Collaboration collection produced a traceable gap."),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "collaboration_event_count": 0,
+            "retained_record_count": 0,
+            "scope_policy_filtered_record_count": int(policy.get("filtered_record_count") or 0),
+            "scope_policy_filter_reason_counts": policy.get("filter_reason_counts") or {},
+            "policy_is_user_authorization_scope": bool(policy.get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "collaboration_fact_claimed": False,
+            "investment_collaboration_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_collaboration_archive_claimed": False,
+            "collaboration_service_token_collected": False,
+            "collector_writes_investor_wiki_directly": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(policy.get("enabled")),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
@@ -677,6 +724,11 @@ def build_manifest(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = [
+        event for event in events
+        if (event.get("data") or {}).get("record_kind") != "collector_gap"
+    ]
+    gap_event_count = len(events) - len(usable_events)
     kind_counts = Counter(event["kind"] for event in events)
     record_counts = Counter((event.get("data") or {}).get("record_kind", "unknown") for event in events)
     gap_only = bool(events) and set(record_counts) == {"collector_gap"}
@@ -686,11 +738,13 @@ def build_manifest(
         "collector": platform,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "collaboration_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "record_kind_counts": dict(sorted(record_counts.items())),
         "field_coverage": field_coverage(events),
         "collaboration_surface_summary": collaboration_surface_summary(events),
-        "source_audit": source_audit(events, collection_audit=collection_audit),
+        "source_audit": source_audit(usable_events, collection_audit=collection_audit),
         "evidence_policy": {
             "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
@@ -770,6 +824,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         "",
         f"- collector: `{manifest['collector']}`",
         f"- event_count: {manifest['event_count']}",
+        f"- collaboration_event_count: {manifest.get('collaboration_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- archive_member_events: {manifest['source_audit']['archive_member_event_count']}",

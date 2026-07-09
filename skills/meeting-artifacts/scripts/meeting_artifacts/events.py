@@ -231,6 +231,7 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
         "archive_member": first(record, [SOURCE_MEMBER_KEY]),
     }
     raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [])}
+    resolved_collected_at = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path_label, title, start_time, text[:160]),
@@ -238,8 +239,8 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
         "source": "用户授权会议产物",
         "owner_scope": "personal",
         "kind": "note",
-        "time": start_time,
-        "collected_at": collected_at or now_iso(),
+        "time": start_time or end_time or resolved_collected_at,
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -251,28 +252,73 @@ def artifact_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optio
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    policy = audit.get("meeting_scope_policy") if isinstance(audit.get("meeting_scope_policy"), dict) else {}
+    status_by_reason = {
+        "meeting_artifact_input_missing": "needs_meeting_artifact_input",
+        "meeting_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "meeting_artifact_records_empty": "records_empty",
+    }
+    messages = {
+        "meeting_artifact_input_missing": "No user-authorized meeting artifact file or folder was provided.",
+        "meeting_scope_policy_filtered_all": "All user-authorized meeting artifacts were excluded by the meeting authorization scope policy.",
+        "meeting_artifact_records_empty": "The authorized meeting input did not contain readable meeting artifact records.",
+    }
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(COLLECTOR, reason),
+        "id": stable_id(COLLECTOR, "gap", reason, event_time),
         "collector": COLLECTOR,
         "source": "会议产物授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized meeting artifact file or folder was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "meeting_artifact_collection_gap",
+            "message": messages.get(reason, "Meeting artifact collection produced a traceable gap."),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "meeting_artifact_event_count": 0,
+            "retained_artifact_count": 0,
+            "scope_policy_filtered_record_count": int(policy.get("filtered_record_count") or 0),
+            "scope_policy_filter_reason_counts": policy.get("filter_reason_counts") or {},
+            "policy_is_user_authorization_scope": bool(policy.get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "meeting_artifact_fact_claimed": False,
+            "investment_meeting_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_meeting_corpus_claimed": False,
+            "meeting_service_token_collected": False,
+            "recording_body_collected": False,
+            "collector_writes_investor_wiki_directly": False,
         },
-        "raw_ref": {"preflight": True},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(policy.get("enabled")),
+        },
         "privacy": {
             "sensitive": True,
             "local_only": True,
-            "contains": ["work_confidential"],
+            "contains": ["work_confidential", "collection_gap"],
         },
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
+
+
+def is_gap_event(event: Dict[str, Any]) -> bool:
+    data = event.get("data") or {}
+    return data.get("subtype") == "collector_gap" or data.get("action_type") == "collector_gap" or data.get("gap")
 
 
 def build_manifest(
@@ -281,9 +327,11 @@ def build_manifest(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    gap_event_count = len(events) - len(usable_events)
     kind_counts = Counter(event["kind"] for event in events)
-    type_counts = Counter((event.get("data") or {}).get("artifact_type", "unknown") for event in events)
-    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
+    type_counts = Counter((event.get("data") or {}).get("artifact_type", "unknown") for event in usable_events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
     scope_policy_filtered_all = bool((collection_audit or {}).get("meeting_scope_policy_filtered_all"))
     observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
@@ -299,6 +347,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "meeting_artifact_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "artifact_type_counts": dict(sorted(type_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
@@ -311,9 +361,9 @@ def build_manifest(
             "unknown_event_count": unknown_event_count,
             "real_account_validation": False,
         },
-        "field_coverage": field_coverage(events),
-        "meeting_surface_summary": meeting_surface_summary(events),
-        "source_audit": source_audit(events, collection_audit=collection_audit),
+        "field_coverage": field_coverage(usable_events),
+        "meeting_surface_summary": meeting_surface_summary(usable_events),
+        "source_audit": source_audit(usable_events, collection_audit=collection_audit),
         "evidence_policy": {
             "generic_collector": True,
             "collector_writes_investor_wiki_directly": False,
@@ -323,7 +373,7 @@ def build_manifest(
         },
         "collection_readiness": {
             "status": meeting_readiness_status(events, gap_only=gap_only, scope_policy_filtered_all=scope_policy_filtered_all),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "can_enter_finclaw": bool(usable_events) and not gap_only and not scope_policy_filtered_all,
             "can_claim_investment_meeting_minutes": False,
             "source_collection_scope": meeting_source_collection_scope(gap_only=gap_only, scope_policy_filtered_all=scope_policy_filtered_all),
             "platform_coverage_status": platform_coverage_status(events, missing_expected),
@@ -385,6 +435,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         "",
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
+        f"- meeting_artifact_event_count: {manifest.get('meeting_artifact_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",

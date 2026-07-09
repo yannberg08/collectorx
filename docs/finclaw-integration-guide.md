@@ -942,6 +942,10 @@ Current status:
   includes `collaboration_scope_policy`, candidate count, filtered count,
   reason counts, and `scope_policy_filtered_all` when all candidates are
   outside the authorized scope.
+- Missing input, empty readable records, and filtered-all collaboration scopes
+  emit `kind=profile` gap events. Route these to
+  `collectorx.data_quality.collection_gaps`; they are not collaboration facts
+  or investor Wiki facts.
 - Writes `manifest.field_coverage`, `collaboration_surface_summary`,
   `source_audit`, and `evidence_policy` so FinClaw can inspect message/meeting/
   file/contact coverage, ZIP provenance, total/skipped ZIP members, skip
@@ -979,6 +983,10 @@ Current status:
   `meeting_scope_policy`, candidate count, filtered count, reason counts, and
   `scope_policy_filtered_all` when every candidate meeting is outside the
   authorized scope.
+- Missing input, empty readable records, and filtered-all meeting scopes emit
+  `kind=profile` gap events. Route these to
+  `collectorx.data_quality.collection_gaps`; they are not meeting facts or
+  investor Wiki facts.
 - Writes `manifest.platform_coverage` with expected P1 meeting platforms,
   observed platforms, missing platforms, event counts, and
   `real_account_validation`.

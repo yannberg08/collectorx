@@ -1,6 +1,6 @@
 ---
 name: collaboration-exports
-description: 钉钉/企业微信通用协作导出采集器。采集用户授权的本地导出中的消息、会话、联系人、文件指针、会议指针，输出 dingtalk 或 wecom 的 CollectorX 事件；不直接判断投资含义。
+description: 钉钉/企业微信通用协作导出采集器。采集用户授权的本地导出中的消息、会话、联系人、文件指针、会议指针，输出 dingtalk 或 wecom 的 CollectorX 事件和 filtered-all/no-input gap package；不直接判断投资含义。
 ---
 
 # Collaboration Exports Collector
@@ -18,6 +18,9 @@ description: 钉钉/企业微信通用协作导出采集器。采集用户授权
 - 可选授权范围过滤：来源平台、记录类型、群聊/会话、发送人/接收人、参会人和关键词。
   过滤发生在事件写入 Lake 前，`manifest.source_audit.collaboration_scope_policy`
   记录候选记录数、过滤数量、原因计数和 `policy_does_not_assert_investment_relevance=true`。
+- 授权输入缺失、可读记录为空或授权范围过滤为空时，输出 `profile` gap 事件，
+  并在 manifest 中区分 `collaboration_event_count` 和 `gap_event_count`；
+  gap 只进入 `collectorx.data_quality.collection_gaps`。
 
 不采集：
 

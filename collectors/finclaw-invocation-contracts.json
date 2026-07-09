@@ -158,8 +158,8 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Provide authorized meeting minutes, transcripts, subtitles, platform exports, or ZIP packages; optionally choose source-platform, participant, and keyword allow/deny scope filters.",
-      "preflight": "Meeting artifact files are user-selected; optional scope filters are applied before Lake output; attachment/recording bodies are not assumed.",
-      "failure_state": "needs_authorized_meeting_export"
+      "preflight": "Meeting artifact files are user-selected; optional scope filters are applied before Lake output; attachment/recording bodies are not assumed; missing input or filtered-all scope produces a validator-safe profile gap package.",
+      "failure_state": "needs_authorized_meeting_export_or_scope_policy_retained_records"
     },
     {
       "id": "dingtalk",
@@ -167,8 +167,8 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Provide authorized DingTalk collaboration exports or ZIP packages; optionally choose source-platform, record-kind, chat, sender, participant, and keyword allow/deny scope filters.",
-      "preflight": "Input is user-authorized; optional scope filters are applied before Lake output; credentials and file bodies are excluded unless explicitly handled by another collector.",
-      "failure_state": "needs_authorized_dingtalk_export"
+      "preflight": "Input is user-authorized; optional scope filters are applied before Lake output; credentials and file bodies are excluded unless explicitly handled by another collector; missing input or filtered-all scope produces a validator-safe profile gap package.",
+      "failure_state": "needs_authorized_dingtalk_export_or_scope_policy_retained_records"
     },
     {
       "id": "wecom",
@@ -176,8 +176,8 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Provide authorized WeCom collaboration exports or ZIP packages; optionally choose source-platform, record-kind, chat, sender, participant, and keyword allow/deny scope filters.",
-      "preflight": "Input is user-authorized; optional scope filters are applied before Lake output; credentials and file bodies are excluded unless explicitly handled by another collector.",
-      "failure_state": "needs_authorized_wecom_export"
+      "preflight": "Input is user-authorized; optional scope filters are applied before Lake output; credentials and file bodies are excluded unless explicitly handled by another collector; missing input or filtered-all scope produces a validator-safe profile gap package.",
+      "failure_state": "needs_authorized_wecom_export_or_scope_policy_retained_records"
     },
     {
       "id": "feishu",
