@@ -188,8 +188,12 @@ like:
 Run the project validation suite:
 
 ```bash
-bash test_collectors.sh
+PYTHON=.venv/bin/python bash test_collectors.sh
 ```
+
+`test_collectors.sh` selects Python 3.10+ when available. In this repository,
+using the bundled `.venv` keeps local, CI, and closeout validation on the same
+interpreter.
 
 The suite currently checks:
 

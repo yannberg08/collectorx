@@ -35,6 +35,9 @@ stop expanding and move into real-user validation.
 - `tools/test_finclaw_catalog.py` now verifies that the closeout handoff keeps
   the current catalog count, readiness distribution, priority distribution, and
   every catalog id in sync with `collectors/finclaw-investor-catalog.json`.
+- README and `docs/first-investor-loop.md` now use
+  `PYTHON=.venv/bin/python bash test_collectors.sh`, matching the closeout
+  checklist and avoiding host-Python 3.9 validation failures on this machine.
 
 ## Verification commands
 

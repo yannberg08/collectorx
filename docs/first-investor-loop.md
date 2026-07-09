@@ -44,7 +44,7 @@ The smoke test is included in `tools/validate_project.py`, so this loop runs
 whenever you run:
 
 ```bash
-bash test_collectors.sh
+PYTHON=.venv/bin/python bash test_collectors.sh
 ```
 
 ## Next Data Needed
