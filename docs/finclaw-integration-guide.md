@@ -1274,8 +1274,10 @@ Current status:
 - Optional scope filters can narrow Lake output by platform, action, source app,
   domain, creator, social topic, or keyword through allow/deny arguments.
   `manifest.source_audit.social_activity_scope_policy` records the policy and
-  filtered counts; if every candidate record is excluded, readiness becomes
-  `scope_policy_filtered_all`.
+  filtered counts; if every candidate record is excluded, the package emits one
+  validator-safe `social_activity_scope_policy_filtered_all` profile gap event,
+  readiness becomes `scope_policy_filtered_all`, and
+  `collection_readiness.can_enter_finclaw=false`.
 - Adds per-event `social_topics`, `primary_social_topic`, and
   `social_topic_terms` so FinClaw can map weak influence signals to macro,
   strategy, industry, fundamental, fund/wealth, trading review, risk control,
@@ -1297,6 +1299,10 @@ Current status:
   explicit no-investment-conclusion / no-platform-wide-scrape /
   no-full-creator-profile claims.
 - Does not claim investment influence directly.
+- `manifest.social_activity_event_count` and `manifest.gap_event_count`
+  distinguish usable social activity weak signals from no-input or filtered-all
+  collection gaps. Pure gap packages must not be fed to
+  `social-investment-influence` as influence facts.
 - Feed `lake/social-activity/events.jsonl` into `social-investment-influence`
   lens. The lens mirrors social-topic/platform/action/creator summaries and
   writes `social_influence_boundary_proof`, but resulting evidence remains weak

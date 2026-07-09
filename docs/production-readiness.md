@@ -16,7 +16,33 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`pro-terminal-usage` now emits validator-safe filtered-all and no-input gap
+`social-activity` now emits validator-safe filtered-all and no-input gap
+packages:
+
+- When user-authorized Weibo, Bilibili, or Xiaohongshu activity records are
+  fully excluded by platform, action, source-app, domain, creator, topic, or
+  keyword authorization filters, the Lake file contains one profile gap event
+  instead of an empty package.
+- The filtered-all gap reason is `social_activity_scope_policy_filtered_all`;
+  readiness remains `scope_policy_filtered_all` and
+  `collection_readiness.can_enter_finclaw=false`.
+- Missing or unusable authorized inputs emit
+  `social_activity_authorized_input_missing` or
+  `social_activity_records_empty` with the same validator-safe event shape.
+- Manifest `social_activity_event_count=0` and `gap_event_count=1` keep package
+  observability separate from real follow, like, favorite, watch, comment,
+  share, browser-history visit, creator, engagement, social-topic, or weak
+  influence evidence.
+- Gap events carry candidate/filter counts and reason summaries but no raw
+  local input path, credential, cookie, token, full creator profile, full
+  content body, unrelated browser-history row, platform-wide scrape, investment
+  influence fact, or investment conclusion.
+- The generic collector still does not write Investor Wiki evidence directly;
+  `social-investment-influence` remains the downstream weak-evidence lens.
+- Fixture tests now run the shared CollectorX package validator for normal,
+  no-input, and filtered-all packages.
+
+The prior completed wave: `pro-terminal-usage` now emits validator-safe filtered-all and no-input gap
 packages:
 
 - When user-authorized Wind, Choice, iFinD, or Bloomberg workflow records are
@@ -811,8 +837,10 @@ scope-policy audit for weak social activity packages:
 - `manifest.social_activity_boundary_proof.authorization_scope_boundary` gives
   FinClaw one stable field for checking whether the user's social-source
   authorization narrowed the weak influence evidence.
-- If all candidate records are outside the authorized scope, readiness reports
-  `scope_policy_filtered_all` and no synthetic success/gap event is written.
+- As of version `0.2.8`, if all candidate records are outside the authorized
+  scope, readiness reports `scope_policy_filtered_all` and the package emits
+  one validator-safe `social_activity_scope_policy_filtered_all` profile gap
+  event instead of an empty Lake file.
 - This improves user-authorization control for P2 social activity imports, but
   it does not claim real Weibo/Bilibili/Xiaohongshu account exports, real
   browser path validation, default creator/domain allowlists, topic
@@ -1228,7 +1256,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 | --- | --- | --- | --- |
 | 富途/老虎/盈透/港美股券商 | `hk-us-brokerage` local read-only CSV/JSON/Excel/ZIP export collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, broker coverage, trade-surface coverage, field coverage, strong-trade surface summary, account-boundary summary, currency/market summary, fee/tax/margin summary, asset value summary, cashflow activity summary, income return summary, order execution summary, broker/account/subtype/symbol/market/currency/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages, ZIP provenance, per-input parse results, skipped file/ZIP-member reasons, path-safety audit, and read-only evidence policy validation passed; no real local export found yet | Validate real Futu/Tiger/IBKR exports or read-only screens, broker-specific column maps, complete account-boundary proof, multi-currency assets, margin, tax, dividends, FX, authorization default scopes, and Windows/macOS/Linux paths |
 | Choice/Wind/同花顺 iFinD 使用痕迹 | `pro-terminal-usage` local CSV/JSON/Excel/HTML/TXT/LOG/ZIP workflow collector | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, terminal coverage, activity coverage, workflow-field coverage, workflow-topic coverage, workflow surface summary, workflow intensity summary, query terms, parameters, export paths, row counts, workspace/template IDs, object counts, terminal/activity/workspace/project/dataset/field/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages, workflow/gap event counts, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, license policy, and evidence policy validation passed; real licensed terminal exports pending | Validate real Wind/Choice/iFinD/Bloomberg authorized workflow exports, user workspace paths, watchlists, searches, downloads, templates, datasets, fields, function codes, query/export lineage, authorization default scopes, workflow-topic false positives, and license-safe boundaries |
-| B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP/browser-history activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, Chromium browser-history copy, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, platform/action/source-app/domain/creator/topic/keyword scope-policy audit, filtered-all readiness, social activity boundary proof, social influence boundary proof, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, domain filtering, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator/domain default allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
+| B站/微博/小红书投资内容痕迹 | `social-activity` local JSON/CSV/Excel/HTML/TXT/ZIP/browser-history activity collector + `social-investment-influence` lens classifier | `baseline+audit`; fixture validation passed; multi-section JSON, Excel, ZIP, Chromium browser-history copy, weak-evidence policy, platform coverage, action coverage, weak-signal-field coverage, social-topic coverage, influence surface summary, browser-history source/visit/transition summary, platform/action/source-app/domain/creator/topic/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages, social/gap event counts, social activity boundary proof, social influence boundary proof, per-input parse results, skipped file/ZIP-member reasons, ZIP provenance, source audit, limit truncation, domain filtering, and preview-only content policy validation passed; real account/export adapters pending | Validate real Weibo/Bilibili/Xiaohongshu exports, real Chromium/Safari/Windows/Linux browser-history paths, watch/favorite/like/follow/comment/share surfaces, platform allowlists, creator/domain default allowlists, engagement fields, social-topic false positives, and weak-evidence backtest |
 
 ## Deep-Designed Existing Collectors
 

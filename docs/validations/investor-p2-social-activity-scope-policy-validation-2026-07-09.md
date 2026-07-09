@@ -2,9 +2,11 @@
 
 ## Scope
 
-This validation covers `social-activity` `0.2.7`, the generic weak-evidence
+This validation originally covered `social-activity` `0.2.7`, the generic weak-evidence
 collector for user-authorized Weibo, Bilibili, and Xiaohongshu activity exports,
-browser-history copies, and ZIP packages.
+browser-history copies, and ZIP packages. Version `0.2.8` extends the
+filtered-all path into a validator-safe gap package; see
+`docs/validations/investor-p2-social-activity-gap-package-validation-2026-07-09.md`.
 
 The goal is to narrow authorized social activity records before Lake output
 while preserving weak influence metadata for records the user explicitly
@@ -25,9 +27,10 @@ authorizes.
   and `social_activity_scope_policy_filtered_all`.
 - `social_activity_boundary_proof.authorization_scope_boundary` gives FinClaw a
   stable place to inspect the user's social activity authorization policy.
-- If all candidate records are excluded by policy, readiness reports
-  `scope_policy_filtered_all` and the collector does not emit a synthetic gap
-  or success event.
+- As of version `0.2.8`, if all candidate records are excluded by policy,
+  readiness reports `scope_policy_filtered_all` and the collector emits one
+  `social_activity_scope_policy_filtered_all` profile gap event instead of an
+  empty package or synthetic social activity event.
 
 ## Validation Commands
 
@@ -61,7 +64,8 @@ PYTHON=.venv/bin/python bash test_collectors.sh
   skips, weak-evidence policy, social activity boundary proof, and preview-only
   content policy.
 - New scope-policy tests cover partial retention by platform/action/source-app/
-  domain/creator/topic/keyword and filtered-all readiness.
+  domain/creator/topic/keyword, filtered-all readiness, and the follow-up
+  validator-safe gap package.
 - FinClaw catalog and batch runner tests passed.
 - Project validation passed.
 - Full collector regression suite passed.

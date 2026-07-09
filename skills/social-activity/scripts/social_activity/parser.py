@@ -476,33 +476,36 @@ def collect_from_inputs_with_audit(
         if limit is not None and len(events) >= limit:
             break
 
+    audit["candidate_record_count"] = candidate_record_count
+    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
+    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     scope_policy_filtered_all = (
         policy["enabled"]
         and candidate_record_count > 0
         and scope_policy_filtered_record_count == candidate_record_count
         and not events
     )
-    if not events and not scope_policy_filtered_all:
-        reason = (
-            "social_activity_authorized_input_missing"
-            if not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0)
-            else "social_activity_records_empty"
-        )
-        events = [gap_event(collected_at=collected_at, reason=reason)]
-    audit["candidate_record_count"] = candidate_record_count
-    audit["scope_policy_filtered_record_count"] = scope_policy_filtered_record_count
-    audit["scope_policy_filter_reason_counts"] = dict(sorted(scope_policy_filter_reason_counts.items()))
     audit["social_activity_scope_policy_filtered_all"] = scope_policy_filtered_all
     audit["parsed_record_count"] = candidate_record_count
+    audit["extension_counts"] = dict(sorted(extension_counts.items()))
+    audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
+    audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
+    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
+
+    if not events:
+        if scope_policy_filtered_all:
+            reason = "social_activity_scope_policy_filtered_all"
+        elif not input_list or (audit["input_missing_count"] and audit["resolved_input_file_count"] == 0):
+            reason = "social_activity_authorized_input_missing"
+        else:
+            reason = "social_activity_records_empty"
+        events = [gap_event(collected_at=collected_at, reason=reason, collection_audit=audit)]
+
     audit["emitted_event_count"] = len(events)
     audit["browser_history_event_count"] = sum(
         1 for event in usable_social_events(events) if str((event.get("data") or {}).get("source_app", "")).endswith("_history")
     )
     audit["browser_history_source_apps"] = sorted(browser_history_source_apps)
-    audit["extension_counts"] = dict(sorted(extension_counts.items()))
-    audit["skipped_extension_counts"] = dict(sorted(skipped_extension_counts.items()))
-    audit["skipped_reason_counts"] = dict(sorted(skipped_reason_counts.items()))
-    audit["skipped_archive_member_reason_counts"] = dict(sorted(skipped_archive_member_reason_counts.items()))
     audit["archive_member_event_count"] = sum(1 for event in usable_social_events(events) if (event.get("raw_ref") or {}).get("archive_member"))
     return events, audit
 
@@ -1179,7 +1182,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         action_type=action_type,
         platform=platform,
     )
-    event_time = first(record, ["time", "date", "created_at", "updated_at", "watched_at", "liked_at", "favorited_at", "commented_at", "时间", "日期", "观看时间", "收藏时间", "点赞时间", "评论时间"])
+    event_time_value = first(record, ["time", "date", "created_at", "updated_at", "watched_at", "liked_at", "favorited_at", "commented_at", "时间", "日期", "观看时间", "收藏时间", "点赞时间", "评论时间"])
+    event_time = str(event_time_value) if event_time_value not in (None, "") else (collected_at or now_iso())
     data = {
         "action_type": action_type,
         "platform": platform,
@@ -1240,7 +1244,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "owner_scope": "personal",
         "kind": kind_for_action(action_type),
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": collected_at or event_time or now_iso(),
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -1252,25 +1256,69 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    status_by_reason = {
+        "social_activity_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "social_activity_authorized_input_missing": "needs_social_activity_input",
+        "social_activity_records_empty": "no_social_activity_records",
+    }
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(COLLECTOR, reason),
         "collector": COLLECTOR,
         "source": "社交平台用户活动授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
             "action_type": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized Weibo/Bilibili/Xiaohongshu activity export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "social_activity_collection_gap",
+            "message": gap_message(reason),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "social_activity_event_count": 0,
+            "retained_event_count": 0,
+            "scope_policy_filtered_record_count": int(audit.get("scope_policy_filtered_record_count") or 0),
+            "scope_policy_filter_reason_counts": audit.get("scope_policy_filter_reason_counts") or {},
+            "policy_is_user_authorization_scope": bool((audit.get("social_activity_scope_policy") or {}).get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "social_activity_fact_claimed": False,
+            "investment_influence_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_social_activity_history_claimed": False,
+            "platform_wide_scrape_performed": False,
+            "full_creator_profile_scraped": False,
+            "full_content_mirrored": False,
+            "unrelated_browser_history_collected": False,
+            "private_platform_credentials_collected": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool((audit.get("social_activity_scope_policy") or {}).get("enabled")),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
+
+
+def gap_message(reason: str) -> str:
+    messages = {
+        "social_activity_scope_policy_filtered_all": "All user-authorized social activity records were excluded by the authorization scope policy.",
+        "social_activity_authorized_input_missing": "No user-authorized Weibo/Bilibili/Xiaohongshu activity export was provided.",
+        "social_activity_records_empty": "The authorized social activity input did not contain usable social activity records.",
+    }
+    return messages.get(reason, "Social activity collection produced a traceable gap.")
 
 
 def infer_action_type(record: Dict[str, Any], path_label: str) -> str:
@@ -1347,11 +1395,14 @@ def build_manifest(
     collected_at: Optional[str] = None,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
+    usable_events = usable_social_events(events)
+    social_activity_event_count = len(usable_events)
+    gap_event_count = len(events) - social_activity_event_count
     kind_counts = Counter(event["kind"] for event in events)
-    action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in events)
-    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in events)
+    action_counts = Counter((event.get("data") or {}).get("action_type", "unknown") for event in usable_events)
+    platform_counts = Counter((event.get("data") or {}).get("platform", "unknown") for event in usable_events)
     collection_audit = collection_audit or {}
-    gap_only = bool(events) and set(action_counts) == {"collector_gap"}
+    gap_only = bool(events) and social_activity_event_count == 0 and gap_event_count == len(events)
     scope_policy_filtered_all = bool(collection_audit.get("social_activity_scope_policy_filtered_all"))
     no_events = not events
     observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
@@ -1364,7 +1415,7 @@ def build_manifest(
     unknown_action_count = sum(count for action, count in action_counts.items() if action not in EXPECTED_SOCIAL_ACTIONS and action != "collector_gap")
     field_counts = Counter(
         field
-        for event in events
+        for event in usable_events
         for field in RECOMMENDED_WEAK_SIGNAL_FIELDS
         if (event.get("data") or {}).get(field) not in (None, "", [])
     )
@@ -1375,6 +1426,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "social_activity_event_count": social_activity_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
@@ -1592,7 +1645,10 @@ def social_activity_boundary_proof(
         gap_reason = None
         if events:
             gap_reason = (events[0].get("data") or {}).get("gap")
-        proof_level = "no_authorized_social_activity_input" if gap_reason == "social_activity_authorized_input_missing" else "no_usable_social_activity_records"
+        if gap_reason == "social_activity_authorized_input_missing" or audit.get("input_missing_count") or not audit.get("input_count"):
+            proof_level = "no_authorized_social_activity_input"
+        else:
+            proof_level = "no_usable_social_activity_records"
     elif all_expected_platforms and all_expected_actions and all_recommended_fields and all_expected_topics:
         proof_level = "strong_partial_social_activity_boundary"
     elif len(observed_expected_platforms) >= 2 and len(observed_expected_actions) >= 3 and surface["events_with_social_topics"] > 0:
@@ -1893,6 +1949,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         "",
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
+        f"- social_activity_event_count: {manifest.get('social_activity_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",

@@ -15,7 +15,30 @@ import openpyxl
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "social_activity.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def read_events(out: Path) -> list[dict]:
+    event_file = out / "lake" / "social-activity" / "events.jsonl"
+    return [json.loads(line) for line in event_file.read_text(encoding="utf-8").splitlines()]
+
+
+def assert_package_valid(out: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "social-activity",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_social_activity_exports() -> None:
@@ -77,7 +100,8 @@ def test_collect_social_activity_exports() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 5
         assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
         assert {event["data"]["action_type"] for event in events} == {"comment", "follow", "like", "saved_page", "watch"}
@@ -91,6 +115,8 @@ def test_collect_social_activity_exports() -> None:
         game = next(event for event in events if event["data"].get("title") == "游戏直播剪辑")
         assert "social_topics" not in game["data"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["social_activity_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
         assert manifest["influence_surface_summary"]["events_with_social_topics"] == 4
         assert manifest["influence_surface_summary"]["social_topic_counts"]["fund_wealth"] == 2
         assert manifest["collection_readiness"]["can_claim_investment_influence"] is False
@@ -180,7 +206,8 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 8
         assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
         serialized = json.dumps(events, ensure_ascii=False)
@@ -204,6 +231,8 @@ def test_collect_nested_sections_workbook_and_weak_policy() -> None:
         assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         assert all(event["data"]["requires_corroboration"] is True for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["social_activity_event_count"] == 8
+        assert manifest["gap_event_count"] == 0
         assert manifest["action_counts"]["favorite"] == 2
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["weibo", "bilibili", "xiaohongshu"]
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
@@ -317,10 +346,13 @@ def test_collect_zip_limit_counts_only_emitted_records() -> None:
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         source_audit = manifest["source_audit"]
         assert len(events) == 1
+        assert manifest["social_activity_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         assert source_audit["limit_reached"] is True
         assert source_audit["archive_member_event_count"] == 1
         assert source_audit["parsed_record_count"] == 1
@@ -389,7 +421,8 @@ def test_collect_browser_history_copy_filters_social_domains() -> None:
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 3
         assert {event["data"]["platform"] for event in events} == {"bilibili", "weibo", "xiaohongshu"}
         assert {event["data"]["source_app"] for event in events} == {"chromium_history"}
@@ -401,6 +434,8 @@ def test_collect_browser_history_copy_filters_social_domains() -> None:
         assert bilibili["data"]["transition_type"] == "typed"
         assert bilibili["raw_ref"]["source_app"] == "chromium_history"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["social_activity_event_count"] == 3
+        assert manifest["gap_event_count"] == 0
         assert manifest["source_audit"]["source_type"] == "authorized_social_activity_export_or_browser_history_copy"
         assert manifest["source_audit"]["browser_history_input_count"] == 1
         assert manifest["source_audit"]["browser_history_event_count"] == 3
@@ -536,7 +571,8 @@ def test_collect_respects_social_scope_policy() -> None:
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         assert len(events) == 1
         assert events[0]["data"]["platform"] == "weibo"
         assert events[0]["data"]["action_type"] == "favorite"
@@ -545,6 +581,8 @@ def test_collect_respects_social_scope_policy() -> None:
         assert events[0]["data"]["creator"] == "财经博主A"
         assert "market_strategy" in events[0]["data"]["social_topics"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["social_activity_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 9
         assert source_audit["parsed_record_count"] == 9
@@ -609,16 +647,51 @@ def test_collect_social_scope_policy_filtered_all_is_not_success() -> None:
                 str(out),
                 "--allow-platform",
                 "weibo",
+                "--collected-at",
+                "2026-07-08T05:00:00+08:00",
             ],
             check=True,
             text=True,
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-        assert events == []
+        assert_package_valid(out)
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T05:00:00+08:00"
+        assert gap["collected_at"] == "2026-07-08T05:00:00+08:00"
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "social_activity_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "social_activity_collection_gap"
+        assert gap["data"]["candidate_record_count"] == 1
+        assert gap["data"]["social_activity_event_count"] == 0
+        assert gap["data"]["retained_event_count"] == 0
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"platform_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["policy_does_not_assert_investment_relevance"] is True
+        assert gap["data"]["social_activity_fact_claimed"] is False
+        assert gap["data"]["investment_influence_fact_claimed"] is False
+        assert gap["data"]["investment_conclusion_claimed"] is False
+        assert gap["data"]["platform_wide_scrape_performed"] is False
+        assert gap["data"]["full_content_mirrored"] is False
+        assert gap["data"]["private_platform_credentials_collected"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "social_activity_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
+        assert str(export) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["social_activity_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
@@ -628,7 +701,7 @@ def test_collect_social_scope_policy_filtered_all_is_not_success() -> None:
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 1
         assert source_audit["parsed_record_count"] == 1
-        assert source_audit["emitted_event_count"] == 0
+        assert source_audit["emitted_event_count"] == 1
         assert source_audit["scope_policy_filtered_record_count"] == 1
         assert source_audit["scope_policy_filter_reason_counts"] == {"platform_not_allowed": 1}
         assert source_audit["social_activity_scope_policy_filtered_all"] is True
@@ -651,16 +724,31 @@ def test_collect_missing_input_writes_gap_audit() -> None:
                 str(missing),
                 "--out-dir",
                 str(out),
+                "--collected-at",
+                "2026-07-08T05:00:00+08:00",
             ],
             check=True,
             text=True,
             capture_output=True,
         )
 
-        events = [json.loads(line) for line in (out / "lake" / "social-activity" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        assert_package_valid(out)
+        events = read_events(out)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"] == "2026-07-08T05:00:00+08:00"
+        assert events[0]["data"]["subtype"] == "collector_gap"
         assert events[0]["data"]["gap"] == "social_activity_authorized_input_missing"
+        assert events[0]["data"]["status"] == "needs_social_activity_input"
+        assert events[0]["data"]["candidate_record_count"] == 0
+        assert events[0]["data"]["social_activity_event_count"] == 0
+        assert events[0]["data"]["social_activity_fact_claimed"] is False
+        assert events[0]["data"]["investment_influence_fact_claimed"] is False
+        assert str(missing) not in json.dumps(events[0], ensure_ascii=False)
+        assert manifest["event_count"] == 1
+        assert manifest["social_activity_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_social_activity_input"
         assert manifest["social_activity_boundary_proof"]["proof_level"] == "no_authorized_social_activity_input"
         assert manifest["social_activity_boundary_proof"]["can_enter_finclaw_lake"] is False
