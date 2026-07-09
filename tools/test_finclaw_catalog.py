@@ -623,6 +623,124 @@ def test_readiness_review_require_any_eligible_fails_without_valid_evidence() ->
     assert packet["summary"]["blocked_from_human_review"] == 12
 
 
+def test_readiness_change_audit_allows_candidate_change_with_verified_review() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        artifact_root = root / "artifacts"
+        ths_artifact = artifact_root / "ths" / "manifest.json"
+        ths_artifact.parent.mkdir(parents=True)
+        ths_artifact.write_text('{"collector":"ths-portfolio","real_validation":true}', encoding="utf-8")
+        ths_sha256 = hashlib.sha256(ths_artifact.read_bytes()).hexdigest()
+
+        evidence_path = root / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [
+                        {
+                            "record_id": "ths-real-001",
+                            "collector_id": "ths-portfolio",
+                            "result": "pass",
+                            "decision": "ready_for_readiness_review",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_export", "real_device", "package_validation"],
+                            "artifacts": [{"path": "ths/manifest.json", "sha256": ths_sha256}],
+                            "validated_at": "2026-07-09T19:00:00+08:00",
+                            "validated_by": "qa-owner",
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        candidate = json.loads((ROOT / "collectors" / "finclaw-investor-catalog.json").read_text(encoding="utf-8"))
+        for entry in candidate["entries"]:
+            if entry["id"] == "ths-portfolio":
+                entry["readiness"] = "production-candidate"
+                entry["gate"] = "G5"
+                entry["production_gap"] = ""
+                break
+        candidate_path = root / "candidate-catalog.json"
+        candidate_path.write_text(json.dumps(candidate, ensure_ascii=False), encoding="utf-8")
+
+        audit = run_json(
+            "readiness-change-audit",
+            "--candidate-catalog",
+            str(candidate_path),
+            "--evidence",
+            str(evidence_path),
+            "--artifact-root",
+            str(artifact_root),
+            "--json",
+            "--require-clean",
+        )
+
+    assert audit["schema"] == "collectorx.finclaw_readiness_change_audit.v1"
+    assert audit["artifact_verification"] == {"enabled": True, "artifact_root": str(artifact_root)}
+    assert audit["summary"]["changed_entries"] == 1
+    assert audit["summary"]["allowed_changes"] == 1
+    assert audit["summary"]["blocked_changes"] == 0
+    change = audit["changes"][0]
+    assert change["id"] == "ths-portfolio"
+    assert change["status"] == "allowed"
+    assert "readiness_promoted" in change["change_types"]
+    assert "production_gap_cleared" in change["change_types"]
+    assert "gate_changed" in change["change_types"]
+    assert change["eligible_review"]["accepted_evidence"]["record_id"] == "ths-real-001"
+    assert change["catalog_update_allowed_by_tool"] is False
+
+
+def test_readiness_change_audit_blocks_candidate_change_without_verified_review() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        evidence_path = root / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        candidate = json.loads((ROOT / "collectors" / "finclaw-investor-catalog.json").read_text(encoding="utf-8"))
+        for entry in candidate["entries"]:
+            if entry["id"] == "ths-portfolio":
+                entry["readiness"] = "production-candidate"
+                entry["gate"] = "G5"
+                entry["production_gap"] = ""
+                break
+        candidate_path = root / "candidate-catalog.json"
+        candidate_path.write_text(json.dumps(candidate, ensure_ascii=False), encoding="utf-8")
+
+        proc = run_proc(
+            "readiness-change-audit",
+            "--candidate-catalog",
+            str(candidate_path),
+            "--evidence",
+            str(evidence_path),
+            "--artifact-root",
+            str(root / "artifacts"),
+            "--json",
+            "--require-clean",
+        )
+
+    assert proc.returncode == 2
+    audit = json.loads(proc.stdout)
+    assert audit["summary"]["changed_entries"] == 1
+    assert audit["summary"]["allowed_changes"] == 0
+    assert audit["summary"]["blocked_changes"] == 1
+    change = audit["changes"][0]
+    assert change["id"] == "ths-portfolio"
+    assert change["status"] == "blocked"
+    assert "missing_eligible_readiness_review" in change["issues"]
+
+
 def stage_by_name(runbook: dict[str, object], name: str) -> dict[str, object]:
     stages = runbook["stages"]
     assert isinstance(stages, list)
@@ -815,9 +933,11 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     assert "validation-evidence --evidence" in handoff
     assert "--verify-artifacts --artifact-root" in handoff
     assert "readiness-review --evidence" in handoff
+    assert "readiness-change-audit --candidate-catalog" in handoff
     assert "collectorx.finclaw_real_validation_evidence.v1" in evidence_ledger
     assert "validation-template" in evidence_ledger
     assert "insufficient_evidence" in evidence_ledger
+    assert "readiness-change-audit" in evidence_ledger
     assert "sha256" in evidence_ledger
     assert "catalog_update_allowed_by_tool" in evidence_ledger
     assert "does not edit" in evidence_ledger
@@ -845,6 +965,8 @@ def main() -> int:
     test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps()
     test_readiness_review_packet_requires_audited_evidence()
     test_readiness_review_require_any_eligible_fails_without_valid_evidence()
+    test_readiness_change_audit_allows_candidate_change_with_verified_review()
+    test_readiness_change_audit_blocks_candidate_change_without_verified_review()
     test_runbook_groups_p0_entries_by_product_stage()
     test_runbook_respects_explicit_lens_input_over_auto_link()
     test_runbook_can_disable_auto_upstream_linking()

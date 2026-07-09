@@ -77,6 +77,10 @@ stop expanding and move into real-user validation.
 - `tools/finclaw_catalog.py readiness-review --evidence <ledger> --json`
   turns accepted validation evidence into a human review packet with eligible
   and blocked entries, required checks, and a non-editing catalog policy.
+- `tools/finclaw_catalog.py readiness-change-audit --candidate-catalog <path>
+  --evidence <ledger> --artifact-root <root> --json --require-clean` blocks
+  proposed catalog readiness, gate, or production-gap changes that are not
+  backed by verified review evidence.
 - `docs/real-validation-evidence-ledger.md` documents the evidence ledger shape
   and the readiness boundary.
 
@@ -95,6 +99,7 @@ python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --verify-artifacts --artifact-root <artifact-root> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --verify-artifacts --artifact-root <artifact-root> --json
+.venv/bin/python tools/finclaw_catalog.py readiness-change-audit --candidate-catalog <candidate-catalog.json> --evidence <ledger> --artifact-root <artifact-root> --json --require-clean
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```

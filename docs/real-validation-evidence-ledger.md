@@ -24,6 +24,12 @@ collector has enough evidence to enter a human readiness review.
   --verify-artifacts \
   --artifact-root docs/validations/artifacts \
   --json
+.venv/bin/python tools/finclaw_catalog.py readiness-change-audit \
+  --candidate-catalog /path/to/proposed/finclaw-investor-catalog.json \
+  --evidence docs/validations/real-validation-evidence.json \
+  --artifact-root docs/validations/artifacts \
+  --json \
+  --require-clean
 ```
 
 Use `--require-all-review-ready` in release automation only when every selected
@@ -123,3 +129,9 @@ Passing `validation-evidence` does not edit
 `collectors/finclaw-investor-catalog.json`. A human release review must inspect
 the artifacts, update the catalog readiness and production gap explicitly, run
 the full validation suite, and commit that change separately.
+
+Before committing that separate catalog change, run `readiness-change-audit`
+against the proposed catalog. The audit compares the proposed
+`readiness`/`gate`/`production_gap` changes against the verified readiness review
+packet and blocks unexplained promotions, gap changes, new entries, or removed
+entries.

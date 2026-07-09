@@ -783,6 +783,13 @@ GAP_CLOSING_DECISIONS = {
     "post_guarded_gap_closed",
     "ready_for_readiness_review",
 }
+READINESS_RANK = {
+    "migrated-review": 0,
+    "baseline": 1,
+    "baseline+audit": 2,
+    "deep-beta": 3,
+    "production-candidate": 4,
+}
 
 
 def template_decision_for_item(item: dict[str, Any]) -> str:
@@ -1308,6 +1315,222 @@ def cmd_readiness_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def catalog_entries_by_id(catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    entries = catalog.get("entries", [])
+    if not isinstance(entries, list):
+        raise SystemExit("catalog entries must be a list")
+    return {str(entry.get("id")): entry for entry in entries if isinstance(entry, dict) and entry.get("id")}
+
+
+def readiness_rank(readiness: str) -> int | None:
+    return READINESS_RANK.get(readiness)
+
+
+def readiness_change_types(base: dict[str, Any], candidate: dict[str, Any]) -> list[str]:
+    changes: list[str] = []
+    base_readiness = str(base.get("readiness", ""))
+    candidate_readiness = str(candidate.get("readiness", ""))
+    if base_readiness != candidate_readiness:
+        changes.append("readiness_changed")
+        base_rank = readiness_rank(base_readiness)
+        candidate_rank = readiness_rank(candidate_readiness)
+        if base_rank is None or candidate_rank is None:
+            changes.append("readiness_rank_unknown")
+        elif candidate_rank > base_rank:
+            changes.append("readiness_promoted")
+        elif candidate_rank < base_rank:
+            changes.append("readiness_lowered")
+
+    base_gap = str(base.get("production_gap", "")).strip()
+    candidate_gap = str(candidate.get("production_gap", "")).strip()
+    if base_gap != candidate_gap:
+        changes.append("production_gap_changed")
+        if base_gap and not candidate_gap:
+            changes.append("production_gap_cleared")
+        elif not base_gap and candidate_gap:
+            changes.append("production_gap_added")
+
+    if str(base.get("gate", "")).strip() != str(candidate.get("gate", "")).strip():
+        changes.append("gate_changed")
+    return changes
+
+
+def readiness_change_requires_review(change_types: list[str]) -> bool:
+    return any(
+        change in change_types
+        for change in {
+            "readiness_promoted",
+            "readiness_rank_unknown",
+            "production_gap_changed",
+            "production_gap_cleared",
+            "gate_changed",
+        }
+    )
+
+
+def build_readiness_change_item(
+    collector_id: str,
+    base: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    eligible_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    change_types = readiness_change_types(base, candidate)
+    if not change_types:
+        return None
+    requires_review = readiness_change_requires_review(change_types)
+    eligible_review = eligible_by_id.get(collector_id)
+    issues: list[str] = []
+    if "readiness_rank_unknown" in change_types:
+        issues.append("unknown_readiness_rank")
+    if requires_review and not eligible_review:
+        issues.append("missing_eligible_readiness_review")
+    status = "allowed" if not issues else "blocked"
+    return {
+        "id": collector_id,
+        "status": status,
+        "requires_review": requires_review,
+        "change_types": change_types,
+        "issues": issues,
+        "base": {
+            "readiness": base.get("readiness"),
+            "gate": base.get("gate"),
+            "production_gap": base.get("production_gap"),
+        },
+        "candidate": {
+            "readiness": candidate.get("readiness"),
+            "gate": candidate.get("gate"),
+            "production_gap": candidate.get("production_gap"),
+        },
+        "eligible_review": {
+            "review_type": eligible_review.get("review_type"),
+            "next_action": eligible_review.get("next_action"),
+            "accepted_evidence": eligible_review.get("accepted_evidence"),
+        }
+        if eligible_review
+        else None,
+        "catalog_update_allowed_by_tool": False,
+        "catalog_update_policy": "manual_catalog_change_after_human_review_and_full_validation_only",
+    }
+
+
+def build_readiness_change_audit(
+    *,
+    candidate_catalog_path: Path,
+    evidence_path: Path,
+    artifact_root: Path | None = None,
+) -> dict[str, Any]:
+    base_catalog = load_catalog()
+    candidate_catalog = load_json(candidate_catalog_path)
+    base_by_id = catalog_entries_by_id(base_catalog)
+    candidate_by_id = catalog_entries_by_id(candidate_catalog)
+    review_packet = build_readiness_review_packet(
+        merged_entries(),
+        evidence_path=evidence_path,
+        verify_artifacts=True,
+        artifact_root=artifact_root,
+    )
+    eligible_by_id = {item["id"]: item for item in review_packet["eligible_reviews"]}
+
+    change_items: list[dict[str, Any]] = []
+    unchanged_count = 0
+    for collector_id, base in base_by_id.items():
+        candidate = candidate_by_id.get(collector_id)
+        if not candidate:
+            change_items.append(
+                {
+                    "id": collector_id,
+                    "status": "blocked",
+                    "requires_review": True,
+                    "change_types": ["entry_removed"],
+                    "issues": ["entry_missing_from_candidate_catalog"],
+                    "base": {
+                        "readiness": base.get("readiness"),
+                        "gate": base.get("gate"),
+                        "production_gap": base.get("production_gap"),
+                    },
+                    "candidate": None,
+                    "eligible_review": None,
+                    "catalog_update_allowed_by_tool": False,
+                    "catalog_update_policy": "manual_catalog_change_after_human_review_and_full_validation_only",
+                }
+            )
+            continue
+        item = build_readiness_change_item(collector_id, base, candidate, eligible_by_id=eligible_by_id)
+        if item:
+            change_items.append(item)
+        else:
+            unchanged_count += 1
+
+    for collector_id, candidate in candidate_by_id.items():
+        if collector_id in base_by_id:
+            continue
+        change_items.append(
+            {
+                "id": collector_id,
+                "status": "blocked",
+                "requires_review": True,
+                "change_types": ["entry_added"],
+                "issues": ["new_entry_not_in_base_catalog_scope"],
+                "base": None,
+                "candidate": {
+                    "readiness": candidate.get("readiness"),
+                    "gate": candidate.get("gate"),
+                    "production_gap": candidate.get("production_gap"),
+                },
+                "eligible_review": None,
+                "catalog_update_allowed_by_tool": False,
+                "catalog_update_policy": "manual_catalog_change_after_human_review_and_full_validation_only",
+            }
+        )
+
+    by_status = Counter(item["status"] for item in change_items)
+    return {
+        "schema": "collectorx.finclaw_readiness_change_audit.v1",
+        "base_catalog": str(CATALOG_PATH),
+        "candidate_catalog": str(candidate_catalog_path),
+        "readiness_review_packet_schema": review_packet["schema"],
+        "artifact_verification": review_packet["artifact_verification"],
+        "summary": {
+            "base_entries": len(base_by_id),
+            "candidate_entries": len(candidate_by_id),
+            "unchanged_entries": unchanged_count,
+            "changed_entries": len(change_items),
+            "allowed_changes": by_status.get("allowed", 0),
+            "blocked_changes": by_status.get("blocked", 0),
+            "by_status": dict(sorted(by_status.items())),
+        },
+        "changes": change_items,
+    }
+
+
+def print_human_readiness_change_audit(audit: dict[str, Any]) -> None:
+    summary = audit["summary"]
+    print(f"changed_entries: {summary['changed_entries']}")
+    print(f"allowed_changes: {summary['allowed_changes']}")
+    print(f"blocked_changes: {summary['blocked_changes']}")
+    for item in audit["changes"]:
+        print(f"  - {item['id']} ({item['status']}): {','.join(item['change_types'])}")
+        if item["issues"]:
+            print(f"    issues: {','.join(item['issues'])}")
+
+
+def cmd_readiness_change_audit(args: argparse.Namespace) -> int:
+    artifact_root = Path(args.artifact_root) if args.artifact_root else None
+    audit = build_readiness_change_audit(
+        candidate_catalog_path=Path(args.candidate_catalog),
+        evidence_path=Path(args.evidence),
+        artifact_root=artifact_root,
+    )
+    if args.json:
+        print(json.dumps(audit, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_readiness_change_audit(audit)
+    if args.require_clean and audit["summary"]["blocked_changes"]:
+        return 2
+    return 0
+
+
 def print_human_runbook(runbook: dict[str, Any]) -> None:
     print(f"total: {runbook['total']}")
     for stage in runbook["stages"]:
@@ -1503,6 +1726,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="Exit with status 2 unless at least one selected backlog item is ready for human review.",
     )
     readiness_review_parser.set_defaults(func=cmd_readiness_review)
+
+    readiness_change_parser = subparsers.add_parser(
+        "readiness-change-audit",
+        help="Audit candidate catalog readiness changes against verified review evidence.",
+    )
+    readiness_change_parser.add_argument(
+        "--candidate-catalog",
+        required=True,
+        help="Path to a proposed finclaw-investor-catalog.json.",
+    )
+    readiness_change_parser.add_argument("--evidence", required=True, help="Path to validation evidence JSON.")
+    readiness_change_parser.add_argument(
+        "--artifact-root",
+        help="Resolve relative artifact paths under this directory. Defaults to the evidence file directory.",
+    )
+    readiness_change_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    readiness_change_parser.add_argument(
+        "--require-clean",
+        action="store_true",
+        help="Exit with status 2 when any candidate catalog change is blocked.",
+    )
+    readiness_change_parser.set_defaults(func=cmd_readiness_change_audit)
 
     runbook_parser = subparsers.add_parser("runbook", help="Build a staged FinClaw collector runbook.")
     runbook_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])

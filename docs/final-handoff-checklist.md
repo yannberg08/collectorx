@@ -140,6 +140,7 @@ FinClaw should call the catalog helper instead of hand-building commands:
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence docs/validations/real-validation-evidence.json --verify-artifacts --artifact-root docs/validations/artifacts --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence docs/validations/real-validation-evidence.json --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence docs/validations/real-validation-evidence.json --verify-artifacts --artifact-root docs/validations/artifacts --json
+.venv/bin/python tools/finclaw_catalog.py readiness-change-audit --candidate-catalog <candidate-catalog.json> --evidence docs/validations/real-validation-evidence.json --artifact-root docs/validations/artifacts --json --require-clean
 .venv/bin/python tools/finclaw_catalog.py doctor --json
 .venv/bin/python tools/finclaw_catalog.py runbook --json
 .venv/bin/python tools/finclaw_catalog.py batch-manifest --json
@@ -183,6 +184,7 @@ The closeout state has been verified with:
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <evidence-ledger.json> --verify-artifacts --artifact-root <artifact-root> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <evidence-ledger.json> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <evidence-ledger.json> --verify-artifacts --artifact-root <artifact-root> --json
+.venv/bin/python tools/finclaw_catalog.py readiness-change-audit --candidate-catalog <candidate-catalog.json> --evidence <evidence-ledger.json> --artifact-root <artifact-root> --json --require-clean
 .venv/bin/python tools/test_finclaw_catalog.py
 .venv/bin/python tools/validate_project.py
 PYTHON=.venv/bin/python bash test_collectors.sh

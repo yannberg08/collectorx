@@ -89,8 +89,10 @@ Operational docs:
   that queue, `validation-evidence` to audit QA evidence records before a
   readiness review, `--verify-artifacts` to require local artifact path and
   sha256 checks, `readiness-review` to generate a human review packet that still
-  cannot edit catalog readiness, `runbook` for batch execution order,
-  `batch-manifest` for compact product execution manifests, and
+  cannot edit catalog readiness, `readiness-change-audit` to check proposed
+  catalog readiness changes against verified review evidence, `runbook` for
+  batch execution order, `batch-manifest` for compact product execution
+  manifests, and
   `plan --require-ready` before executing a single collector, then execute the
   returned `argv` list rather than reparsing the display command string.
   Runbook auto-links deterministic `<upstream-id-events-jsonl>` lens inputs

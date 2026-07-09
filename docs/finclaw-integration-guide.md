@@ -101,6 +101,12 @@ python3 tools/finclaw_catalog.py readiness-review \
   --verify-artifacts \
   --artifact-root docs/validations/artifacts \
   --json
+python3 tools/finclaw_catalog.py readiness-change-audit \
+  --candidate-catalog /path/to/proposed/finclaw-investor-catalog.json \
+  --evidence docs/validations/real-validation-evidence.json \
+  --artifact-root docs/validations/artifacts \
+  --json \
+  --require-clean
 python3 tools/finclaw_catalog.py runbook \
   --priority P0 \
   --out-dir-root /path/to/run \
@@ -143,6 +149,10 @@ itself. When release QA uses `--verify-artifacts`, local artifact paths and
 sha256 hashes must match before a record can pass. The `readiness-review` output
 turns that audit into a human review packet with eligible and blocked entries,
 required checks, and explicit `catalog_update_allowed_by_tool=false` policy.
+Before committing any `collectors/finclaw-investor-catalog.json` readiness,
+gate, or `production_gap` change, run `readiness-change-audit` against the
+proposed catalog; it blocks changes that cannot be explained by verified review
+evidence.
 
 For batch collection, FinClaw should use `runbook --json`. The runbook keeps the
 same item shape as `doctor` but groups entries into product execution stages:
