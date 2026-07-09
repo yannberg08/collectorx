@@ -1,6 +1,6 @@
 # FinClaw Investor Collector Final Handoff Checklist
 
-Date: 2026-07-09
+Date: 2026-07-10
 
 This is the final handoff checklist for the CollectorX P0/P1/P2 investor-avatar
 collector closeout. It records the state that FinClaw product, QA, scheduling,
@@ -17,6 +17,29 @@ and follow-up validation should use after the scope freeze.
   - `tools/finclaw_catalog.py closeout --json`
   - `docs/investor-collector-closeout.md`
   - `docs/finclaw-integration-guide.md`
+
+## Latest Verification Snapshot
+
+This handoff was rechecked after the 2026-07-10 scope correction that stops
+P0/P1/P2 expansion and treats the remaining work as validation evidence
+collection.
+
+- Current head: `45d37c6`
+- Latest GitHub Actions run:
+  <https://github.com/yannberg08/collectorx/actions/runs/29036855861>
+- Result: success
+- Workflow coverage: Ubuntu, macOS, and Windows project validation across the
+  configured Python matrix.
+- Canonical local gate:
+
+```bash
+.venv/bin/python tools/validate_project.py
+```
+
+The green project gate proves the checked-in collector contracts, fixtures,
+package validators, catalog helper, and cross-platform test harness are
+consistent. It does not prove that every catalog entry has real-account or
+real-device production validation.
 
 ## Current Catalog Counts
 

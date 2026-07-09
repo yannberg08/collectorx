@@ -110,6 +110,25 @@ Operational docs:
 - `docs/soulmirror-migration-policy.md` records the rule for copying existing
   SoulMirror/Hermes collectors without unnecessary rewrites.
 
+## Current FinClaw Delivery Boundary
+
+As of the 2026-07-10 closeout correction, the FinClaw investor-avatar scope is
+frozen. CollectorX has 30 cataloged investor entries, but that must not be read
+as 30 production collectors.
+
+- `eastmoney-portfolio` is the only guarded production candidate.
+- `ths-portfolio` and `qq` are invite-only deep beta.
+- The remaining 27 entries are `baseline+audit`: runnable beta, import/local,
+  managed-authorization, or downstream-lens paths that still need real user,
+  real account, real device, real export, or Wiki-backtest evidence before any
+  production promotion.
+- The next phase is validation evidence collection, not new collector
+  expansion. Use `tools/finclaw_catalog.py validation-backlog --json` and
+  `docs/real-validation-evidence-ledger.md` as the QA queue.
+
+This boundary exists to keep FinClaw from presenting placeholder or fixture-only
+work as a personal-data collector that is ready for broad production use.
+
 ## Current Collectors
 
 ### Generic Collectors
@@ -201,15 +220,15 @@ like:
 Run the project validation suite:
 
 ```bash
-.venv/bin/python skills/eastmoney-portfolio/tests/test_local_collect.py
-PYTHON=.venv/bin/python bash test_collectors.sh
+.venv/bin/python tools/validate_project.py
 ```
 
-`test_collectors.sh` selects Python 3.10+ when available. In this repository,
-using the bundled `.venv` keeps local, CI, and closeout validation on the same
-interpreter. `tools/validate_project.py` also checks that every `test_*.py` or
+`tools/validate_project.py` is the canonical local and CI gate. It sets the
+same UTF-8 execution defaults used by GitHub Actions, runs the EastMoney local
+collector tests, runs `test_collectors.sh`, and checks that every `test_*.py` or
 `*_test.py` file under `skills/` and `tools/` is declared in the main validation
-suite, so new collector tests cannot silently sit outside the gate.
+suite. `test_collectors.sh` remains a compatibility wrapper for lower-level
+debugging.
 
 The suite currently checks:
 
