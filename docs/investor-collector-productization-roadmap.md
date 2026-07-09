@@ -76,6 +76,22 @@ Expansion rule: add at most two new worker lanes after the previous worker
 lane has been reviewed or merged. Prefer one P0/P1 real-source or fixture gate
 and one P2/contract-hardening lane per batch so validation remains tractable.
 
+Parallel audit result: P0/P1/P2 catalog entries are no longer pure placeholders;
+the main remaining risk is real account/device validation, not missing parser
+scaffolding. The next safe parallel lanes are:
+
+- WeChat real-source unlock: `skills/wechat-export/**` plus validation notes.
+- Email real mailbox validation: `skills/email-collector/**` plus validation
+  notes.
+- Xueqiu real account/HAR/browser-history validation:
+  `skills/xueqiu-watchlist/**` and `skills/xueqiu-investor-activity/**`.
+- Collaboration/meeting real exports:
+  `skills/feishu/**`, `skills/meeting-artifacts/**`, and
+  `skills/collaboration-exports/**`.
+- P2 real-sample and weak-evidence hardening:
+  `skills/hk-us-brokerage/**`, `skills/pro-terminal-usage/**`, and
+  `skills/social-activity/**`, each in a separate write-bounded lane.
+
 ## Readiness Gates
 
 | Gate | Meaning | Proof |
@@ -4282,6 +4298,31 @@ Findings:
   validation and real Weibo/Bilibili/Xiaohongshu export/browser-history
   validation are still required before promotion beyond baseline+audit.
 
+### Wave BR: P1 notes-to-investment-notes fixture E2E hardening
+
+Validation record:
+
+- `docs/validations/investor-p1-notes-investment-e2e-validation-2026-07-09.md`
+
+Findings:
+
+- Added a fixed Obsidian-style fixture under
+  `examples/fixtures/notes-investment-e2e/` containing a trade review, trade
+  rules/checklist note, valuation-assumption/research note, and life-note
+  decoy.
+- `notes-collector` now has a repeatable E2E test that emits four generic
+  preview-only `notes` events, validates the generic notes package, and proves
+  the generic collector does not claim investment-note facts or write Investor
+  Wiki evidence directly.
+- The same test feeds the generated `lake/notes/events.jsonl` into
+  `investment-notes`; the lens keeps three investment notes, excludes the life
+  decoy, validates the downstream evidence package, and checks preview-only
+  boundary proof in the manifest and Investor Wiki evidence surface.
+- This remains an offline fixture gate. Real Notion/Youdao/Evernote account
+  exports/APIs, Windows/Linux vault paths, user allowlists, and broad private
+  note-corpus false-positive review are still required before promotion beyond
+  baseline+audit.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -4298,7 +4339,7 @@ Findings:
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP; generic notes manifest reports platform coverage, field coverage, source-app/path/tag authorization filters, table import audit, Canvas import audit, source audit, content policy, ZIP provenance, filtered-all/no-input gap packages, note/gap event counts, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote exports/APIs, real-user allowlist tuning, false-positive review, Windows/Linux vault path validation |
+| 1 | `investment-notes` | G2/G3 partial on macOS Obsidian-style notes; G1/G2 import path for Youdao/Evernote/Markdown/Obsidian Canvas/HTML/JSON/CSV/TSV/ENEX/ZIP; fixed notes-to-investment-notes E2E fixture now validates generic notes package output, downstream investment-notes package output, life-note decoy exclusion, and preview-only boundary proof; generic notes manifest reports platform coverage, field coverage, source-app/path/tag authorization filters, table import audit, Canvas import audit, source audit, content policy, ZIP provenance, filtered-all/no-input gap packages, note/gap event counts, and generic-collector evidence policy; lens manifest/evidence reports review/rules/checklist/valuation/research note-type surface, source-app surface, preview/full-content surface, and investment note boundary proof | Validate real Notion/Youdao/Evernote exports/APIs, real-user allowlist tuning, false-positive review, Windows/Linux vault path validation |
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; TickTick/Dida task events now preserve timezone, all-day, repeat frequency, reminders, checklist items, checklist completed/pending counts, completion rate, source-app/project/tag/keyword scope-policy audit, filtered-all/no-input profile gaps, and task/gap event counts for offline packages; calendar reports duration/multi-day/invalid-time/conflict quality plus source-platform/calendar/attendee/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages, and calendar/gap event counts; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, reminder/time/timezone/repeat coverage, task checklist execution surface, calendar time-quality surface, and task/calendar boundary proof | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, checklist-heavy trading-plan backtest, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, participant-role hints, action items, decision points, risk items, mentioned symbols, source audit, meeting/collaboration scope-policy audits, validator-safe filtered-all/no-input gap packages, meeting/collaboration/gap event counts, missing/unsupported input accounting, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries plus meeting-minutes and decision/action boundary proof; Feishu package path now adds validator-safe missing/no-readable data-quality gaps, usable/feishu/gap counts, Feishu/data-quality/downstream-lens gates, and direct-Wiki blocking; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant identity normalization, speaker/role resolution, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, article behavior summary, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, validator-safe missing/no-readable/filtered-all data-quality gaps, usable/wechat-favorite/favorite/gap counts, WeChat-favorites/data-quality/article-lens gates, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries plus article/behavior boundary proof | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |

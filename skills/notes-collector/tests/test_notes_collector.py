@@ -14,7 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "notes_api.py"
+INVESTOR_SCRIPT = REPO_ROOT / "skills" / "investor-source-collectors" / "scripts" / "investor_sources.py"
 PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+NOTES_INVESTMENT_FIXTURE = REPO_ROOT / "examples" / "fixtures" / "notes-investment-e2e" / "obsidian-vault"
 
 
 def read_events(out: Path) -> list[dict]:
@@ -30,6 +32,23 @@ def assert_package_valid(out: Path) -> None:
             str(out),
             "--collector",
             "notes",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+
+
+def assert_investor_package_valid(out: Path, collector: str) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            collector,
+            "--require-evidence",
             "--json",
         ],
         check=True,
@@ -119,6 +138,148 @@ def test_obsidian_outputs_collectorx_events_without_full_content_by_default() ->
         assert manifest["source_audit"]["emitted_event_count"] == 2
         assert manifest["source_audit"]["path_results"][0]["status"] == "parsed"
         assert_package_valid(out)
+
+
+def test_notes_investment_fixture_flows_into_investment_notes_lens() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        notes_export = root / "notes.json"
+        notes_out = root / "notes-out"
+        lens_out = root / "lens-out"
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "obsidian",
+                "--vault",
+                str(NOTES_INVESTMENT_FIXTURE),
+                "--export",
+                str(notes_export),
+                "--out-dir",
+                str(notes_out),
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        notes_events = read_events(notes_out)
+        assert len(notes_events) == 4
+        notes_titles = {event["data"]["title"] for event in notes_events}
+        assert notes_titles == {
+            "600519-trade-review",
+            "semiconductor-valuation-assumptions",
+            "trade-checklist",
+            "weekend-plan",
+        }
+        assert all(event["collector"] == "notes" for event in notes_events)
+        assert all(event["kind"] == "note" for event in notes_events)
+        assert all(event["data"]["content_included"] is False for event in notes_events)
+        assert all("content" not in event["data"] for event in notes_events)
+        assert any(event["data"]["title"] == "weekend-plan" for event in notes_events)
+        assert any("周末生活安排" in event["data"]["content_preview"] for event in notes_events)
+
+        notes_manifest = json.loads((notes_out / "manifest.json").read_text(encoding="utf-8"))
+        assert notes_manifest["event_count"] == 4
+        assert notes_manifest["note_event_count"] == 4
+        assert notes_manifest["gap_event_count"] == 0
+        assert notes_manifest["content_policy"]["full_content_event_count"] == 0
+        assert notes_manifest["content_policy"]["preview_only_event_count"] == 4
+        assert notes_manifest["content_policy"]["investment_classification_done"] is False
+        assert notes_manifest["evidence_policy"]["generic_collector"] is True
+        assert notes_manifest["evidence_policy"]["required_lens"] == "investment-notes"
+        assert notes_manifest["evidence_policy"]["collector_writes_investor_wiki_directly"] is False
+        assert notes_manifest["collection_readiness"]["can_claim_investment_notes"] is False
+        assert notes_manifest["source_audit"]["source_type"] == "obsidian_vault"
+        assert notes_manifest["source_audit"]["parsed_note_count"] == 4
+        assert_package_valid(notes_out)
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(INVESTOR_SCRIPT),
+                "collect",
+                "--source",
+                "investment-notes",
+                "--input",
+                str(notes_out / "lake" / "notes" / "events.jsonl"),
+                "--out-dir",
+                str(lens_out),
+                "--collected-at",
+                "2026-07-08T12:30:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        lens_events = [
+            json.loads(line)
+            for line in (lens_out / "lake" / "investment-notes" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 3
+        lens_titles = {event["data"]["payload"]["title"] for event in lens_events}
+        assert lens_titles == {"600519-trade-review", "semiconductor-valuation-assumptions", "trade-checklist"}
+        assert "weekend-plan" not in lens_titles
+        assert {event["raw_ref"]["upstream_event_id"] for event in lens_events} == {
+            event["id"] for event in notes_events if event["data"]["title"] in lens_titles
+        }
+        assert all(event["raw_ref"]["parser"] == "collectorx.event.v1" for event in lens_events)
+        assert all(event["raw_ref"]["upstream_raw_ref"]["source_app"] == "obsidian" for event in lens_events)
+        assert all(event["data"]["payload"]["upstream_collector"] == "notes" for event in lens_events)
+        assert all(event["data"]["payload"]["content_included"] is False for event in lens_events)
+        assert all("content" not in event["data"]["payload"] for event in lens_events)
+
+        classifications = [event["data"]["classification"] for event in lens_events]
+        assert all(item["is_investment_evidence"] is True for item in classifications)
+        assert any("review_note" in item["investment_note_types"] for item in classifications)
+        assert any("rules_library" in item["investment_note_types"] for item in classifications)
+        assert any("trade_checklist" in item["investment_note_types"] for item in classifications)
+        assert any("valuation_assumption" in item["investment_note_types"] for item in classifications)
+        assert any("research_note" in item["investment_note_types"] for item in classifications)
+
+        lens_manifest = json.loads((lens_out / "manifest.json").read_text(encoding="utf-8"))
+        assert lens_manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        surface = lens_manifest["lens_surface_summary"]
+        assert surface["event_count"] == 3
+        assert surface["source_app_counts"] == {"obsidian": 3}
+        assert surface["upstream_collector_counts"] == {"notes": 3}
+        assert surface["full_content_event_count"] == 0
+        assert surface["preview_only_event_count"] == 3
+        assert surface["tagged_event_count"] == 3
+        assert surface["collector_writes_wiki_directly"] is False
+        assert surface["investment_note_type_counts"]["review_note"] >= 1
+        assert surface["investment_note_type_counts"]["rules_library"] >= 1
+        assert surface["investment_note_type_counts"]["trade_checklist"] >= 1
+        assert surface["investment_note_type_counts"]["valuation_assumption"] >= 1
+        assert surface["investment_note_type_counts"]["research_note"] >= 1
+
+        proof = lens_manifest["investment_note_boundary_proof"]
+        assert proof["source_type"] == "notes_lake_investment_note_lens"
+        assert proof["proof_level"] == "authorized_investment_notes_preview_only"
+        assert proof["event_count"] == 3
+        assert proof["candidate_record_count"] == 4
+        assert proof["matched_event_count"] == 3
+        assert proof["filtered_candidate_count"] == 1
+        assert proof["complete_notes_vault_claimed"] is False
+        assert proof["complete_note_context_claimed"] is False
+        assert proof["direct_notes_reconnect"] is False
+        assert proof["requires_upstream_notes_collector"] is True
+        assert proof["collector_writes_wiki_directly"] is False
+        assert proof["content_boundary"]["full_content_event_count"] == 0
+        assert proof["content_boundary"]["preview_only_event_count"] == 3
+        assert proof["note_boundary"]["generic_notes_lens"] is True
+        assert proof["note_boundary"]["collector_writes_wiki_directly"] is False
+
+        evidence = json.loads((lens_out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        evidence_surface = evidence["coverage_summary"]["source_surface_summary"]["investment-notes"]
+        assert evidence_surface["event_count"] == 3
+        assert evidence_surface["source_app_counts"] == {"obsidian": 3}
+        assert evidence_surface["generic_notes_lens"] is True
+        assert evidence_surface["collector_writes_wiki_directly"] is False
+        assert evidence_surface["full_content_event_count"] == 0
+        assert evidence_surface["preview_only_event_count"] == 3
+        assert_investor_package_valid(lens_out, "investment-notes")
 
 
 def test_import_outputs_youdao_evernote_and_markdown_events() -> None:
@@ -569,6 +730,7 @@ def test_import_missing_input_has_source_audit_gap() -> None:
 
 if __name__ == "__main__":
     test_obsidian_outputs_collectorx_events_without_full_content_by_default()
+    test_notes_investment_fixture_flows_into_investment_notes_lens()
     test_import_outputs_youdao_evernote_and_markdown_events()
     test_import_notion_csv_database_and_tsv_zip_tables()
     test_import_note_source_policy_filters_by_source_path_and_tag()
