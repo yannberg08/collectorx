@@ -1343,6 +1343,7 @@ def build_evidence(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     usable_events = [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in usable_events)
     for event in usable_events:
@@ -1355,6 +1356,8 @@ def build_evidence(
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
             "event_count": len(usable_events),
+            "raw_event_count": len(events),
+            "gap_event_count": gap_event_count,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,

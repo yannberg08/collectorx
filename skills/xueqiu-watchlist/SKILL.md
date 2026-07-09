@@ -1,7 +1,7 @@
 ---
 name: xueqiu-watchlist
-description: 雪球关注/自选列表垂直采集器。采集用户授权导出的雪球关注池，输出 watchlist 事件；关注池不能单独证明持仓、交易或完整投资意图；无输入或授权范围过滤为空时输出可验证 gap package。
-version: 0.3.3
+description: 雪球关注/自选列表垂直采集器。采集用户授权导出的雪球关注池，输出 watchlist 事件；关注池不能单独证明持仓、交易或完整投资意图；无输入或授权范围过滤为空时输出可验证 gap package，并在 Investor Wiki evidence generated_from 中拆分 raw/gap/usable 计数。
+version: 0.3.4
 ---
 
 # Xueqiu Watchlist Collector
@@ -44,6 +44,7 @@ python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect \
 
 - `lake/xueqiu-watchlist/events.jsonl`
 - `manifest.json`
+- `investor_wiki_evidence.v1.json`
 - `SUMMARY.md`
 
 保留旧入口：
@@ -75,3 +76,6 @@ validator-safe profile gap event，并设置 `manifest.gap_event_count=1`、
 `collection_readiness.can_enter_xueqiu_watchlist_lake=false`、
 `collection_readiness.can_enter_data_quality_lake=true` 和
 `collection_readiness.can_feed_investor_wiki_evidence=false`。
+Investor Wiki evidence 的 `generated_from.event_count` 只统计可用关注池事件，
+`raw_event_count` 统计原始 Lake 事件，`gap_event_count` 统计 collection gap；
+gap-only 包不会产生 Wiki route facts 或维度 evidence count。

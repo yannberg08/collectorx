@@ -43,6 +43,30 @@ def assert_package_valid(out: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def assert_evidence_generated_from(
+    out: Path,
+    *,
+    raw_event_count: int,
+    usable_event_count: int,
+    gap_event_count: int,
+) -> dict:
+    evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+    generated_from = evidence["generated_from"]
+    assert generated_from["event_count"] == usable_event_count
+    assert generated_from["raw_event_count"] == raw_event_count
+    assert generated_from["gap_event_count"] == gap_event_count
+    assert generated_from["event_count"] + generated_from["gap_event_count"] == generated_from["raw_event_count"]
+    assert "collectorx.data_quality.collection_gaps" not in evidence["coverage_summary"]["route_counts"]
+    if usable_event_count == 0:
+        assert evidence["coverage_summary"]["route_counts"] == {}
+        assert all(
+            child["evidence_count"] == 0
+            for dimension in evidence["dimensions"]
+            for child in dimension["children"]
+        )
+    return evidence
+
+
 def chromium_time(year: int, month: int, day: int, hour: int = 0, minute: int = 0) -> int:
     from datetime import datetime, timezone
 
@@ -153,8 +177,12 @@ def test_collect_watchlist_csv() -> None:
         assert proof["can_enter_xueqiu_activity_lake"] is True
         assert proof["can_enter_data_quality_lake"] is False
         assert proof["can_feed_investor_wiki_evidence"] is True
-        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
-        assert evidence["generated_from"]["event_count"] == manifest["usable_event_count"]
+        evidence = assert_evidence_generated_from(
+            out,
+            raw_event_count=manifest["event_count"],
+            usable_event_count=manifest["usable_event_count"],
+            gap_event_count=manifest["gap_event_count"],
+        )
         assert evidence["coverage_summary"]["xueqiu_is_strong_trade_source"] is False
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
@@ -338,6 +366,7 @@ def test_activity_scope_policy_filtered_all_gap() -> None:
         assert manifest["activity_boundary_proof"]["overall_proof_level"] == "scope_policy_filtered_all"
         assert manifest["activity_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
         assert manifest["activity_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert_evidence_generated_from(out, raw_event_count=1, usable_event_count=0, gap_event_count=1)
 
 
 def test_activity_gap_event() -> None:
@@ -385,8 +414,7 @@ def test_activity_gap_event() -> None:
         assert manifest["collection_readiness"]["can_enter_xueqiu_activity_lake"] is False
         assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
         assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
-        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
-        assert evidence["generated_from"]["event_count"] == 0
+        assert_evidence_generated_from(out, raw_event_count=1, usable_event_count=0, gap_event_count=1)
 
 
 def test_collects_nested_xueqiu_api_shapes_and_sanitizes_secrets() -> None:

@@ -1,7 +1,7 @@
 ---
 name: xueqiu-investor-activity
-description: 雪球投资者活动垂直采集器。采集用户授权的雪球自选、关注用户、关注组合、个人发帖、评论、收藏、用户自己的组合调仓，以及用户授权复制的 Chromium/Safari 浏览器历史中的雪球访问痕迹，输出 CollectorX 事件和 FinClaw 投资分身证据包。用于能力圈、关注池、信息源、人脉网络和投资观点表达；不采全站舆情，不把雪球组合或浏览历史当券商强交易事实；无输入或授权范围过滤为空时输出可验证 gap package。
-version: 0.3.6
+description: 雪球投资者活动垂直采集器。采集用户授权的雪球自选、关注用户、关注组合、个人发帖、评论、收藏、用户自己的组合调仓，以及用户授权复制的 Chromium/Safari 浏览器历史中的雪球访问痕迹，输出 CollectorX 事件和 FinClaw 投资分身证据包。用于能力圈、关注池、信息源、人脉网络和投资观点表达；不采全站舆情，不把雪球组合或浏览历史当券商强交易事实；无输入或授权范围过滤为空时输出可验证 gap package，并在 Investor Wiki evidence generated_from 中拆分 raw/gap/usable 计数。
+version: 0.3.7
 ---
 
 # 雪球投资者活动采集器
@@ -99,4 +99,7 @@ validator-safe profile gap event，并设置 `manifest.gap_event_count=1`、
 `collection_readiness.can_enter_xueqiu_activity_lake=false`、
 `collection_readiness.can_enter_data_quality_lake=true`、
 `collection_readiness.can_feed_investor_wiki_evidence=false`；
-Investor Wiki evidence 只统计可用活动，不把 collection gap 当成用户画像事实。
+Investor Wiki evidence 的 `generated_from.event_count` 只统计可用活动，
+`raw_event_count` 统计原始 Lake 事件，`gap_event_count` 统计 collection gap；
+不把 collection gap 当成用户画像事实，gap-only 包不会产生 Wiki route facts
+或维度 evidence count。

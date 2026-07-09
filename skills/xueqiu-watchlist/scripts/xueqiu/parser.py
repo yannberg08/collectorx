@@ -553,6 +553,7 @@ def build_manifest(
 
 def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
     usable_events = [event for event in events if not (event.get("data") or {}).get("gap")]
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     by_target: Dict[str, List[Dict[str, Any]]] = {}
     for event in usable_events:
         for target in event.get("wiki_targets") or []:
@@ -564,6 +565,8 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
             "event_count": len(usable_events),
+            "raw_event_count": len(events),
+            "gap_event_count": gap_event_count,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
