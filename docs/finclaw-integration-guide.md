@@ -481,6 +481,15 @@ Current status:
   extension, path, file name, parser, research surface, and keyword before
   evidence reaches the Lake. The manifest records configured allow/deny rules,
   filtered candidate count, reason counts, and filtered-all status.
+- Missing input, unreadable input, no-match, and fully filtered document-scope
+  runs emit one validator-safe profile gap event such as
+  `research_documents_scope_policy_filtered_all` and route it to
+  `collectorx.data_quality.collection_gaps`.
+- `manifest.event_count`, `manifest.usable_event_count`,
+  `manifest.research_document_event_count`, and `manifest.gap_event_count`
+  keep real research-document facts separate from collection-state evidence;
+  pure gap packages keep
+  `investor_wiki_evidence.v1.json.generated_from.event_count=0`.
 - `manifest.research_corpus_boundary_proof` and `manifest.lens_surface_summary`
   summarize which authorized research corpus was actually covered, including
   report/financial-statement/valuation/announcement/review/screenshot/table

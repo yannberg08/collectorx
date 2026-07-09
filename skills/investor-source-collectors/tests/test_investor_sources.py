@@ -935,6 +935,10 @@ def test_research_documents_extracts_office_and_pdf_content_when_authorized() ->
         assert any("DCF低估" in event["data"]["payload"].get("content", "") for event in events)
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collection_readiness"]["status"] == "events_collected"
+        assert manifest["event_count"] == 3
+        assert manifest["usable_event_count"] == 3
+        assert manifest["gap_event_count"] == 0
+        assert manifest["research_document_event_count"] == 3
         audit = manifest["collection_audit"]
         assert audit["content_extraction_policy"]["include_content_enabled"] is True
         assert audit["content_extraction_policy"]["content_read_requires_explicit_include_content"] is True
@@ -1337,8 +1341,15 @@ def test_research_documents_scope_policy_filtered_all_has_explicit_gap() -> None
         )
 
         manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["collection_readiness"]["status"] == "source_policy_filtered_all"
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_investor_source_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["research_document_event_count"] == 0
         audit = manifest["collection_audit"]
         assert audit["candidate_record_count"] == 1
         assert audit["document_scope_policy_filtered_all"] is True
@@ -1349,15 +1360,27 @@ def test_research_documents_scope_policy_filtered_all_has_explicit_gap() -> None
         assert policy["filtered_all"] is True
         assert policy["filter_reason_counts"] == {"keyword_not_allowed": 1}
         proof = manifest["research_corpus_boundary_proof"]
-        assert proof["proof_level"] == "source_policy_filtered_all"
+        assert proof["proof_level"] == "research_documents_scope_policy_filtered_all"
         assert proof["event_count"] == 0
+        assert proof["raw_event_count"] == 1
+        assert proof["gap_event_count"] == 1
         assert proof["authorization_scope_boundary"]["filtered_all"] is True
         assert proof["can_enter_finclaw"] is False
         event = json.loads((out_dir / "lake" / "research-documents" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
-        assert event["data"]["payload"]["gap"] == "source_policy_filtered_all"
+        assert event["kind"] == "profile"
+        assert event["data"]["profile_type"] == "investor_lens_collection_gap"
+        assert event["data"]["status"] == "scope_policy_filtered_all"
+        assert event["data"]["candidate_record_count"] == 1
+        assert event["data"]["filtered_candidate_count"] == 1
+        assert event["data"]["payload"]["gap"] == "research_documents_scope_policy_filtered_all"
+        assert event["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
         assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+        validator = run_package_validator(str(out_dir), "--collector", "research-documents", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
 
 
 def test_research_documents_image_ocr_requires_explicit_adapter_authorization() -> None:

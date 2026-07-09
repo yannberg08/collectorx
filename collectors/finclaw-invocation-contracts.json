@@ -101,8 +101,8 @@
         "notes"
       ],
       "user_step": "Run on authorized research folders or upstream file/note Lake events; optionally narrow by extension, path, file name, parser, research surface, or keyword; content extraction requires explicit flags.",
-      "preflight": "Research inputs are user-selected, optional document scope-policy allow/deny rules are explicit when used, and body/OCR extraction choices are explicit.",
-      "failure_state": "needs_authorized_research_input"
+      "preflight": "Research inputs are user-selected, optional document scope-policy allow/deny rules are explicit when used, body/OCR extraction choices are explicit, and no-input/no-readable/no-match/filtered-all states produce data-quality gap packages rather than successful empty evidence.",
+      "failure_state": "needs_authorized_research_input_or_scope_policy_retained_research_documents_or_gap_package"
     },
     {
       "id": "email",

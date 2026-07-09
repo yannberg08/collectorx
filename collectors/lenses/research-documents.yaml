@@ -32,6 +32,9 @@ scope:
     - research_corpus_boundary_proof
     - extension_path_file_name_parser_surface_keyword_scope_policy
     - scope_policy_filtered_all_readiness
+    - validator_safe_scope_policy_gap_packages
+    - research_document_event_count
+    - gap_event_count
   excludes:
     - whole_disk_scan
     - unrelated_private_files
@@ -83,4 +86,7 @@ description: |
   manifest 中记录降级原因。
   但仍只写 CollectorX lake 与 investor_wiki_evidence.v1 证据包。
   manifest 会记录缺失输入、逐文件解析结果、跳过原因、limit 截断、研究语料面谱、
-  research_corpus_boundary_proof 和截图 OCR/metadata-only 边界。
+  research_corpus_boundary_proof 和截图 OCR/metadata-only 边界。若授权输入缺失、
+  不可读、未命中投资证据，或扩展名/路径/文件名/解析器/研究主题/关键词策略过滤后全空，
+  会输出 validator-safe profile gap 事件，路由到 collectorx.data_quality.collection_gaps，
+  并在 manifest 中拆分 research_document_event_count、usable_event_count 和 gap_event_count。

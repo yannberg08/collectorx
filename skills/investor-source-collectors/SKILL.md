@@ -143,6 +143,9 @@ P2 必做：
 当缺少授权输入、输入不可读、没有投资证据或授权范围过滤后全空时，lens 会输出
 validator-safe `kind=profile` gap 事件，路由到
 `collectorx.data_quality.collection_gaps`；这些 gap 会被证据包排除，不会变成投资事实。
+manifest 会拆分 `event_count`、`usable_event_count` 和 `gap_event_count`；
+`research-documents` 还会额外写 `research_document_event_count`，因此 FinClaw 可以区分
+真实投研文档事实和采集状态证据。
 
 `manifest.json` 会带 `collection_audit`：
 
@@ -150,7 +153,7 @@ validator-safe `kind=profile` gap 事件，路由到
 - 记录 `source_policy`：`--allow-chat`、`--deny-chat`、`--allow-sender`、`--deny-sender` 的配置和过滤数量。这个策略只收窄来源范围，不把普通聊天强行变成投资证据。
 - 对 `wechat-investment-dialogue` 输出 `wechat_dialogue_boundary_proof` 与对话面谱：汇总聊天/发送者范围、来源策略、本人/他人发言、群聊/私聊、交易意图、买卖理由、仓位、风险情绪、咨询网络、研究讨论和复盘线索；不声明完整微信历史或完整上下文。
 - 对 `research-documents` 明确记录 `content_extraction_policy`：通用 `filesystem` 只做元数据；DOCX/PDF/XLSX/XLSM/XLS/PPTX 正文、表格或幻灯片读取必须显式传入 `--include-content`；`.xls` 会区分 XML Spreadsheet、HTML table、delimited/plain text、renamed OOXML 和 binary BIFF，经 `parser_counts` 写入 manifest；binary BIFF 需要 `xlrd`，不可用时必须记录 `xlrd-biff` / `extract_failed`，不能伪造内容；截图/图片默认只保留元数据；若用户显式传入 `--include-image-ocr` 且本机有 tesseract，才读取图片文字；OCR 不可用时必须在 manifest/path_results 中写明降级原因。
-- 对 `research-documents` 额外输出 `document_scope_policy`、`research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、扩展名/路径/文件名/解析器/研究主题/关键词授权范围、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描。
+- 对 `research-documents` 额外输出 `document_scope_policy`、`research_corpus_boundary_proof` 和 `lens_surface_summary`：汇总授权输入、格式覆盖、解析器、扩展名/路径/文件名/解析器/研究主题/关键词授权范围、全文/元数据/OCR 边界、研报/财报/估值表/公告/复盘/截图/表格面谱，并明确不声明完整研究语料库或全盘扫描；若研究文档授权范围过滤后全空，gap 原因为 `research_documents_scope_policy_filtered_all`，readiness 为 `scope_policy_filtered_all`，只进入数据质量湖。
 - 对 `investment-notes` 输出 `investment_note_boundary_proof`：汇总授权输入、来源应用、预览/全文、标签/路径/URL、候选/命中/过滤数量和投资笔记类型面谱，并明确不声明完整笔记库或完整上下文。
 - 对 `task-calendar-investor` 输出 `task_calendar_boundary_proof`：汇总授权输入、上游任务/日历来源、候选/命中/过滤数量、时间/提醒/会议链接/日程质量面谱，并明确不声明完整任务清单、完整日历或完整上下文。
 - 对 `meeting-minutes` 输出 `meeting_minutes_boundary_proof`：汇总授权输入、上游会议/协作来源、候选/命中/过滤数量、参会人、会议链接、附件/录制指针和时间覆盖，并明确不声明完整会议历史、完整工作区或默认采集录制正文。

@@ -207,6 +207,7 @@ def build_gap_event(
         "no_readable_input": "Authorized input was provided, but no readable records were found.",
         "no_investment_evidence_matched": "Authorized input was scanned, but no investment-related evidence matched the lens rules.",
         "source_policy_filtered_all": "Authorized input was scanned, but every candidate was excluded by the configured authorization scope policy.",
+        "research_documents_scope_policy_filtered_all": "Authorized research document input was scanned, but every candidate was outside the configured research-document authorization scope policy.",
         "email_research_scope_policy_filtered_all": "Authorized email input was scanned, but every candidate was outside the configured email-research authorization scope policy.",
         "social_influence_scope_policy_filtered_all": "Authorized social activity input was scanned, but every candidate was outside the configured social-influence authorization scope policy.",
     }.get(reason, "Collector could not produce source evidence for this run.")
@@ -222,6 +223,8 @@ def build_gap_event(
         policy_keys = ("email_research_scope_policy",)
     elif reason == "social_influence_scope_policy_filtered_all":
         policy_keys = ("social_influence_scope_policy",)
+    elif reason == "research_documents_scope_policy_filtered_all":
+        policy_keys = ("document_scope_policy",)
     elif reason == "source_policy_filtered_all" and source_id == "research-documents":
         policy_keys = ("document_scope_policy",)
     elif reason == "source_policy_filtered_all":
@@ -256,6 +259,7 @@ def build_gap_event(
         "no_readable_input": "no_readable_input",
         "no_investment_evidence_matched": "no_investment_evidence_matched",
         "source_policy_filtered_all": "source_policy_filtered_all",
+        "research_documents_scope_policy_filtered_all": "scope_policy_filtered_all",
         "email_research_scope_policy_filtered_all": "scope_policy_filtered_all",
         "social_influence_scope_policy_filtered_all": "scope_policy_filtered_all",
     }.get(reason, "collection_gap")
@@ -295,6 +299,8 @@ def build_manifest(
 ) -> Dict[str, Any]:
     profile = get_profile(source_id)
     kind_counts = Counter(event["kind"] for event in events)
+    gap_event_count = sum(1 for event in events if is_gap_event(event))
+    usable_event_count = max(len(events) - gap_event_count, 0)
     only_gap = bool(events) and all(is_gap_event(event) for event in events)
     gap_reason = None
     if only_gap:
@@ -304,6 +310,7 @@ def build_manifest(
         "no_readable_input": "no_readable_input",
         "no_investment_evidence_matched": "no_investment_evidence_matched",
         "source_policy_filtered_all": "source_policy_filtered_all",
+        "research_documents_scope_policy_filtered_all": "scope_policy_filtered_all",
         "email_research_scope_policy_filtered_all": "scope_policy_filtered_all",
         "social_influence_scope_policy_filtered_all": "scope_policy_filtered_all",
     }.get(str(gap_reason), "events_collected" if not only_gap else "needs_source_authorization_or_input")
@@ -315,8 +322,13 @@ def build_manifest(
     collection_readiness = {
         "status": status,
         "can_enter_finclaw": bool(events) and not only_gap,
+        "can_enter_investor_source_lake": usable_event_count > 0,
+        "can_enter_data_quality_lake": gap_event_count > 0,
+        "can_feed_investor_wiki_evidence": usable_event_count > 0,
         "can_claim_complete_source_collection": False,
         "source_collection_scope": "none" if only_gap else "partial_authorized_input",
+        "usable_event_count": usable_event_count,
+        "gap_event_count": gap_event_count,
         "next_action": next_action_for_status(status),
     }
     lens_surface = lens_surface_summary(source_id, events)
@@ -368,6 +380,8 @@ def build_manifest(
         "priority": profile["priority"],
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": usable_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "classification_summary": {
             "classifier": "investor-source-keyword-v1",
@@ -389,6 +403,8 @@ def build_manifest(
         },
         "collection_audit": collection_audit or {},
     }
+    if source_id == "research-documents":
+        manifest["research_document_event_count"] = usable_event_count
     if research_proof is not None:
         manifest["research_corpus_boundary_proof"] = research_proof
     if wechat_proof is not None:
@@ -422,6 +438,8 @@ def build_research_corpus_boundary_proof(
         "source_type": "user_selected_research_files_or_upstream_file_events",
         "proof_level": research_corpus_proof_level(usable_events, audit=audit, readiness=collection_readiness),
         "event_count": len(usable_events),
+        "raw_event_count": len(events),
+        "gap_event_count": sum(1 for event in events if is_gap_event(event)),
         "candidate_record_count": audit.get("candidate_record_count", 0),
         "matched_event_count": audit.get("matched_event_count", 0),
         "filtered_candidate_count": audit.get("filtered_candidate_count", 0),
@@ -493,8 +511,8 @@ def research_corpus_proof_level(
             return "no_authorized_research_input"
         if status == "no_readable_input":
             return "no_readable_research_input"
-        if status == "source_policy_filtered_all":
-            return "source_policy_filtered_all"
+        if status in {"source_policy_filtered_all", "scope_policy_filtered_all"}:
+            return "research_documents_scope_policy_filtered_all"
         return "no_usable_research_evidence_after_filter"
     document_scope_policy = audit.get("document_scope_policy") if isinstance(audit.get("document_scope_policy"), dict) else {}
     if document_scope_policy.get("enabled"):
@@ -1244,6 +1262,7 @@ def build_social_influence_boundary_proof(
 
 def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
+    gap_event_count = sum(1 for event in events if is_gap_event(event))
     by_subdimension: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     source_counts = Counter()
     kind_counts = Counter()
@@ -1297,6 +1316,8 @@ def build_investor_wiki_evidence(events: List[Dict[str, Any]], *, generated_at: 
             "skill": "investor-source-collectors",
             "event_schema": EVENT_SCHEMA,
             "event_count": len(usable_events),
+            "raw_event_count": len(events),
+            "gap_event_count": gap_event_count,
             "kind_counts": dict(sorted(kind_counts.items())),
             "source_counts": dict(sorted(source_counts.items())),
             "source_profile_priority_counts": profile_count_by_priority(
@@ -2585,6 +2606,7 @@ def next_action_for_status(status: str) -> str:
         "no_readable_input": "检查输入路径、文件格式和导出内容后重跑。",
         "no_investment_evidence_matched": "输入已读取，但未命中投资证据；可降低阈值、补充白名单或确认这批数据不属于投资分身。",
         "source_policy_filtered_all": "输入已读取，但全部被授权范围策略排除；请检查本次配置的白名单和黑名单。",
+        "research_documents_scope_policy_filtered_all": "投研文档输入已读取，但全部被授权范围策略排除；请检查扩展名、路径、文件名、解析器、主题或关键词白名单/黑名单。",
         "scope_policy_filtered_all": "输入已读取，但全部被当前 lens 的授权范围策略排除；请检查本次配置的白名单、黑名单和主题/关键词范围。",
         "events_collected": "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
     }.get(status, "检查 manifest 后决定下一步。")

@@ -365,6 +365,8 @@ def collect_events_with_audit(
             reason = "email_research_scope_policy_filtered_all"
         elif source_id == "social-investment-influence" and int((audit.get("social_influence_scope_policy") or {}).get("filtered_candidate_count") or 0) >= parsed_count:
             reason = "social_influence_scope_policy_filtered_all"
+        elif source_id == "research-documents" and document_scope_filtered >= parsed_count:
+            reason = "research_documents_scope_policy_filtered_all"
         elif source_policy_filtered + document_scope_filtered >= parsed_count:
             reason = "source_policy_filtered_all"
         else:
