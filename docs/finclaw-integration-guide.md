@@ -446,6 +446,15 @@ Boundary:
 - `manifest.source_audit` records requested/resolved roots, scanned/emitted
   file counts, extension coverage, skipped file/directory counts, skipped
   reasons, size policy, ignored directories, and per-root scan results.
+- `manifest.usable_event_count`, `filesystem_event_count`, `file_event_count`,
+  and `gap_event_count` separate retained metadata from collection gaps.
+- Missing, no-retained, and fully filtered filesystem runs emit validator-safe
+  profile gap events routed to `collectorx.data_quality.collection_gaps`;
+  gap-only packages do not enter the filesystem Lake, do not feed
+  `research-documents`, and never feed Investor Wiki directly.
+- `collection_readiness.can_enter_filesystem_lake`,
+  `can_enter_data_quality_lake`, `can_feed_research_documents_lens`, and
+  `can_feed_investor_wiki_directly=false` are the FinClaw routing gates.
 - The manifest records the macOS/Windows/Linux default-root plan for product
   preflight, but FinClaw should still pass explicit user-authorized roots when
   possible.
@@ -635,7 +644,9 @@ Current status for `xueqiu-watchlist`:
 - Recursively filters credential-like raw keys.
 - Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
   coverage for attention-universe subdimensions; gap events are excluded from
-  Wiki evidence by `can_feed_investor_wiki_evidence=false`.
+  Wiki evidence by `can_feed_investor_wiki_evidence=false`. Its
+  `generated_from` block separates usable `event_count`, raw Lake
+  `raw_event_count`, and `gap_event_count`.
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows.
 
@@ -676,6 +687,9 @@ Current status:
   `gap_event_count`; `collection_readiness.can_enter_xueqiu_activity_lake`
   gates retained activity evidence, while `can_enter_data_quality_lake` gates
   gap events routed to `collectorx.data_quality.collection_gaps`.
+- Generated Investor Wiki evidence separates usable `event_count`, raw Lake
+  `raw_event_count`, and `gap_event_count`, so gap-only packages cannot
+  inflate Wiki facts.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade
   evidence.
 - `activity_boundary_proof` reports whether watchlist, followed users,
@@ -953,9 +967,14 @@ Current status:
   refs, recording refs, participants, links, document refs, content previews,
   and source provenance.
 - Writes `manifest.field_coverage`, `feishu_surface_summary`, `source_audit`,
-  and `evidence_policy` so FinClaw can inspect message/document/file/meeting
-  coverage, ZIP provenance, total/skipped ZIP members, skip reasons,
-  per-input parse results, and required downstream lenses.
+  `collection_readiness`, and `evidence_policy` so FinClaw can inspect
+  message/document/file/meeting coverage, ZIP provenance, total/skipped ZIP
+  members, skip reasons, per-input parse results, usable/feishu/gap counts,
+  and required downstream lenses.
+- Missing-input and no-readable Feishu runs emit validator-safe data-quality
+  gap packages with `can_enter_feishu_lake=false`,
+  `can_enter_data_quality_lake=true`, downstream lens gates false, and
+  `can_feed_investor_wiki_directly=false`.
 - Filters credential-like raw keys including app secrets, cookies, access
   tokens, refresh tokens, authorization, session, and password fields.
 - Does not claim investment evidence directly.
@@ -1098,6 +1117,12 @@ Current status:
 - `manifest.source_audit` records requested inputs, missing inputs,
   per-file parse results, extension coverage, skipped file reasons, ZIP member
   counts, skipped ZIP member reasons, and path-safety flags.
+- Missing, no-readable, and fully filtered runs emit validator-safe
+  data-quality gap packages with usable/wechat-favorite/favorite/gap counts,
+  `can_enter_wechat_favorites_lake=false`,
+  `can_enter_data_quality_lake=true`,
+  `can_feed_wechat_article_favorites_lens=false`, and
+  `can_feed_investor_wiki_directly=false`.
 - Captures ZIP member provenance, source account type, article ID, favorite
   reason, share target, read duration/progress, symbol hints, engagement
   counters, source account count, text length, and filters credential-like raw

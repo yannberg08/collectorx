@@ -96,7 +96,7 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-root-metadata-scan-with-optional-metadata-scope-policy",
       "cli": "python3 skills/filesystem-collector/scripts/filesystem_query.py collect --root <authorized-root> --out-dir <out-dir>",
-      "collects": "Authorized local file metadata: path, extension, size, modified time, source audit, extension/path/file-name/directory/keyword scope-policy audit, filtered-all/no-metadata gap packages, filesystem boundary proof, extension coverage, skipped reason counts, and per-root scan results.",
+      "collects": "Authorized local file metadata: path, extension, size, modified time, source audit, extension/path/file-name/directory/keyword scope-policy audit, validator-safe filtered-all/no-metadata data-quality gap packages routed to collectorx.data_quality.collection_gaps, lake route audit, usable/filesystem/file/gap counts, explicit filesystem/data-quality/research-documents-lens readiness gates, filesystem boundary proof, extension coverage, skipped reason counts, and per-root scan results.",
       "must_not_collect": "File bodies by default, whole-disk scans, credentials, or investment conclusions.",
       "production_gap": "Real Windows/Linux device validation and broader private file-sample review."
     },
@@ -148,7 +148,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-import",
       "cli": "python3 skills/xueqiu-watchlist/scripts/xueqiu_query.py collect --input <authorized-xueqiu-watchlist-export> --out-dir <out-dir>",
-      "collects": "Xueqiu watchlists, symbols, groups, industries, tags, notes, followed time, archive provenance, source audit, symbol/market/group/industry/tag/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages routed to data-quality lake, gap/usable/watchlist manifest counts, explicit business/data-quality/Wiki readiness gates, watchlist authorization boundary proof, and field coverage.",
+      "collects": "Xueqiu watchlists, symbols, groups, industries, tags, notes, followed time, archive provenance, source audit, symbol/market/group/industry/tag/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages routed to data-quality lake, gap/usable/watchlist manifest counts, explicit business/data-quality/Wiki readiness gates, watchlist authorization boundary proof, field coverage, and Investor Wiki evidence raw/gap/usable generated_from observability.",
       "must_not_collect": "Broker-confirmed holdings, executions, orders, or fund flows.",
       "production_gap": "Real Xueqiu account export discovery and real watchlist pagination validation."
     },
@@ -161,7 +161,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-export-har-or-browser-history-import",
       "cli": "python3 skills/xueqiu-investor-activity/scripts/xueqiu_activity.py collect --input <authorized-xueqiu-export-har-or-browser-history-copy> --out-dir <out-dir> --sync-soulmirror",
-      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, authorized browser-history visits, source browser apps, visit/typed counts, browser transition types, domain-filtered URLs, source audit, pagination marker audit, activity/source-surface/source-app/domain/symbol/author/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages routed to data-quality lake, gap/usable/activity manifest counts, explicit business/data-quality/Wiki readiness gates, activity-boundary proof with authorization scope boundary, browser-history boundary proof, pagination completeness summary, and field coverage.",
+      "collects": "Xueqiu follows, posts, comments, favorites, saved pages, owner portfolios, rebalance records, authorized browser-history visits, source browser apps, visit/typed counts, browser transition types, domain-filtered URLs, source audit, pagination marker audit, activity/source-surface/source-app/domain/symbol/author/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages routed to data-quality lake, gap/usable/activity manifest counts, explicit business/data-quality/Wiki readiness gates, activity-boundary proof with authorization scope boundary, browser-history boundary proof, pagination completeness summary, field coverage, and Investor Wiki evidence raw/gap/usable generated_from observability.",
       "must_not_collect": "Trading facts unless corroborated by broker sources, login secrets, or platform-wide public scraping.",
       "production_gap": "Real account adapter/export workflow, real pagination coverage, broader real browser-history samples, and rate/terms boundary review."
     },
@@ -226,7 +226,7 @@
       "gate": "G2",
       "finclaw_action": "authorized-feishu-export-import-before-investor-lenses",
       "cli": "python3 skills/feishu/scripts/feishu_api.py collect --input <authorized-feishu-export> --out-dir <out-dir>",
-      "collects": "Feishu messages, chats, contacts, documents, file refs, folders, meeting refs, recording refs, source audit, ZIP skip reasons, and path-level parse results.",
+      "collects": "Feishu messages, chats, contacts, documents, file refs, folders, meeting refs, recording refs, source audit, ZIP skip reasons, path-level parse results, validator-safe missing-input/no-readable data-quality gap packages, usable/feishu/gap counts, explicit Feishu/data-quality/downstream-lens readiness gates, and direct-Wiki block.",
       "must_not_collect": "Tenant secrets, app secrets, cookies, access/refresh tokens, unauthorized workspace-wide data, file bodies by default, or direct investor conclusions.",
       "production_gap": "Real Feishu account API/export validation, tenant permission boundary review, participant normalization, and investor lens backtest."
     },
@@ -317,7 +317,7 @@
       "gate": "G2-partial",
       "finclaw_action": "authorized-saved-article-or-favorites-import",
       "cli": "python3 skills/wechat-favorites/scripts/wechat_favorites.py collect --input <authorized-wechat-favorites-export> --out-dir <out-dir>",
-      "collects": "WeChat favorite/read/share/saved-file actions, article titles, source accounts and source-account types, URLs, article IDs, tags, text previews, favorite reasons, share targets, read duration/progress, symbols, engagement counters, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, action coverage, behavior coverage, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
+      "collects": "WeChat favorite/read/share/saved-file actions, article titles, source accounts and source-account types, URLs, article IDs, tags, text previews, favorite reasons, share targets, read duration/progress, symbols, engagement counters, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, validator-safe missing/no-readable/filtered-all data-quality gap packages, usable/wechat-favorite/favorite/gap counts, explicit WeChat-favorites/data-quality/article-lens readiness gates, action coverage, behavior coverage, per-input source audit, skipped reasons, ZIP member audit, and content policy.",
       "must_not_collect": "WeChat secrets, unrelated article bodies as conclusions, or platform-wide public account scraping.",
       "production_gap": "Real WeChat favorites/public-account stores and Windows/Linux path validation."
     },

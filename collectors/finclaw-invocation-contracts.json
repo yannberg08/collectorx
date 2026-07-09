@@ -88,7 +88,7 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Select an authorized root folder for metadata-only scanning; optionally narrow by extension, path, file name, directory name, or metadata keyword.",
-      "preflight": "Root exists, optional filesystem scope-policy allow/deny rules are explicit when used, and the user understands file bodies are not read by the generic collector; missing/no-retained metadata produces a traceable gap package.",
+      "preflight": "Root exists, optional filesystem scope-policy allow/deny rules are explicit when used, and the user understands file bodies are not read by the generic collector; missing/no-retained metadata produces a validator-safe data-quality gap package routed to collectorx.data_quality.collection_gaps with can_enter_filesystem_lake=false, can_enter_data_quality_lake=true, can_feed_research_documents_lens=false, and can_feed_investor_wiki_directly=false.",
       "failure_state": "needs_authorized_root_or_scope_policy_retained_files_or_gap_package"
     },
     {
@@ -185,8 +185,8 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Provide authorized Feishu exports or use the registered read-only Feishu tooling where available.",
-      "preflight": "Workspace scope is user-authorized and tenant/app secrets are not written to output.",
-      "failure_state": "needs_authorized_feishu_export"
+      "preflight": "Workspace scope is user-authorized and tenant/app secrets are not written to output; missing input or no readable records produce validator-safe data-quality gap packages with can_enter_feishu_lake=false, can_enter_data_quality_lake=true, downstream lens gates false, and can_feed_investor_wiki_directly=false.",
+      "failure_state": "needs_authorized_feishu_export_or_readable_records_or_gap_package"
     },
     {
       "id": "meeting-minutes",
@@ -261,8 +261,8 @@
       "product_surface": "import-beta",
       "evidence_role": "personal-channel-lake",
       "user_step": "Provide authorized WeChat favorites, saved article files, folders, or ZIP packages; optionally choose source-account, account-type, action, tag, domain, and keyword allow/deny scope filters.",
-      "preflight": "Input is user-selected; optional scope filters are applied before Lake output and do not imply public-account platform-wide scraping.",
-      "failure_state": "needs_authorized_wechat_favorites_export"
+      "preflight": "Input is user-selected; optional scope filters are applied before Lake output and do not imply public-account platform-wide scraping; missing, no-readable, and filtered-all runs produce validator-safe data-quality gap packages with can_enter_wechat_favorites_lake=false, can_enter_data_quality_lake=true, can_feed_wechat_article_favorites_lens=false, and can_feed_investor_wiki_directly=false.",
+      "failure_state": "needs_authorized_wechat_favorites_export_or_scope_policy_retained_articles_or_gap_package"
     },
     {
       "id": "wechat-article-favorites",
