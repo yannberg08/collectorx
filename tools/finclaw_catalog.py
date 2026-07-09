@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import hashlib
 import json
 import re
 import shlex
@@ -908,7 +909,68 @@ def validation_record_reviewer(record: dict[str, Any]) -> str:
     return str(record.get("validated_by") or record.get("reviewer") or "").strip()
 
 
-def validation_record_issues(record: dict[str, Any], item: dict[str, Any]) -> list[str]:
+def artifact_path_value(artifact: Any) -> str:
+    if isinstance(artifact, str):
+        return artifact.strip()
+    if isinstance(artifact, dict):
+        return str(artifact.get("path") or artifact.get("local_path") or "").strip()
+    return ""
+
+
+def artifact_sha256_value(artifact: Any) -> str:
+    if isinstance(artifact, dict):
+        return str(artifact.get("sha256") or "").strip().lower()
+    return ""
+
+
+def resolve_artifact_path(raw_path: str, artifact_root: Path | None) -> Path:
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    return (artifact_root or Path.cwd()) / path
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def artifact_integrity_issues(artifacts: list[Any], *, artifact_root: Path | None) -> list[str]:
+    issues: list[str] = []
+    for artifact in artifacts:
+        raw_path = artifact_path_value(artifact)
+        if not raw_path:
+            issues.append("artifact_missing_path")
+            continue
+        if "<" in raw_path or ">" in raw_path:
+            issues.append("artifact_path_placeholder")
+            continue
+        path = resolve_artifact_path(raw_path, artifact_root)
+        if not path.is_file():
+            issues.append("artifact_path_not_found")
+            continue
+        expected_sha256 = artifact_sha256_value(artifact)
+        if not expected_sha256:
+            issues.append("artifact_missing_sha256")
+            continue
+        if "<" in expected_sha256 or ">" in expected_sha256:
+            issues.append("artifact_sha256_placeholder")
+            continue
+        if sha256_file(path) != expected_sha256:
+            issues.append("artifact_sha256_mismatch")
+    return issues
+
+
+def validation_record_issues(
+    record: dict[str, Any],
+    item: dict[str, Any],
+    *,
+    verify_artifacts: bool = False,
+    artifact_root: Path | None = None,
+) -> list[str]:
     issues: list[str] = []
     collector_id = validation_record_collector_id(record)
     if collector_id != item["id"]:
@@ -926,6 +988,8 @@ def validation_record_issues(record: dict[str, Any], item: dict[str, Any]) -> li
         issues.append("missing_real_validation_type")
     if not validation_record_artifacts(record):
         issues.append("missing_artifacts")
+    elif verify_artifacts:
+        issues.extend(artifact_integrity_issues(validation_record_artifacts(record), artifact_root=artifact_root))
     if not validation_record_timestamp(record):
         issues.append("missing_validated_at")
     if not validation_record_reviewer(record):
@@ -945,14 +1009,31 @@ def accepted_validation_record_summary(record: dict[str, Any]) -> dict[str, Any]
     }
 
 
-def validation_evidence_item(item: dict[str, Any], records: list[dict[str, Any]]) -> dict[str, Any]:
+def validation_evidence_item(
+    item: dict[str, Any],
+    records: list[dict[str, Any]],
+    *,
+    verify_artifacts: bool = False,
+    artifact_root: Path | None = None,
+) -> dict[str, Any]:
     candidate_records = [record for record in records if validation_record_collector_id(record) == item["id"]]
     if not candidate_records:
         status = "missing_evidence"
         accepted_record = None
         issues = ["missing_validation_evidence"]
     else:
-        evaluations = [(record, validation_record_issues(record, item)) for record in candidate_records]
+        evaluations = [
+            (
+                record,
+                validation_record_issues(
+                    record,
+                    item,
+                    verify_artifacts=verify_artifacts,
+                    artifact_root=artifact_root,
+                ),
+            )
+            for record in candidate_records
+        ]
         accepted = [record for record, record_issues in evaluations if not record_issues]
         if accepted:
             status = "ready_for_readiness_review"
@@ -978,11 +1059,22 @@ def build_validation_evidence_report(
     entries: list[dict[str, Any]],
     *,
     evidence_path: Path,
+    verify_artifacts: bool = False,
+    artifact_root: Path | None = None,
 ) -> dict[str, Any]:
     records, ledger_issues = load_validation_evidence(evidence_path)
     backlog = build_validation_backlog(entries)
     backlog_by_id = {item["id"]: item for item in backlog["items"]}
-    items = [validation_evidence_item(item, records) for item in backlog["items"]]
+    effective_artifact_root = artifact_root or evidence_path.parent
+    items = [
+        validation_evidence_item(
+            item,
+            records,
+            verify_artifacts=verify_artifacts,
+            artifact_root=effective_artifact_root,
+        )
+        for item in backlog["items"]
+    ]
     matched_ids = {item["id"] for item in items}
     unmatched_records = [
         {
@@ -1000,6 +1092,10 @@ def build_validation_evidence_report(
         "evidence_schema": VALIDATION_EVIDENCE_SCHEMA,
         "validation_backlog_schema": backlog["schema"],
         "evidence_path": str(evidence_path),
+        "artifact_verification": {
+            "enabled": verify_artifacts,
+            "artifact_root": str(effective_artifact_root) if verify_artifacts else None,
+        },
         "ledger_issues": ledger_issues,
         "total": len(items),
         "summary": {
@@ -1063,7 +1159,13 @@ def print_human_validation_evidence(report: dict[str, Any]) -> None:
 
 def cmd_validation_evidence(args: argparse.Namespace) -> int:
     entries = filtered_entries(args)
-    report = build_validation_evidence_report(entries, evidence_path=Path(args.evidence))
+    artifact_root = Path(args.artifact_root) if args.artifact_root else None
+    report = build_validation_evidence_report(
+        entries,
+        evidence_path=Path(args.evidence),
+        verify_artifacts=args.verify_artifacts,
+        artifact_root=artifact_root,
+    )
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
     else:
@@ -1133,8 +1235,19 @@ def readiness_review_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def build_readiness_review_packet(entries: list[dict[str, Any]], *, evidence_path: Path) -> dict[str, Any]:
-    evidence_report = build_validation_evidence_report(entries, evidence_path=evidence_path)
+def build_readiness_review_packet(
+    entries: list[dict[str, Any]],
+    *,
+    evidence_path: Path,
+    verify_artifacts: bool = False,
+    artifact_root: Path | None = None,
+) -> dict[str, Any]:
+    evidence_report = build_validation_evidence_report(
+        entries,
+        evidence_path=evidence_path,
+        verify_artifacts=verify_artifacts,
+        artifact_root=artifact_root,
+    )
     items = [readiness_review_item(item) for item in evidence_report["items"]]
     eligible = [item for item in items if item["readiness_review_allowed"]]
     blocked = [item for item in items if not item["readiness_review_allowed"]]
@@ -1142,6 +1255,7 @@ def build_readiness_review_packet(entries: list[dict[str, Any]], *, evidence_pat
         "schema": "collectorx.finclaw_readiness_review_packet.v1",
         "validation_evidence_audit_schema": evidence_report["schema"],
         "evidence_path": evidence_report["evidence_path"],
+        "artifact_verification": evidence_report["artifact_verification"],
         "total": len(items),
         "summary": {
             "eligible_for_human_review": len(eligible),
@@ -1178,7 +1292,13 @@ def print_human_readiness_review(packet: dict[str, Any]) -> None:
 
 def cmd_readiness_review(args: argparse.Namespace) -> int:
     entries = filtered_entries(args)
-    packet = build_readiness_review_packet(entries, evidence_path=Path(args.evidence))
+    artifact_root = Path(args.artifact_root) if args.artifact_root else None
+    packet = build_readiness_review_packet(
+        entries,
+        evidence_path=Path(args.evidence),
+        verify_artifacts=args.verify_artifacts,
+        artifact_root=artifact_root,
+    )
     if args.json:
         print(json.dumps(packet, ensure_ascii=False, indent=2, sort_keys=True))
     else:
@@ -1342,6 +1462,15 @@ def build_parser() -> argparse.ArgumentParser:
     validation_evidence_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
     validation_evidence_parser.add_argument("--readiness")
     validation_evidence_parser.add_argument("--evidence", required=True, help="Path to validation evidence JSON.")
+    validation_evidence_parser.add_argument(
+        "--verify-artifacts",
+        action="store_true",
+        help="Verify artifact local paths and sha256 values before accepting evidence.",
+    )
+    validation_evidence_parser.add_argument(
+        "--artifact-root",
+        help="Resolve relative artifact paths under this directory. Defaults to the evidence file directory.",
+    )
     validation_evidence_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     validation_evidence_parser.add_argument(
         "--require-all-review-ready",
@@ -1358,6 +1487,15 @@ def build_parser() -> argparse.ArgumentParser:
     readiness_review_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
     readiness_review_parser.add_argument("--readiness")
     readiness_review_parser.add_argument("--evidence", required=True, help="Path to validation evidence JSON.")
+    readiness_review_parser.add_argument(
+        "--verify-artifacts",
+        action="store_true",
+        help="Verify artifact local paths and sha256 values before allowing human review.",
+    )
+    readiness_review_parser.add_argument(
+        "--artifact-root",
+        help="Resolve relative artifact paths under this directory. Defaults to the evidence file directory.",
+    )
     readiness_review_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     readiness_review_parser.add_argument(
         "--require-any-eligible",

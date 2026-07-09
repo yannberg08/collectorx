@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -407,6 +408,95 @@ def test_validation_evidence_audits_real_validation_records() -> None:
     assert by_id["wechat"]["issues"] == ["missing_validation_evidence"]
 
 
+def test_validation_evidence_can_verify_artifact_sha256() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        artifact_root = root / "artifacts"
+        eastmoney_artifact = artifact_root / "eastmoney" / "manifest.json"
+        eastmoney_artifact.parent.mkdir(parents=True)
+        eastmoney_artifact.write_text('{"collector":"eastmoney-portfolio"}', encoding="utf-8")
+        eastmoney_sha256 = hashlib.sha256(eastmoney_artifact.read_bytes()).hexdigest()
+
+        ths_artifact = artifact_root / "ths" / "manifest.json"
+        ths_artifact.parent.mkdir(parents=True)
+        ths_artifact.write_text('{"collector":"ths-portfolio"}', encoding="utf-8")
+
+        evidence_path = root / "validation-evidence.json"
+        evidence_path.write_text(
+            json.dumps(
+                {
+                    "schema": "collectorx.finclaw_real_validation_evidence.v1",
+                    "records": [
+                        {
+                            "record_id": "em-real-001",
+                            "collector_id": "eastmoney-portfolio",
+                            "result": "pass",
+                            "decision": "post_guarded_gap_closed",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_account", "real_device", "wiki_backtest"],
+                            "artifacts": [{"path": "eastmoney/manifest.json", "sha256": eastmoney_sha256}],
+                            "validated_at": "2026-07-09T18:00:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                        {
+                            "record_id": "ths-real-001",
+                            "collector_id": "ths-portfolio",
+                            "result": "pass",
+                            "decision": "ready_for_readiness_review",
+                            "covers_production_gap": True,
+                            "evidence_types": ["real_export", "package_validation"],
+                            "artifacts": [{"path": "ths/manifest.json", "sha256": "0" * 64}],
+                            "validated_at": "2026-07-09T19:00:00+08:00",
+                            "validated_by": "qa-owner",
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        report = run_json(
+            "validation-evidence",
+            "--priority",
+            "P0",
+            "--evidence",
+            str(evidence_path),
+            "--verify-artifacts",
+            "--artifact-root",
+            str(artifact_root),
+            "--json",
+        )
+        packet = run_json(
+            "readiness-review",
+            "--priority",
+            "P0",
+            "--evidence",
+            str(evidence_path),
+            "--verify-artifacts",
+            "--artifact-root",
+            str(artifact_root),
+            "--json",
+        )
+
+    assert report["artifact_verification"] == {
+        "enabled": True,
+        "artifact_root": str(artifact_root),
+    }
+    assert report["summary"]["by_evidence_status"] == {
+        "insufficient_evidence": 1,
+        "missing_evidence": 10,
+        "ready_for_readiness_review": 1,
+    }
+    by_id = {item["id"]: item for item in report["items"]}
+    assert by_id["eastmoney-portfolio"]["evidence_status"] == "ready_for_readiness_review"
+    assert by_id["ths-portfolio"]["evidence_status"] == "insufficient_evidence"
+    assert "artifact_sha256_mismatch" in by_id["ths-portfolio"]["issues"]
+    assert packet["artifact_verification"]["enabled"] is True
+    assert packet["summary"]["eligible_for_human_review"] == 1
+    assert packet["summary"]["blocked_from_human_review"] == 11
+
+
 def test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         evidence_path = Path(tmp) / "validation-evidence.json"
@@ -723,10 +813,12 @@ def test_final_handoff_checklist_matches_closeout_report() -> None:
     assert "The next phase is real validation, not more collector expansion." in handoff
     assert "validation-template --json" in handoff
     assert "validation-evidence --evidence" in handoff
+    assert "--verify-artifacts --artifact-root" in handoff
     assert "readiness-review --evidence" in handoff
     assert "collectorx.finclaw_real_validation_evidence.v1" in evidence_ledger
     assert "validation-template" in evidence_ledger
     assert "insufficient_evidence" in evidence_ledger
+    assert "sha256" in evidence_ledger
     assert "catalog_update_allowed_by_tool" in evidence_ledger
     assert "does not edit" in evidence_ledger
 
@@ -749,6 +841,7 @@ def main() -> int:
     test_validation_backlog_matches_closeout_gap_scope()
     test_validation_template_matches_backlog_and_is_not_accepted_as_evidence()
     test_validation_evidence_audits_real_validation_records()
+    test_validation_evidence_can_verify_artifact_sha256()
     test_validation_evidence_require_all_review_ready_fails_on_remaining_gaps()
     test_readiness_review_packet_requires_audited_evidence()
     test_readiness_review_require_any_eligible_fails_without_valid_evidence()

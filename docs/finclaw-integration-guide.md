@@ -92,10 +92,14 @@ python3 tools/finclaw_catalog.py validation-template \
 python3 tools/finclaw_catalog.py validation-evidence \
   --priority P0 \
   --evidence docs/validations/real-validation-evidence.json \
+  --verify-artifacts \
+  --artifact-root docs/validations/artifacts \
   --json
 python3 tools/finclaw_catalog.py readiness-review \
   --priority P0 \
   --evidence docs/validations/real-validation-evidence.json \
+  --verify-artifacts \
+  --artifact-root docs/validations/artifacts \
   --json
 python3 tools/finclaw_catalog.py runbook \
   --priority P0 \
@@ -135,9 +139,10 @@ template is intentionally rejected by `validation-evidence`. The
 `validation-evidence` output audits a QA-maintained evidence ledger and marks
 each item as `missing_evidence`, `insufficient_evidence`, or
 `ready_for_readiness_review`; it still does not edit readiness or close gaps by
-itself. The `readiness-review` output turns that audit into a human review
-packet with eligible and blocked entries, required checks, and explicit
-`catalog_update_allowed_by_tool=false` policy.
+itself. When release QA uses `--verify-artifacts`, local artifact paths and
+sha256 hashes must match before a record can pass. The `readiness-review` output
+turns that audit into a human review packet with eligible and blocked entries,
+required checks, and explicit `catalog_update_allowed_by_tool=false` policy.
 
 For batch collection, FinClaw should use `runbook --json`. The runbook keeps the
 same item shape as `doctor` but groups entries into product execution stages:

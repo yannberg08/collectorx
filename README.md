@@ -87,8 +87,9 @@ Operational docs:
   reporting, `validation-backlog` for the next real-user/device/export
   validation queue, `validation-template` to generate a fillable QA ledger from
   that queue, `validation-evidence` to audit QA evidence records before a
-  readiness review, `readiness-review` to generate a human review packet that
-  still cannot edit catalog readiness, `runbook` for batch execution order,
+  readiness review, `--verify-artifacts` to require local artifact path and
+  sha256 checks, `readiness-review` to generate a human review packet that still
+  cannot edit catalog readiness, `runbook` for batch execution order,
   `batch-manifest` for compact product execution manifests, and
   `plan --require-ready` before executing a single collector, then execute the
   returned `argv` list rather than reparsing the display command string.

@@ -71,6 +71,9 @@ stop expanding and move into real-user validation.
   `ready_for_readiness_review` when a record passes, covers the production gap,
   includes real-validation evidence types, artifacts, timestamp, and reviewer.
   It still does not edit readiness.
+- `validation-evidence` and `readiness-review` support `--verify-artifacts`
+  with `--artifact-root` so release QA can require local artifact existence and
+  sha256 matches before accepting a record.
 - `tools/finclaw_catalog.py readiness-review --evidence <ledger> --json`
   turns accepted validation evidence into a human review packet with eligible
   and blocked entries, required checks, and a non-editing catalog policy.
@@ -89,7 +92,9 @@ python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 .venv/bin/python tools/finclaw_catalog.py validation-template --json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --json
+.venv/bin/python tools/finclaw_catalog.py validation-evidence --evidence <ledger> --verify-artifacts --artifact-root <artifact-root> --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --json
+.venv/bin/python tools/finclaw_catalog.py readiness-review --evidence <ledger> --verify-artifacts --artifact-root <artifact-root> --json
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```

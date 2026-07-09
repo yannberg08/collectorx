@@ -16,9 +16,13 @@ collector has enough evidence to enter a human readiness review.
   --json > docs/validations/real-validation-evidence.json
 .venv/bin/python tools/finclaw_catalog.py validation-evidence \
   --evidence docs/validations/real-validation-evidence.json \
+  --verify-artifacts \
+  --artifact-root docs/validations/artifacts \
   --json
 .venv/bin/python tools/finclaw_catalog.py readiness-review \
   --evidence docs/validations/real-validation-evidence.json \
+  --verify-artifacts \
+  --artifact-root docs/validations/artifacts \
   --json
 ```
 
@@ -89,6 +93,13 @@ true:
 - `validated_at` and `validated_by` are present.
 
 Anything else remains `missing_evidence` or `insufficient_evidence`.
+
+When `--verify-artifacts` is used, each artifact must be a local file reference
+with a valid `path` or `local_path` and a matching `sha256`. Relative artifact
+paths are resolved under `--artifact-root`, or under the evidence ledger's
+directory when no root is supplied. Missing files, placeholder paths, missing
+hashes, placeholder hashes, or hash mismatches keep the record blocked as
+`insufficient_evidence`.
 
 ## Readiness Review Packet
 
