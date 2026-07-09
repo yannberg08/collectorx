@@ -217,10 +217,10 @@ def test_parse_watchlist_value():
 
 def test_local_file_label_masks_account_ids():
     path = Path("/tmp/ShortTermWizard/188888888/HXShortTermWizardMarketMapKey.text")
-    assert local_file_label(path) == "188****888/HXShortTermWizardMarketMapKey.text"
+    assert local_file_label(path) == str(Path("188****888") / "HXShortTermWizardMarketMapKey.text")
 
     xcs_path = Path("/tmp/XcsFold/XcsLscjDataFile_12345678_188888888")
-    assert local_file_label(xcs_path) == "XcsFold/XcsLscjDataFile_123****678_188****888"
+    assert local_file_label(xcs_path) == str(Path("XcsFold") / "XcsLscjDataFile_123****678_188****888")
 
     print("test_local_file_label_masks_account_ids: PASSED")
 
