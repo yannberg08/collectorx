@@ -5,11 +5,13 @@
 import sys
 import shutil
 import json
+import subprocess
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from eastmoney.local_collect import (
+    DATA_QUALITY_TARGET,
     build_local_probe_report,
     build_collection_readiness,
     collect_local,
@@ -24,6 +26,29 @@ from eastmoney.local_collect import (
 from eastmoney.scope import build_eastmoney_scope_policy
 from eastmoney.trade_export import parse_trade_export_file, parse_trade_export_text
 from eastmoney.ui_collect import parse_ax_trade_records, parse_ax_trade_state, parse_screen_trade_state
+
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def assert_package_valid(output: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(output),
+            "--collector",
+            "eastmoney-investor-v2",
+            "--require-evidence",
+            "--json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    summary = json.loads(result.stdout)
+    assert summary["valid"] is True
 
 
 def test_parse_stock_token():
@@ -105,6 +130,7 @@ def test_windows_code_level_probe_fixture():
     assert all(not target.startswith("vertical/investor/") for event in lake_events for target in event.get("wiki_targets", []))
     assert any(event["data"].get("source_kind") == "watchlist" for event in lake_events)
     assert (output / "wiki" / "external" / "investor" / "risk-portfolio" / "东方财富资产持仓边界.md").exists()
+    assert_package_valid(output)
 
 
 def test_linux_code_level_probe_fixture():
@@ -170,12 +196,22 @@ def test_trade_export_detail_fixture():
     assert counts["data_gap"] == 3
     assert manifest["collection_readiness"]["status"] == "ready_for_investor_avatar"
     assert manifest["collection_readiness"]["can_claim_complete_trade_collection"] is True
+    assert manifest["event_count"] == manifest["source_counts"]["total_events"]
+    assert manifest["usable_event_count"] == manifest["event_count"] - manifest["gap_event_count"]
+    assert manifest["gap_event_count"] == 3
+    assert manifest["strong_trade_event_count"] == 8
+    assert manifest["lake_kind_counts"]["trade"] == 5
+    assert manifest["lake_kind_counts"]["holding"] == 3
+    assert manifest["lake_kind_counts"]["profile"] >= 3
     assert (output / "investor_wiki_evidence.v1.json").exists()
     evidence = json.loads((output / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
     assert evidence["coverage_summary"]["dimension_count"] == 7
     assert evidence["coverage_summary"]["subdimension_count"] == 20
     assert evidence["generated_from"]["soulmirror_target_schema"] == "external.investor / 7 dimensions / 20 subdimensions"
+    assert evidence["generated_from"]["event_count"] == manifest["usable_event_count"]
+    assert evidence["generated_from"]["gap_event_count"] == manifest["gap_event_count"]
     assert manifest["validation"]["ok"] is True
+    assert_package_valid(output)
 
 
 def test_eastmoney_scope_policy_filters_strong_trade_package():
@@ -220,6 +256,7 @@ def test_eastmoney_scope_policy_filters_strong_trade_package():
     assert len(profile["trade_execution_sample"]) == 1
     assert profile["asset_snapshot_sample"] == []
     assert manifest["validation"]["ok"] is True
+    assert_package_valid(output)
 
 
 def test_eastmoney_scope_policy_filtered_all_package_status():
@@ -245,16 +282,51 @@ def test_eastmoney_scope_policy_filtered_all_package_status():
     assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
     assert manifest["collection_readiness"]["can_enter_finclaw"] is False
     assert manifest["source_counts"]["data_gap"] == 1
+    assert manifest["event_count"] == 1
+    assert manifest["usable_event_count"] == 0
+    assert manifest["gap_event_count"] == 1
+    assert manifest["strong_trade_event_count"] == 0
+    assert manifest["lake_kind_counts"] == {"profile": 1}
     assert manifest["eastmoney_portfolio_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+    assert manifest["eastmoney_portfolio_boundary_proof"]["usable_event_count"] == 0
+    assert manifest["eastmoney_portfolio_boundary_proof"]["gap_event_count"] == 1
 
     events_path = output / "lake" / "eastmoney-investor-v2" / "events.jsonl"
     events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
     assert len(events) == 1
-    assert events[0]["kind"] == "profile"
-    assert events[0]["time"]
-    assert events[0]["data"]["source_kind"] == "data_gap"
-    assert events[0]["data"]["gap"] == "eastmoney_scope_policy_filtered_all"
+    event = events[0]
+    assert event["kind"] == "profile"
+    assert event["time"]
+    assert event["data"]["source_kind"] == "data_gap"
+    assert event["data"]["gap"] == "eastmoney_scope_policy_filtered_all"
+    assert event["data"]["profile_type"] == "eastmoney_collection_gap"
+    assert event["data"]["subtype"] == "collector_gap"
+    assert event["data"]["action_type"] == "collector_gap"
+    assert event["data"]["candidate_event_count"] > 0
+    assert event["data"]["retained_event_count"] == 0
+    assert event["data"]["filtered_event_count"] == event["data"]["candidate_event_count"]
+    assert event["data"]["filter_reason_counts"]
+    assert event["data"]["exact_business_numbers_preserved"] is True
+    assert event["data"]["read_only"] is True
+    assert event["data"]["credential_material_collected"] is False
+    assert event["data"]["device_fingerprint_collected"] is False
+    assert event["data"]["raw_trade_payload_collected"] is False
+    assert event["data"]["order_mutation_performed"] is False
+    assert event["data"]["investment_conclusion_claimed"] is False
+    assert event["data"]["complete_trade_collection_claimed"] is False
+    assert event["data"]["collector_writes_investor_wiki_directly"] is False
+    assert DATA_QUALITY_TARGET in event["wiki_targets"]
+    assert all(not target.startswith("vertical/investor/") for target in event["wiki_targets"])
+    assert all(not target.startswith("investor.data_quality") for target in event["wiki_targets"])
+    evidence = json.loads((output / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+    assert evidence["generated_from"]["event_count"] == 0
+    assert evidence["generated_from"]["raw_event_count"] == 1
+    assert evidence["generated_from"]["gap_event_count"] == 1
+    assert evidence["generated_from"]["source_kind_counts"] == {}
+    assert evidence["generated_from"]["raw_source_kind_counts"] == {"data_gap": 1}
+    assert evidence["generated_from"]["lake_kind_counts"] == {}
     assert manifest["validation"]["ok"] is True
+    assert_package_valid(output)
 
 
 def test_trade_ui_locked_state_parser():

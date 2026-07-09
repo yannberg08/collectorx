@@ -3911,6 +3911,36 @@ Findings:
 - Fixture validation covers retained social weak evidence, filtered-all gap
   output, empty Wiki evidence on pure gaps, and shared package validation.
 
+### Wave BF - P0 EastMoney Gap Package Hardening
+
+Status: `completed-production-candidate`
+
+Validation record:
+
+- `docs/validations/investor-p0-eastmoney-gap-package-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `eastmoney-portfolio` to `0.7.4`.
+- Converted EastMoney authorization filtered-all output into a
+  validator-safe `eastmoney_scope_policy_filtered_all` profile gap package
+  routed to `collectorx.data_quality.collection_gaps`.
+- Gap payloads now expose candidate, retained, filtered, and filter-reason
+  counts while carrying explicit read-only, exact-number-preservation, no
+  credential-material, no device-fingerprint, no raw-trade-payload,
+  no account-mutation, no investment-conclusion, no complete-trade-collection,
+  and no direct-Wiki-write flags.
+- Manifest and structured profile now separate `event_count`,
+  `usable_event_count`, `gap_event_count`, `strong_trade_event_count`, and
+  `lake_kind_counts`.
+- Investor Wiki evidence now counts only retained non-gap EastMoney business
+  events; pure gap packages keep `generated_from.event_count=0` and record the
+  raw gap count separately.
+- Fixture validation now runs `tools/validate_collector_package.py --collector
+  eastmoney-investor-v2 --require-evidence` for Windows simulation,
+  full strong-trade fixtures, retained scope-policy packages, and filtered-all
+  gap packages.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |

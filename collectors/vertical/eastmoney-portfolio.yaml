@@ -35,6 +35,13 @@ outputs:
   lake_path: lake/eastmoney-investor-v2/events.jsonl
   evidence_schema: finclaw.investor_wiki_evidence.v1
   evidence_path: investor_wiki_evidence.v1.json
+  manifest_counters:
+    - event_count
+    - usable_event_count
+    - gap_event_count
+    - strong_trade_event_count
+    - lake_kind_counts
+  gap_wiki_target: collectorx.data_quality.collection_gaps
   wiki_routes:
     - wiki/external/investor/
     - wiki/vertical/investor/
@@ -68,7 +75,8 @@ readiness_gate:
     - account
     - source
     - keyword
-  filtered_all_behavior: emit_scope_policy_gap
+  filtered_all_behavior: emit_validator_safe_scope_policy_gap
+  investor_wiki_evidence_policy: excludes_gap_events_from_business_evidence
 
 skill: eastmoney-portfolio
 
@@ -86,5 +94,7 @@ description: |
   交易接口状态，以及东方财富 Mac 交易页自动只读采集的资产、持仓、成交、委托、
   资金流水。用户授权后的账户标识、股东账号、委托号、成交号、金额、数量、价格等
   业务字段会保留在本地 Lake；采集器不会读取或请求交易密码，不绕过账户锁定，不下单、
-  不撤单、不转账。可选授权范围策略按事件类型、证券代码、账户、来源或关键词缩小输出，
-  manifest 会记录 eastmoney_scope_policy 和 filtered-all 状态。
+  不撤单、不转账。可选授权范围策略按事件类型、证券代码、账户、来源或关键词缩小输出；
+  filtered-all 会生成 validator-safe 的 eastmoney_scope_policy_filtered_all 采集缺口包，
+  manifest 会分离 event_count、usable_event_count、gap_event_count 和 strong_trade_event_count，
+  Investor Wiki evidence 只使用可用业务事件，不把采集缺口写成用户投资事实。

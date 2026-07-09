@@ -268,6 +268,17 @@ Preconditions:
   source, or keyword. If every candidate is outside that scope, the package
   emits an `eastmoney_scope_policy_filtered_all` gap and reports
   `collection_readiness.status=scope_policy_filtered_all`.
+- Filtered-all packages still contain one validator-safe Lake event routed to
+  `collectorx.data_quality.collection_gaps`, but
+  `investor_wiki_evidence.v1.json.generated_from.event_count=0`; FinClaw must
+  treat it as a traceable collection gap, not a user investment fact.
+- After collection, run the package validation command from the catalog plan or:
+
+```bash
+python3 tools/validate_collector_package.py <out-dir> \
+  --collector eastmoney-investor-v2 \
+  --require-evidence
+```
 
 Do not ask for or store trading password, login password, cookie, token, session,
 signature, or device fingerprint.

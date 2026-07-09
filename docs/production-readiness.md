@@ -16,7 +16,31 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`email` and `email-research` now emit validator-safe collection gap packages:
+`eastmoney-portfolio` now emits validator-safe strong-trade collection gap
+packages and keeps those gaps out of Investor Wiki business evidence:
+
+- Upgraded `eastmoney-portfolio` to `0.7.4`.
+- Filtered-all authorization-scope runs emit one
+  `eastmoney_scope_policy_filtered_all` gap event under
+  `lake/eastmoney-investor-v2/events.jsonl`; the normalized Lake event is
+  `kind=profile` and routes to `collectorx.data_quality.collection_gaps`.
+- Gap events now carry profile/subtype/action markers, candidate/retained/
+  filtered counts, filter reason summaries, read-only proof, exact business
+  number preservation, and false-claim flags for credential material, device
+  fingerprint, raw trade payload, account mutation, investment conclusions,
+  complete trade collection, and direct investor Wiki writes.
+- Manifest and structured profile now separate `event_count`,
+  `usable_event_count`, `gap_event_count`, `strong_trade_event_count`, and
+  `lake_kind_counts`.
+- Generated `investor_wiki_evidence.v1.json` counts only non-gap retained
+  business events; pure gap packages report
+  `generated_from.event_count=0`, `raw_event_count=1`, and
+  `gap_event_count=1`.
+- The EastMoney fixture suite now runs the shared CollectorX package validator
+  for Windows simulation, full strong-trade fixture packages, retained
+  scope-policy packages, and filtered-all scope-policy gap packages.
+
+The prior completed wave: `email` and `email-research` now emit validator-safe collection gap packages:
 
 - Generic email IMAP/local-scan/local-import missing-account, missing-export,
   no-message, collection-failure, and filtered-all scope runs now emit
@@ -231,7 +255,7 @@ filtered-all gap packages:
 - Investor Wiki evidence keeps all 20 subdimensions at `support_level=none`
   for filtered-all packages.
 
-The prior completed wave: `eastmoney-portfolio` now supports event-level
+Earlier EastMoney scope-policy wave: `eastmoney-portfolio` added event-level
 authorization scope filters before production-candidate strong trading
 evidence enters the Lake:
 
@@ -1355,7 +1379,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Collector | Current status |
 | --- | --- |
-| `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; event-kind/symbol/account/source/keyword authorization scope-policy audit, filtered-all readiness, and strong trade boundary proof exist; Windows/Linux are code-level simulations or fallback paths |
+| `eastmoney-portfolio` | `production-candidate` on current macOS machine for unlocked account read-only asset/holding/execution/order/fund-flow capture; event-kind/symbol/account/source/keyword authorization scope-policy audit, validator-safe filtered-all gap packages, gap/usable/strong-trade counts, Investor Wiki evidence gap exclusion, and strong trade boundary proof exist; Windows/Linux are code-level simulations or fallback paths |
 | `ths-portfolio` | `deep-beta`; strong local package, GUI snapshot design, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, and Wiki boundary proof exist, but broader real-device/multi-account validation is still required before production |
 | `ths-watchlist` | `baseline+audit`; authorized local-scan plus export/package collector for same-channel watchlist/attention-universe evidence with local-scan provenance, path-level source audit, ZIP provenance, symbol/market/group/industry/tag/keyword/source authorization scope-policy audit, filtered-all readiness, field coverage, ths_watchlist_boundary_proof, and standard 7/20 Wiki evidence package; not a strong trade, holding, order, or fund-flow collector |
 | `qq` | `deep-beta`; QQ NT discovery/decrypt-ready flow plus standard package output, manifest/summary, field/filter audit, gap packages, and fixture package validation exist; current machine still has LLDB/passphrase capture limitation for real encrypted NT messages |

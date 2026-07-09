@@ -42,6 +42,7 @@ COLLECTOR = "eastmoney-investor-v2"
 EVENT_SCHEMA = "collectorx.event.v1"
 MANIFEST_SCHEMA = "eastmoney.investor_v2_collect.manifest.v1"
 TZ = timezone(timedelta(hours=8))
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 
 DEFAULT_HOME = Path.home() / (
     "Library/Containers/com.emmac.mac/Data/Library/Application Support/EastMoney"
@@ -122,7 +123,13 @@ LEGACY_WIKI_TARGET_MAP = {
         "investor.risk_portfolio.portfolio_constraints",
     ],
     "vertical/investor/profile": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
+    ],
+    "investor.data_quality.collection_gaps": [
+        DATA_QUALITY_TARGET,
+    ],
+    DATA_QUALITY_TARGET: [
+        DATA_QUALITY_TARGET,
     ],
 }
 
@@ -155,7 +162,7 @@ SOURCE_KIND_EXTRA_WIKI_TARGETS = {
     ],
     "broker_asset_status": [
         "investor.risk_portfolio.current_assets",
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
     "broker_position_detail": [
         "investor.risk_portfolio.current_positions",
@@ -164,7 +171,7 @@ SOURCE_KIND_EXTRA_WIKI_TARGETS = {
     ],
     "broker_position_status": [
         "investor.risk_portfolio.current_positions",
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
     "broker_trade_execution": [
         "investor.record_review.decision_log",
@@ -184,40 +191,40 @@ SOURCE_KIND_EXTRA_WIKI_TARGETS = {
         "investor.opportunity_watchlist.watchlist",
     ],
     "broker_interface_response": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
         "investor.record_review.decision_log",
     ],
     "broker_trade_ui_status": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
         "investor.risk_portfolio.current_assets",
         "investor.risk_portfolio.current_positions",
     ],
     "broker_trade_table_status": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
         "investor.record_review.decision_log",
         "investor.execution.orders",
         "external.capital.cashflows",
     ],
     "broker_market_gap": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
         "investor.risk_portfolio.current_positions",
     ],
     "broker_login_status": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
     "watchlist_sync_status": [
         "investor.opportunity_watchlist.watchlist",
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
     "watchlist_local_load_status": [
         "investor.opportunity_watchlist.watchlist",
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
     "data_gap": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
     "profile": [
-        "investor.data_quality.collection_gaps",
+        DATA_QUALITY_TARGET,
     ],
 }
 
@@ -1750,6 +1757,15 @@ def normalize_event_for_lake(event: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def is_gap_event(event: Dict[str, Any]) -> bool:
+    data = event.get("data") or {}
+    return isinstance(data, dict) and bool(data.get("gap"))
+
+
+def usable_events(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [event for event in events if not is_gap_event(event)]
+
+
 def gap_event(
     collected_at: str,
     gap: str,
@@ -1762,13 +1778,25 @@ def gap_event(
     return make_event(
         kind="data_gap",
         data={
+            "profile_type": "eastmoney_collection_gap",
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "gap": gap,
             "status": status,
+            "exact_business_numbers_preserved": True,
+            "read_only": True,
+            "credential_material_collected": False,
+            "device_fingerprint_collected": False,
+            "raw_trade_payload_collected": False,
+            "order_mutation_performed": False,
+            "investment_conclusion_claimed": False,
+            "complete_trade_collection_claimed": False,
+            "collector_writes_investor_wiki_directly": False,
             "note": note,
         },
         collected_at=collected_at,
         source=f"{source_prefix} 本地采集边界",
-        privacy_contains=["portfolio"],
+        privacy_contains=["collection_gap", "portfolio"],
         raw_ref=raw_ref or {},
         wiki_targets=wiki_targets or [],
     )
@@ -1785,7 +1813,9 @@ def scope_policy_filtered_all_event(
         data={
             "gap": "eastmoney_scope_policy_filtered_all",
             "status": "scope_policy_filtered_all",
-            "profile_type": "eastmoney_scope_policy_filtered_all",
+            "profile_type": "eastmoney_collection_gap",
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "candidate_event_count": policy.get("candidate_event_count", 0),
             "retained_event_count": policy.get("retained_event_count", 0),
             "filtered_event_count": policy.get("filtered_event_count", 0),
@@ -1794,13 +1824,20 @@ def scope_policy_filtered_all_event(
             "policy_does_not_assert_investment_relevance": True,
             "exact_business_numbers_preserved": True,
             "read_only": True,
+            "credential_material_collected": False,
+            "device_fingerprint_collected": False,
+            "raw_trade_payload_collected": False,
+            "order_mutation_performed": False,
+            "investment_conclusion_claimed": False,
+            "complete_trade_collection_claimed": False,
+            "collector_writes_investor_wiki_directly": False,
             "note": "输入已读取，但全部被东方财富授权范围策略排除；未把任何业务事件写入 Lake。",
         },
         collected_at=collected_at,
         source=f"{source_prefix} 授权范围策略",
-        privacy_contains=["portfolio"],
+        privacy_contains=["collection_gap", "portfolio"],
         raw_ref={"scope_policy_enabled": True},
-        wiki_targets=["vertical/investor/profile"],
+        wiki_targets=[DATA_QUALITY_TARGET],
     )
 
 
@@ -1843,6 +1880,10 @@ def build_profile(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
+    gap_events = [event for event in events if is_gap_event(event)]
+    business_events = usable_events(events)
+    lake_counts = Counter(normalize_event_for_lake(event)["kind"] for event in events)
+    strong_trade_event_count = sum(counts.get(kind, 0) for kind in STRONG_TRADE_KINDS)
     watch_groups: Dict[str, int] = Counter(
         event["data"].get("group")
         for event in events
@@ -1897,6 +1938,11 @@ def build_profile(
         "collection_readiness": build_collection_readiness(events, collection_audit),
         "source_home_redacted": redacted_path(eastmoney_home),
         "event_counts": dict(sorted(counts.items())),
+        "event_count": len(events),
+        "usable_event_count": len(business_events),
+        "gap_event_count": len(gap_events),
+        "strong_trade_event_count": strong_trade_event_count,
+        "lake_kind_counts": dict(sorted(lake_counts.items())),
         "watch_groups": {
             (k or "").strip(): v
             for k, v in sorted(watch_groups.items(), key=lambda item: item[0] or "")
@@ -1922,12 +1968,21 @@ def build_manifest(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     counts = Counter(event["kind"] for event in events)
+    gap_events = [event for event in events if is_gap_event(event)]
+    business_events = usable_events(events)
+    lake_counts = Counter(normalize_event_for_lake(event)["kind"] for event in events)
+    strong_trade_event_count = sum(counts.get(kind, 0) for kind in STRONG_TRADE_KINDS)
     audit = collection_audit or default_eastmoney_scope_audit(events)
     readiness = build_collection_readiness(events, audit)
     return {
         "schema": MANIFEST_SCHEMA,
         "collector": COLLECTOR,
         "collected_at": collected_at,
+        "event_count": len(events),
+        "usable_event_count": len(business_events),
+        "gap_event_count": len(gap_events),
+        "strong_trade_event_count": strong_trade_event_count,
+        "lake_kind_counts": dict(sorted(lake_counts.items())),
         "local_platform": platform_meta or {},
         "design_principle": (
             "Collect evidence for investor decision-chain, not generic identity data. "
@@ -1985,7 +2040,11 @@ def build_manifest(
         "eastmoney_portfolio_boundary_proof": {
             "source_type": "broker_trade_asset_and_local_investment_behavior_evidence",
             "event_count": len(events),
+            "usable_event_count": len(business_events),
+            "gap_event_count": len(gap_events),
+            "strong_trade_event_count": strong_trade_event_count,
             "source_kind_counts": dict(sorted(counts.items())),
+            "lake_kind_counts": dict(sorted(lake_counts.items())),
             "authorization_scope_boundary": audit.get("eastmoney_scope_policy") or {},
             "read_only": True,
             "exact_business_numbers_preserved": True,
@@ -2098,7 +2157,7 @@ def build_collection_readiness(
     gaps = {
         str(event["data"].get("gap"))
         for event in events
-        if event["kind"] == "data_gap" and event["data"].get("gap")
+        if is_gap_event(event)
     }
     if collection_audit and collection_audit.get("eastmoney_scope_policy_filtered_all"):
         policy = collection_audit.get("eastmoney_scope_policy") or {}
@@ -2208,8 +2267,11 @@ def build_investor_wiki_evidence(
     generated_at: str,
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    counts = Counter(event["kind"] for event in events)
-    lake_kinds = Counter(normalize_event_for_lake(event)["kind"] for event in events)
+    gap_events = [event for event in events if is_gap_event(event)]
+    business_events = usable_events(events)
+    counts = Counter(event["kind"] for event in business_events)
+    raw_counts = Counter(event["kind"] for event in events)
+    lake_kinds = Counter(normalize_event_for_lake(event)["kind"] for event in business_events)
     dimensions = []
     for dim in INVESTOR_DIMENSION_CONTRACT:
         children = []
@@ -2247,8 +2309,11 @@ def build_investor_wiki_evidence(
         "generated_from": {
             "collector": COLLECTOR,
             "event_schema": EVENT_SCHEMA,
-            "event_count": len(events),
+            "event_count": len(business_events),
+            "raw_event_count": len(events),
+            "gap_event_count": len(gap_events),
             "source_kind_counts": dict(sorted(counts.items())),
+            "raw_source_kind_counts": dict(sorted(raw_counts.items())),
             "lake_kind_counts": dict(sorted(lake_kinds.items())),
             "soulmirror_target_schema": SOULMIRROR_TARGET_SCHEMA,
             "authorization_scope_boundary": (collection_audit or {}).get("eastmoney_scope_policy") or {},
@@ -2370,7 +2435,7 @@ def write_summary(
     gaps = [
         event["data"].get("gap")
         for event in events
-        if event["kind"] == "data_gap"
+        if is_gap_event(event)
     ]
     platform_meta = manifest.get("local_platform") or {}
     resolved_platform = platform_meta.get("resolved") or "mac"
@@ -2579,7 +2644,7 @@ def write_trade_status_wiki(root: Path, events: List[Dict[str, Any]]) -> None:
             evidence_level="strong_status_only",
             targets=[
                 "investor.record_review.decision_log",
-                "investor.data_quality.collection_gaps",
+                DATA_QUALITY_TARGET,
             ],
         ),
     )
@@ -2613,7 +2678,7 @@ def write_risk_boundary_wiki(root: Path, events: List[Dict[str, Any]]) -> None:
             "broker_trade_ui_status",
             "broker_market_gap",
         }
-        or (e["kind"] == "data_gap" and e["data"].get("gap") in risk_gap_names)
+        or (is_gap_event(e) and e["data"].get("gap") in risk_gap_names)
     ]
     lines: List[str] = []
     for event in selected:
@@ -2667,7 +2732,7 @@ def write_risk_boundary_wiki(root: Path, events: List[Dict[str, Any]]) -> None:
                 "investor.risk_portfolio.current_assets",
                 "investor.risk_portfolio.current_positions",
                 "investor.risk_portfolio.portfolio_constraints",
-                "investor.data_quality.collection_gaps",
+                DATA_QUALITY_TARGET,
             ],
         ),
     )
