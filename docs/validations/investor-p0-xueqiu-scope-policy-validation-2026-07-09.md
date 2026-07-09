@@ -31,9 +31,10 @@ content are committed.
   `authorization_scope_boundary` for FinClaw gating.
 - When every candidate record is filtered, readiness reports
   `scope_policy_filtered_all`.
-- As of `xueqiu-watchlist` `0.3.2` and `xueqiu-investor-activity` `0.3.5`,
+- As of `xueqiu-watchlist` `0.3.3` and `xueqiu-investor-activity` `0.3.6`,
   no-input and filtered-all states also emit validator-safe profile gap events
-  with non-empty `time`, event-count summaries, and non-trade boundary flags.
+  with non-empty `time`, event-count summaries, data-quality routing, readiness
+  gates, and non-trade boundary flags.
 
 ## Fixture Coverage
 

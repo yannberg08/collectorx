@@ -228,8 +228,15 @@ filtered-all and no-input gap packages:
 - Missing authorized inputs emit `xueqiu_watchlist_authorized_input_missing` or
   `xueqiu_authorized_input_missing` with the same validator-safe event shape.
 - Manifest `watchlist_event_count=0` / `activity_event_count=0` and
-  `gap_event_count=1` keep package observability separate from real attention,
-  information-network, opinion, or model-portfolio evidence.
+  `gap_event_count=1`, plus `usable_event_count=0`, keep package observability
+  separate from real attention, information-network, opinion, or
+  model-portfolio evidence.
+- `collection_readiness.can_enter_xueqiu_watchlist_lake` /
+  `can_enter_xueqiu_activity_lake` gate retained business events,
+  `can_enter_data_quality_lake` gates gap events, and
+  `can_feed_investor_wiki_evidence=false` prevents collection gaps from becoming
+  Investor Wiki facts.
+- Gap events route to `collectorx.data_quality.collection_gaps`.
 - Gap events carry candidate/filter counts and reason summaries but no raw
   local input path, credential, token, session, broker holding, execution,
   order, fund flow, or investment conclusion.

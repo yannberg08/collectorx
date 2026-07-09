@@ -923,7 +923,7 @@ def gap_event(
             "scope_policy_enabled": bool(scope_audit.get("configured", False)),
         },
         "privacy": {"sensitive": True, "local_only": True, "contains": ["portfolio", "collection_gap"]},
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
 
@@ -1016,7 +1016,7 @@ def wiki_targets_for_activity(activity_type: str) -> List[str]:
         "saved_page": ["investor.information_sources.news_consumption", "investor.research_consumption.workflow"],
         "post": ["investor.record_review.review_record", "investor.decision_framework.strategy_rules"],
     }
-    return targets.get(activity_type, ["investor.data_quality.collection_gaps"])
+    return targets.get(activity_type, ["collectorx.data_quality.collection_gaps"])
 
 
 def build_manifest(
@@ -1031,6 +1031,7 @@ def build_manifest(
     gap_only = bool(events) and set(activity_counts) == {"collector_gap"}
     activity_event_count = sum(1 for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap")
     gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
+    usable_event_count = activity_event_count
     observed = sorted(activity for activity in activity_counts if activity != "collector_gap")
     missing = [activity for activity in EXPECTED_ACTIVITY_TYPES if activity not in activity_counts]
     audit = collection_audit or {}
@@ -1051,6 +1052,7 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": usable_event_count,
         "activity_event_count": activity_event_count,
         "gap_event_count": gap_event_count,
         "source_file_count": len({(event.get("raw_ref") or {}).get("path") for event in events if (event.get("raw_ref") or {}).get("path")}),
@@ -1070,10 +1072,16 @@ def build_manifest(
         },
         "collection_readiness": {
             "status": readiness_status,
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "can_enter_finclaw": usable_event_count > 0,
+            "can_enter_xueqiu_activity_lake": usable_event_count > 0,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": usable_event_count > 0,
             "can_claim_broker_trade_collection": False,
             "can_claim_complete_xueqiu_activity_boundary": False,
             "activity_boundary_scope": activity_boundary_scope,
+            "usable_event_count": usable_event_count,
+            "activity_event_count": activity_event_count,
+            "gap_event_count": gap_event_count,
             "next_action": next_action,
         },
         "collection_audit": audit,
@@ -1370,6 +1378,7 @@ def activity_boundary_proof(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     activity_events = [event for event in events if (event.get("data") or {}).get("activity_type") != "collector_gap"]
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     audit = collection_audit or {}
     if not activity_events:
         scope_policy_filtered_all = bool(audit.get("xueqiu_activity_scope_policy_filtered_all"))
@@ -1378,6 +1387,11 @@ def activity_boundary_proof(
             "overall_proof_level": "scope_policy_filtered_all" if scope_policy_filtered_all else "no_authorized_activity_evidence",
             "complete_xueqiu_activity_boundary_claimed": False,
             "xueqiu_is_broker_trade_source": False,
+            "activity_event_count": 0,
+            "gap_event_count": gap_event_count,
+            "can_enter_xueqiu_activity_lake": False,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": False,
             "expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
             "observed_activity_types": [],
             "missing_expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
@@ -1412,6 +1426,11 @@ def activity_boundary_proof(
         "overall_proof_level": overall_activity_boundary_level(activity_counts),
         "complete_xueqiu_activity_boundary_claimed": False,
         "xueqiu_is_broker_trade_source": False,
+        "activity_event_count": len(activity_events),
+        "gap_event_count": gap_event_count,
+        "can_enter_xueqiu_activity_lake": len(activity_events) > 0,
+        "can_enter_data_quality_lake": gap_event_count > 0,
+        "can_feed_investor_wiki_evidence": len(activity_events) > 0,
         "expected_activity_types": list(EXPECTED_ACTIVITY_TYPES),
         "observed_activity_types": observed,
         "missing_expected_activity_types": missing,

@@ -1,7 +1,7 @@
 ---
 name: xueqiu-investor-activity
 description: 雪球投资者活动垂直采集器。采集用户授权的雪球自选、关注用户、关注组合、个人发帖、评论、收藏、用户自己的组合调仓，以及用户授权复制的 Chromium/Safari 浏览器历史中的雪球访问痕迹，输出 CollectorX 事件和 FinClaw 投资分身证据包。用于能力圈、关注池、信息源、人脉网络和投资观点表达；不采全站舆情，不把雪球组合或浏览历史当券商强交易事实；无输入或授权范围过滤为空时输出可验证 gap package。
-version: 0.3.5
+version: 0.3.6
 ---
 
 # 雪球投资者活动采集器
@@ -95,5 +95,8 @@ keyword 的 allow/deny 授权范围过滤。`manifest.collection_audit.xueqiu_ac
 
 没有授权输入，或授权范围过滤后没有保留任何活动记录时，采集器输出
 validator-safe profile gap event，并设置 `manifest.gap_event_count=1`、
-`manifest.activity_event_count=0`、`collection_readiness.can_enter_finclaw=false`；
+`manifest.activity_event_count=0`、`manifest.usable_event_count=0`、
+`collection_readiness.can_enter_xueqiu_activity_lake=false`、
+`collection_readiness.can_enter_data_quality_lake=true`、
+`collection_readiness.can_feed_investor_wiki_evidence=false`；
 Investor Wiki evidence 只统计可用活动，不把 collection gap 当成用户画像事实。

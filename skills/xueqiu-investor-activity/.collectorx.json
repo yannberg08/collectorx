@@ -1,6 +1,6 @@
 {
   "slug": "xueqiu-investor-activity",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "status": "baseline+audit",
-  "description": "Xueqiu vertical investor-activity collector for authorized exports, ZIP/HAR packages, copied Chromium/Safari browser history, follows, posts, comments, favorites, saved pages, owner portfolios, browser-history visit metadata, scope-policy audit, validator-safe filtered-all/no-input gap packages, activity-boundary proof, pagination completeness, and SoulMirror lake packages."
+  "description": "Xueqiu vertical investor-activity collector for authorized exports, ZIP/HAR packages, copied Chromium/Safari browser history, follows, posts, comments, favorites, saved pages, owner portfolios, browser-history visit metadata, scope-policy audit, validator-safe filtered-all/no-input gap packages routed to data-quality lake, explicit business/data-quality/Wiki readiness gates, activity-boundary proof, pagination completeness, and SoulMirror lake packages."
 }

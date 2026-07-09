@@ -1,7 +1,7 @@
 ---
 name: xueqiu-watchlist
 description: 雪球关注/自选列表垂直采集器。采集用户授权导出的雪球关注池，输出 watchlist 事件；关注池不能单独证明持仓、交易或完整投资意图；无输入或授权范围过滤为空时输出可验证 gap package。
-version: 0.3.2
+version: 0.3.3
 ---
 
 # Xueqiu Watchlist Collector
@@ -71,4 +71,7 @@ ZIP 包会保留 `archive.zip::member` 来源并跳过路径穿越成员。manif
 检查本轮关注池授权边界。该策略只限定用户授权范围，不判断投资相关性。
 如果没有授权输入，或授权范围过滤后没有保留任何关注池记录，采集器会输出
 validator-safe profile gap event，并设置 `manifest.gap_event_count=1`、
-`manifest.watchlist_event_count=0` 和 `collection_readiness.can_enter_finclaw=false`。
+`manifest.watchlist_event_count=0`、`manifest.usable_event_count=0`、
+`collection_readiness.can_enter_xueqiu_watchlist_lake=false`、
+`collection_readiness.can_enter_data_quality_lake=true` 和
+`collection_readiness.can_feed_investor_wiki_evidence=false`。

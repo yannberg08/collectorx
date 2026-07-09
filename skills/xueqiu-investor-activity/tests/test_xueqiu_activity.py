@@ -141,7 +141,20 @@ def test_collect_watchlist_csv() -> None:
         assert event["kind"] == "watchlist"
         assert event["data"]["symbol"] == "SH600519"
         assert event["data"]["symbols"] == ["SH600519"]
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 1
+        assert manifest["activity_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_xueqiu_activity_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["usable_event_count"] == 1
+        proof = manifest["activity_boundary_proof"]
+        assert proof["can_enter_xueqiu_activity_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
+        assert proof["can_feed_investor_wiki_evidence"] is True
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == manifest["usable_event_count"]
         assert evidence["coverage_summary"]["xueqiu_is_strong_trade_source"] is False
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
@@ -301,6 +314,7 @@ def test_activity_scope_policy_filtered_all_gap() -> None:
         assert gap["data"]["broker_trade_fact_claimed"] is False
         assert gap["data"]["holding_fact_claimed"] is False
         assert gap["data"]["order_or_fund_flow_claimed"] is False
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert gap["raw_ref"] == {
             "preflight": True,
             "reason": "xueqiu_scope_policy_filtered_all",
@@ -309,15 +323,21 @@ def test_activity_scope_policy_filtered_all_gap() -> None:
         assert str(json_path) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["activity_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_xueqiu_activity_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
         assert manifest["collection_readiness"]["activity_boundary_scope"] == "scope_policy_excluded_all"
         assert manifest["collection_audit"]["xueqiu_activity_scope_policy_filtered_all"] is True
         assert manifest["activity_boundary_proof"]["overall_proof_level"] == "scope_policy_filtered_all"
         assert manifest["activity_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+        assert manifest["activity_boundary_proof"]["can_enter_data_quality_lake"] is True
 
 
 def test_activity_gap_event() -> None:
@@ -349,6 +369,7 @@ def test_activity_gap_event() -> None:
         assert events[0]["data"]["retained_event_count"] == 0
         assert events[0]["data"]["filtered_event_count"] == 0
         assert events[0]["data"]["broker_trade_fact_claimed"] is False
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert events[0]["raw_ref"] == {
             "preflight": True,
             "reason": "xueqiu_authorized_input_missing",
@@ -356,10 +377,14 @@ def test_activity_gap_event() -> None:
         }
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["activity_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_xueqiu_activity_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
 

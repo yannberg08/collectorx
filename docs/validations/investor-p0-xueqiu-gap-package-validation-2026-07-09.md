@@ -1,9 +1,11 @@
 # P0 Xueqiu Gap Package Validation - 2026-07-09
 
-This validation covers `xueqiu-watchlist` version `0.3.2` and
-`xueqiu-investor-activity` version `0.3.5`, which harden no-input and
-filtered-all outputs into standard CollectorX packages that FinClaw can
-validate without mistaking collection gaps for real Investor Wiki facts.
+This validation covers `xueqiu-watchlist` version `0.3.3` and
+`xueqiu-investor-activity` version `0.3.6`, which harden no-input and
+filtered-all outputs into standard CollectorX packages and add explicit
+business-lake, data-quality-lake, and Investor Wiki evidence readiness gates so
+FinClaw can validate packages without mistaking collection gaps for real
+Investor Wiki facts.
 
 ## Scope
 
@@ -27,9 +29,16 @@ validate without mistaking collection gaps for real Investor Wiki facts.
 - Gap events carry non-empty `time`, `data.status`, `data.profile_type`,
   candidate/retained/filtered counts, filter reason counts, and explicit
   non-trade boundary flags.
-- Manifest output includes `watchlist_event_count`, `activity_event_count`, and
-  `gap_event_count` so packages can be observable while still reporting zero
-  usable personal evidence.
+- Gap events route to `collectorx.data_quality.collection_gaps`.
+- Manifest output includes `usable_event_count`, `watchlist_event_count`,
+  `activity_event_count`, and `gap_event_count` so packages can be observable
+  while still reporting zero usable personal evidence.
+- `collection_readiness.can_enter_xueqiu_watchlist_lake` and
+  `collection_readiness.can_enter_xueqiu_activity_lake` gate retained Xueqiu
+  business evidence.
+- `collection_readiness.can_enter_data_quality_lake` gates gap packages.
+- `collection_readiness.can_feed_investor_wiki_evidence=false` prevents gap
+  packages from becoming Investor Wiki facts.
 - `xueqiu-investor-activity` Investor Wiki evidence counts only usable activity
   events; collection gaps do not become user-profile facts.
 
@@ -80,8 +89,16 @@ PYTHON=.venv/bin/python bash test_collectors.sh
 - `data.order_or_fund_flow_claimed=false`.
 - `manifest.watchlist_event_count=0` for watchlist gap packages.
 - `manifest.activity_event_count=0` for activity gap packages.
+- `manifest.usable_event_count=0` for gap packages.
 - `manifest.gap_event_count=1`.
 - `manifest.collection_readiness.can_enter_finclaw=false`.
+- `manifest.collection_readiness.can_enter_xueqiu_watchlist_lake=false` for
+  watchlist gap packages.
+- `manifest.collection_readiness.can_enter_xueqiu_activity_lake=false` for
+  activity gap packages.
+- `manifest.collection_readiness.can_enter_data_quality_lake=true`.
+- `manifest.collection_readiness.can_feed_investor_wiki_evidence=false`.
+- `event.wiki_targets=["collectorx.data_quality.collection_gaps"]`.
 
 ## Remaining Real Validation
 

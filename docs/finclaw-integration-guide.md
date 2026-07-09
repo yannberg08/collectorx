@@ -628,9 +628,14 @@ Current status for `xueqiu-watchlist`:
   counts, parsed/filtered record counts, symbol/market/group/industry/tag/
   keyword scope-policy audit, filtered-all/no-input gap packages,
   authorization scope boundary, and watchlist field coverage.
+- Manifest separates `usable_event_count`, `watchlist_event_count`, and
+  `gap_event_count`; `collection_readiness.can_enter_xueqiu_watchlist_lake`
+  gates real watchlist evidence, while `can_enter_data_quality_lake` gates
+  collection gaps routed to `collectorx.data_quality.collection_gaps`.
 - Recursively filters credential-like raw keys.
 - Writes `investor_wiki_evidence.v1.json` with canonical 7/20 Investor Wiki
-  coverage for attention-universe subdimensions.
+  coverage for attention-universe subdimensions; gap events are excluded from
+  Wiki evidence by `can_feed_investor_wiki_evidence=false`.
 - This is attention-universe evidence only. It does not prove holdings, trades,
   orders, or fund flows.
 
@@ -667,6 +672,10 @@ Current status:
   author/keyword scope-policy audit, filtered-all/no-input gap packages,
   `activity_boundary_proof.authorization_scope_boundary`, and pagination
   completeness.
+- Manifest separates `usable_event_count`, `activity_event_count`, and
+  `gap_event_count`; `collection_readiness.can_enter_xueqiu_activity_lake`
+  gates retained activity evidence, while `can_enter_data_quality_lake` gates
+  gap events routed to `collectorx.data_quality.collection_gaps`.
 - Saved HTML pages are parsed as `saved_page` activity and stay non-trade
   evidence.
 - `activity_boundary_proof` reports whether watchlist, followed users,

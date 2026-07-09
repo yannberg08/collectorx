@@ -486,15 +486,20 @@ Validation record:
 
 Findings:
 
-- Upgraded `xueqiu-watchlist` to `0.3.2` and `xueqiu-investor-activity` to
-  `0.3.5`.
+- Upgraded `xueqiu-watchlist` to `0.3.3` and `xueqiu-investor-activity` to
+  `0.3.6`.
 - Converted no-input and filtered-all outputs into validator-safe profile gap
   events with non-empty `time`, stable `data.status`, `data.profile_type`,
   candidate/retained/filtered counts, filter reason counts, and explicit
   non-trade boundary flags.
-- Added `manifest.watchlist_event_count`, `manifest.activity_event_count`, and
-  `manifest.gap_event_count` so FinClaw can distinguish package observability
-  from real attention-universe or activity evidence.
+- Added `manifest.usable_event_count`, `manifest.watchlist_event_count`,
+  `manifest.activity_event_count`, and `manifest.gap_event_count` so FinClaw can
+  distinguish package observability from real attention-universe or activity
+  evidence.
+- Added explicit `can_enter_xueqiu_watchlist_lake`,
+  `can_enter_xueqiu_activity_lake`, `can_enter_data_quality_lake`, and
+  `can_feed_investor_wiki_evidence` readiness gates; Xueqiu activity gap targets
+  now route to `collectorx.data_quality.collection_gaps`.
 - `xueqiu-investor-activity` evidence now counts only usable activity events,
   so collection gaps do not become Investor Wiki facts.
 - Fixture validation now runs the shared CollectorX package validator with

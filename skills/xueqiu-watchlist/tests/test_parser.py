@@ -142,6 +142,13 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         assert zip_event["raw_ref"]["archive_member"] == "nested/zip-watchlist.csv"
         assert zip_event["raw_ref"]["member_row"] == 1
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 7
+        assert manifest["watchlist_event_count"] == 7
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_xueqiu_watchlist_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["usable_event_count"] == 7
         assert manifest["collection_readiness"]["can_claim_complete_xueqiu_watchlist_boundary"] is False
         assert manifest["market_counts"]["HK"] == 2
         assert manifest["archive_member_event_count"] == 1
@@ -150,7 +157,12 @@ def test_collect_xueqiu_watchlist_exports() -> None:
         assert manifest["collection_audit"]["skipped_archive_member_count"] == 1
         assert manifest["collection_audit"]["filtered_record_count"] >= 1
         assert manifest["field_coverage"]["fields"]["symbol"]["present"] == 7
+        proof = manifest["xueqiu_watchlist_boundary_proof"]
+        assert proof["can_enter_xueqiu_watchlist_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
+        assert proof["can_feed_investor_wiki_evidence"] is True
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == manifest["usable_event_count"]
         assert evidence["coverage_summary"]["xueqiu_watchlist_is_strong_trade_source"] is False
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
@@ -270,6 +282,7 @@ def test_watchlist_scope_policy_filtered_all_gap() -> None:
         assert gap["data"]["broker_trade_fact_claimed"] is False
         assert gap["data"]["holding_fact_claimed"] is False
         assert gap["data"]["order_or_fund_flow_claimed"] is False
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert gap["raw_ref"] == {
             "preflight": True,
             "reason": "xueqiu_watchlist_scope_policy_filtered_all",
@@ -278,15 +291,21 @@ def test_watchlist_scope_policy_filtered_all_gap() -> None:
         assert str(csv_path) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["watchlist_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_xueqiu_watchlist_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["collection_audit"]["xueqiu_watchlist_scope_policy_filtered_all"] is True
         assert manifest["xueqiu_watchlist_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
         assert manifest["xueqiu_watchlist_boundary_proof"]["authorization_scope_boundary"]["filtered_all"] is True
+        assert manifest["xueqiu_watchlist_boundary_proof"]["can_enter_data_quality_lake"] is True
 
 
 def test_gap_event() -> None:
@@ -317,6 +336,7 @@ def test_gap_event() -> None:
         assert events[0]["data"]["retained_event_count"] == 0
         assert events[0]["data"]["filtered_event_count"] == 0
         assert events[0]["data"]["broker_trade_fact_claimed"] is False
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert events[0]["raw_ref"] == {
             "preflight": True,
             "reason": "xueqiu_watchlist_authorized_input_missing",
@@ -324,10 +344,14 @@ def test_gap_event() -> None:
         }
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["watchlist_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_xueqiu_watchlist_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
 
 
 def test_legacy_cli_export() -> None:

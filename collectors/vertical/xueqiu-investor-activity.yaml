@@ -37,6 +37,9 @@ scope:
     - scope_policy_audit
     - scope_policy_filtered_all_gap_package
     - no_input_gap_package
+    - business_lake_readiness_gate
+    - data_quality_lake_readiness_gate
+    - investor_wiki_evidence_readiness_gate
     - field_coverage
     - activity_boundary_proof
     - pagination_completeness_summary
@@ -60,5 +63,7 @@ description: |
   包保留 archive.zip::member 来源并跳过路径穿越成员。manifest 记录输入、HAR、浏览器
   历史、ZIP、分页标记、字段覆盖、活动面覆盖证明和分页完整性摘要。
   可用 activity、source_surface、source_app、domain、symbol、author、keyword
-  授权范围策略在写入 Lake 前过滤，并把 filtered-all/no-input gap package 写入 Lake 与 manifest。
+  授权范围策略在写入 Lake 前过滤，并把 filtered-all/no-input gap package 写入
+  collectorx.data_quality.collection_gaps 与 manifest；manifest 明确区分业务 Lake、
+  数据质量 Lake 和 Investor Wiki evidence readiness gate。
   不能当券商强交易事实，也不爬全站舆情。

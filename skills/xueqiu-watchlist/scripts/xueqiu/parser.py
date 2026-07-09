@@ -500,6 +500,7 @@ def build_manifest(
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
     watchlist_event_count = sum(1 for event in events if event.get("kind") == "watchlist")
     gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
+    usable_event_count = watchlist_event_count
     audit = collection_audit or {}
     if gap_only and audit.get("xueqiu_watchlist_scope_policy_filtered_all"):
         readiness_status = "scope_policy_filtered_all"
@@ -518,6 +519,7 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": usable_event_count,
         "watchlist_event_count": watchlist_event_count,
         "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
@@ -534,9 +536,15 @@ def build_manifest(
         },
         "collection_readiness": {
             "status": readiness_status,
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "can_enter_finclaw": usable_event_count > 0,
+            "can_enter_xueqiu_watchlist_lake": usable_event_count > 0,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": usable_event_count > 0,
             "can_claim_complete_xueqiu_watchlist_boundary": False,
             "source_collection_scope": source_collection_scope,
+            "usable_event_count": usable_event_count,
+            "watchlist_event_count": watchlist_event_count,
+            "gap_event_count": gap_event_count,
             "next_action": next_action,
         },
         "collection_audit": audit,
@@ -764,6 +772,7 @@ def watchlist_authorization_scope_boundary(collection_audit: Optional[Dict[str, 
 
 def build_watchlist_boundary_proof(events: List[Dict[str, Any]], collection_audit: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     watchlist_events = [event for event in events if event.get("kind") == "watchlist"]
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
     audit = collection_audit or {}
     scope_policy_filtered_all = bool(audit.get("xueqiu_watchlist_scope_policy_filtered_all"))
     market_counts = Counter((event.get("data") or {}).get("market", "unknown") for event in watchlist_events)
@@ -778,6 +787,10 @@ def build_watchlist_boundary_proof(events: List[Dict[str, Any]], collection_audi
         "proof_scope": proof_scope,
         "proof_level": proof_level,
         "watchlist_event_count": len(watchlist_events),
+        "gap_event_count": gap_event_count,
+        "can_enter_xueqiu_watchlist_lake": len(watchlist_events) > 0,
+        "can_enter_data_quality_lake": gap_event_count > 0,
+        "can_feed_investor_wiki_evidence": len(watchlist_events) > 0,
         "complete_xueqiu_watchlist_boundary_claimed": False,
         "xueqiu_watchlist_is_strong_trade_source": False,
         "broker_confirmed_trade_collection": False,
