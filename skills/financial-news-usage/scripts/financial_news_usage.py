@@ -53,7 +53,10 @@ def collect(args: argparse.Namespace) -> int:
         write_jsonl(out / "lake" / COLLECTOR / "events.jsonl", events)
         manifest = build_manifest(events, collected_at=collected_at, collection_audit=collection_audit)
         write_json(out / "manifest.json", manifest)
-        write_json(out / "investor_wiki_evidence.v1.json", build_evidence(events, generated_at=collected_at))
+        write_json(
+            out / "investor_wiki_evidence.v1.json",
+            build_evidence(events, generated_at=collected_at, collection_audit=collection_audit),
+        )
         (out / "SUMMARY.md").write_text(
             "\n".join(
                 [

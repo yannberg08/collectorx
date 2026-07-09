@@ -16,7 +16,22 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`email` and `email-research` now expose explicit Lake readiness gates and
+`financial-news-usage` now exposes explicit business/data-quality/Wiki readiness
+gates and routes collection gaps to the data-quality Lake:
+
+- Upgraded `financial-news-usage` to `0.3.0`.
+- Manifests now separate `usable_event_count`, `usage_event_count`, and
+  `gap_event_count`.
+- `collection_readiness.can_enter_financial_news_usage_lake` gates retained
+  personal finance-news usage traces, `can_enter_data_quality_lake` gates
+  no-input/filtered-all gap packages, and `can_feed_investor_wiki_evidence`
+  blocks collection gaps from becoming investor Wiki facts.
+- Gap events route only to `collectorx.data_quality.collection_gaps`.
+- Generated `investor_wiki_evidence.v1.json` excludes gap events from business
+  evidence and records `generated_from.raw_event_count` plus
+  `generated_from.gap_event_count`.
+
+The prior completed wave: `email` and `email-research` now expose explicit Lake readiness gates and
 email-research/gap manifest counts:
 
 - Upgraded `email-collector` to `0.5.8` and `investor-source-collectors` to
@@ -549,9 +564,13 @@ authorization scope filters for user-owned finance-news usage traces:
 - Manifest `source_audit.financial_news_scope_policy` records the configured
   filters, candidate record count, filtered record count, filter reason counts,
   and whether every candidate was excluded by policy.
-- As of version `0.2.9`, when all candidate records are excluded, collection
+- As of version `0.3.0`, when all candidate records are excluded, collection
   readiness reports `scope_policy_filtered_all` and the package emits one
   `financial_news_scope_policy_filtered_all` profile gap event.
+- Gap-only packages route to `collectorx.data_quality.collection_gaps` and set
+  `can_enter_financial_news_usage_lake=false`,
+  `can_enter_data_quality_lake=true`, and
+  `can_feed_investor_wiki_evidence=false`.
 - `usage_boundary_proof.authorization_scope_boundary` gives FinClaw a stable
   place to inspect the user's authorization boundary before using events in the
   investor Wiki pipeline.

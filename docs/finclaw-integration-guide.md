@@ -1167,6 +1167,15 @@ Current status:
   policy kept or excluded; `collection_readiness.status=scope_policy_filtered_all`
   means the collector ran successfully but the user's policy excluded every
   candidate record.
+- Manifest separates `usable_event_count`, `usage_event_count`, and
+  `gap_event_count`; `collection_readiness.can_enter_financial_news_usage_lake`
+  gates retained personal usage evidence, `can_enter_data_quality_lake` gates
+  no-input/filtered-all collection gaps, and `can_feed_investor_wiki_evidence`
+  prevents pure gap packages from becoming investor Wiki facts.
+- Financial-news gap events route only to
+  `collectorx.data_quality.collection_gaps`; generated Wiki evidence counts
+  non-gap retained usage events and records `generated_from.raw_event_count`
+  plus `generated_from.gap_event_count`.
 - `manifest.source_audit` records requested inputs, missing inputs, per-file
   parse results, extension coverage, skipped file reasons, ZIP member counts,
   skipped ZIP member reasons, browser-history source apps/source-app counts,

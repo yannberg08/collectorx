@@ -149,6 +149,16 @@ def test_collect_usage_exports() -> None:
         subscribe_event = next(event for event in events if event["data"]["action_type"] == "subscribe")
         assert subscribe_event["data"]["subscription_target"] == "宏观政策"
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 5
+        assert manifest["usage_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["can_enter_financial_news_usage_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["usable_event_count"] == 5
+        assert manifest["collection_readiness"]["usage_event_count"] == 5
+        assert manifest["collection_readiness"]["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_complete_usage_history"] is False
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["cls", "wallstreetcn", "gelonghui"]
         assert manifest["platform_coverage"]["missing_expected_platforms"] == []
@@ -211,6 +221,11 @@ def test_collect_usage_exports() -> None:
         proof = manifest["usage_boundary_proof"]
         assert proof["proof_level"] == "authorized_financial_news_usage_with_behavior_surface"
         assert proof["event_count"] == 5
+        assert proof["usable_event_count"] == 5
+        assert proof["gap_event_count"] == 0
+        assert proof["can_enter_financial_news_usage_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
+        assert proof["can_feed_investor_wiki_evidence"] is True
         assert proof["parsed_record_count"] == 5
         assert proof["emitted_event_count"] == 5
         assert proof["platform_action_boundary"]["observed_expected_platforms"] == ["cls", "wallstreetcn", "gelonghui"]
@@ -243,9 +258,14 @@ def test_collect_usage_exports() -> None:
         assert proof["direct_app_or_account_reconnect"] is False
         assert proof["personal_usage_only"] is True
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 5
+        assert evidence["generated_from"]["raw_event_count"] == 5
+        assert evidence["generated_from"]["gap_event_count"] == 0
         assert evidence["coverage_summary"]["source_is_public_news_crawler"] is False
         assert evidence["coverage_summary"]["personal_usage_only"] is True
         assert evidence["coverage_summary"]["public_news_content_mirror"] is False
+        assert evidence["coverage_summary"]["usable_event_count"] == 5
+        assert evidence["coverage_summary"]["gap_event_count"] == 0
         assert evidence["coverage_summary"]["usage_surface_summary"]["usage_topic_counts"]["industry_theme"] == 3
         assert evidence["coverage_summary"]["usage_behavior_summary"]["events_with_alert_condition"] == 1
         assert evidence["coverage_summary"]["dimension_count"] == 7
@@ -648,14 +668,22 @@ def test_collect_scope_policy_filtered_all_status() -> None:
         assert events[0]["data"]["scope_policy_filter_reason_counts"] == {"topic_not_allowed": 1}
         assert events[0]["data"]["personal_usage_event_count"] == 0
         assert events[0]["data"]["public_news_full_crawl_claimed"] is False
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert events[0]["raw_ref"]["scope_policy_enabled"] is True
         assert str(export) not in json.dumps(events[0], ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["usage_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_financial_news_usage_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
+        assert manifest["collection_readiness"]["usage_event_count"] == 0
+        assert manifest["collection_readiness"]["gap_event_count"] == 1
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["source_audit"]["candidate_record_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 1
@@ -671,8 +699,14 @@ def test_collect_scope_policy_filtered_all_status() -> None:
         assert manifest["usage_boundary_proof"]["package_event_count"] == 1
         assert manifest["usage_boundary_proof"]["gap_event_count"] == 1
         assert manifest["usage_boundary_proof"]["can_enter_finclaw"] is False
+        assert manifest["usage_boundary_proof"]["can_enter_financial_news_usage_lake"] is False
+        assert manifest["usage_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["usage_boundary_proof"]["can_feed_investor_wiki_evidence"] is False
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["route_counts"] == {}
         subprocess.run(
             [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "financial-news-usage", "--require-evidence"],
             check=True,
@@ -707,12 +741,20 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert events[0]["kind"] == "profile"
         assert events[0]["time"] == "2026-07-08T03:20:00+08:00"
         assert events[0]["data"]["gap"] == "financial_news_usage_authorized_input_missing"
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["usage_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_financial_news_usage_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_financial_news_usage_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
+        assert manifest["collection_readiness"]["usage_event_count"] == 0
+        assert manifest["collection_readiness"]["gap_event_count"] == 1
         assert manifest["source_audit"]["input_count"] == 1
         assert manifest["source_audit"]["input_missing_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 0
@@ -723,7 +765,15 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
         assert manifest["usage_boundary_proof"]["proof_level"] == "no_authorized_financial_news_usage_input"
         assert manifest["usage_boundary_proof"]["can_enter_finclaw"] is False
+        assert manifest["usage_boundary_proof"]["can_enter_financial_news_usage_lake"] is False
+        assert manifest["usage_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["usage_boundary_proof"]["can_feed_investor_wiki_evidence"] is False
         assert manifest["usage_boundary_proof"]["input_boundary"]["input_missing_count"] == 1
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["route_counts"] == {}
         subprocess.run(
             [sys.executable, str(PACKAGE_VALIDATOR), str(out), "--collector", "financial-news-usage", "--require-evidence"],
             check=True,

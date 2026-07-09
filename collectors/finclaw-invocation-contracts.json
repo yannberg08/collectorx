@@ -282,7 +282,7 @@
       "product_surface": "import-beta",
       "evidence_role": "information-usage",
       "user_step": "Provide authorized finance-news usage exports, saved pages, ZIP packages, copied browser history, or ZIP-packaged History.db members; optionally choose platform, action, source-app, domain, topic, or keyword allow/deny filters.",
-      "preflight": "Only CLS, WallstreetCN, Gelonghui, or whitelisted finance-news usage traces are parsed; browser-history inputs are domain-filtered and source-app counted; optional scope filters are applied before Lake output and can return a traceable financial_news_scope_policy_filtered_all gap package.",
+      "preflight": "Only CLS, WallstreetCN, Gelonghui, or whitelisted finance-news usage traces are parsed; browser-history inputs are domain-filtered and source-app counted; optional scope filters are applied before Lake output and can return a traceable financial_news_scope_policy_filtered_all gap package routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_financial_news_usage_lake=false, can_enter_data_quality_lake=true, and can_feed_investor_wiki_evidence=false.",
       "failure_state": "needs_authorized_finance_news_usage_input_or_scope_policy_retained_records_or_gap_package"
     },
     {

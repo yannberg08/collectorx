@@ -4027,6 +4027,28 @@ Findings:
   gap packages, retained email-research packages, and filtered-all
   email-research gap packages.
 
+### Wave BJ: P1 financial-news readiness gate hardening
+
+Validation record:
+
+- `docs/validations/investor-p1-financial-news-readiness-gate-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `financial-news-usage` to `0.3.0`.
+- Manifest now separates `usable_event_count`, `usage_event_count`, and
+  `gap_event_count`.
+- Readiness now exposes `can_enter_financial_news_usage_lake`,
+  `can_enter_data_quality_lake`, and `can_feed_investor_wiki_evidence`.
+- No-input and filtered-all gap events route to
+  `collectorx.data_quality.collection_gaps`, while retained read/favorite/search/
+  subscribe/alert usage events remain business evidence.
+- Investor Wiki evidence excludes gap events from route counts and records
+  `generated_from.raw_event_count` plus `generated_from.gap_event_count`.
+- Fixture validation covers retained personal usage, filtered-all data-quality
+  gap packages, missing-input gap packages, Chromium history, direct Safari
+  history, and ZIP-packaged browser-history members.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
@@ -4047,7 +4069,7 @@ Findings:
 | 2 | `task-calendar-investor` | G1/G2 baseline for authorized TickTick/Dida JSON/ZIP and generic calendar ICS/JSON/CSV/TSV/ZIP exports; TickTick live path now follows SoulMirror YAML + AgentRunner + skill, returns a stable task snapshot through `collect_for_soulmirror.py`, fails with `ticktick_auth_required` when disconnected, and keeps daemon-owned `lake/ticktick/events.jsonl` separate from offline `exports/ticktick/events.jsonl`; TickTick/Dida task events now preserve timezone, all-day, repeat frequency, reminders, checklist items, checklist completed/pending counts, completion rate, source-app/project/tag/keyword scope-policy audit, filtered-all/no-input profile gaps, and task/gap event counts for offline packages; calendar reports duration/multi-day/invalid-time/conflict quality plus source-platform/calendar/attendee/keyword scope-policy audit, validator-safe filtered-all/no-input gap packages, and calendar/gap event counts; lens manifest/evidence reports research-task/trade-plan/review/earnings/research-meeting/risk-check surface, upstream source surface, reminder/time/timezone/repeat coverage, task checklist execution surface, calendar time-quality surface, and task/calendar boundary proof | Deploy managed TickTick OAuth Broker, run real TickTick account validation, validate real calendar exports/accounts, recurring tasks/timezones, checklist-heavy trading-plan backtest, false-positive review |
 | 3 | `meeting-minutes` | G1/G2 strengthened for local/platform/ZIP meeting artifacts plus Feishu/DingTalk/WeCom collaboration exports; manifests report platform coverage, field coverage, meeting/collaboration source summaries, participant-role hints, action items, decision points, risk items, mentioned symbols, source audit, meeting/collaboration scope-policy audits, validator-safe filtered-all/no-input gap packages, meeting/collaboration/gap event counts, missing/unsupported input accounting, ZIP provenance, generic-collector evidence policy, and lens-level roadshow/research/IC/expert/earnings/decision/risk/follow-up surface summaries plus meeting-minutes and decision/action boundary proof; real account APIs pending | Real Feishu/DingTalk/WeCom/Tencent Meeting artifacts, participant identity normalization, speaker/role resolution, attachments/recording refs, false-positive review |
 | 4 | `wechat-article-favorites` | G2/G3 partial for local authorized saved-article files; G1/G2 file/folder/ZIP import with favorite/read/share/saved-file action coverage, field coverage, article source summary, article behavior summary, source-account/source-account-type/action/tag/domain/keyword scope-policy audit, filtered-all status, source audit, ZIP provenance, content policy, generic-collector evidence policy, and lens-level broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surface summaries plus article/behavior boundary proof | Real WeChat favorites/public-account stores, account/tag allowlists, action metadata, Windows/Linux path validation, false-positive review |
-| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, direct Chromium/Safari browser-history copies, ZIP-packaged browser-history members, and platform/action/topic/behavior coverage; manifests now include field coverage, usage topic summary, usage surface summary, usage behavior summary, platform/action/source-app/domain/topic/keyword scope-policy audit, filtered-all gap packages, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps/source-app counts, ZIP provenance, usage/behavior boundary proof, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux path validation, authorization default scopes, platform inference on noisy exports, topic false-positive review |
+| 5 | `financial-news-usage` | G1/G2 strengthened for authorized usage/saved pages, ZIP packages, direct Chromium/Safari browser-history copies, ZIP-packaged browser-history members, and platform/action/topic/behavior coverage; manifests now include field coverage, usage topic summary, usage surface summary, usage behavior summary, platform/action/source-app/domain/topic/keyword scope-policy audit, filtered-all/no-input data-quality gap packages, gap/usable/usage counts, business/data-quality/Wiki readiness gates, per-input source audit, skipped file/ZIP-member reasons, path-level parse results, browser-history source apps/source-app counts, ZIP provenance, usage/behavior boundary proof, content policy, and vertical evidence policy | Real CLS/WallstreetCN/Gelonghui app/account adapters, real subscription/alert stores, real Safari/macOS history samples, Windows/Linux path validation, authorization default scopes, platform inference on noisy exports, topic false-positive review |
 
 ## P2 Work Queue
 

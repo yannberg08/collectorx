@@ -29,6 +29,7 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 
 COLLECTOR = "financial-news-usage"
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 CN_TZ = timezone(timedelta(hours=8))
 UTC = timezone.utc
 SUPPORTED_RECORD_EXTENSIONS = {
@@ -1321,7 +1322,7 @@ def gap_event(*, collected_at: Optional[str], reason: str, collection_audit: Opt
             "scope_policy_enabled": bool((audit.get("financial_news_scope_policy") or {}).get("enabled")),
         },
         "privacy": {"sensitive": True, "local_only": True, "contains": ["collection_gap", "financial_news_usage_metadata"]},
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -1410,7 +1411,7 @@ def wiki_targets_for_action(action_type: str) -> List[str]:
         "search": ["investor.research_consumption.workflow", "investor.capability_circle.attention_universe"],
         "alert": ["investor.decision_framework.monitoring_rules", "investor.execution.watchlist_alerts"],
     }
-    return targets.get(action_type, ["investor.data_quality.collection_gaps"])
+    return targets.get(action_type, [DATA_QUALITY_TARGET])
 
 
 def build_manifest(
@@ -1426,6 +1427,9 @@ def build_manifest(
     gap_only = bool(events) and set(action_counts) == {"collector_gap"}
     scope_policy_filtered_all = bool(collection_audit.get("financial_news_scope_policy_filtered_all"))
     no_events = not events
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap")
+    usage_event_count = len(usable_usage_events(events))
+    usable_event_count = usage_event_count
     observed_platforms = sorted(platform for platform, count in platform_counts.items() if count and platform != "unknown")
     observed_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if platform_counts.get(platform)]
     missing_expected_platforms = [platform for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS if not platform_counts.get(platform)]
@@ -1439,8 +1443,9 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
-        "usage_event_count": len(usable_usage_events(events)),
-        "gap_event_count": sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap"),
+        "usable_event_count": usable_event_count,
+        "usage_event_count": usage_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "platform_counts": dict(sorted(platform_counts.items())),
@@ -1493,7 +1498,10 @@ def build_manifest(
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
             ),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "can_enter_finclaw": usable_event_count > 0 and not scope_policy_filtered_all,
+            "can_enter_financial_news_usage_lake": usable_event_count > 0 and not scope_policy_filtered_all,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": usable_event_count > 0 and not scope_policy_filtered_all,
             "can_claim_complete_usage_history": False,
             "source_collection_scope": source_collection_scope_for_readiness(
                 gap_only=gap_only,
@@ -1502,6 +1510,9 @@ def build_manifest(
             ),
             "platform_coverage_status": coverage_status(events, missing_expected_platforms, "platform"),
             "action_coverage_status": coverage_status(events, missing_expected_actions, "action"),
+            "usable_event_count": usable_event_count,
+            "usage_event_count": usage_event_count,
+            "gap_event_count": gap_event_count,
             "next_action": collection_next_action(
                 gap_only=gap_only,
                 no_events=no_events,
@@ -1550,6 +1561,8 @@ def build_usage_boundary_proof(
     observed_expected_actions = [action for action in EXPECTED_FINANCIAL_NEWS_ACTIONS if action_counts.get(action)]
     audit = source_audit(events, collection_audit=collection_audit)
     surface = usage_surface_summary(events)
+    gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap")
+    can_enter_usage_lake = bool(usage_events) and not gap_only
     return {
         "source_type": "authorized_financial_news_usage_export_or_browser_history_copy",
         "proof_level": usage_boundary_proof_level(
@@ -1561,8 +1574,9 @@ def build_usage_boundary_proof(
             gap_only=gap_only,
         ),
         "event_count": len(usage_events),
+        "usable_event_count": len(usage_events),
         "package_event_count": len(events),
-        "gap_event_count": sum(1 for event in events if (event.get("data") or {}).get("action_type") == "collector_gap"),
+        "gap_event_count": gap_event_count,
         "parsed_record_count": audit.get("parsed_record_count", len(usage_events)),
         "emitted_event_count": audit.get("emitted_event_count", len(events)),
         "usage_event_count": audit.get("usage_event_count", len(usage_events)),
@@ -1637,7 +1651,10 @@ def build_usage_boundary_proof(
         "direct_app_or_account_reconnect": False,
         "collector_writes_wiki_directly": False,
         "personal_usage_only": True,
-        "can_enter_finclaw": bool(usage_events) and not gap_only,
+        "can_enter_finclaw": can_enter_usage_lake,
+        "can_enter_financial_news_usage_lake": can_enter_usage_lake,
+        "can_enter_data_quality_lake": gap_event_count > 0,
+        "can_feed_investor_wiki_evidence": can_enter_usage_lake,
     }
 
 
@@ -1870,13 +1887,16 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     return audit
 
 
-def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+def build_evidence(
+    events: List[Dict[str, Any]],
+    *,
+    generated_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
-    usable_events = 0
-    for event in events:
-        if (event.get("data") or {}).get("action_type") == "collector_gap":
-            continue
-        usable_events += 1
+    usable_events = usable_usage_events(events)
+    gap_event_count = max(len(events) - len(usable_events), 0)
+    for event in usable_events:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
     evidence = {
@@ -1885,7 +1905,9 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
         "generated_from": {
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
-            "event_count": usable_events,
+            "event_count": len(usable_events),
+            "raw_event_count": len(events),
+            "gap_event_count": gap_event_count,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1896,27 +1918,43 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "source_is_public_news_crawler": False,
             "personal_usage_only": True,
             "public_news_content_mirror": False,
-            "usable_event_count": usable_events,
+            "usable_event_count": len(usable_events),
+            "gap_event_count": gap_event_count,
             "source_platforms": sorted(
                 {
                     str((event.get("data") or {}).get("platform"))
-                    for event in events
+                    for event in usable_events
                     if (event.get("data") or {}).get("platform")
                 }
             ),
             "source_actions": sorted(
                 {
                     str((event.get("data") or {}).get("action_type"))
-                    for event in events
+                    for event in usable_events
                     if (event.get("data") or {}).get("action_type") not in (None, "collector_gap")
                 }
             ),
-            "usage_surface_summary": usage_surface_summary(events),
-            "usage_behavior_summary": usage_behavior_summary(events),
+            "usage_surface_summary": usage_surface_summary(usable_events),
+            "usage_behavior_summary": usage_behavior_summary(usable_events),
+            "usage_boundary_proof": build_usage_boundary_proof(
+                events,
+                collection_audit=collection_audit,
+                missing_expected_platforms=[
+                    platform
+                    for platform in EXPECTED_P1_FINANCIAL_NEWS_PLATFORMS
+                    if not any((event.get("data") or {}).get("platform") == platform for event in usable_events)
+                ],
+                missing_expected_actions=[
+                    action
+                    for action in EXPECTED_FINANCIAL_NEWS_ACTIONS
+                    if not any((event.get("data") or {}).get("action_type") == action for event in usable_events)
+                ],
+                gap_only=bool(events) and not usable_events,
+            ),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }
-    return augment_evidence_with_dimensions(evidence, events, INVESTOR_WIKI_SUBDIMENSION_RULES)
+    return augment_evidence_with_dimensions(evidence, usable_events, INVESTOR_WIKI_SUBDIMENSION_RULES)
 
 
 def classify_usage_topics(
