@@ -29,6 +29,8 @@ def write_summary(path: Path, manifest: dict) -> None:
         "",
         "- collector: `calendar`",
         f"- event_count: {manifest['event_count']}",
+        f"- calendar_event_count: {manifest.get('calendar_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",

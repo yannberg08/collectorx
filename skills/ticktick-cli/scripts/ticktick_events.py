@@ -116,9 +116,9 @@ def collect_from_inputs_with_audit(
     )
     audit = new_collection_audit(input_list, paths, limit=limit, scope_policy=scope_policy)
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="ticktick_authorized_input_missing")]
-        audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
+        events = [gap_event(collected_at=collected_at, reason="ticktick_authorized_input_missing", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
         return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
@@ -156,6 +156,9 @@ def collect_from_inputs_with_audit(
             path_result["status"] = "filtered_by_scope_policy"
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
+    if not events and audit.get("task_scope_policy_filtered_all"):
+        events = [gap_event(collected_at=collected_at, reason="task_scope_policy_filtered_all", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
     return events, audit
 
 
@@ -422,7 +425,8 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
     checklist_items = checklist_items_for(record)
     checklist_completed = sum(1 for item in checklist_items if item.get("is_completed") is True)
     checklist_total = len(checklist_items)
-    event_time = due_time or start_time or completed_time
+    resolved_collected_at = collected_at or now_iso()
+    event_time = due_time or start_time or completed_time or resolved_collected_at
     data = {
         "source_app": source_app,
         "title": title,
@@ -471,7 +475,7 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
         "owner_scope": "personal",
         "kind": "task",
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -483,22 +487,59 @@ def task_to_event(record: Dict[str, Any], *, path: Path, collected_at: Optional[
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    policy = audit.get("task_scope_policy") if isinstance(audit.get("task_scope_policy"), dict) else {}
+    status_by_reason = {
+        "ticktick_authorized_input_missing": "needs_ticktick_authorized_input",
+        "task_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    messages = {
+        "ticktick_authorized_input_missing": "No user-authorized TickTick/Dida task export was provided.",
+        "task_scope_policy_filtered_all": "All user-authorized task records were excluded by the task authorization scope policy.",
+    }
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(COLLECTOR, reason),
+        "id": stable_id(COLLECTOR, "gap", reason, event_time),
         "collector": COLLECTOR,
         "source": "滴答清单授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized TickTick task export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "task_collection_gap",
+            "message": messages.get(reason, "Task collection produced a traceable gap."),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "task_event_count": 0,
+            "retained_task_count": 0,
+            "scope_policy_filtered_record_count": int(policy.get("filtered_record_count") or 0),
+            "scope_policy_filter_reason_counts": policy.get("filter_reason_counts") or {},
+            "policy_is_user_authorization_scope": bool(policy.get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "task_fact_claimed": False,
+            "investment_task_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_task_list_claimed": False,
+            "task_service_token_collected": False,
+            "collector_writes_investor_wiki_directly": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["task"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(policy.get("enabled")),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["task", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
@@ -511,6 +552,8 @@ def build_manifest(
 ) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    task_events = [event for event in events if event.get("kind") == "task"]
+    gap_event_count = len(events) - len(task_events)
     source_app_counts = Counter(source_app_for(event) for event in events if source_app_for(event) != "unknown")
     observed_apps = sorted(app for app, count in source_app_counts.items() if count)
     observed_expected = [app for app in EXPECTED_P1_TASK_PLATFORMS if source_app_counts.get(app)]
@@ -522,6 +565,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "task_event_count": len(task_events),
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "platform_coverage": {
             "expected_p1_platforms": list(EXPECTED_P1_TASK_PLATFORMS),
@@ -573,6 +618,8 @@ def task_readiness_status(
     gap_only: bool,
 ) -> str:
     if gap_only:
+        if collection_audit and collection_audit.get("task_scope_policy_filtered_all"):
+            return "scope_policy_filtered_all"
         return "needs_ticktick_authorized_input"
     if events:
         return "events_collected"
@@ -620,6 +667,8 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         "",
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
+        f"- task_event_count: {manifest.get('task_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
         f"- observed_platforms: `{', '.join(manifest['platform_coverage']['observed_platforms']) or 'none'}`",
         f"- missing_expected_platforms: `{', '.join(manifest['platform_coverage']['missing_expected_platforms']) or 'none'}`",

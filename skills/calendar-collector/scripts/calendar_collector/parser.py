@@ -113,9 +113,9 @@ def collect_from_inputs_with_audit(
     )
     audit = new_collection_audit(input_list, paths, limit=limit, scope_policy=scope_policy)
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="calendar_authorized_input_missing")]
-        audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
+        events = [gap_event(collected_at=collected_at, reason="calendar_authorized_input_missing", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
         return events, audit
     events: List[Dict[str, Any]] = []
     for path in paths:
@@ -153,6 +153,9 @@ def collect_from_inputs_with_audit(
             path_result["status"] = "filtered_by_scope_policy"
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
+    if not events and audit.get("calendar_scope_policy_filtered_all"):
+        events = [gap_event(collected_at=collected_at, reason="calendar_scope_policy_filtered_all", collection_audit=audit)]
+        audit["emitted_event_count"] = len(events)
     return events, audit
 
 
@@ -561,6 +564,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "archive_member": first(record, [SOURCE_MEMBER_KEY]),
     }
     raw_ref = {key: value for key, value in raw_ref.items() if value not in (None, "", [], {})}
+    resolved_collected_at = collected_at or now_iso()
     return {
         "schema": "collectorx.event.v1",
         "id": stable_id(path, row, data.get("event_id"), title, start, end),
@@ -568,8 +572,8 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "source": "用户授权日历事件",
         "owner_scope": "personal",
         "kind": "calendar",
-        "time": data.get("start") or data.get("end"),
-        "collected_at": collected_at or now_iso(),
+        "time": data.get("start") or data.get("end") or resolved_collected_at,
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar", "work_confidential", "contact"]},
@@ -577,22 +581,59 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    policy = audit.get("calendar_scope_policy") if isinstance(audit.get("calendar_scope_policy"), dict) else {}
+    status_by_reason = {
+        "calendar_authorized_input_missing": "needs_calendar_authorized_input",
+        "calendar_scope_policy_filtered_all": "scope_policy_filtered_all",
+    }
+    messages = {
+        "calendar_authorized_input_missing": "No user-authorized calendar export was provided.",
+        "calendar_scope_policy_filtered_all": "All user-authorized calendar events were excluded by the calendar authorization scope policy.",
+    }
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(COLLECTOR, reason),
+        "id": stable_id(COLLECTOR, "gap", reason, event_time),
         "collector": COLLECTOR,
         "source": "日历授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized calendar export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "calendar_collection_gap",
+            "message": messages.get(reason, "Calendar collection produced a traceable gap."),
+            "candidate_record_count": int(audit.get("candidate_record_count") or 0),
+            "calendar_event_count": 0,
+            "retained_calendar_count": 0,
+            "scope_policy_filtered_record_count": int(policy.get("filtered_record_count") or 0),
+            "scope_policy_filter_reason_counts": policy.get("filter_reason_counts") or {},
+            "policy_is_user_authorization_scope": bool(policy.get("enabled")),
+            "policy_does_not_assert_investment_relevance": True,
+            "calendar_fact_claimed": False,
+            "investment_calendar_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_calendar_claimed": False,
+            "calendar_service_token_collected": False,
+            "collector_writes_investor_wiki_directly": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar"]},
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": bool(policy.get("enabled")),
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["calendar", "collection_gap"]},
         "wiki_targets": ["collectorx.data_quality.collection_gaps"],
     }
 
@@ -605,6 +646,8 @@ def build_manifest(
 ) -> Dict[str, Any]:
     kind_counts = Counter(event["kind"] for event in events)
     gap_only = bool(events) and all((event.get("data") or {}).get("gap") for event in events)
+    calendar_events = [event for event in events if event.get("kind") == "calendar"]
+    gap_event_count = len(events) - len(calendar_events)
     source_platform_counts = Counter(source_platform_for(event) for event in events if source_platform_for(event) != "unknown")
     observed_platforms = sorted(platform for platform, count in source_platform_counts.items() if count)
     observed_expected = [platform for platform in EXPECTED_P1_CALENDAR_PLATFORMS if source_platform_counts.get(platform)]
@@ -620,6 +663,8 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "calendar_event_count": len(calendar_events),
+        "gap_event_count": gap_event_count,
         "source_file_count": len({(event.get("raw_ref") or {}).get("path") for event in events if (event.get("raw_ref") or {}).get("path")}),
         "kind_counts": dict(sorted(kind_counts.items())),
         "platform_coverage": {
@@ -672,6 +717,8 @@ def calendar_readiness_status(
     gap_only: bool,
 ) -> str:
     if gap_only:
+        if collection_audit and collection_audit.get("calendar_scope_policy_filtered_all"):
+            return "scope_policy_filtered_all"
         return "needs_calendar_authorized_input"
     if events:
         return "events_collected"

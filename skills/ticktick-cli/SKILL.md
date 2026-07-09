@@ -1,7 +1,7 @@
 ---
 name: ticktick-cli
 description: 使用 Python CLI 与 Dida365 Open API 交互以管理滴答清单任务/项目，适用于需要通过脚本或命令行调用滴答清单接口的场景（如项目/任务的查询、创建、更新、完成、删除）。
-version: 0.1.12
+version: 0.1.13
 ---
 
 ## 调用约定（AI 必读）
@@ -224,6 +224,9 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect \
 
 输出在 `exports/ticktick/events.jsonl`、`manifest.json`、`SUMMARY.md`。这里有意不写
 `lake/ticktick/events.jsonl`，避免和 SoulMirror daemon 的职责混淆。
+无授权导出输入或授权范围过滤为空时，离线 helper 会写入 `profile` gap 事件，并在
+manifest 中区分 `task_event_count` 和 `gap_event_count`；这些 gap 只进入数据质量路由，
+不能当作任务事实或投资事实。
 如果用户只授权某些项目/清单、标签、来源应用或关键词范围，可传
 `--allow-source-app` / `--deny-source-app`、`--allow-project` /
 `--deny-project`、`--allow-tag` / `--deny-tag`、`--allow-keyword` /
@@ -286,6 +289,7 @@ python <SKILL_DIR>/scripts/ticktick_events.py collect \
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.1.13 | 2026-07-09 | 离线授权导入新增 filtered-all/no-input profile gap 事件，manifest 区分 `task_event_count` 与 `gap_event_count`，继续保持 SoulMirror 主路径由 daemon 写 lake |
 | 0.1.12 | 2026-07-09 | 离线授权导入新增任务范围策略：按来源应用、项目/清单、标签和关键词 allow/deny 过滤，并在 manifest 中记录 `task_scope_policy`、候选/过滤计数、过滤原因和 filtered-all 状态 |
 | 0.1.11 | 2026-07-08 | 补强投资任务计划面：SoulMirror snapshot 顶层保留 timezone/repeat/reminders/checklist 计数；离线授权导入标准化 start/due/completed 时间，输出 timeZone/all-day/重复频率/checklist 子项、完成数、未完成数和完成率，并在 manifest 中汇总时间质量和 checklist 执行拆解度 |
 | 0.1.10 | 2026-07-08 | 对齐 SoulMirror 原版采集器模式：`collectors/generic/ticktick.yaml` 改为 `soulmirror/v1` prompt 采集；主路径由 AgentRunner 调用 `collect_for_soulmirror.py` 并只返回 JSON array；明确禁止 skill 直接写 lake；离线 `ticktick_events.py` 输出改到 `exports/ticktick/events.jsonl`，避免和 daemon 写 lake 的职责混淆 |

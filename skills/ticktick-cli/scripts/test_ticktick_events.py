@@ -15,6 +15,10 @@ ROOT = Path(__file__).resolve().parent
 SCRIPT = ROOT / "ticktick_events.py"
 
 
+def read_events(out: Path) -> list[dict]:
+    return [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+
+
 def test_ticktick_json_to_task_events() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -55,7 +59,7 @@ def test_ticktick_json_to_task_events() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 1
         event = events[0]
         assert event["schema"] == "collectorx.event.v1"
@@ -83,6 +87,9 @@ def test_ticktick_json_to_task_events() -> None:
         assert "must-not-leak" not in json.dumps(event, ensure_ascii=False)
         assert event["wiki_targets"] == ["internal.productivity.tasks"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["task_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_investment_tasks"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "partial_authorized_input"
         assert manifest["platform_coverage"]["observed_expected_platforms"] == ["ticktick"]
@@ -146,7 +153,7 @@ def test_ticktick_zip_dida_export_and_unsafe_member_skip() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 1
         assert events[0]["data"]["source_app"] == "dida365"
         assert events[0]["data"]["is_completed"] is True
@@ -278,14 +285,41 @@ def test_ticktick_scope_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        events_path = out / "exports" / "ticktick" / "events.jsonl"
-        assert events_path.read_text(encoding="utf-8") == ""
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["schema"] == "collectorx.event.v1"
+        assert gap["collector"] == "ticktick"
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "task_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "task_collection_gap"
+        assert gap["data"]["candidate_record_count"] == 1
+        assert gap["data"]["task_event_count"] == 0
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"tag_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["investment_task_fact_claimed"] is False
+        assert gap["data"]["complete_task_list_claimed"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "task_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["task_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         audit = manifest["source_audit"]
         assert audit["candidate_record_count"] == 1
+        assert audit["emitted_event_count"] == 1
         assert audit["task_scope_policy_filtered_all"] is True
         assert audit["task_scope_policy"]["filtered_record_count"] == 1
         assert audit["task_scope_policy"]["filter_reason_counts"] == {"tag_not_allowed": 1}
@@ -295,10 +329,20 @@ def test_ticktick_without_input_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
-        events = [json.loads(line) for line in (out / "exports" / "ticktick" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 1
+        assert events[0]["kind"] == "profile"
+        assert events[0]["time"]
         assert events[0]["data"]["gap"] == "ticktick_authorized_input_missing"
+        assert events[0]["data"]["status"] == "needs_ticktick_authorized_input"
+        assert events[0]["data"]["profile_type"] == "task_collection_gap"
+        assert events[0]["data"]["candidate_record_count"] == 0
+        assert events[0]["data"]["task_event_count"] == 0
+        assert "collection_gap" in events[0]["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["task_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         assert manifest["source_audit"]["input_count"] == 0
         assert manifest["source_audit"]["resolved_input_file_count"] == 0

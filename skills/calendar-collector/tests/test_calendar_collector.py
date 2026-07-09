@@ -12,7 +12,29 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "calendar_query.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
+
+
+def read_events(out: Path) -> list[dict]:
+    return [json.loads(line) for line in (out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+
+
+def assert_package_valid(out: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "calendar",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_ics_event() -> None:
@@ -49,7 +71,9 @@ def test_collect_ics_event() -> None:
             text=True,
             capture_output=True,
         )
-        event = json.loads((out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        events = read_events(out)
+        assert len(events) == 1
+        event = events[0]
         assert event["schema"] == "collectorx.event.v1"
         assert event["collector"] == "calendar"
         assert event["kind"] == "calendar"
@@ -67,6 +91,9 @@ def test_collect_ics_event() -> None:
         assert event["data"]["description_length"] == len("跟踪贵州茅台二季度财报")
         assert event["wiki_targets"] == ["internal.calendar.events"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["calendar_event_count"] == 1
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_investment_calendar"] is False
         assert manifest["platform_coverage"]["observed_platforms"] == ["ics_export"]
         assert manifest["collection_readiness"]["platform_coverage_status"] == "partial_expected_platforms_observed"
@@ -84,6 +111,7 @@ def test_collect_ics_event() -> None:
         assert manifest["source_audit"]["parsed_record_count"] == 1
         assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["evidence_policy"]["required_lens"] == "task-calendar-investor"
+        assert_package_valid(out)
 
 
 def test_collect_json_and_csv_events() -> None:
@@ -103,17 +131,21 @@ def test_collect_json_and_csv_events() -> None:
             text=True,
             capture_output=True,
         )
-        events = [json.loads(line) for line in (out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        events = read_events(out)
         assert len(events) == 2
         assert {event["data"]["title"] for event in events} == {"复盘提醒", "行业会议"}
         serialized = json.dumps(events, ensure_ascii=False)
         assert "must-not-leak" not in serialized
         assert all(target == "internal.calendar.events" for event in events for target in event["wiki_targets"])
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 2
+        assert manifest["calendar_event_count"] == 2
+        assert manifest["gap_event_count"] == 0
         assert manifest["platform_coverage"]["source_platform_counts"] == {
             "google_calendar": 1,
             "outlook_calendar": 1,
         }
+        assert_package_valid(out)
 
 
 def test_collect_all_expected_calendar_platforms_and_zip_safety() -> None:
@@ -370,30 +402,71 @@ def test_collect_calendar_scope_policy_filtered_all_status() -> None:
             text=True,
             capture_output=True,
         )
-        events_path = out / "lake" / "calendar" / "events.jsonl"
-        assert events_path.read_text(encoding="utf-8") == ""
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["schema"] == "collectorx.event.v1"
+        assert gap["collector"] == "calendar"
+        assert gap["kind"] == "profile"
+        assert gap["time"]
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["gap"] == "calendar_scope_policy_filtered_all"
+        assert gap["data"]["status"] == "scope_policy_filtered_all"
+        assert gap["data"]["profile_type"] == "calendar_collection_gap"
+        assert gap["data"]["candidate_record_count"] == 1
+        assert gap["data"]["calendar_event_count"] == 0
+        assert gap["data"]["scope_policy_filtered_record_count"] == 1
+        assert gap["data"]["scope_policy_filter_reason_counts"] == {"calendar_not_allowed": 1}
+        assert gap["data"]["policy_is_user_authorization_scope"] is True
+        assert gap["data"]["investment_calendar_fact_claimed"] is False
+        assert gap["data"]["complete_calendar_claimed"] is False
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "calendar_scope_policy_filtered_all",
+            "scope_policy_enabled": True,
+        }
+        assert "collection_gap" in gap["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest["event_count"] == 0
+        assert manifest["event_count"] == 1
+        assert manifest["calendar_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
         audit = manifest["source_audit"]
         assert audit["candidate_record_count"] == 1
+        assert audit["emitted_event_count"] == 1
         assert audit["calendar_scope_policy_filtered_all"] is True
         assert audit["calendar_scope_policy"]["filtered_record_count"] == 1
         assert audit["calendar_scope_policy"]["filter_reason_counts"] == {"calendar_not_allowed": 1}
+        assert_package_valid(out)
 
 
 def test_collect_without_input_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
         subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
-        event = json.loads((out / "lake" / "calendar" / "events.jsonl").read_text(encoding="utf-8").splitlines()[0])
+        events = read_events(out)
+        assert len(events) == 1
+        event = events[0]
+        assert event["kind"] == "profile"
+        assert event["time"]
         assert event["data"]["gap"] == "calendar_authorized_input_missing"
+        assert event["data"]["status"] == "needs_calendar_authorized_input"
+        assert event["data"]["profile_type"] == "calendar_collection_gap"
+        assert event["data"]["candidate_record_count"] == 0
+        assert event["data"]["calendar_event_count"] == 0
+        assert "collection_gap" in event["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["calendar_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
         assert manifest["source_audit"]["input_count"] == 0
         assert manifest["source_audit"]["resolved_input_file_count"] == 0
         assert manifest["source_audit"]["parsed_record_count"] == 0
         assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert_package_valid(out)
 
 
 if __name__ == "__main__":

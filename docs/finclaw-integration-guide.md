@@ -813,7 +813,11 @@ Offline helper status:
   configured filters, candidate task count, filtered task count, filter reason
   counts, and `policy_does_not_assert_investment_relevance=true`.
 - If authorized input exists but every candidate task is outside the selected
-  scope, readiness reports `scope_policy_filtered_all`.
+  scope, the helper emits a `kind=profile` gap event and readiness reports
+  `scope_policy_filtered_all`.
+- Missing offline input also emits a `kind=profile` gap event. These helper gap
+  events route to `collectorx.data_quality.collection_gaps`; they do not write
+  daemon-owned `lake/ticktick/events.jsonl` and they are not task facts.
 - Writes `manifest.field_coverage`, `time_status_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect title/project/status/start/due/
   completion/timezone/all-day/recurrence/reminder/checklist coverage, overdue
@@ -855,7 +859,11 @@ Current status:
   records the configured filters, candidate event count, filtered event count,
   filter reason counts, and `policy_does_not_assert_investment_relevance=true`.
 - If authorized input exists but every candidate calendar event is outside the
-  selected scope, readiness reports `scope_policy_filtered_all`.
+  selected scope, the package emits a validator-safe `kind=profile` gap event
+  and readiness reports `scope_policy_filtered_all`.
+- Missing calendar input also emits a `kind=profile` gap event. FinClaw should
+  route calendar collection gaps to `collectorx.data_quality.collection_gaps`,
+  not to investor facts.
 - Writes `manifest.field_coverage`, `time_surface_summary`, `source_audit`, and
   `evidence_policy` so FinClaw can inspect start/end, meeting URL, attendees,
   recurrence, reminders, duration coverage, all-day/multi-day events, invalid
