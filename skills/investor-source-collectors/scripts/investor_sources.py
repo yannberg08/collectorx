@@ -64,6 +64,20 @@ def collect(args: argparse.Namespace) -> int:
         deny_email_surfaces=args.deny_email_surface,
         allow_email_keywords=args.allow_email_keyword,
         deny_email_keywords=args.deny_email_keyword,
+        allow_social_platforms=args.allow_social_platform,
+        deny_social_platforms=args.deny_social_platform,
+        allow_social_actions=args.allow_social_action,
+        deny_social_actions=args.deny_social_action,
+        allow_social_source_apps=args.allow_social_source_app,
+        deny_social_source_apps=args.deny_social_source_app,
+        allow_social_domains=args.allow_social_domain,
+        deny_social_domains=args.deny_social_domain,
+        allow_social_creators=args.allow_social_creator,
+        deny_social_creators=args.deny_social_creator,
+        allow_social_topics=args.allow_social_topic,
+        deny_social_topics=args.deny_social_topic,
+        allow_social_keywords=args.allow_social_keyword,
+        deny_social_keywords=args.deny_social_keyword,
         allow_extensions=args.allow_extension,
         deny_extensions=args.deny_extension,
         allow_paths=args.allow_path,
@@ -148,6 +162,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_collect.add_argument("--deny-email-surface", action="append", help="Email research: exclude matching surfaces.")
     p_collect.add_argument("--allow-email-keyword", action="append", help="Email research: only keep records whose sender/subject/preview/attachment metadata match keyword.")
     p_collect.add_argument("--deny-email-keyword", action="append", help="Email research: exclude records whose sender/subject/preview/attachment metadata match keyword.")
+    p_collect.add_argument("--allow-social-platform", action="append", help="Social influence: only keep matching platforms such as weibo, bilibili, or xiaohongshu.")
+    p_collect.add_argument("--deny-social-platform", action="append", help="Social influence: exclude matching platforms.")
+    p_collect.add_argument("--allow-social-action", action="append", help="Social influence: only keep matching activity actions such as watch, like, favorite, follow, comment, or share.")
+    p_collect.add_argument("--deny-social-action", action="append", help="Social influence: exclude matching activity actions.")
+    p_collect.add_argument("--allow-social-source-app", action="append", help="Social influence: only keep matching source apps such as chromium_history or safari_history.")
+    p_collect.add_argument("--deny-social-source-app", action="append", help="Social influence: exclude matching source apps.")
+    p_collect.add_argument("--allow-social-domain", action="append", help="Social influence: only keep records whose URL domain matches this domain.")
+    p_collect.add_argument("--deny-social-domain", action="append", help="Social influence: exclude records whose URL domain matches this domain.")
+    p_collect.add_argument("--allow-social-creator", action="append", help="Social influence: only keep records whose creator/author/account matches this pattern.")
+    p_collect.add_argument("--deny-social-creator", action="append", help="Social influence: exclude records whose creator/author/account matches this pattern.")
+    p_collect.add_argument("--allow-social-topic", action="append", help="Social influence: only keep matching social topics such as market_strategy or industry_theme.")
+    p_collect.add_argument("--deny-social-topic", action="append", help="Social influence: exclude matching social topics.")
+    p_collect.add_argument("--allow-social-keyword", action="append", help="Social influence: only keep records whose social metadata or preview matches keyword.")
+    p_collect.add_argument("--deny-social-keyword", action="append", help="Social influence: exclude records whose social metadata or preview matches keyword.")
     p_collect.add_argument("--allow-extension", action="append", help="Research documents: only keep matching file extensions, e.g. pdf, xlsx, md.")
     p_collect.add_argument("--deny-extension", action="append", help="Research documents: exclude matching file extensions.")
     p_collect.add_argument("--allow-path", action="append", help="Research documents: only keep records whose path/source contains this pattern.")

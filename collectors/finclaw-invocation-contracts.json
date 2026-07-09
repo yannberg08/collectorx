@@ -320,9 +320,9 @@
       "requires_upstream": [
         "social-activity"
       ],
-      "user_step": "Run after social activity Lake exists and use the output only as weak influence evidence.",
-      "preflight": "Upstream social-activity events.jsonl exists and stronger trade/research corroboration is still required.",
-      "failure_state": "needs_social_activity_lake"
+      "user_step": "Run after social activity Lake exists, optionally narrowing weak influence evidence by platform, action, source app, domain, creator, social topic, or keyword.",
+      "preflight": "Upstream social-activity events.jsonl exists; optional social influence scope filters are explicit when used; pure upstream gap packages and filtered-all lens packages must not become influence facts; stronger trade/research corroboration is still required.",
+      "failure_state": "needs_social_activity_lake_or_scope_policy_retained_social_influence"
     },
     {
       "id": "qq",

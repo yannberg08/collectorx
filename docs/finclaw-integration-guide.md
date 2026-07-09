@@ -1307,6 +1307,29 @@ Current status:
   lens. The lens mirrors social-topic/platform/action/creator summaries and
   writes `social_influence_boundary_proof`, but resulting evidence remains weak
   influence evidence unless corroborated by stronger sources.
+- The lens can also narrow Wiki-bound weak influence evidence before evidence
+  packaging:
+
+```bash
+python3 skills/investor-source-collectors/scripts/investor_sources.py collect \
+  --source social-investment-influence \
+  --input <social-activity-events-jsonl> \
+  --out-dir <out-dir> \
+  --allow-social-platform xiaohongshu \
+  --allow-social-topic market_strategy \
+  --allow-social-creator <authorized-creator-name>
+```
+
+- `manifest.collection_audit.social_influence_scope_policy` records
+  platform/action/source-app/domain/creator/topic/keyword allow/deny filters,
+  candidate counts, filtered counts, and reason counts.
+- If the lens policy excludes every social activity candidate, the run emits a
+  `social_influence_scope_policy_filtered_all` gap, readiness reports
+  `scope_policy_filtered_all`, and `collection_readiness.can_enter_finclaw=false`.
+- `manifest.social_influence_boundary_proof.authorization_scope_boundary`
+  exposes the same policy to FinClaw/SoulMirror. A filtered-all lens package
+  keeps `investor_wiki_evidence.v1.json.generated_from.event_count=0` and must
+  not become an influence fact.
 
 ### 投资 Lens / 分类工具
 

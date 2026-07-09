@@ -44,6 +44,10 @@ def test_list_sources_contains_all_priorities() -> None:
     assert email_profile["email_research_scope_policy"]["supports_allow_sender_domain"] is True
     assert email_profile["email_research_scope_policy"]["supports_allow_email_surface"] is True
     assert email_profile["email_research_scope_policy"]["policy_does_not_assert_investment_relevance"] is True
+    social_profile = next(profile for profile in profiles if profile["id"] == "social-investment-influence")
+    assert social_profile["social_influence_scope_policy"]["supports_allow_platform"] is True
+    assert social_profile["social_influence_scope_policy"]["supports_allow_topic"] is True
+    assert social_profile["social_influence_scope_policy"]["policy_does_not_assert_investment_relevance"] is True
     priorities = {profile["priority"] for profile in profiles}
     assert {"P0", "P1", "P2"}.issubset(priorities)
     classes = {profile["collector_class"] for profile in profiles}
@@ -2493,6 +2497,207 @@ def test_social_investment_influence_lens_keeps_investment_activity_only() -> No
         evidence_proof = evidence["coverage_summary"]["source_boundary_proof_summary"]["social-investment-influence"]
         assert evidence_proof["weak_evidence_only"] is True
         assert evidence_proof["can_claim_investment_conclusion"] is False
+
+
+def test_social_investment_influence_scope_policy_filters_weak_evidence() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "social-events.jsonl"
+        out_dir = root / "out"
+        events = [
+            {
+                "schema": "collectorx.event.v1",
+                "id": "social-activity:allowed",
+                "collector": "social-activity",
+                "source": "小红书授权活动",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-09T09:00:00+08:00",
+                "collected_at": "2026-07-09T10:00:00+08:00",
+                "data": {
+                    "platform": "xiaohongshu",
+                    "action_type": "favorite",
+                    "source_app": "social_export",
+                    "url": "https://www.xiaohongshu.com/explore/strategy-1",
+                    "title": "半导体估值策略复盘",
+                    "creator": "价值投教作者",
+                    "social_topics": ["market_strategy", "industry_theme"],
+                    "primary_social_topic": "market_strategy",
+                    "content_preview": "估值、财报和仓位控制的投资复盘。",
+                },
+                "raw_ref": {"path": "social.json", "row": 1},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "social-activity:other-platform",
+                "collector": "social-activity",
+                "source": "B站授权活动",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-09T09:10:00+08:00",
+                "collected_at": "2026-07-09T10:00:00+08:00",
+                "data": {
+                    "platform": "bilibili",
+                    "action_type": "watch",
+                    "source_app": "social_export",
+                    "url": "https://www.bilibili.com/video/BV1",
+                    "title": "半导体行业估值复盘",
+                    "creator": "价值投教作者",
+                    "social_topics": ["market_strategy"],
+                    "content_preview": "估值和财报。",
+                },
+                "raw_ref": {"path": "social.json", "row": 2},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+            {
+                "schema": "collectorx.event.v1",
+                "id": "social-activity:denied-keyword",
+                "collector": "social-activity",
+                "source": "小红书授权活动",
+                "owner_scope": "personal",
+                "kind": "note",
+                "time": "2026-07-09T09:20:00+08:00",
+                "collected_at": "2026-07-09T10:00:00+08:00",
+                "data": {
+                    "platform": "xiaohongshu",
+                    "action_type": "favorite",
+                    "source_app": "social_export",
+                    "url": "https://www.xiaohongshu.com/explore/private-1",
+                    "title": "私人观察：半导体估值",
+                    "creator": "价值投教作者",
+                    "social_topics": ["market_strategy"],
+                    "content_preview": "私人观察，不进入投资分身。",
+                },
+                "raw_ref": {"path": "social.json", "row": 3},
+                "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+            },
+        ]
+        source_path.write_text("\n".join(json.dumps(event, ensure_ascii=False) for event in events) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "social-investment-influence",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-social-platform",
+            "xiaohongshu",
+            "--allow-social-action",
+            "favorite",
+            "--allow-social-source-app",
+            "social_export",
+            "--allow-social-domain",
+            "xiaohongshu.com",
+            "--allow-social-creator",
+            "价值投教作者",
+            "--allow-social-topic",
+            "market_strategy",
+            "--allow-social-keyword",
+            "估值",
+            "--deny-social-keyword",
+            "私人",
+            "--collected-at",
+            "2026-07-09T10:30:00+08:00",
+        )
+
+        lens_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "social-investment-influence" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lens_events) == 1
+        assert lens_events[0]["raw_ref"]["upstream_event_id"] == "social-activity:allowed"
+        policy = lens_events[0]["data"]["social_influence_scope_policy"]
+        assert policy["allowed"] is True
+        assert policy["matched_allow_social_domain"] == "xiaohongshu.com"
+        assert policy["matched_allow_social_creator"] == "价值投教作者"
+        assert policy["matched_allow_social_topic"] == "market_strategy"
+        assert policy["matched_allow_social_keyword"] == "估值"
+        assert policy["policy_does_not_assert_investment_relevance"] is True
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        audit_policy = manifest["collection_audit"]["social_influence_scope_policy"]
+        assert audit_policy["enabled"] is True
+        assert audit_policy["allow_social_platforms"] == ["xiaohongshu"]
+        assert audit_policy["allow_social_topics"] == ["market_strategy"]
+        assert audit_policy["filtered_candidate_count"] == 2
+        assert audit_policy["filter_reason_counts"] == {
+            "social_platform_not_allowed": 1,
+            "social_keyword_denied": 1,
+        }
+        proof = manifest["social_influence_boundary_proof"]
+        assert proof["authorization_scope_boundary"]["enabled"] is True
+        assert proof["authorization_scope_boundary"]["filtered_candidate_count"] == 2
+        assert proof["authorization_scope_boundary"]["filtered_all"] is False
+        assert proof["authorization_scope_boundary"]["policy_is_user_authorization_scope"] is True
+        assert proof["observed_event_count"] == 1
+        validator = run_package_validator(str(out_dir), "--collector", "social-investment-influence", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
+
+
+def test_social_investment_influence_scope_policy_filtered_all_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        source_path = root / "social-events.jsonl"
+        out_dir = root / "out"
+        event = {
+            "schema": "collectorx.event.v1",
+            "id": "social-activity:xhs",
+            "collector": "social-activity",
+            "source": "小红书授权活动",
+            "owner_scope": "personal",
+            "kind": "note",
+            "time": "2026-07-09T09:00:00+08:00",
+            "collected_at": "2026-07-09T10:00:00+08:00",
+            "data": {
+                "platform": "xiaohongshu",
+                "action_type": "favorite",
+                "url": "https://www.xiaohongshu.com/explore/strategy-1",
+                "title": "半导体估值策略复盘",
+                "creator": "价值投教作者",
+                "social_topics": ["market_strategy"],
+                "content_preview": "估值、财报和仓位控制的投资复盘。",
+            },
+            "raw_ref": {"path": "social.json", "row": 1},
+            "privacy": {"sensitive": True, "local_only": True, "contains": ["personal_message", "contact"]},
+        }
+        source_path.write_text(json.dumps(event, ensure_ascii=False) + "\n", encoding="utf-8")
+        run_cli(
+            "collect",
+            "--source",
+            "social-investment-influence",
+            "--input",
+            str(source_path),
+            "--out-dir",
+            str(out_dir),
+            "--allow-social-platform",
+            "weibo",
+            "--collected-at",
+            "2026-07-09T10:30:00+08:00",
+        )
+
+        lake_events = [
+            json.loads(line)
+            for line in (out_dir / "lake" / "social-investment-influence" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        assert len(lake_events) == 1
+        assert lake_events[0]["data"]["payload"]["gap"] == "social_influence_scope_policy_filtered_all"
+        assert lake_events[0]["wiki_targets"] == []
+        manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        audit = manifest["collection_audit"]
+        assert audit["social_influence_scope_policy_filtered_all"] is True
+        assert audit["social_influence_scope_policy"]["filter_reason_counts"] == {"social_platform_not_allowed": 1}
+        proof = manifest["social_influence_boundary_proof"]
+        assert proof["proof_level"] == "social_influence_scope_policy_filtered_all"
+        assert proof["authorization_scope_boundary"]["filtered_all"] is True
+        assert proof["can_enter_finclaw_lake"] is False
+        evidence = json.loads((out_dir / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["coverage_summary"]["usable_for_wiki_now"] == []
+        validator = run_package_validator(str(out_dir), "--collector", "social-investment-influence", "--require-evidence", "--json")
+        assert json.loads(validator.stdout)["valid"] is True
 
 
 def test_investment_notes_lens_reports_note_type_surface_from_notes_events() -> None:

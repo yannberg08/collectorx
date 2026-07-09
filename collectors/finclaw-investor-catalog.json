@@ -394,8 +394,8 @@
       "readiness": "baseline+audit",
       "gate": "G2",
       "finclaw_action": "run-after-social-activity-lake-as-weak-evidence-only",
-      "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source social-investment-influence --input <social-activity-events-jsonl> --out-dir <out-dir>",
-      "collects": "Investment creator influence, attention sources, social influence topic summaries, platform/action summaries, corroboration candidates, and social influence boundary proof from social activity.",
+      "cli": "python3 skills/investor-source-collectors/scripts/investor_sources.py collect --source social-investment-influence --input <social-activity-events-jsonl> --out-dir <out-dir> [--allow-social-platform <platform>] [--allow-social-action <action>] [--allow-social-source-app <source-app>] [--allow-social-domain <domain>] [--allow-social-creator <creator>] [--allow-social-topic <topic>] [--allow-social-keyword <keyword>]",
+      "collects": "Investment creator influence, attention sources, social influence topic summaries, platform/action/source-app/domain/creator/topic/keyword authorization scope-policy audit, filtered-all gap state, corroboration candidates, and social influence boundary proof from social activity.",
       "must_not_collect": "Standalone investment advice or conclusions.",
       "production_gap": "Weak-evidence backtest against stronger trade/research sources."
     },

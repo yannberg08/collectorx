@@ -15,6 +15,7 @@ import zipfile
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
+from urllib.parse import urlparse
 
 from .classifier import classify_record, should_keep_event
 from .events import build_event, build_gap_event, classify_email_research_surfaces, classify_research_document_surfaces
@@ -53,6 +54,22 @@ EMAIL_RESEARCH_SCOPE_POLICY_KEYS = (
     "deny_email_surfaces",
     "allow_email_keywords",
     "deny_email_keywords",
+)
+SOCIAL_INFLUENCE_SCOPE_POLICY_KEYS = (
+    "allow_social_platforms",
+    "deny_social_platforms",
+    "allow_social_actions",
+    "deny_social_actions",
+    "allow_social_source_apps",
+    "deny_social_source_apps",
+    "allow_social_domains",
+    "deny_social_domains",
+    "allow_social_creators",
+    "deny_social_creators",
+    "allow_social_topics",
+    "deny_social_topics",
+    "allow_social_keywords",
+    "deny_social_keywords",
 )
 
 
@@ -97,6 +114,20 @@ def collect_events(
     deny_email_surfaces: Optional[Sequence[str]] = None,
     allow_email_keywords: Optional[Sequence[str]] = None,
     deny_email_keywords: Optional[Sequence[str]] = None,
+    allow_social_platforms: Optional[Sequence[str]] = None,
+    deny_social_platforms: Optional[Sequence[str]] = None,
+    allow_social_actions: Optional[Sequence[str]] = None,
+    deny_social_actions: Optional[Sequence[str]] = None,
+    allow_social_source_apps: Optional[Sequence[str]] = None,
+    deny_social_source_apps: Optional[Sequence[str]] = None,
+    allow_social_domains: Optional[Sequence[str]] = None,
+    deny_social_domains: Optional[Sequence[str]] = None,
+    allow_social_creators: Optional[Sequence[str]] = None,
+    deny_social_creators: Optional[Sequence[str]] = None,
+    allow_social_topics: Optional[Sequence[str]] = None,
+    deny_social_topics: Optional[Sequence[str]] = None,
+    allow_social_keywords: Optional[Sequence[str]] = None,
+    deny_social_keywords: Optional[Sequence[str]] = None,
     allow_extensions: Optional[Sequence[str]] = None,
     deny_extensions: Optional[Sequence[str]] = None,
     allow_paths: Optional[Sequence[str]] = None,
@@ -137,6 +168,20 @@ def collect_events(
         deny_email_surfaces=deny_email_surfaces,
         allow_email_keywords=allow_email_keywords,
         deny_email_keywords=deny_email_keywords,
+        allow_social_platforms=allow_social_platforms,
+        deny_social_platforms=deny_social_platforms,
+        allow_social_actions=allow_social_actions,
+        deny_social_actions=deny_social_actions,
+        allow_social_source_apps=allow_social_source_apps,
+        deny_social_source_apps=deny_social_source_apps,
+        allow_social_domains=allow_social_domains,
+        deny_social_domains=deny_social_domains,
+        allow_social_creators=allow_social_creators,
+        deny_social_creators=deny_social_creators,
+        allow_social_topics=allow_social_topics,
+        deny_social_topics=deny_social_topics,
+        allow_social_keywords=allow_social_keywords,
+        deny_social_keywords=deny_social_keywords,
         allow_extensions=allow_extensions,
         deny_extensions=deny_extensions,
         allow_paths=allow_paths,
@@ -180,6 +225,20 @@ def collect_events_with_audit(
     deny_email_surfaces: Optional[Sequence[str]] = None,
     allow_email_keywords: Optional[Sequence[str]] = None,
     deny_email_keywords: Optional[Sequence[str]] = None,
+    allow_social_platforms: Optional[Sequence[str]] = None,
+    deny_social_platforms: Optional[Sequence[str]] = None,
+    allow_social_actions: Optional[Sequence[str]] = None,
+    deny_social_actions: Optional[Sequence[str]] = None,
+    allow_social_source_apps: Optional[Sequence[str]] = None,
+    deny_social_source_apps: Optional[Sequence[str]] = None,
+    allow_social_domains: Optional[Sequence[str]] = None,
+    deny_social_domains: Optional[Sequence[str]] = None,
+    allow_social_creators: Optional[Sequence[str]] = None,
+    deny_social_creators: Optional[Sequence[str]] = None,
+    allow_social_topics: Optional[Sequence[str]] = None,
+    deny_social_topics: Optional[Sequence[str]] = None,
+    allow_social_keywords: Optional[Sequence[str]] = None,
+    deny_social_keywords: Optional[Sequence[str]] = None,
     allow_extensions: Optional[Sequence[str]] = None,
     deny_extensions: Optional[Sequence[str]] = None,
     allow_paths: Optional[Sequence[str]] = None,
@@ -217,6 +276,20 @@ def collect_events_with_audit(
         deny_email_surfaces=deny_email_surfaces,
         allow_email_keywords=allow_email_keywords,
         deny_email_keywords=deny_email_keywords,
+        allow_social_platforms=allow_social_platforms,
+        deny_social_platforms=deny_social_platforms,
+        allow_social_actions=allow_social_actions,
+        deny_social_actions=deny_social_actions,
+        allow_social_source_apps=allow_social_source_apps,
+        deny_social_source_apps=deny_social_source_apps,
+        allow_social_domains=allow_social_domains,
+        deny_social_domains=deny_social_domains,
+        allow_social_creators=allow_social_creators,
+        deny_social_creators=deny_social_creators,
+        allow_social_topics=allow_social_topics,
+        deny_social_topics=deny_social_topics,
+        allow_social_keywords=allow_social_keywords,
+        deny_social_keywords=deny_social_keywords,
     )
     document_scope_policy = build_document_scope_policy(
         source_id,
@@ -290,6 +363,8 @@ def collect_events_with_audit(
             reason = "no_readable_input"
         elif source_id == "email-research" and email_research_scope_filtered >= parsed_count:
             reason = "email_research_scope_policy_filtered_all"
+        elif source_id == "social-investment-influence" and int((audit.get("social_influence_scope_policy") or {}).get("filtered_candidate_count") or 0) >= parsed_count:
+            reason = "social_influence_scope_policy_filtered_all"
         elif source_policy_filtered + document_scope_filtered >= parsed_count:
             reason = "source_policy_filtered_all"
         else:
@@ -507,6 +582,7 @@ def initial_collection_audit(
         "source_policy": {
             "enabled": source_policy_enabled(source_policy),
             "email_research_scope_applies": (source_policy or {}).get("email_research_scope_applies", False),
+            "social_influence_scope_applies": (source_policy or {}).get("social_influence_scope_applies", False),
             "allow_chats": (source_policy or {}).get("allow_chats", []),
             "deny_chats": (source_policy or {}).get("deny_chats", []),
             "allow_senders": (source_policy or {}).get("allow_senders", []),
@@ -530,6 +606,7 @@ def initial_collection_audit(
             "policy_does_not_assert_investment_relevance": True,
         },
         "email_research_scope_policy": build_email_research_scope_policy_audit(source_id, source_policy),
+        "social_influence_scope_policy": build_social_influence_scope_policy_audit(source_id, source_policy),
         "document_scope_policy": {
             **(document_scope_policy or {"enabled": False}),
             "filtered_candidate_count": 0,
@@ -596,6 +673,12 @@ def finalize_collection_audit(audit: Dict[str, Any], events: List[Dict[str, Any]
     email_filtered_count = int(email_research_scope_policy.get("filtered_candidate_count") or 0)
     email_research_scope_policy["filtered_all"] = parsed_count > 0 and email_filtered_count >= parsed_count
     audit["email_research_scope_policy_filtered_all"] = bool(email_research_scope_policy.get("filtered_all"))
+    social_influence_scope_policy = audit.get("social_influence_scope_policy") or {}
+    if isinstance(social_influence_scope_policy.get("filter_reason_counts"), Counter):
+        social_influence_scope_policy["filter_reason_counts"] = dict(sorted(social_influence_scope_policy["filter_reason_counts"].items()))
+    social_filtered_count = int(social_influence_scope_policy.get("filtered_candidate_count") or 0)
+    social_influence_scope_policy["filtered_all"] = parsed_count > 0 and social_filtered_count >= parsed_count
+    audit["social_influence_scope_policy_filtered_all"] = bool(social_influence_scope_policy.get("filtered_all"))
     document_scope_policy = audit.get("document_scope_policy") or {}
     if isinstance(document_scope_policy.get("filter_reason_counts"), Counter):
         document_scope_policy["filter_reason_counts"] = dict(sorted(document_scope_policy["filter_reason_counts"].items()))
@@ -1338,6 +1421,8 @@ def candidate_to_event(
         event["data"]["source_policy"] = policy_match
     if source_id == "email-research" and email_research_scope_policy_enabled(source_policy):
         event["data"]["email_research_scope_policy"] = policy_match
+    if source_id == "social-investment-influence" and social_influence_scope_policy_enabled(source_policy):
+        event["data"]["social_influence_scope_policy"] = policy_match
     if document_scope_policy_enabled(document_scope_policy):
         event["data"]["document_scope_policy"] = document_policy_match
     return event
@@ -1364,10 +1449,26 @@ def build_source_policy(
     deny_email_surfaces: Optional[Sequence[str]],
     allow_email_keywords: Optional[Sequence[str]],
     deny_email_keywords: Optional[Sequence[str]],
+    allow_social_platforms: Optional[Sequence[str]],
+    deny_social_platforms: Optional[Sequence[str]],
+    allow_social_actions: Optional[Sequence[str]],
+    deny_social_actions: Optional[Sequence[str]],
+    allow_social_source_apps: Optional[Sequence[str]],
+    deny_social_source_apps: Optional[Sequence[str]],
+    allow_social_domains: Optional[Sequence[str]],
+    deny_social_domains: Optional[Sequence[str]],
+    allow_social_creators: Optional[Sequence[str]],
+    deny_social_creators: Optional[Sequence[str]],
+    allow_social_topics: Optional[Sequence[str]],
+    deny_social_topics: Optional[Sequence[str]],
+    allow_social_keywords: Optional[Sequence[str]],
+    deny_social_keywords: Optional[Sequence[str]],
 ) -> Dict[str, Any]:
     email_scope_applies = source_id == "email-research"
+    social_scope_applies = source_id == "social-investment-influence"
     return {
         "email_research_scope_applies": email_scope_applies,
+        "social_influence_scope_applies": social_scope_applies,
         "allow_chats": split_patterns(allow_chats),
         "deny_chats": split_patterns(deny_chats),
         "allow_senders": split_patterns(allow_senders),
@@ -1386,6 +1487,20 @@ def build_source_policy(
         "deny_email_surfaces": normalize_surface_terms(deny_email_surfaces) if email_scope_applies else [],
         "allow_email_keywords": split_patterns(allow_email_keywords) if email_scope_applies else [],
         "deny_email_keywords": split_patterns(deny_email_keywords) if email_scope_applies else [],
+        "allow_social_platforms": normalize_lower_terms(allow_social_platforms) if social_scope_applies else [],
+        "deny_social_platforms": normalize_lower_terms(deny_social_platforms) if social_scope_applies else [],
+        "allow_social_actions": normalize_lower_terms(allow_social_actions) if social_scope_applies else [],
+        "deny_social_actions": normalize_lower_terms(deny_social_actions) if social_scope_applies else [],
+        "allow_social_source_apps": normalize_lower_terms(allow_social_source_apps) if social_scope_applies else [],
+        "deny_social_source_apps": normalize_lower_terms(deny_social_source_apps) if social_scope_applies else [],
+        "allow_social_domains": normalize_domain_terms(allow_social_domains) if social_scope_applies else [],
+        "deny_social_domains": normalize_domain_terms(deny_social_domains) if social_scope_applies else [],
+        "allow_social_creators": split_patterns(allow_social_creators) if social_scope_applies else [],
+        "deny_social_creators": split_patterns(deny_social_creators) if social_scope_applies else [],
+        "allow_social_topics": normalize_surface_terms(allow_social_topics) if social_scope_applies else [],
+        "deny_social_topics": normalize_surface_terms(deny_social_topics) if social_scope_applies else [],
+        "allow_social_keywords": split_patterns(allow_social_keywords) if social_scope_applies else [],
+        "deny_social_keywords": split_patterns(deny_social_keywords) if social_scope_applies else [],
     }
 
 
@@ -1396,6 +1511,22 @@ def build_email_research_scope_policy_audit(source_id: str, source_policy: Optio
     return {
         "enabled": enabled,
         "applies_to": "email-research",
+        **{key: policy.get(key, []) for key in keys},
+        "filtered_candidate_count": 0,
+        "filter_reason_counts": {},
+        "filtered_all": False,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
+    }
+
+
+def build_social_influence_scope_policy_audit(source_id: str, source_policy: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    policy = source_policy or {}
+    keys = SOCIAL_INFLUENCE_SCOPE_POLICY_KEYS
+    enabled = source_id == "social-investment-influence" and any(policy.get(key) for key in keys)
+    return {
+        "enabled": enabled,
+        "applies_to": "social-investment-influence",
         **{key: policy.get(key, []) for key in keys},
         "filtered_candidate_count": 0,
         "filter_reason_counts": {},
@@ -1517,7 +1648,10 @@ def source_policy_enabled(source_policy: Optional[Dict[str, Any]]) -> bool:
     email_enabled = bool(source_policy.get("email_research_scope_applies")) and any(
         source_policy.get(key) for key in EMAIL_RESEARCH_SCOPE_POLICY_KEYS
     )
-    return generic_enabled or email_enabled
+    social_enabled = bool(source_policy.get("social_influence_scope_applies")) and any(
+        source_policy.get(key) for key in SOCIAL_INFLUENCE_SCOPE_POLICY_KEYS
+    )
+    return generic_enabled or email_enabled or social_enabled
 
 
 def document_scope_policy_enabled(document_scope_policy: Optional[Dict[str, Any]]) -> bool:
@@ -1529,6 +1663,14 @@ def email_research_scope_policy_enabled(source_policy: Optional[Dict[str, Any]])
         return False
     return bool(source_policy.get("email_research_scope_applies")) and any(
         source_policy.get(key) for key in EMAIL_RESEARCH_SCOPE_POLICY_KEYS
+    )
+
+
+def social_influence_scope_policy_enabled(source_policy: Optional[Dict[str, Any]]) -> bool:
+    if not source_policy:
+        return False
+    return bool(source_policy.get("social_influence_scope_applies")) and any(
+        source_policy.get(key) for key in SOCIAL_INFLUENCE_SCOPE_POLICY_KEYS
     )
 
 
@@ -1566,6 +1708,9 @@ def source_policy_match(record: Dict[str, Any], *, source_label: str, source_pol
     email_allowed, email_match = email_research_scope_policy_match(record, source_label=source_label, source_policy=source_policy)
     if not email_allowed:
         return False, email_match
+    social_allowed, social_match = social_influence_scope_policy_match(record, source_label=source_label, source_policy=source_policy)
+    if not social_allowed:
+        return False, social_match
 
     result = {
         "enabled": True,
@@ -1576,6 +1721,10 @@ def source_policy_match(record: Dict[str, Any], *, source_label: str, source_pol
     }
     if email_match.get("enabled"):
         result.update(email_match)
+        result["matched_allow_chat"] = chat_hit
+        result["matched_allow_sender"] = sender_hit
+    if social_match.get("enabled"):
+        result.update(social_match)
         result["matched_allow_chat"] = chat_hit
         result["matched_allow_sender"] = sender_hit
     return True, result
@@ -1668,6 +1817,94 @@ def email_research_scope_policy_match(
         "matched_allow_email_keyword": allow_keyword,
         "sender_domain": sender_domain,
         "email_surfaces": email_surfaces,
+        "policy_is_user_authorization_scope": True,
+        "policy_does_not_assert_investment_relevance": True,
+    }
+
+
+def social_influence_scope_policy_match(
+    record: Dict[str, Any],
+    *,
+    source_label: str,
+    source_policy: Optional[Dict[str, Any]],
+) -> tuple[bool, Dict[str, Any]]:
+    if not social_influence_scope_policy_enabled(source_policy):
+        return True, {"enabled": False}
+
+    platform = normalize_social_value(first_record_value(record, ("platform", "source_platform", "平台")))
+    action = normalize_social_value(first_record_value(record, ("action_type", "action", "activity_type", "动作", "行为")))
+    source_app = normalize_social_value(first_record_value(record, ("source_app", "browser", "app", "来源应用")))
+    domains = social_domains_from_record(record)
+    creator_surface = searchable_field_surface(record, source_label, ("creator", "author", "account", "up", "博主", "作者", "账号"))
+    topics = social_topics_from_record(record)
+    topic_set = set(topics)
+    keyword_surface = social_influence_scope_keyword_surface(record, source_label=source_label)
+
+    deny_platform = platform if platform in source_policy.get("deny_social_platforms", []) else None
+    if deny_platform:
+        return False, {"enabled": True, "allowed": False, "reason": "social_platform_denied", "matched_social_platform": deny_platform}
+    allow_platforms = source_policy.get("allow_social_platforms", [])
+    if allow_platforms and platform not in allow_platforms:
+        return False, {"enabled": True, "allowed": False, "reason": "social_platform_not_allowed", "social_platform": platform}
+
+    deny_action = action if action in source_policy.get("deny_social_actions", []) else None
+    if deny_action:
+        return False, {"enabled": True, "allowed": False, "reason": "social_action_denied", "matched_social_action": deny_action}
+    allow_actions = source_policy.get("allow_social_actions", [])
+    if allow_actions and action not in allow_actions:
+        return False, {"enabled": True, "allowed": False, "reason": "social_action_not_allowed", "social_action": action}
+
+    deny_source_app = source_app if source_app in source_policy.get("deny_social_source_apps", []) else None
+    if deny_source_app:
+        return False, {"enabled": True, "allowed": False, "reason": "social_source_app_denied", "matched_social_source_app": deny_source_app}
+    allow_source_apps = source_policy.get("allow_social_source_apps", [])
+    if allow_source_apps and source_app not in allow_source_apps:
+        return False, {"enabled": True, "allowed": False, "reason": "social_source_app_not_allowed", "social_source_app": source_app}
+
+    deny_domain = first_domain_hit_any(source_policy.get("deny_social_domains", []), domains)
+    if deny_domain:
+        return False, {"enabled": True, "allowed": False, "reason": "social_domain_denied", "matched_social_domain": deny_domain}
+    allow_domains = source_policy.get("allow_social_domains", [])
+    allow_domain = first_domain_hit_any(allow_domains, domains)
+    if allow_domains and not allow_domain:
+        return False, {"enabled": True, "allowed": False, "reason": "social_domain_not_allowed", "social_domains": domains}
+
+    deny_creator = first_pattern_hit(source_policy.get("deny_social_creators", []), creator_surface)
+    if deny_creator:
+        return False, {"enabled": True, "allowed": False, "reason": "social_creator_denied", "matched_pattern": deny_creator}
+    allow_creators = source_policy.get("allow_social_creators", [])
+    allow_creator = first_pattern_hit(allow_creators, creator_surface)
+    if allow_creators and not allow_creator:
+        return False, {"enabled": True, "allowed": False, "reason": "social_creator_not_allowed"}
+
+    deny_topic = first_surface_hit(source_policy.get("deny_social_topics", []), topic_set)
+    if deny_topic:
+        return False, {"enabled": True, "allowed": False, "reason": "social_topic_denied", "matched_social_topic": deny_topic}
+    allow_topics = source_policy.get("allow_social_topics", [])
+    allow_topic = first_surface_hit(allow_topics, topic_set)
+    if allow_topics and not allow_topic:
+        return False, {"enabled": True, "allowed": False, "reason": "social_topic_not_allowed", "social_topics": topics}
+
+    deny_keyword = first_pattern_hit(source_policy.get("deny_social_keywords", []), keyword_surface)
+    if deny_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "social_keyword_denied", "matched_pattern": deny_keyword}
+    allow_keywords = source_policy.get("allow_social_keywords", [])
+    allow_keyword = first_pattern_hit(allow_keywords, keyword_surface)
+    if allow_keywords and not allow_keyword:
+        return False, {"enabled": True, "allowed": False, "reason": "social_keyword_not_allowed"}
+
+    return True, {
+        "enabled": True,
+        "allowed": True,
+        "matched_allow_social_domain": allow_domain,
+        "matched_allow_social_creator": allow_creator,
+        "matched_allow_social_topic": allow_topic,
+        "matched_allow_social_keyword": allow_keyword,
+        "social_platform": platform,
+        "social_action": action,
+        "social_source_app": source_app,
+        "social_domains": domains,
+        "social_topics": topics,
         "policy_is_user_authorization_scope": True,
         "policy_does_not_assert_investment_relevance": True,
     }
@@ -1776,6 +2013,44 @@ def first_domain_hit(patterns: Iterable[str], domain: str) -> Optional[str]:
     return None
 
 
+def first_domain_hit_any(patterns: Iterable[str], domains: Iterable[str]) -> Optional[str]:
+    for domain in domains:
+        hit = first_domain_hit(patterns, domain)
+        if hit:
+            return hit
+    return None
+
+
+def normalize_social_value(value: Any) -> str:
+    return str(value or "").lower().strip().replace("-", "_")
+
+
+def social_domains_from_record(record: Dict[str, Any]) -> List[str]:
+    domains: List[str] = []
+    for key in ("url", "link", "href", "page_url", "creator_url", "source_url", "原文链接", "链接"):
+        value = record.get(key)
+        if value in (None, ""):
+            continue
+        parsed = urlparse(str(value))
+        domain = (parsed.netloc or "").split("@")[-1].split(":")[0].lower().strip()
+        if domain:
+            domains.append(domain)
+    return stable_unique(domains)
+
+
+def social_topics_from_record(record: Dict[str, Any]) -> List[str]:
+    topics: List[str] = []
+    for key in ("social_topics", "social_topic", "primary_social_topic", "topics", "topic", "tags", "标签", "主题"):
+        value = record.get(key)
+        if value in (None, ""):
+            continue
+        if isinstance(value, str):
+            topics.extend(normalize_surface_terms([value]))
+        elif isinstance(value, (list, tuple, set)):
+            topics.extend(normalize_surface_terms([str(item) for item in value if item not in (None, "")]))
+    return stable_unique(topics)
+
+
 def email_sender_domain_from_record(record: Dict[str, Any]) -> str:
     sender = str(first_record_value(record, ("from", "sender", "发件人")) or "")
     if "@" not in sender:
@@ -1792,6 +2067,12 @@ def email_attachment_surface(record: Dict[str, Any]) -> str:
 
 
 def email_research_scope_keyword_surface(record: Dict[str, Any], *, source_label: str) -> str:
+    parts = [source_label]
+    flatten_policy_surface(record, parts)
+    return "\n".join(str(part) for part in parts if part not in (None, "")).lower()
+
+
+def social_influence_scope_keyword_surface(record: Dict[str, Any], *, source_label: str) -> str:
     parts = [source_label]
     flatten_policy_surface(record, parts)
     return "\n".join(str(part) for part in parts if part not in (None, "")).lower()
@@ -1877,6 +2158,14 @@ def record_source_policy_filter(audit: Optional[Dict[str, Any]], reason: str) ->
             email_counts = Counter(email_counts or {})
             email_policy["filter_reason_counts"] = email_counts
         email_counts[reason] += 1
+    social_policy = audit.get("social_influence_scope_policy")
+    if isinstance(social_policy, dict) and social_policy.get("enabled") and reason.startswith("social_"):
+        social_policy["filtered_candidate_count"] = int(social_policy.get("filtered_candidate_count") or 0) + 1
+        social_counts = social_policy.get("filter_reason_counts")
+        if not isinstance(social_counts, Counter):
+            social_counts = Counter(social_counts or {})
+            social_policy["filter_reason_counts"] = social_counts
+        social_counts[reason] += 1
 
 
 def record_document_scope_policy_filter(audit: Optional[Dict[str, Any]], reason: str) -> None:

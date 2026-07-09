@@ -1,6 +1,6 @@
 {
   "slug": "investor-source-collectors",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "status": "baseline+audit",
-  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including research-document explicit content extraction, audited legacy/binary XLS parser boundaries, document scope-policy audit, email-research sender/folder/subject/attachment/surface/keyword scope-policy audit, investment-note, task-calendar checklist/timezone/repeat surfaces, meeting-minutes decision/action/participant-role surfaces, WeChat article behavior/boundary summaries, and social influence surface/boundary summaries plus path-level source audits."
+  "description": "Investor-avatar taxonomy, routing, lens profiles, and evidence package helper for China-focused CollectorX sources, including research-document explicit content extraction, audited legacy/binary XLS parser boundaries, document scope-policy audit, email-research sender/folder/subject/attachment/surface/keyword scope-policy audit, social-investment-influence platform/action/source-app/domain/creator/topic/keyword scope-policy audit, investment-note, task-calendar checklist/timezone/repeat surfaces, meeting-minutes decision/action/participant-role surfaces, WeChat article behavior/boundary summaries, and social influence surface/boundary summaries plus path-level source audits."
 }

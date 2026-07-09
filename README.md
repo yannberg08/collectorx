@@ -140,7 +140,7 @@ Operational docs:
 | `investment-notes` | `notes` | Runnable lens baseline for investment notes, reviews, rules, checklists, valuation assumptions, source-app surface, and preview/full-content surface; note adapters pending |
 | `task-calendar-investor` | `ticktick`, `calendar` | Runnable lens baseline for research tasks, trade plans, review reminders, earnings calendar, research meetings, risk checks, upstream source surface, scope-policy boundary, and reminder/time surface |
 | `wechat-article-favorites` | `wechat-favorites` | Runnable lens baseline for investment public-account articles, saved/read/share/saved-file action surface, broker/fundamental/strategy/industry/valuation/portfolio/risk/macro article surfaces, and source-account type coverage |
-| `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator, social influence topic, platform/action, corroboration-candidate signals, and social influence boundary proof |
+| `social-investment-influence` | `social-activity` | Runnable lens baseline for weak investment creator, social influence topic, platform/action/source-app/domain/creator/topic/keyword scope-policy audit, filtered-all gap state, corroboration-candidate signals, and social influence boundary proof |
 
 Status legend:
 

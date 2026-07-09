@@ -22,6 +22,8 @@ scope:
     - comments
     - social_topic_summary
     - platform_action_creator_summary
+    - social_influence_scope_policy_audit
+    - social_influence_scope_policy_filtered_all_gap
     - social_influence_boundary_proof
   excludes:
     - platform_wide_scraping
@@ -31,5 +33,6 @@ scope:
 
 description: |
   微博/B站/小红书等通用活动先入 social-activity lake；本 lens 只筛投资影响源。
-  输出会汇总社交影响主题、平台、动作、创作者可用面和社交影响边界证明；只能作为弱证据，
-  需要交易、笔记、研报、会议等更强证据交叉验证。
+  可按平台、动作、来源应用、域名、创作者、主题和关键词继续收窄用户授权范围。
+  输出会汇总社交影响主题、平台、动作、创作者可用面、授权范围审计和社交影响边界证明；
+  只能作为弱证据，需要交易、笔记、研报、会议等更强证据交叉验证。

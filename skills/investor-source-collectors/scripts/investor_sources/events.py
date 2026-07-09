@@ -201,6 +201,7 @@ def build_gap_event(source_id: str, *, collected_at: Optional[str] = None, reaso
         "no_investment_evidence_matched": "Authorized input was scanned, but no investment-related evidence matched the lens rules.",
         "source_policy_filtered_all": "Authorized input was scanned, but every candidate was excluded by the configured authorization scope policy.",
         "email_research_scope_policy_filtered_all": "Authorized email input was scanned, but every candidate was outside the configured email-research authorization scope policy.",
+        "social_influence_scope_policy_filtered_all": "Authorized social activity input was scanned, but every candidate was outside the configured social-influence authorization scope policy.",
     }.get(reason, "Collector could not produce source evidence for this run.")
     record = {
         "signal_type": "collector_preflight_gap",
@@ -248,6 +249,7 @@ def build_manifest(
         "no_investment_evidence_matched": "no_investment_evidence_matched",
         "source_policy_filtered_all": "source_policy_filtered_all",
         "email_research_scope_policy_filtered_all": "scope_policy_filtered_all",
+        "social_influence_scope_policy_filtered_all": "scope_policy_filtered_all",
     }.get(str(gap_reason), "events_collected" if not only_gap else "needs_source_authorization_or_input")
     classifications = [
         (event.get("data") or {}).get("classification") or {}
@@ -1037,6 +1039,7 @@ def build_social_influence_boundary_proof(
     collection_readiness: Dict[str, Any],
 ) -> Dict[str, Any]:
     usable_events = [event for event in events if not is_gap_event(event)]
+    scope_policy = audit.get("social_influence_scope_policy") if isinstance(audit.get("social_influence_scope_policy"), dict) else {}
     surface = social_influence_surface_summary(usable_events)
     topic_counts = surface["social_topic_counts"]
     observed_topics = [topic for topic in SOCIAL_INFLUENCE_TOPIC_ORDER[:-1] if topic_counts.get(topic)]
@@ -1044,7 +1047,17 @@ def build_social_influence_boundary_proof(
     platform_count = len(surface["platform_counts"])
     action_count = len(surface["action_counts"])
     if not usable_events:
-        proof_level = "no_social_influence_candidates"
+        status = str(collection_readiness.get("status") or "")
+        if status == "needs_source_authorization_or_input":
+            proof_level = "no_authorized_social_activity_lake_input"
+        elif status == "no_readable_input":
+            proof_level = "no_readable_social_activity_lake_input"
+        elif status == "scope_policy_filtered_all" and scope_policy.get("filtered_all"):
+            proof_level = "social_influence_scope_policy_filtered_all"
+        elif status == "source_policy_filtered_all":
+            proof_level = "source_policy_filtered_all"
+        else:
+            proof_level = "no_social_influence_candidates"
     elif (
         int(surface["event_count"]) >= 3
         and platform_count >= 2
@@ -1100,6 +1113,33 @@ def build_social_influence_boundary_proof(
             "action_counts": surface["action_counts"],
             "platform_topic_counts": surface["platform_topic_counts"],
             "action_topic_counts": surface["action_topic_counts"],
+        },
+        "authorization_scope_boundary": {
+            "enabled": scope_policy.get("enabled", False),
+            "filters": {
+                key: scope_policy.get(key, [])
+                for key in (
+                    "allow_social_platforms",
+                    "deny_social_platforms",
+                    "allow_social_actions",
+                    "deny_social_actions",
+                    "allow_social_source_apps",
+                    "deny_social_source_apps",
+                    "allow_social_domains",
+                    "deny_social_domains",
+                    "allow_social_creators",
+                    "deny_social_creators",
+                    "allow_social_topics",
+                    "deny_social_topics",
+                    "allow_social_keywords",
+                    "deny_social_keywords",
+                )
+            },
+            "filtered_candidate_count": scope_policy.get("filtered_candidate_count", 0),
+            "filter_reason_counts": scope_policy.get("filter_reason_counts", {}),
+            "filtered_all": scope_policy.get("filtered_all", False),
+            "policy_is_user_authorization_scope": scope_policy.get("policy_is_user_authorization_scope", True),
+            "policy_does_not_assert_investment_relevance": scope_policy.get("policy_does_not_assert_investment_relevance", True),
         },
         "creator_content_boundary": {
             "creator_event_count": surface["creator_event_count"],
@@ -2489,7 +2529,7 @@ def next_action_for_status(status: str) -> str:
         "no_readable_input": "检查输入路径、文件格式和导出内容后重跑。",
         "no_investment_evidence_matched": "输入已读取，但未命中投资证据；可降低阈值、补充白名单或确认这批数据不属于投资分身。",
         "source_policy_filtered_all": "输入已读取，但全部被授权范围策略排除；请检查本次配置的白名单和黑名单。",
-        "scope_policy_filtered_all": "输入已读取，但全部被 email-research 授权范围策略排除；请检查发件域、文件夹、邮件面谱和关键词范围。",
+        "scope_policy_filtered_all": "输入已读取，但全部被当前 lens 的授权范围策略排除；请检查本次配置的白名单、黑名单和主题/关键词范围。",
         "events_collected": "可进入投资分身蒸馏；继续做真实源适配和增量验证。",
     }.get(status, "检查 manifest 后决定下一步。")
 

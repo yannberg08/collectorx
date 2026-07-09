@@ -404,6 +404,23 @@ SOURCE_PROFILES: Dict[str, Dict[str, Any]] = {
             "inv-information-source",
             "inv-consultation-network",
         ],
+        "social_influence_scope_policy": {
+            "supports_allow_platform": True,
+            "supports_deny_platform": True,
+            "supports_allow_action": True,
+            "supports_deny_action": True,
+            "supports_allow_source_app": True,
+            "supports_deny_source_app": True,
+            "supports_allow_domain": True,
+            "supports_deny_domain": True,
+            "supports_allow_creator": True,
+            "supports_deny_creator": True,
+            "supports_allow_topic": True,
+            "supports_deny_topic": True,
+            "supports_allow_keyword": True,
+            "supports_deny_keyword": True,
+            "policy_does_not_assert_investment_relevance": True,
+        },
     },
 }
 
