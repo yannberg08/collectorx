@@ -83,6 +83,9 @@ python3 tools/finclaw_catalog.py doctor \
 python3 tools/finclaw_catalog.py closeout \
   --priority P0 \
   --json
+python3 tools/finclaw_catalog.py validation-backlog \
+  --priority P0 \
+  --json
 python3 tools/finclaw_catalog.py runbook \
   --priority P0 \
   --out-dir-root /path/to/run \
@@ -112,7 +115,10 @@ checklists. The `closeout` output is the product launch guardrail: it maps each
 entry to a launch tier, states whether the entry still requires real validation
 before production, separately marks remaining validation gaps that still exist
 after guarded launch, and repeats the `production_gap` that must be cleared
-before raising readiness beyond the current tier.
+before raising readiness beyond the current tier. The `validation-backlog`
+output is the next-phase QA queue derived from the same catalog and closeout
+state; it lists each remaining real user, real device, real export, or Wiki
+backtest gap without changing collector readiness.
 
 For batch collection, FinClaw should use `runbook --json`. The runbook keeps the
 same item shape as `doctor` but groups entries into product execution stages:

@@ -258,6 +258,29 @@ def test_closeout_report_tracks_product_tiers_and_real_validation_gaps() -> None
     assert all(item["cannot_claim"].strip() for item in report["items"])
 
 
+def test_validation_backlog_matches_closeout_gap_scope() -> None:
+    closeout = run_json("closeout", "--json")
+    backlog = run_json("validation-backlog", "--json")
+    assert backlog["schema"] == "collectorx.finclaw_real_validation_backlog.v1"
+    assert backlog["closeout_schema"] == closeout["schema"]
+    assert backlog["total"] == closeout["summary"]["entries_with_remaining_validation_gap"] == 30
+    assert backlog["summary"]["by_remaining_validation_scope"] == closeout["summary"]["by_remaining_validation_scope"]
+    assert backlog["summary"]["requires_real_validation_before_production"] == 29
+
+    closeout_by_id = {item["id"]: item for item in closeout["items"]}
+    assert [item["id"] for item in backlog["items"]][:3] == [
+        "eastmoney-portfolio",
+        "ths-portfolio",
+        "ths-watchlist",
+    ]
+    for item in backlog["items"]:
+        source = closeout_by_id[item["id"]]
+        assert item["production_gap"] == source["production_gap"]
+        assert item["remaining_validation_scope"] == source["remaining_validation_scope"]
+        assert item["launch_tier"] == source["launch_tier"]
+        assert item["requires_real_validation_before_production"] == source["requires_real_validation_before_production"]
+
+
 def stage_by_name(runbook: dict[str, object], name: str) -> dict[str, object]:
     stages = runbook["stages"]
     assert isinstance(stages, list)
@@ -461,6 +484,7 @@ def main() -> int:
     test_doctor_filters_priority()
     test_doctor_require_all_ready_fails_when_any_entry_is_blocked()
     test_closeout_report_tracks_product_tiers_and_real_validation_gaps()
+    test_validation_backlog_matches_closeout_gap_scope()
     test_runbook_groups_p0_entries_by_product_stage()
     test_runbook_respects_explicit_lens_input_over_auto_link()
     test_runbook_can_disable_auto_upstream_linking()

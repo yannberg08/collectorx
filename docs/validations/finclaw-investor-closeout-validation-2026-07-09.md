@@ -59,6 +59,10 @@ stop expanding and move into real-user validation.
 - `docs/final-handoff-checklist.md` records the final handoff checklist for
   FinClaw product, QA, scheduling, package acceptance, and remaining real
   validation work; the closeout acceptance view links to it directly.
+- `tools/finclaw_catalog.py validation-backlog --json` now exposes the next
+  real-user/device/export validation queue derived from the catalog and
+  closeout report. It is a QA planning view only; it does not add collectors or
+  raise readiness.
 
 ## Verification commands
 
@@ -69,6 +73,7 @@ python3 -m json.tool collectors/finclaw-investor-catalog.json >/dev/null
 python3 -m json.tool collectors/finclaw-invocation-contracts.json >/dev/null
 .venv/bin/python tools/validate_project.py
 .venv/bin/python tools/finclaw_catalog.py closeout --json
+.venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```

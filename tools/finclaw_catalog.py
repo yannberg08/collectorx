@@ -680,6 +680,92 @@ def cmd_closeout(args: argparse.Namespace) -> int:
     return 0
 
 
+def validation_backlog_item(entry: dict[str, Any], *, order: int) -> dict[str, Any]:
+    contract = entry.get("invocation_contract") or {}
+    closeout = closeout_item(entry)
+    return {
+        "order": order,
+        "id": entry["id"],
+        "priority": entry["priority"],
+        "category": entry["category"],
+        "skill": entry["skill"],
+        "readiness": entry["readiness"],
+        "gate": entry["gate"],
+        "launch_tier": closeout["launch_tier"],
+        "remaining_validation_scope": closeout["remaining_validation_scope"],
+        "requires_real_validation_before_production": closeout["requires_real_validation_before_production"],
+        "product_surface": contract.get("product_surface"),
+        "authorization_mode": contract.get("authorization_mode"),
+        "evidence_role": contract.get("evidence_role"),
+        "failure_state": contract.get("failure_state"),
+        "requires_upstream": contract.get("requires_upstream", []),
+        "production_gap": closeout["production_gap"],
+    }
+
+
+def build_validation_backlog(entries: list[dict[str, Any]]) -> dict[str, Any]:
+    items = [
+        validation_backlog_item(entry, order=order)
+        for order, entry in enumerate(entries, start=1)
+        if str(entry.get("production_gap", "")).strip()
+    ]
+    return {
+        "schema": "collectorx.finclaw_real_validation_backlog.v1",
+        "closeout_schema": "collectorx.finclaw_closeout_readiness.v1",
+        "total": len(items),
+        "summary": {
+            "by_priority": dict(sorted(Counter(item["priority"] for item in items).items())),
+            "by_category": dict(sorted(Counter(item["category"] for item in items).items())),
+            "by_readiness": dict(sorted(Counter(item["readiness"] for item in items).items())),
+            "by_remaining_validation_scope": dict(
+                sorted(Counter(item["remaining_validation_scope"] for item in items).items())
+            ),
+            "requires_real_validation_before_production": sum(
+                1 for item in items if item["requires_real_validation_before_production"]
+            ),
+        },
+        "items": items,
+    }
+
+
+def print_human_validation_backlog(report: dict[str, Any]) -> None:
+    print(f"total: {report['total']}")
+    items = report["items"]
+    if not items:
+        print("No validation backlog entries matched.")
+        return
+    headers = ("order", "id", "P", "readiness", "scope", "production_gap")
+    rows = [
+        (
+            item["order"],
+            item["id"],
+            item["priority"],
+            item["readiness"],
+            item["remaining_validation_scope"],
+            item["production_gap"],
+        )
+        for item in items
+    ]
+    widths = [
+        max(len(str(value)) for value in column)
+        for column in zip(headers, *rows, strict=False)
+    ]
+    print("  ".join(str(value).ljust(width) for value, width in zip(headers, widths, strict=False)))
+    print("  ".join("-" * width for width in widths))
+    for row in rows:
+        print("  ".join(str(value).ljust(width) for value, width in zip(row, widths, strict=False)))
+
+
+def cmd_validation_backlog(args: argparse.Namespace) -> int:
+    entries = filtered_entries(args)
+    report = build_validation_backlog(entries)
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print_human_validation_backlog(report)
+    return 0
+
+
 def print_human_runbook(runbook: dict[str, Any]) -> None:
     print(f"total: {runbook['total']}")
     for stage in runbook["stages"]:
@@ -805,6 +891,16 @@ def build_parser() -> argparse.ArgumentParser:
     closeout_parser.add_argument("--readiness")
     closeout_parser.add_argument("--json", action="store_true", help="Print JSON output.")
     closeout_parser.set_defaults(func=cmd_closeout)
+
+    validation_backlog_parser = subparsers.add_parser(
+        "validation-backlog",
+        help="List remaining real-user/device/export validation work.",
+    )
+    validation_backlog_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])
+    validation_backlog_parser.add_argument("--category", choices=["generic", "vertical", "lens"])
+    validation_backlog_parser.add_argument("--readiness")
+    validation_backlog_parser.add_argument("--json", action="store_true", help="Print JSON output.")
+    validation_backlog_parser.set_defaults(func=cmd_validation_backlog)
 
     runbook_parser = subparsers.add_parser("runbook", help="Build a staged FinClaw collector runbook.")
     runbook_parser.add_argument("--priority", choices=["P0", "P1", "P2", "supporting"])

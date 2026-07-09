@@ -134,6 +134,7 @@ FinClaw should call the catalog helper instead of hand-building commands:
 
 ```bash
 .venv/bin/python tools/finclaw_catalog.py closeout --json
+.venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 .venv/bin/python tools/finclaw_catalog.py doctor --json
 .venv/bin/python tools/finclaw_catalog.py runbook --json
 .venv/bin/python tools/finclaw_catalog.py batch-manifest --json
@@ -169,6 +170,7 @@ The closeout state has been verified with:
 
 ```bash
 .venv/bin/python tools/finclaw_catalog.py closeout --json
+.venv/bin/python tools/finclaw_catalog.py validation-backlog --json
 .venv/bin/python tools/test_finclaw_catalog.py
 .venv/bin/python tools/validate_project.py
 PYTHON=.venv/bin/python bash test_collectors.sh
