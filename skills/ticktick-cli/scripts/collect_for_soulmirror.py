@@ -115,6 +115,7 @@ def checklist_counts(task: dict[str, Any]) -> tuple[int, int]:
 
 
 def main() -> int:
+    configure_stdio()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--completed-limit", type=int, default=500)
     parser.add_argument("--no-completed", action="store_true")
@@ -164,6 +165,12 @@ def main() -> int:
         deduped.append(record)
     print(json.dumps(deduped, ensure_ascii=False, indent=2, default=str))
     return 0
+
+
+def configure_stdio() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
 
 if __name__ == "__main__":

@@ -30,6 +30,7 @@ def test_missing_auth_fails_without_empty_snapshot() -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT)],
             text=True,
+            encoding="utf-8",
             capture_output=True,
             env=env,
         )
@@ -136,6 +137,7 @@ def test_authorized_snapshot_collects_active_and_completed_tasks() -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--completed-limit", "25"],
             text=True,
+            encoding="utf-8",
             capture_output=True,
             env=env,
             check=True,
