@@ -579,9 +579,18 @@ def closeout_product_claim(entry: dict[str, Any]) -> str:
     return "must_not_claim_production_without_real_validation"
 
 
+def closeout_remaining_validation_scope(entry: dict[str, Any]) -> str:
+    if not str(entry.get("production_gap", "")).strip():
+        return "none_recorded"
+    if entry["readiness"] == "production-candidate":
+        return "post_guarded_launch_validation"
+    return "pre_production_validation"
+
+
 def closeout_item(entry: dict[str, Any]) -> dict[str, Any]:
     contract = entry.get("invocation_contract") or {}
     product_surface = contract.get("product_surface")
+    production_gap = str(entry["production_gap"])
     return {
         "id": entry["id"],
         "priority": entry["priority"],
@@ -595,7 +604,9 @@ def closeout_item(entry: dict[str, Any]) -> dict[str, Any]:
         "launch_tier": closeout_launch_tier(entry, product_surface),
         "product_claim": closeout_product_claim(entry),
         "requires_real_validation_before_production": entry["readiness"] != "production-candidate",
-        "production_gap": entry["production_gap"],
+        "has_remaining_validation_gap": bool(production_gap.strip()),
+        "remaining_validation_scope": closeout_remaining_validation_scope(entry),
+        "production_gap": production_gap,
         "cannot_claim": entry["must_not_collect"],
         "failure_state": contract.get("failure_state"),
     }
@@ -616,6 +627,10 @@ def build_closeout_report(entries: list[dict[str, Any]]) -> dict[str, Any]:
             "requires_real_validation_before_production": sum(
                 1 for item in items if item["requires_real_validation_before_production"]
             ),
+            "entries_with_remaining_validation_gap": sum(1 for item in items if item["has_remaining_validation_gap"]),
+            "by_remaining_validation_scope": dict(
+                sorted(Counter(item["remaining_validation_scope"] for item in items).items())
+            ),
         },
         "items": items,
     }
@@ -628,6 +643,7 @@ def print_human_closeout(report: dict[str, Any]) -> None:
         "requires_real_validation_before_production: "
         f"{report['summary']['requires_real_validation_before_production']}"
     )
+    print(f"entries_with_remaining_validation_gap: {report['summary']['entries_with_remaining_validation_gap']}")
     items = report["items"]
     if not items:
         print("No entries matched.")

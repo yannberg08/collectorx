@@ -128,7 +128,8 @@ FinClaw 可以展示的用户步骤来自 invocation contract：
 如果 helper 没返回可执行 `argv`，产品层不要自己拼命令。
 
 `closeout --json` 是产品发布闸门：它把每个条目映射到 launch tier，
-重复 `production_gap`，并明确是否仍需真实验证才能从 beta 升级为生产能力。
+重复 `production_gap`，区分“生产前必须补的真实验证”和“受控上线后仍要补的验证”。
+因此 `production-candidate` 不等于 full production done。
 
 ## 最终交付清单
 
@@ -140,7 +141,8 @@ FinClaw 可以展示的用户步骤来自 invocation contract：
 4. README、productization control board、production readiness 和本收口表互相引用。
 5. 对每个 `production-candidate` 和 `deep-beta` 条目有明确真实验证或剩余阻塞记录。
 6. 对每个 `baseline+audit` 条目有明确“可 beta 使用方式”和“不能宣称什么”。
-7. `tools/finclaw_catalog.py closeout --json` 能输出机器可读 launch tier 和真实验证缺口。
+7. `tools/finclaw_catalog.py closeout --json` 能输出机器可读 launch tier、
+   真实验证缺口和剩余验证阶段。
 8. Git 工作区干净，最新 commit 已 push。
 
 ## 下一步不再扩张

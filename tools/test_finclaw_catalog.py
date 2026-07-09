@@ -237,13 +237,21 @@ def test_closeout_report_tracks_product_tiers_and_real_validation_gaps() -> None
     }
     assert report["summary"]["production_candidates"] == 1
     assert report["summary"]["requires_real_validation_before_production"] == 29
+    assert report["summary"]["entries_with_remaining_validation_gap"] == 30
+    assert report["summary"]["by_remaining_validation_scope"] == {
+        "post_guarded_launch_validation": 1,
+        "pre_production_validation": 29,
+    }
 
     by_id = {item["id"]: item for item in report["items"]}
     assert by_id["eastmoney-portfolio"]["launch_tier"] == "guarded-production-candidate"
     assert by_id["eastmoney-portfolio"]["product_claim"] == "may_expose_as_guarded_collector_after_preflight"
     assert by_id["eastmoney-portfolio"]["requires_real_validation_before_production"] is False
+    assert by_id["eastmoney-portfolio"]["has_remaining_validation_gap"] is True
+    assert by_id["eastmoney-portfolio"]["remaining_validation_scope"] == "post_guarded_launch_validation"
     assert by_id["ths-portfolio"]["launch_tier"] == "invite-only-deep-beta"
     assert by_id["ths-portfolio"]["requires_real_validation_before_production"] is True
+    assert by_id["ths-portfolio"]["remaining_validation_scope"] == "pre_production_validation"
     assert by_id["wechat-investment-dialogue"]["launch_tier"] == "downstream-lens-beta"
     assert by_id["ticktick"]["launch_tier"] == "managed-authorization-beta"
     assert all(item["production_gap"].strip() for item in report["items"])

@@ -110,8 +110,9 @@ catalog entry, plus summary counts by priority, category, runner, and
 `next_action`; FinClaw should use it to render collector setup and authorization
 checklists. The `closeout` output is the product launch guardrail: it maps each
 entry to a launch tier, states whether the entry still requires real validation
-before production, and repeats the `production_gap` that must be cleared before
-raising readiness.
+before production, separately marks remaining validation gaps that still exist
+after guarded launch, and repeats the `production_gap` that must be cleared
+before raising readiness beyond the current tier.
 
 For batch collection, FinClaw should use `runbook --json`. The runbook keeps the
 same item shape as `doctor` but groups entries into product execution stages:

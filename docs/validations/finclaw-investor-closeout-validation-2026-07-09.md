@@ -51,6 +51,10 @@ stop expanding and move into real-user validation.
   30-entry catalog count, the 1/2/27 readiness distribution, the single guarded
   production candidate, and the 29 entries that still require real validation
   before production.
+- The closeout report now separates `requires_real_validation_before_production`
+  from `has_remaining_validation_gap` / `remaining_validation_scope`, so the
+  EastMoney production candidate remains a guarded launch candidate with
+  post-launch validation gaps instead of being treated as fully production done.
 
 ## Verification commands
 
