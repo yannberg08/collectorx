@@ -17,6 +17,48 @@ leave behind:
 No collector is marked `production-candidate` without real-device or real-account
 validation.
 
+## Parallel Execution Protocol
+
+Starting 2026-07-09, collector productization may run with multiple agents, but
+only under a single main integrator. The main integrator owns architecture,
+cross-collector contracts, final validation, Git commits, and GitHub pushes.
+
+Parallel work is allowed only when each lane has a disjoint write boundary:
+
+- A vertical collector lane may own one collector directory, its catalog entry,
+  invocation contract row, validation note, and product-readiness text.
+- A lens lane may own one lens profile plus its upstream/downstream evidence
+  contract, tests, and validation note.
+- A generic channel lane may own one generic collector and the lens routing
+  that consumes its Lake output only when the file boundaries are explicit.
+- A documentation or verification lane may update runbooks, validation docs, or
+  test harnesses, but cannot change collector behavior in the same wave unless
+  it is also the designated collector owner.
+
+Every parallel lane must preserve the same quality bar used for Tonghuashun and
+EastMoney:
+
+1. Real user authorization boundary is explicit.
+2. No secrets, cookies, tokens, passwords, or mutation actions are written.
+3. `collectorx.event.v1` output is runnable through the standard package shape.
+4. Empty, missing, or fully filtered results become data-quality gap packages
+   rather than fake business facts.
+5. Manifests expose usable/gap counts and business/data-quality/Wiki readiness
+   gates.
+6. Investor Wiki evidence follows the SoulMirror 7-dimension / 20-subdimension
+   contract and excludes gap events from facts.
+7. macOS, Windows, and Linux behavior is either fixture-tested, real-validated,
+   or explicitly listed as a production gap.
+8. The main integrator runs targeted tests, catalog tests, batch tests,
+   `tools/validate_project.py`, `test_collectors.sh`, and `git diff --check`
+   before commit.
+
+The first parallel audit lanes are:
+
+- P0 strong-data and research sources.
+- P1 notes, tasks, collaboration, articles, and finance-news usage sources.
+- P2 brokerage, professional-terminal, social, and global contract hardening.
+
 ## Readiness Gates
 
 | Gate | Meaning | Proof |
@@ -4155,8 +4197,11 @@ Findings:
 ## Git Practice
 
 - Keep each wave small enough to review.
-- Run `bash test_collectors.sh` before commit.
+- Run `PYTHON=.venv/bin/python bash test_collectors.sh` before commit.
 - Commit with a message that names the collector wave.
 - Push `main` after a green validation run.
+- For parallel work, merge only one completed lane at a time and rerun the
+  relevant targeted tests plus the shared project validators before the final
+  full-suite run.
 - If a collector remains baseline or placeholder, say so in
   `docs/production-readiness.md` instead of implying production readiness.
