@@ -1640,13 +1640,21 @@ def test_research_documents_image_ocr_extracts_when_explicitly_authorized() -> N
         root = Path(tmp)
         bin_dir = root / "bin"
         bin_dir.mkdir()
-        fake_tesseract = bin_dir / "tesseract"
-        fake_tesseract.write_text(
-            "#!/bin/sh\n"
-            "printf '%s\\n' '半导体 研报 财报 DCF 估值 安全边际 买入理由 风险提示'\n",
-            encoding="utf-8",
-        )
-        fake_tesseract.chmod(0o755)
+        ocr_text = "半导体 研报 财报 DCF 估值 安全边际 买入理由 风险提示"
+        if os.name == "nt":
+            fake_tesseract = bin_dir / "tesseract.cmd"
+            fake_tesseract.write_text(
+                f'@echo off\r\n"{sys.executable}" -c "print({ascii(ocr_text)})"\r\n',
+                encoding="ascii",
+            )
+        else:
+            fake_tesseract = bin_dir / "tesseract"
+            fake_tesseract.write_text(
+                "#!/bin/sh\n"
+                f"printf '%s\\n' '{ocr_text}'\n",
+                encoding="utf-8",
+            )
+            fake_tesseract.chmod(0o755)
 
         image_path = root / "screen.png"
         image_path.write_bytes(b"fake image bytes")
