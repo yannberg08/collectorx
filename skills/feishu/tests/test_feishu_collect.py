@@ -12,7 +12,9 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parents[1]
 SCRIPT = ROOT / "scripts" / "feishu_api.py"
+PACKAGE_VALIDATOR = REPO_ROOT / "tools" / "validate_collector_package.py"
 
 
 def read_events(out: Path) -> list[dict]:
@@ -20,6 +22,22 @@ def read_events(out: Path) -> list[dict]:
         json.loads(line)
         for line in (out / "lake" / "feishu" / "events.jsonl").read_text(encoding="utf-8").splitlines()
     ]
+
+
+def assert_package_valid(out: Path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(PACKAGE_VALIDATOR),
+            str(out),
+            "--collector",
+            "feishu",
+            "--json",
+        ],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
 
 
 def test_collect_feishu_authorized_export_package() -> None:
@@ -101,6 +119,7 @@ def test_collect_feishu_authorized_export_package() -> None:
         events = read_events(out)
         assert len(events) == 6
         assert {event["collector"] for event in events} == {"feishu"}
+        assert all(isinstance(event["time"], str) and event["time"] for event in events)
         assert {event["data"]["record_kind"] for event in events} == {
             "document",
             "file",
@@ -122,8 +141,21 @@ def test_collect_feishu_authorized_export_package() -> None:
 
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["collector"] == "feishu"
+        assert manifest["event_count"] == 6
+        assert manifest["usable_event_count"] == 6
+        assert manifest["feishu_event_count"] == 6
+        assert manifest["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["can_enter_feishu_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_meeting_minutes_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_research_documents_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_collaboration_dialogue_lens"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
         assert manifest["collection_readiness"]["can_claim_investment_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 6
+        assert manifest["collection_readiness"]["feishu_event_count"] == 6
+        assert manifest["collection_readiness"]["gap_event_count"] == 0
         assert manifest["evidence_policy"]["collector_writes_investor_wiki_directly"] is False
         assert manifest["field_coverage"]["field_counts"]["platform"] == 6
         assert manifest["field_coverage"]["field_counts"]["document_ref"] == 1
@@ -137,23 +169,133 @@ def test_collect_feishu_authorized_export_package() -> None:
         assert manifest["source_audit"]["extension_counts"] == {".csv": 1, ".json": 1, ".zip": 1}
         assert manifest["source_audit"]["parsed_record_count"] == 6
         assert manifest["source_audit"]["emitted_event_count"] == 6
+        assert manifest["source_audit"]["feishu_event_count"] == 6
+        assert manifest["source_audit"]["gap_event_count"] == 0
+        assert manifest["source_audit"]["business_records_written"] is True
+        assert manifest["source_audit"]["read_only"] is True
         assert len(manifest["source_audit"]["path_results"]) == 3
+        assert_package_valid(out)
 
 
 def test_collect_feishu_gap() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "out"
-        subprocess.run([sys.executable, str(SCRIPT), "collect", "--out-dir", str(out)], check=True, text=True, capture_output=True)
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T12:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
         events = read_events(out)
         assert len(events) == 1
-        assert events[0]["data"]["record_kind"] == "collector_gap"
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T12:00:00+08:00"
+        assert gap["collected_at"] == "2026-07-08T12:00:00+08:00"
+        assert gap["data"]["subtype"] == "collector_gap"
+        assert gap["data"]["action_type"] == "collector_gap"
+        assert gap["data"]["record_kind"] == "collector_gap"
+        assert gap["data"]["gap"] == "feishu_authorized_input_missing"
+        assert gap["data"]["status"] == "needs_feishu_authorized_input"
+        assert gap["data"]["profile_type"] == "feishu_collection_gap"
+        assert gap["data"]["feishu_event_count"] == 0
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
+        assert gap["raw_ref"] == {
+            "preflight": True,
+            "reason": "feishu_authorized_input_missing",
+            "scope_policy_enabled": False,
+        }
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+        assert "collection_gap" in gap["privacy"]["contains"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["feishu_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["collection_readiness"]["status"] == "needs_feishu_authorized_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_feishu_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_meeting_minutes_lens"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
+        assert manifest["collection_readiness"]["feishu_event_count"] == 0
+        assert manifest["collection_readiness"]["gap_event_count"] == 1
         assert manifest["source_audit"]["input_count"] == 0
         assert manifest["source_audit"]["resolved_input_file_count"] == 0
+        assert manifest["source_audit"]["feishu_event_count"] == 0
+        assert manifest["source_audit"]["gap_event_count"] == 1
+        assert manifest["source_audit"]["business_records_written"] is False
+        assert manifest["source_audit"]["read_only"] is True
+        assert_package_valid(out)
+
+
+def test_collect_feishu_no_readable_records_gap() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        empty_csv = root / "empty.csv"
+        out = root / "out"
+        empty_csv.write_text("", encoding="utf-8")
+
+        subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "collect",
+                "--input",
+                str(empty_csv),
+                "--out-dir",
+                str(out),
+                "--collected-at",
+                "2026-07-08T13:00:00+08:00",
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+
+        events = read_events(out)
+        assert len(events) == 1
+        gap = events[0]
+        assert gap["kind"] == "profile"
+        assert gap["time"] == "2026-07-08T13:00:00+08:00"
+        assert gap["data"]["record_kind"] == "collector_gap"
+        assert gap["data"]["gap"] == "feishu_records_empty"
+        assert gap["data"]["status"] == "records_empty"
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+
+        manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
+        assert manifest["feishu_event_count"] == 0
+        assert manifest["gap_event_count"] == 1
+        assert manifest["collection_readiness"]["status"] == "records_empty"
+        assert manifest["collection_readiness"]["can_enter_feishu_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_directly"] is False
+        assert manifest["source_audit"]["input_count"] == 1
+        assert manifest["source_audit"]["resolved_input_file_count"] == 1
+        assert manifest["source_audit"]["parsed_record_count"] == 0
+        assert manifest["source_audit"]["emitted_event_count"] == 1
+        assert manifest["source_audit"]["feishu_event_count"] == 0
+        assert manifest["source_audit"]["gap_event_count"] == 1
+        assert manifest["source_audit"]["path_results"][0]["status"] == "parsed_empty"
+        assert_package_valid(out)
 
 
 if __name__ == "__main__":
     test_collect_feishu_authorized_export_package()
     test_collect_feishu_gap()
+    test_collect_feishu_no_readable_records_gap()
     print("feishu collect tests passed.")

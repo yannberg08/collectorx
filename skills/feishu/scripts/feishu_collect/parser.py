@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 COLLECTOR = "feishu"
 CN_TZ = timezone(timedelta(hours=8))
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 SUPPORTED_RECORD_EXTENSIONS = {".json", ".jsonl", ".ndjson", ".csv", ".tsv", ".html", ".htm", ".md", ".markdown", ".txt"}
 SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
 SECRET_KEY_FRAGMENTS = (
@@ -95,7 +96,13 @@ def collect_from_inputs_with_audit(
     paths = list(iter_paths(input_list))
     audit = new_collection_audit(input_list, paths, limit=limit)
     if not paths:
-        events = [gap_event(collected_at=collected_at, reason="feishu_authorized_input_missing")]
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason="feishu_authorized_input_missing",
+                collection_audit=audit,
+            )
+        ]
         audit["emitted_event_count"] = len(events)
         finalize_audit(audit)
         return events, audit
@@ -111,8 +118,16 @@ def collect_from_inputs_with_audit(
         }
         audit["path_results"].append(path_result)
         increment_counter(audit, "extension_counts", path_result["extension"])
-        records = parse_path(path, audit=audit)
+        try:
+            records = parse_path(path, audit=audit)
+        except Exception as exc:
+            records = []
+            path_result["status"] = "parse_error"
+            path_result["error_type"] = exc.__class__.__name__
+            increment_counter(audit, "skipped_reason_counts", "parse_error")
         path_result["parsed_record_count"] = len(records)
+        if not records and path_result["status"] == "parsed":
+            path_result["status"] = "parsed_empty"
         audit["parsed_record_count"] += len(records)
         for row, record in enumerate(records, start=1):
             events.append(record_to_event(record, path=path, row=row, collected_at=collected_at))
@@ -123,7 +138,13 @@ def collect_from_inputs_with_audit(
                 return events[:limit], audit
 
     if not events:
-        events = [gap_event(collected_at=collected_at, reason="feishu_records_empty")]
+        events = [
+            gap_event(
+                collected_at=collected_at,
+                reason="feishu_records_empty",
+                collection_audit=audit,
+            )
+        ]
     audit["emitted_event_count"] = len(events)
     finalize_audit(audit)
     return events, audit
@@ -140,6 +161,7 @@ def new_collection_audit(inputs: List[str], paths: List[Path], *, limit: Optiona
         "skipped_archive_member_count": 0,
         "skipped_archive_member_extension_counts": {},
         "skipped_archive_member_reason_counts": {},
+        "skipped_reason_counts": {},
         "parsed_record_count": 0,
         "emitted_event_count": 0,
         "limit": limit,
@@ -330,11 +352,13 @@ def parse_text_text(text: str, *, path_label: str, default_title: str) -> Dict[s
 
 
 def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_at: Optional[str]) -> Dict[str, Any]:
+    resolved_collected_at = collected_at or now_iso()
     kind = normalize_kind(first(record, ["record_kind", "kind", "type", "docs_type", "文件类型", "类型", "消息类型"]) or infer_kind_from_record(record, path))
     text = first(record, ["text", "content", "message", "body", "summary", "description", "transcript", "正文", "内容", "消息", "纪要"]) or ""
     title = first(record, ["title", "name", "subject", "chat", "room", "group", "file_name", "filename", "标题", "名称", "会话", "群名", "文件名"]) or path.stem
     url = first(record, ["url", "link", "href", "file_url", "meeting_url", "web_url", "链接", "地址", "会议链接"])
-    event_time = first(record, ["time", "date", "created_at", "updated_at", "sent_at", "start_time", "modified_time", "时间", "日期", "发送时间", "开始时间"])
+    source_event_time = first(record, ["time", "date", "created_at", "updated_at", "sent_at", "start_time", "modified_time", "时间", "日期", "发送时间", "开始时间"])
+    event_time = source_event_time or resolved_collected_at
     path_label = first(record, [SOURCE_PATH_KEY, "path"]) or str(path)
     participants = list_values(record, ["participants", "attendees", "members", "users", "参会人", "成员"])
     data = {
@@ -380,7 +404,7 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
         "owner_scope": "personal",
         "kind": event_kind_for_record(kind),
         "time": event_time,
-        "collected_at": collected_at or now_iso(),
+        "collected_at": resolved_collected_at,
         "data": data,
         "raw_ref": raw_ref,
         "privacy": {
@@ -392,40 +416,82 @@ def record_to_event(record: Dict[str, Any], *, path: Path, row: int, collected_a
     }
 
 
-def gap_event(*, collected_at: Optional[str], reason: str) -> Dict[str, Any]:
+def gap_event(
+    *,
+    collected_at: Optional[str],
+    reason: str,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    event_time = collected_at or now_iso()
+    audit = collection_audit or {}
+    status_by_reason = {
+        "feishu_authorized_input_missing": "needs_feishu_authorized_input",
+        "feishu_records_empty": "records_empty",
+    }
+    messages = {
+        "feishu_authorized_input_missing": "No user-authorized Feishu export was provided.",
+        "feishu_records_empty": "The authorized Feishu input did not contain readable records.",
+    }
     return {
         "schema": "collectorx.event.v1",
-        "id": stable_id(COLLECTOR, reason),
+        "id": stable_id(COLLECTOR, "gap", reason, event_time),
         "collector": COLLECTOR,
         "source": "飞书授权状态",
         "owner_scope": "personal",
-        "kind": "other",
-        "time": None,
-        "collected_at": collected_at or now_iso(),
+        "kind": "profile",
+        "time": event_time,
+        "collected_at": event_time,
         "data": {
+            "subtype": "collector_gap",
+            "action_type": "collector_gap",
             "record_kind": "collector_gap",
             "gap": reason,
-            "message": "No user-authorized Feishu export was provided.",
+            "status": status_by_reason.get(reason, reason),
+            "profile_type": "feishu_collection_gap",
+            "message": messages.get(reason, "Feishu collection produced a traceable gap."),
+            "candidate_record_count": int(audit.get("parsed_record_count") or 0),
+            "parsed_record_count": int(audit.get("parsed_record_count") or 0),
+            "feishu_event_count": 0,
+            "retained_record_count": 0,
+            "business_records_written": False,
+            "read_only": True,
+            "policy_does_not_assert_investment_relevance": True,
+            "collector_writes_investor_wiki_directly": False,
+            "investment_feishu_fact_claimed": False,
+            "investment_conclusion_claimed": False,
+            "complete_feishu_archive_claimed": False,
+            "feishu_service_token_collected": False,
         },
-        "raw_ref": {"preflight": True},
-        "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential"]},
-        "wiki_targets": ["collectorx.data_quality.collection_gaps"],
+        "raw_ref": {
+            "preflight": True,
+            "reason": reason,
+            "scope_policy_enabled": False,
+        },
+        "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential", "collection_gap"]},
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
 def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] = None, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    gap_event_count = len(events) - len(usable_events)
     kind_counts = Counter(event["kind"] for event in events)
     record_counts = Counter((event.get("data") or {}).get("record_kind", "unknown") for event in events)
-    gap_only = bool(events) and set(record_counts) == {"collector_gap"}
+    gap_only = bool(events) and all(is_gap_event(event) for event in events)
+    surface_summary = feishu_surface_summary(usable_events)
+    feishu_event_count = len(usable_events)
     return {
         "schema": "collectorx.feishu.manifest.v1",
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": feishu_event_count,
+        "feishu_event_count": feishu_event_count,
+        "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "record_kind_counts": dict(sorted(record_counts.items())),
-        "field_coverage": field_coverage(events),
-        "feishu_surface_summary": feishu_surface_summary(events),
+        "field_coverage": field_coverage(usable_events),
+        "feishu_surface_summary": surface_summary,
         "source_audit": source_audit(events, collection_audit=collection_audit),
         "evidence_policy": {
             "generic_collector": True,
@@ -433,15 +499,56 @@ def build_manifest(events: List[Dict[str, Any]], *, collected_at: Optional[str] 
             "investment_classification_done": False,
             "required_lenses": ["meeting-minutes", "research-documents", "future-collaboration-dialogue"],
             "real_account_validation": False,
+            "read_only_collection": True,
         },
         "collection_readiness": {
-            "status": "needs_feishu_authorized_input" if gap_only else "events_collected",
-            "can_enter_finclaw": bool(events) and not gap_only,
+            "status": feishu_readiness_status(events, gap_only=gap_only),
+            "can_enter_finclaw": feishu_event_count > 0,
+            "can_enter_feishu_lake": feishu_event_count > 0,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_meeting_minutes_lens": surface_summary["meeting_event_count"] > 0,
+            "can_feed_research_documents_lens": surface_summary["document_event_count"] > 0,
+            "can_feed_collaboration_dialogue_lens": (
+                surface_summary["message_event_count"] + surface_summary["chat_event_count"]
+            ) > 0,
+            "can_feed_investor_wiki_directly": False,
             "can_claim_investment_evidence": False,
+            "usable_event_count": feishu_event_count,
+            "feishu_event_count": feishu_event_count,
+            "gap_event_count": gap_event_count,
             "source_collection_scope": "none" if gap_only else "partial_authorized_input",
-            "next_action": "Provide authorized Feishu export." if gap_only else "Feed events into relevant investor lenses.",
+            "next_action": feishu_next_action(events, gap_only=gap_only),
         },
     }
+
+
+def is_gap_event(event: Dict[str, Any]) -> bool:
+    data = event.get("data") or {}
+    return (
+        data.get("record_kind") == "collector_gap"
+        or data.get("action_type") == "collector_gap"
+        or bool(data.get("gap"))
+    )
+
+
+def feishu_readiness_status(events: List[Dict[str, Any]], *, gap_only: bool) -> str:
+    if gap_only:
+        reason = (events[0].get("data") or {}).get("gap") if events else ""
+        if reason == "feishu_records_empty":
+            return "records_empty"
+        return "needs_feishu_authorized_input"
+    if not events:
+        return "records_empty"
+    return "events_collected"
+
+
+def feishu_next_action(events: List[Dict[str, Any]], *, gap_only: bool) -> str:
+    if gap_only:
+        reason = (events[0].get("data") or {}).get("gap") if events else ""
+        if reason == "feishu_records_empty":
+            return "Provide a Feishu export containing readable records."
+        return "Provide authorized Feishu export."
+    return "Feed events into relevant investor lenses."
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -463,7 +570,11 @@ def write_summary(path: Path, manifest: Dict[str, Any]) -> None:
         "",
         f"- collector: `{COLLECTOR}`",
         f"- event_count: {manifest['event_count']}",
+        f"- feishu_event_count: {manifest.get('feishu_event_count', 0)}",
+        f"- gap_event_count: {manifest.get('gap_event_count', 0)}",
         f"- readiness: `{manifest['collection_readiness']['status']}`",
+        f"- feishu_lake_ready: `{manifest['collection_readiness']['can_enter_feishu_lake']}`",
+        f"- data_quality_lake_ready: `{manifest['collection_readiness']['can_enter_data_quality_lake']}`",
         f"- field_coverage_missing: `{', '.join(manifest['field_coverage']['missing_recommended_fields']) or 'none'}`",
         f"- message_events: {manifest['feishu_surface_summary']['message_event_count']}",
         f"- document_events: {manifest['feishu_surface_summary']['document_event_count']}",
@@ -514,16 +625,23 @@ def feishu_surface_summary(events: List[Dict[str, Any]]) -> Dict[str, int]:
 
 
 def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    usable_events = [event for event in events if not is_gap_event(event)]
+    gap_event_count = len(events) - len(usable_events)
     archives = [
         (event.get("raw_ref") or {}).get("source_archive")
-        for event in events
+        for event in usable_events
         if (event.get("raw_ref") or {}).get("source_archive")
     ]
     audit = {
-        "source_ref_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("path")),
-        "archive_member_event_count": sum(1 for event in events if (event.get("raw_ref") or {}).get("archive_member")),
+        "source_ref_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("path")),
+        "archive_member_event_count": sum(1 for event in usable_events if (event.get("raw_ref") or {}).get("archive_member")),
         "archive_count": len(set(archives)),
         "archive_path_traversal_members_collected": False,
+        "usable_event_count": len(usable_events),
+        "feishu_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
+        "business_records_written": bool(usable_events),
+        "read_only": True,
     }
     if collection_audit:
         audit.update(collection_audit)
@@ -541,6 +659,7 @@ def finalize_audit(audit: Dict[str, Any]) -> Dict[str, Any]:
         "archive_member_extension_counts",
         "skipped_archive_member_extension_counts",
         "skipped_archive_member_reason_counts",
+        "skipped_reason_counts",
     ):
         audit[key] = dict(sorted((audit.get(key) or {}).items()))
     return audit

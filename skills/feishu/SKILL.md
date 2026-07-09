@@ -146,8 +146,12 @@ python <SKILL_DIR>/scripts/feishu_api.py collect \
 本模式只做 generic lake 采集：消息、会话、联系人、文档、文件指针、会议/妙记
 产物进入 `collectorx.event.v1`，不直接写投资 Wiki。`manifest.json` 记录
 字段覆盖、飞书数据面、来源审计、ZIP 成员总数、跳过成员数量/原因、逐文件解析结果
-和 evidence policy。投资含义由 `meeting-minutes`、`research-documents` 或后续协作
-lens 判断。
+和 evidence policy。正常导出记录 `usable_event_count`、`feishu_event_count`、
+`gap_event_count`，并通过 `collection_readiness.can_enter_feishu_lake` 进入飞书业务
+lake；缺输入或无可读记录时只产出 validator-safe `collector_gap`，路由到
+`collectorx.data_quality.collection_gaps`，`can_enter_feishu_lake=false`、
+`can_enter_data_quality_lake=true`，且 `can_feed_investor_wiki_directly=false`。
+投资含义由 `meeting-minutes`、`research-documents` 或后续协作 lens 判断。
 
 ## 2) 状态文件
 
@@ -174,6 +178,7 @@ lens 判断。
 
 | 版本 | 日期 | 变更 |
 |------|------|------|
+| 0.2.1 | 2026-07-09 | 对齐 P1 baseline+audit readiness gate：普通事件补合法 `time` 兜底；缺输入/无可读记录 gap 改为 validator-safe profile 事件，写入 `business_records_written=false`、`read_only=true`、`wiki_targets=["collectorx.data_quality.collection_gaps"]`；manifest 增加 `usable_event_count`、`feishu_event_count`、`gap_event_count` 与 Feishu/data-quality/lens gate；测试覆盖正常包、missing-input gap、no-readable gap 和 validator package |
 | 0.2.0 | 2026-07-08 | 增加 `feishu_api.py collect` 只读本地授权导入，输出 `lake/feishu/events.jsonl`、`manifest.json`、`SUMMARY.md`；支持 JSON/CSV/HTML/Markdown/TXT/ZIP，manifest 记录字段覆盖、飞书数据面、来源审计、ZIP 跳过成员原因和 generic/lens 边界；保留原 OAuth/API 工具命令 |
 | 0.1.5 | 2026-05-24 | **状态目录定为 `~/.cufin/skills-config/`**（萃分身英文代号 cufin）。token / chrome-auto profile 全部在此。env var 主名 `CUFIN_CHROME_PROFILE` / `CUFIN_CHROME_PORT` / `CUFIN_CHROME_BIN`。改动文件：SKILL.md / auth.py / chrome_setup.py / feishu_api.py 共 4 处路径常量 + env var 处理 + 注释/文档更新 |
 | 0.1.4 | 2026-05-01 | **修『AI 调用方等不及重跑导致权限只勾上一半』root cause**：setup 是个长流程（60–120 秒），QClaw / Codex / 其他 AI runner 默认子进程超时太短（30–60s）等不到 `凭证已落 .../feishu.json` 就以为失败重跑，第二个 setup 进程跟第一个抢 Chrome / 飞书后台 SPA，互相打断 _enable_scopes 的 click 流程，结果 8 个 scope 只勾上一部分（甚至 0 个），OAuth 拿到 token 但调 API 全 Unauthorized。SKILL.md 顶部加显眼提示："不要因为终端短时间没新输出就重跑，总超时设到 3 分钟以上"。同时加防御：每次 click 后 sleep 250ms 让 React state 同步、勾完后 sleep 2s 再点确认开通（dump_state 诊断 log 也保留作生产调试用） |

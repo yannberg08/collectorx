@@ -32,6 +32,9 @@ scope:
     - field_coverage_manifest
     - feishu_surface_summary
     - source_audit_manifest
+    - readiness_gate_manifest
+    - data_quality_gap_events
+    - validator_safe_gap_packages
     - archive_member_provenance
     - archive_member_skip_audit
     - path_level_collection_audit
@@ -51,5 +54,6 @@ description: |
   飞书通用采集器。保留原 OAuth/API 工具能力，同时支持用户授权本地导出的
   JSON/CSV/HTML/Markdown/TXT/ZIP 转 CollectorX 标准包。输出 lake/feishu/events.jsonl、
   manifest.json 和 SUMMARY.md；manifest 记录字段覆盖、飞书数据面、ZIP 来源审计、
-  跳过成员原因和逐文件解析结果。投资会议、研报文档和协作讨论由下游 investor lens
-  从 lake 中筛选。
+  跳过成员原因、逐文件解析结果、usable/feishu/gap 事件计数和 readiness gates。
+  正常导出进入 Feishu 业务 lake；缺输入/无可读记录只生成 data-quality gap，
+  不直连投资 Wiki。投资会议、研报文档和协作讨论由下游 investor lens 从 lake 中筛选。
