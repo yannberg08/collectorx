@@ -291,7 +291,7 @@
       "product_surface": "import-beta",
       "evidence_role": "strong-trade-asset-facts",
       "user_step": "Provide authorized read-only Futu, Tiger, or IBKR statements, exports, workbooks, or ZIP packages; optionally choose broker, account, subtype, symbol, market, currency, or keyword allow/deny filters.",
-      "preflight": "Brokerage input is read-only and user-owned; no order mutation or trading password is requested; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages with can_enter_finclaw=false.",
+      "preflight": "Brokerage input is read-only and user-owned; no order mutation or trading password is requested; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_hk_us_brokerage_lake=false, can_enter_data_quality_lake=true, and can_feed_investor_wiki_evidence=false.",
       "failure_state": "needs_authorized_hk_us_brokerage_export_or_scope_policy_retained_records"
     },
     {

@@ -16,7 +16,22 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-`financial-news-usage` now exposes explicit business/data-quality/Wiki readiness
+`hk-us-brokerage` now exposes explicit strong-fact/data-quality/Wiki readiness
+gates and routes collection gaps to the data-quality Lake:
+
+- Upgraded `hk-us-brokerage` to `0.2.9`.
+- Manifests now separate `usable_event_count`, `brokerage_event_count`,
+  `strong_trade_event_count`, and `gap_event_count`.
+- `collection_readiness.can_enter_hk_us_brokerage_lake` gates retained Futu,
+  Tiger, and IBKR strong trade/asset facts, `can_enter_data_quality_lake` gates
+  no-input/filtered-all gap packages, and `can_feed_investor_wiki_evidence`
+  blocks collection gaps from becoming investor Wiki facts.
+- Gap events route only to `collectorx.data_quality.collection_gaps`.
+- Generated `investor_wiki_evidence.v1.json` excludes gap events from business
+  evidence and records `generated_from.raw_event_count` plus
+  `generated_from.gap_event_count`.
+
+The prior completed wave: `financial-news-usage` now exposes explicit business/data-quality/Wiki readiness
 gates and routes collection gaps to the data-quality Lake:
 
 - Upgraded `financial-news-usage` to `0.3.0`.
@@ -222,6 +237,13 @@ packages:
 - Manifest `brokerage_event_count=0` and `gap_event_count=1` keep package
   observability separate from real asset, holding, execution, order, cashflow,
   dividend, or FX evidence.
+- As of version `0.2.9`, readiness also separates
+  `can_enter_hk_us_brokerage_lake`, `can_enter_data_quality_lake`, and
+  `can_feed_investor_wiki_evidence`; pure gap packages set the brokerage Lake
+  and Wiki gates to false while keeping the data-quality gate true.
+- Investor Wiki evidence records `generated_from.raw_event_count` and
+  `generated_from.gap_event_count`, and route counts only include retained
+  non-gap brokerage records.
 - Gap events carry candidate/filter counts and reason summaries but no raw
   local input path, credential, token, trading password, broker business fact,
   order mutation, or investment conclusion.

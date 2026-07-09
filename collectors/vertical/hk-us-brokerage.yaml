@@ -44,6 +44,11 @@ scope:
     - scope_policy_filter_reason_counts
     - scope_policy_filtered_all_gap_package
     - no_input_gap_package
+    - usable_event_count
+    - brokerage_event_count
+    - strong_trade_event_count
+    - gap_event_count
+    - business_data_quality_wiki_readiness_gates
     - archive_member_provenance
     - path_level_collection_audit
     - skipped_file_reason_counts
@@ -62,5 +67,5 @@ description: |
   港美股券商是投资垂直强交易源。支持用户授权 CSV/JSON/Excel/ZIP 只读导出包。
   manifest 会报告富途/老虎/盈透、七类强交易表、关键金额字段覆盖、资产数值汇总、
   账户边界、币种市场、费用税费保证金、现金流活动、收益回报、订单执行、券商/账户/交易表/标的/市场/币种/关键词授权范围过滤、
-  filtered-all/no-input gap package、统一券商边界证明、逐输入来源审计、跳过原因和只读证据边界。
+  filtered-all/no-input data-quality gap package、业务/数据质量/Wiki 入湖门禁、统一券商边界证明、逐输入来源审计、跳过原因和只读证据边界。
   后续按富途、老虎、盈透逐个做真实账号只读采集和真机验证。

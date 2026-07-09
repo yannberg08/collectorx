@@ -31,6 +31,7 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 
 COLLECTOR = "hk-us-brokerage"
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 CN_TZ = timezone(timedelta(hours=8))
 SUPPORTED_RECORD_EXTENSIONS = {".csv", ".tsv", ".json", ".jsonl", ".ndjson", ".xlsx", ".xlsm"}
 SUPPORTED_EXTENSIONS = SUPPORTED_RECORD_EXTENSIONS | {".zip"}
@@ -1015,6 +1016,8 @@ def gap_event(
             "broker_trade_fact_claimed": False,
             "holding_fact_claimed": False,
             "order_or_fund_flow_claimed": False,
+            "business_records_written": False,
+            "read_only": True,
         },
         "raw_ref": {
             "preflight": True,
@@ -1022,7 +1025,7 @@ def gap_event(
             "scope_policy_enabled": bool(scope_policy.get("enabled", False)),
         },
         "privacy": {"sensitive": True, "local_only": True, "contains": ["money", "portfolio", "trade", "collection_gap"]},
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -1080,7 +1083,7 @@ def wiki_targets_for_subtype(subtype: str) -> List[str]:
         "dividend": ["external.capital.cashflows", "investor.risk_portfolio.current_positions"],
         "fx": ["external.capital.cashflows", "investor.risk_portfolio.portfolio_constraints"],
     }
-    return targets.get(subtype, ["investor.data_quality.collection_gaps"])
+    return targets.get(subtype, [DATA_QUALITY_TARGET])
 
 
 def build_manifest(
@@ -1096,6 +1099,8 @@ def build_manifest(
     gap_only = bool(events) and set(subtype_counts) == {"collector_gap"}
     brokerage_event_count = len(usable_brokerage_events(events))
     gap_event_count = sum(1 for event in events if (event.get("data") or {}).get("gap"))
+    usable_event_count = brokerage_event_count
+    strong_trade_event_count = brokerage_event_count
     scope_policy_filtered_all = bool(collection_audit.get("brokerage_scope_policy_filtered_all"))
     no_events = not events
     observed_brokers = sorted(broker for broker, count in broker_counts.items() if count and broker != "unknown")
@@ -1119,7 +1124,9 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": usable_event_count,
         "brokerage_event_count": brokerage_event_count,
+        "strong_trade_event_count": strong_trade_event_count,
         "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
         "subtype_counts": dict(sorted(subtype_counts.items())),
@@ -1174,8 +1181,15 @@ def build_manifest(
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
             ),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "can_enter_finclaw": usable_event_count > 0 and not scope_policy_filtered_all,
+            "can_enter_hk_us_brokerage_lake": usable_event_count > 0 and not scope_policy_filtered_all,
+            "can_enter_data_quality_lake": gap_event_count > 0,
+            "can_feed_investor_wiki_evidence": usable_event_count > 0 and not scope_policy_filtered_all,
             "can_claim_complete_hk_us_trade_boundary": False,
+            "usable_event_count": usable_event_count,
+            "brokerage_event_count": brokerage_event_count,
+            "strong_trade_event_count": strong_trade_event_count,
+            "gap_event_count": gap_event_count,
             "brokerage_boundary_scope": brokerage_boundary_scope_for_readiness(
                 gap_only=gap_only,
                 no_events=no_events,
@@ -1596,6 +1610,7 @@ def brokerage_boundary_proof(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     usable_events = usable_brokerage_events(events)
+    gap_event_count = max(len(events) - len(usable_events), 0)
     subtype_counts = Counter((event.get("data") or {}).get("subtype", "unknown") for event in usable_events)
     broker_counts = Counter((event.get("data") or {}).get("broker", "unknown") for event in usable_events)
     field_counts = Counter(
@@ -1682,9 +1697,15 @@ def brokerage_boundary_proof(
         "authorized_input_observed": bool(usable_events),
         "strong_trade_source": bool(usable_events),
         "can_enter_finclaw_lake": bool(usable_events),
+        "can_enter_hk_us_brokerage_lake": bool(usable_events),
+        "can_enter_data_quality_lake": gap_event_count > 0,
         "can_feed_investor_wiki_evidence": bool(usable_events),
         "business_numbers_preserved": True,
         "observed_event_count": len(usable_events),
+        "usable_event_count": len(usable_events),
+        "brokerage_event_count": len(usable_events),
+        "strong_trade_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
         "observed_brokers": observed_expected_brokers,
         "missing_expected_brokers": missing_expected_brokers,
         "observed_trade_surfaces": observed_expected_subtypes,
@@ -1835,8 +1856,14 @@ def source_audit(events: List[Dict[str, Any]], *, collection_audit: Optional[Dic
     return audit
 
 
-def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] = None) -> Dict[str, Any]:
+def build_evidence(
+    events: List[Dict[str, Any]],
+    *,
+    generated_at: Optional[str] = None,
+    collection_audit: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     usable_event_list = usable_brokerage_events(events)
+    gap_event_count = max(len(events) - len(usable_event_list), 0)
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     for event in usable_event_list:
         for target in event.get("wiki_targets", []):
@@ -1848,6 +1875,8 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
             "event_count": len(usable_event_list),
+            "raw_event_count": len(events),
+            "gap_event_count": gap_event_count,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1859,14 +1888,18 @@ def build_evidence(events: List[Dict[str, Any]], *, generated_at: Optional[str] 
             "complete_trade_boundary_claimed": False,
             "read_only_collection": True,
             "order_side_effects_allowed": False,
-            "account_boundary_summary": account_boundary_summary(events),
-            "currency_market_summary": currency_market_summary(events),
-            "fee_tax_margin_summary": fee_tax_margin_summary(events),
-            "asset_value_summary": asset_value_summary(events),
-            "cashflow_activity_summary": cashflow_activity_summary(events),
-            "income_return_summary": income_return_summary(events),
-            "order_execution_summary": order_execution_summary(events),
-            "brokerage_boundary_proof": brokerage_boundary_proof(events),
+            "usable_event_count": len(usable_event_list),
+            "brokerage_event_count": len(usable_event_list),
+            "strong_trade_event_count": len(usable_event_list),
+            "gap_event_count": gap_event_count,
+            "account_boundary_summary": account_boundary_summary(usable_event_list),
+            "currency_market_summary": currency_market_summary(usable_event_list),
+            "fee_tax_margin_summary": fee_tax_margin_summary(usable_event_list),
+            "asset_value_summary": asset_value_summary(usable_event_list),
+            "cashflow_activity_summary": cashflow_activity_summary(usable_event_list),
+            "income_return_summary": income_return_summary(usable_event_list),
+            "order_execution_summary": order_execution_summary(usable_event_list),
+            "brokerage_boundary_proof": brokerage_boundary_proof(events, collection_audit=collection_audit),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

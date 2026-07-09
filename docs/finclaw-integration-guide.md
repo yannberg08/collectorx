@@ -1249,6 +1249,16 @@ Current status:
   means the package contains a validator-safe
   `brokerage_scope_policy_filtered_all` profile gap event and
   `collection_readiness.can_enter_finclaw=false`, not a usable brokerage fact.
+- Manifest separates `usable_event_count`, `brokerage_event_count`,
+  `strong_trade_event_count`, and `gap_event_count`;
+  `collection_readiness.can_enter_hk_us_brokerage_lake` gates retained strong
+  brokerage facts, `can_enter_data_quality_lake` gates no-input/filtered-all
+  collection gaps, and `can_feed_investor_wiki_evidence` prevents pure gaps from
+  becoming investor Wiki trade facts.
+- HK/US brokerage gap events route only to
+  `collectorx.data_quality.collection_gaps`; generated Wiki evidence counts
+  non-gap retained brokerage events and records
+  `generated_from.raw_event_count` plus `generated_from.gap_event_count`.
 - `manifest.brokerage_boundary_proof` gives FinClaw a single gate for the
   authorized input boundary, broker coverage, strong trade surfaces, account
   IDs, asset values, multi-currency, fee/tax/margin, cashflow activity, income

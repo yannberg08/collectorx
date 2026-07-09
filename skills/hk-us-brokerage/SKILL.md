@@ -1,7 +1,7 @@
 ---
 name: hk-us-brokerage
-description: 港美股券商强交易采集器。采集用户授权的富途、老虎、盈透等券商只读导出/ZIP 包中的资产、持仓、成交、委托、资金流水、分红、换汇，输出 CollectorX 事件、券商/交易表/字段覆盖、账户边界、币种市场、费用税费保证金、资金流活动、收益回报、订单执行、授权范围过滤审计、强交易可用面、资产数值汇总、来源审计 manifest 和 FinClaw 投资分身证据包；不读取密码，不下单，不撤单；无输入或授权范围过滤为空时输出可验证 gap package。
-version: 0.2.8
+description: 港美股券商强交易采集器。采集用户授权的富途、老虎、盈透等券商只读导出/ZIP 包中的资产、持仓、成交、委托、资金流水、分红、换汇，输出 CollectorX 事件、券商/交易表/字段覆盖、账户边界、币种市场、费用税费保证金、资金流活动、收益回报、订单执行、授权范围过滤审计、强交易可用面、资产数值汇总、业务/数据质量/Wiki 入湖门禁、来源审计 manifest 和 FinClaw 投资分身证据包；不读取密码，不下单，不撤单；无输入或授权范围过滤为空时输出可验证 data-quality gap package。
+version: 0.2.9
 ---
 
 # HK/US Brokerage Collector
@@ -28,6 +28,8 @@ version: 0.2.8
 - `manifest.source_audit`：记录授权输入、缺失输入、逐文件解析结果、扩展名覆盖、跳过文件原因、ZIP 成员数量、跳过 ZIP 成员原因、文件/ZIP 成员来源、section/sheet 来源，并声明未采集危险路径成员。
 - `manifest.source_audit.brokerage_scope_policy`：记录券商、账户、交易表面、标的、市场、币种和关键词 allow/deny 授权过滤；同时记录候选记录数、过滤记录数、过滤原因和 `scope_policy_filtered_all` 状态。
 - 无授权输入、无可用记录、或 filtered-all 场景下的 profile gap 事件，带非空时间、候选/过滤计数和非交易事实边界。
+- `manifest.usable_event_count`、`manifest.brokerage_event_count`、`manifest.strong_trade_event_count` 和 `manifest.gap_event_count`：区分真实券商业务事实与数据质量缺口。
+- `manifest.collection_readiness.can_enter_hk_us_brokerage_lake`、`can_enter_data_quality_lake` 与 `can_feed_investor_wiki_evidence`：分别控制强交易 Lake、数据质量 Lake 和投资分身 Wiki evidence；gap 只路由到 `collectorx.data_quality.collection_gaps`。
 - `manifest.evidence_policy`：声明只读采集、强交易源、不直接写 Wiki、不允许下单/撤单副作用、不声称完整交易边界。
 
 不采集：
@@ -74,6 +76,9 @@ profile gap event，不会伪造券商业务事件。
 assets、positions、executions、orders、cashflows、dividends、fx 等 section。manifest 会
 记录逐输入来源审计、跳过原因、ZIP 成员审计、账户/币种/市场摘要、现金流/收益/订单执行摘要、授权范围过滤审计、统一券商边界证明和路径安全边界。真实富途、老虎、盈透只读
 适配器需要按平台逐个验证。
-无输入或 filtered-all gap package 会设置 `manifest.brokerage_event_count=0`、
-`manifest.gap_event_count=1` 和 `collection_readiness.can_enter_finclaw=false`；
+无输入或 filtered-all gap package 会设置 `manifest.usable_event_count=0`、
+`manifest.brokerage_event_count=0`、`manifest.strong_trade_event_count=0`、
+`manifest.gap_event_count=1`、`collection_readiness.can_enter_hk_us_brokerage_lake=false`、
+`collection_readiness.can_enter_data_quality_lake=true` 和
+`collection_readiness.can_feed_investor_wiki_evidence=false`；
 Investor Wiki evidence 只统计真实保留的券商业务记录。

@@ -116,11 +116,27 @@ def test_collect_brokerage_exports() -> None:
         assert execution["data"]["side"] == "buy"
         assert execution["data"]["amount"] == 1902.0
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 5
+        assert manifest["brokerage_event_count"] == 5
+        assert manifest["strong_trade_event_count"] == 5
+        assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["can_enter_hk_us_brokerage_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
+        assert manifest["collection_readiness"]["usable_event_count"] == 5
+        assert manifest["collection_readiness"]["strong_trade_event_count"] == 5
+        assert manifest["collection_readiness"]["gap_event_count"] == 0
         assert manifest["collection_readiness"]["can_claim_complete_hk_us_trade_boundary"] is False
         proof = manifest["brokerage_boundary_proof"]
         assert proof["proof_level"] == "weak_partial_brokerage_boundary"
         assert proof["can_enter_finclaw_lake"] is True
+        assert proof["can_enter_hk_us_brokerage_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
         assert proof["business_numbers_preserved"] is True
+        assert proof["usable_event_count"] == 5
+        assert proof["strong_trade_event_count"] == 5
+        assert proof["gap_event_count"] == 0
         assert proof["false_claims"]["complete_hk_us_trade_boundary_claimed"] is False
         assert proof["false_claims"]["trading_password_collected"] is False
         assert "missing_expected_brokers:tiger" in proof["completion_blockers"]
@@ -128,6 +144,11 @@ def test_collect_brokerage_exports() -> None:
         assert evidence["coverage_summary"]["strong_trade_source"] is True
         assert evidence["coverage_summary"]["brokerage_boundary_proof"]["can_feed_investor_wiki_evidence"] is True
         assert evidence["generated_from"]["event_count"] == 5
+        assert evidence["generated_from"]["raw_event_count"] == 5
+        assert evidence["generated_from"]["gap_event_count"] == 0
+        assert evidence["coverage_summary"]["usable_event_count"] == 5
+        assert evidence["coverage_summary"]["strong_trade_event_count"] == 5
+        assert evidence["coverage_summary"]["gap_event_count"] == 0
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
         execution_discipline = next(
@@ -656,6 +677,8 @@ def test_collect_scope_policy_filtered_all_status() -> None:
         assert gap["data"]["broker_trade_fact_claimed"] is False
         assert gap["data"]["holding_fact_claimed"] is False
         assert gap["data"]["order_or_fund_flow_claimed"] is False
+        assert gap["data"]["business_records_written"] is False
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert gap["raw_ref"] == {
             "preflight": True,
             "reason": "brokerage_scope_policy_filtered_all",
@@ -664,11 +687,19 @@ def test_collect_scope_policy_filtered_all_status() -> None:
         assert str(export) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["brokerage_event_count"] == 0
+        assert manifest["strong_trade_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_hk_us_brokerage_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
+        assert manifest["collection_readiness"]["strong_trade_event_count"] == 0
+        assert manifest["collection_readiness"]["gap_event_count"] == 1
         assert manifest["collection_readiness"]["brokerage_boundary_scope"] == "scope_policy_excluded_all"
         assert manifest["source_audit"]["candidate_record_count"] == 1
         assert manifest["source_audit"]["parsed_record_count"] == 1
@@ -679,9 +710,16 @@ def test_collect_scope_policy_filtered_all_status() -> None:
         assert manifest["source_audit"]["path_results"][0]["status"] == "filtered_by_scope_policy"
         assert manifest["brokerage_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
         assert manifest["brokerage_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["brokerage_boundary_proof"]["can_enter_hk_us_brokerage_lake"] is False
+        assert manifest["brokerage_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["brokerage_boundary_proof"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["brokerage_boundary_proof"]["gap_event_count"] == 1
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
         assert evidence["coverage_summary"]["strong_trade_source"] is False
+        assert evidence["coverage_summary"]["route_counts"] == {}
 
 
 def test_collect_missing_input_writes_gap_audit() -> None:
@@ -717,6 +755,8 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert events[0]["data"]["retained_record_count"] == 0
         assert events[0]["data"]["filtered_record_count"] == 0
         assert events[0]["data"]["broker_trade_fact_claimed"] is False
+        assert events[0]["data"]["business_records_written"] is False
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert events[0]["raw_ref"] == {
             "preflight": True,
             "reason": "hk_us_brokerage_authorized_input_missing",
@@ -724,13 +764,24 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         }
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["brokerage_event_count"] == 0
+        assert manifest["strong_trade_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "needs_hk_us_brokerage_authorized_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_hk_us_brokerage_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
+        assert manifest["collection_readiness"]["usable_event_count"] == 0
+        assert manifest["collection_readiness"]["strong_trade_event_count"] == 0
+        assert manifest["collection_readiness"]["gap_event_count"] == 1
         assert manifest["brokerage_boundary_proof"]["proof_level"] == "no_authorized_brokerage_input"
         assert manifest["brokerage_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["brokerage_boundary_proof"]["can_enter_hk_us_brokerage_lake"] is False
+        assert manifest["brokerage_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["brokerage_boundary_proof"]["can_feed_investor_wiki_evidence"] is False
         assert manifest["brokerage_boundary_proof"]["source_boundary"]["input_missing_count"] == 1
         assert manifest["brokerage_boundary_proof"]["false_claims"]["direct_broker_reconnect"] is False
         assert manifest["source_audit"]["input_count"] == 1
@@ -738,6 +789,11 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert manifest["source_audit"]["parsed_record_count"] == 0
         assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["route_counts"] == {}
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
 
 
