@@ -2,7 +2,6 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "pytest>=8.0.0",
 #     "httpx>=0.27.0",
 #     "pydantic>=2.5.0",
 # ]
@@ -31,8 +30,6 @@ import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
-
-import pytest
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
@@ -358,22 +355,23 @@ def test_build_receipt_status_is_one_of_three_values():
 # 7. classify_http_error · 边界 helper 单测
 # -----------------------------------------------------------------------------
 
-@pytest.mark.parametrize("status_code,expected_retryable", [
-    (500, True),
-    (502, True),
-    (503, True),
-    (504, True),
-    (401, True),
-    (400, False),
-    (403, False),
-    (404, False),
-    (422, False),
-])
-def test_classify_http_error_retryable_rules(status_code, expected_retryable):
+def test_classify_http_error_retryable_rules():
     """retryable 判定规则：5xx + 401 = retryable · 4xx 非 401 = non-retryable。"""
-    code, retryable = classify_http_error(status_code)
-    assert retryable is expected_retryable
-    assert code == f"HTTP_{status_code}"
+    cases = [
+        (500, True),
+        (502, True),
+        (503, True),
+        (504, True),
+        (401, True),
+        (400, False),
+        (403, False),
+        (404, False),
+        (422, False),
+    ]
+    for status_code, expected_retryable in cases:
+        code, retryable = classify_http_error(status_code)
+        assert retryable is expected_retryable
+        assert code == f"HTTP_{status_code}"
 
 
 def test_classify_http_error_network_failure_is_retryable():
@@ -381,3 +379,20 @@ def test_classify_http_error_network_failure_is_retryable():
     code, retryable = classify_http_error(None)
     assert retryable is True
     assert code == "NETWORK_ERROR"
+
+
+if __name__ == "__main__":
+    test_build_receipt_succeeded_when_no_duplicate()
+    test_build_receipt_duplicate_when_same_title_and_due_date()
+    test_build_receipt_duplicate_handles_timezone_diff_same_utc_day()
+    test_build_receipt_succeeded_when_same_title_different_due_date()
+    test_build_receipt_failed_retryable_on_http_500()
+    test_build_receipt_failed_retryable_on_http_401()
+    test_build_receipt_failed_non_retryable_on_http_400()
+    test_build_receipt_failed_non_retryable_on_http_403()
+    test_build_receipt_echoes_all_input_fields()
+    test_build_receipt_ts_is_iso8601_with_offset()
+    test_build_receipt_status_is_one_of_three_values()
+    test_classify_http_error_retryable_rules()
+    test_classify_http_error_network_failure_is_retryable()
+    print("ticktick action receipt tests passed.")

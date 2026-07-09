@@ -63,13 +63,19 @@ PARSER_TESTS = [
     "skills/feishu/tests/test_feishu_collect.py",
     "skills/filesystem-collector/tests/test_filesystem_collector.py",
     "skills/meeting-artifacts/tests/test_meeting_artifacts.py",
+    "skills/wechat-export/scripts/test_wechat_tags.py",
     "skills/wechat-export/tests/test_collect_package.py",
+    "skills/wechat-export/tests/test_keycrypto.py",
+    "skills/wechat-export/tests/test_mac4_keys.py",
+    "skills/wechat-export/tests/test_multi_shard.py",
     "skills/wechat-favorites/tests/test_wechat_favorites.py",
     "skills/qq-export/tests/test_parser.py",
     "skills/notes-collector/tests/test_notes_collector.py",
+    "skills/ticktick-cli/scripts/test_action_receipt.py",
     "skills/ticktick-cli/scripts/test_ticktick_events.py",
     "skills/ticktick-cli/scripts/test_ticktick_api_client.py",
     "skills/ticktick-cli/scripts/test_collect_for_soulmirror.py",
+    "skills/ticktick-cli/scripts/test_create_receipt_cli.py",
     "skills/calendar-collector/tests/test_calendar_collector.py",
     "skills/collaboration-exports/tests/test_collaboration_exports.py",
     "skills/ths-portfolio/tests/test_parser.py",
@@ -171,6 +177,28 @@ def check_prebuilt_executables() -> None:
             raise SystemExit(f"Missing prebuilt executable: {rel}")
         if not os.access(path, os.X_OK):
             raise SystemExit(f"Prebuilt executable is not executable: {rel}")
+
+
+def discover_parser_tests() -> list[str]:
+    paths = set()
+    for pattern in ("tools/test_*.py", "tools/*_test.py", "skills/**/test_*.py", "skills/**/*_test.py"):
+        paths.update(path.relative_to(ROOT).as_posix() for path in ROOT.glob(pattern))
+    return sorted(paths)
+
+
+def check_parser_test_coverage() -> None:
+    discovered = set(discover_parser_tests())
+    declared = set(PARSER_TESTS)
+    missing = sorted(discovered - declared)
+    extra = sorted(declared - discovered)
+    if missing or extra:
+        details = []
+        if missing:
+            details.append("missing from PARSER_TESTS:\n" + "\n".join(f"  - {item}" for item in missing))
+        if extra:
+            details.append("declared in PARSER_TESTS but not found:\n" + "\n".join(f"  - {item}" for item in extra))
+        raise SystemExit("Parser test coverage mismatch.\n" + "\n".join(details))
+    print(f"validate_parser_test_coverage {len(discovered)} tests", flush=True)
 
 
 def run_parser_tests() -> None:
@@ -509,6 +537,7 @@ def main() -> int:
     compile_python()
     check_cli_help()
     check_prebuilt_executables()
+    check_parser_test_coverage()
     run_parser_tests()
     validate_event_examples()
     validate_investor_catalog()

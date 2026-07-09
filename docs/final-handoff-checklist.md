@@ -194,6 +194,10 @@ PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```
 
+`tools/validate_project.py` also enforces parser-test coverage: every
+`test_*.py` or `*_test.py` file under `skills/` and `tools/` must be declared in
+the main validation suite.
+
 ## Remaining Work After Handoff
 
 The next phase is real validation, not more collector expansion.

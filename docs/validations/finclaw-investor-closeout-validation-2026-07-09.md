@@ -108,5 +108,9 @@ PYTHON=.venv/bin/python bash test_collectors.sh
 git diff --check
 ```
 
+`tools/validate_project.py` also enforces parser-test coverage: every
+`test_*.py` or `*_test.py` file under `skills/` and `tools/` must be declared in
+the main validation suite.
+
 This validation is a documentation and release-control gate. It does not claim
 new real-account coverage.

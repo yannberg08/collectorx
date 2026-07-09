@@ -2,7 +2,6 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "pytest>=8.0.0",
 #     "httpx>=0.27.0",
 #     "typer>=0.9.0",
 #     "pydantic>=2.5.0",
@@ -23,11 +22,13 @@ S13-P2-5 · 验 `ticktick task create-receipt` subcommand 完整链路：
 from __future__ import annotations
 
 import json
+import os
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from typer.testing import CliRunner
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -82,18 +83,22 @@ def _make_mock_session(get_project_data_response: dict, create_task_response: di
     return session
 
 
-@pytest.fixture
-def runner():
-    # CliRunner 在 click 8.x 后默认 mix_stderr=False · 不再接收 kwarg
-    return CliRunner()
-
-
-@pytest.fixture
-def mock_token_env(monkeypatch, tmp_path):
+@contextmanager
+def patched_token_env():
     """配置 token env · 防 get_client 报错。"""
-    monkeypatch.setenv("TICKTICK_TOKEN", "test-token-abc")
-    monkeypatch.setattr(ticktick_cli, "TOKEN_FILE", tmp_path / "ticktick.json")
-    return None
+    previous_token = os.environ.get("TICKTICK_TOKEN")
+    previous_token_file = ticktick_cli.TOKEN_FILE
+    with tempfile.TemporaryDirectory() as tmp:
+        os.environ["TICKTICK_TOKEN"] = "test-token-abc"
+        ticktick_cli.TOKEN_FILE = Path(tmp) / "ticktick.json"
+        try:
+            yield
+        finally:
+            if previous_token is None:
+                os.environ.pop("TICKTICK_TOKEN", None)
+            else:
+                os.environ["TICKTICK_TOKEN"] = previous_token
+            ticktick_cli.TOKEN_FILE = previous_token_file
 
 
 # -----------------------------------------------------------------------------
@@ -276,3 +281,18 @@ def test_cli_create_receipt_idempotency_key_required(runner, mock_token_env):
     assert result.exit_code != 0
     # typer 写到 stderr · 包含 "idempotency-key" 关键词
     assert "idempotency-key" in result.stderr.lower() or "missing" in result.stderr.lower()
+
+
+def run_cli_test(fn):
+    # CliRunner 在 click 8.x 后默认 mix_stderr=False · 不再接收 kwarg
+    with patched_token_env():
+        fn(CliRunner(), None)
+
+
+if __name__ == "__main__":
+    run_cli_test(test_cli_create_receipt_succeeded_path)
+    run_cli_test(test_cli_create_receipt_duplicate_path)
+    run_cli_test(test_cli_create_receipt_failed_path_still_exit_0)
+    run_cli_test(test_cli_create_receipt_default_sink_id_is_ticktick_cli)
+    run_cli_test(test_cli_create_receipt_idempotency_key_required)
+    print("ticktick create receipt CLI tests passed.")

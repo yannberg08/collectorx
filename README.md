@@ -207,7 +207,9 @@ PYTHON=.venv/bin/python bash test_collectors.sh
 
 `test_collectors.sh` selects Python 3.10+ when available. In this repository,
 using the bundled `.venv` keeps local, CI, and closeout validation on the same
-interpreter.
+interpreter. `tools/validate_project.py` also checks that every `test_*.py` or
+`*_test.py` file under `skills/` and `tools/` is declared in the main validation
+suite, so new collector tests cannot silently sit outside the gate.
 
 The suite currently checks:
 
