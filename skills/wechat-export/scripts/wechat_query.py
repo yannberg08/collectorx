@@ -1989,6 +1989,214 @@ def _finish_collect_gap(args, *, platform: str, status: str, reason: str, next_a
     return True
 
 
+def _module_available(module_name: str) -> bool:
+    try:
+        __import__(module_name)
+        return True
+    except Exception:
+        return False
+
+
+def _count_db_files(root: str) -> dict:
+    counts = {
+        'db_file_count': 0,
+        'message_db_file_count': 0,
+        'contact_db_file_count': 0,
+        'session_db_file_count': 0,
+    }
+    if not root or not os.path.isdir(root):
+        return counts
+    for current_root, _dirs, files in os.walk(root):
+        rel = os.path.relpath(current_root, root)
+        top = rel.split(os.sep)[0] if rel != '.' else ''
+        for filename in files:
+            if not filename.endswith('.db') or filename.endswith('-wal') or filename.endswith('-shm'):
+                continue
+            counts['db_file_count'] += 1
+            if top == 'message':
+                counts['message_db_file_count'] += 1
+            elif top == 'contact':
+                counts['contact_db_file_count'] += 1
+            elif top == 'session':
+                counts['session_db_file_count'] += 1
+    return counts
+
+
+def _wechat_runtime_platform() -> str:
+    if sys.platform in ('win32', 'cygwin'):
+        return 'windows'
+    if sys.platform == 'darwin':
+        return 'macos'
+    if sys.platform.startswith('linux'):
+        return 'linux'
+    return 'generic'
+
+
+def _sip_status() -> str:
+    if sys.platform != 'darwin':
+        return 'not_applicable'
+    try:
+        import subprocess
+        result = subprocess.run(['csrutil', 'status'], text=True, capture_output=True, timeout=5)
+        text = (result.stdout or result.stderr or '').strip().lower()
+    except Exception:
+        return 'unknown'
+    if 'disabled' in text:
+        return 'disabled'
+    if 'enabled' in text:
+        return 'enabled'
+    return 'unknown'
+
+
+def _diagnose_keys(args) -> tuple[bool, bool]:
+    explicit_key = bool((getattr(args, 'key', None) or '').strip())
+    keys_file = getattr(args, 'keys', None)
+    if not keys_file:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        keys_file = resolve_keys_file(os.path.join(script_dir, '..', 'data'))
+    return explicit_key, bool(keys_file and os.path.exists(keys_file))
+
+
+def _quiet_call(func, *args, **kwargs):
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        return func(*args, **kwargs)
+
+
+def _build_diagnose_payload(args) -> dict:
+    platform = _wechat_runtime_platform()
+    explicit_key, keys_file_present = _diagnose_keys(args)
+    db_dir_arg = getattr(args, 'db_dir', None)
+    mac_version = None
+    detected_db_storage = None
+    db_dir_exists = False
+    db_dir_readable = False
+    db_counts = _count_db_files(None)
+    status = 'needs_readable_wechat_store'
+    reason = 'wechat_store_not_detected'
+    next_action = 'Authorize a readable WeChat 4.x local store before running --collect --out-dir.'
+    can_attempt_collect = False
+
+    if db_dir_arg:
+        db_dir_exists = os.path.isdir(db_dir_arg)
+        db_dir_readable = os.access(db_dir_arg, os.R_OK) if db_dir_exists else False
+        db_counts = _count_db_files(db_dir_arg) if db_dir_readable else _count_db_files(None)
+        if not db_dir_exists or not db_dir_readable or db_counts['db_file_count'] == 0:
+            status = 'needs_readable_wechat_db_dir'
+            reason = 'explicit_db_dir_missing_unreadable_or_empty'
+            next_action = 'Confirm the authorized WeChat 4.x db_storage directory exists, is readable, and contains .db files.'
+        elif explicit_key or keys_file_present:
+            status = 'ready_for_collect_attempt'
+            reason = 'explicit_db_dir_and_key_material_available'
+            next_action = 'Run wechat_query.py --collect --db-dir <authorized-db-storage> --out-dir <out-dir>, then validate the package.'
+            can_attempt_collect = True
+        else:
+            status = 'needs_wechat_decryption_or_plaintext_db'
+            reason = 'explicit_db_dir_without_key_material'
+            next_action = 'Provide all_keys.json, --key, or a user-authorized plaintext/decrypted database directory before collection.'
+    elif platform == 'macos':
+        mac_version, detected_db_storage = _quiet_call(_detect_mac_version)
+        if mac_version == 'mac4' and detected_db_storage:
+            db_dir_exists = True
+            db_dir_readable = os.access(detected_db_storage, os.R_OK)
+            db_counts = _count_db_files(detected_db_storage) if db_dir_readable else _count_db_files(None)
+            if db_counts['db_file_count'] == 0:
+                status = 'needs_readable_wechat_db_dir'
+                reason = 'macos_wechat_4_db_storage_empty_or_unreadable'
+                next_action = 'Confirm WeChat 4.x is logged in and the authorized db_storage directory is readable.'
+            elif explicit_key or keys_file_present:
+                status = 'ready_for_collect_attempt'
+                reason = 'macos_wechat_4_store_and_key_material_available'
+                next_action = 'Run wechat_query.py --collect --out-dir <out-dir>, then validate the package.'
+                can_attempt_collect = True
+            else:
+                status = 'needs_wechat_4_keys_or_dependencies'
+                reason = 'macos_wechat_4_store_found_without_keys'
+                next_action = 'Run sudo python3 wechat_extract_mac.py after satisfying SIP/lldb/root/login preconditions, then retry collection.'
+        else:
+            status = 'needs_wechat_4_data'
+            reason = 'macos_wechat_4_data_not_detected'
+            next_action = 'Install/login to WeChat 4.x and authorize the local store before running collection.'
+    elif platform == 'windows':
+        auto_db_dir = _quiet_call(_auto_find_windows_db_dir)
+        db_dir_exists = bool(auto_db_dir)
+        db_dir_readable = os.access(auto_db_dir, os.R_OK) if auto_db_dir else False
+        db_counts = _count_db_files(auto_db_dir) if auto_db_dir and db_dir_readable else _count_db_files(None)
+        if not auto_db_dir:
+            status = 'needs_readable_wechat_db_dir'
+            reason = 'windows_wechat_db_dir_not_detected'
+            next_action = 'Authorize the WeChat 4.x db_storage directory or run the Windows extractor before collection.'
+        elif explicit_key or keys_file_present:
+            status = 'ready_for_collect_attempt'
+            reason = 'windows_wechat_store_and_key_material_available'
+            next_action = 'Run wechat_query.py --collect --db-dir <authorized-db-storage> --out-dir <out-dir>, then validate the package.'
+            can_attempt_collect = True
+        else:
+            status = 'needs_wechat_decryption_or_plaintext_db'
+            reason = 'windows_wechat_store_found_without_keys'
+            next_action = 'Run wechat_extract_windows.py or provide a user-authorized plaintext/decrypted database directory.'
+    else:
+        status = 'needs_explicit_wechat_db_dir'
+        reason = 'platform_requires_explicit_db_dir'
+        next_action = 'Provide --db-dir for a user-authorized WeChat 4.x db_storage or plaintext/decrypted database directory.'
+
+    return {
+        'schema': 'collectorx.wechat_preflight.v1',
+        'collector': 'wechat',
+        'generated_at': _now_iso(),
+        'platform': platform,
+        'diagnostic_scope': {
+            'message_text_read': False,
+            'raw_database_pages_read': False,
+            'contacts_read': False,
+            'credentials_collected': False,
+            'keys_emitted': False,
+            'paths_emitted': False,
+        },
+        'input_summary': {
+            'db_dir_argument_provided': bool(db_dir_arg),
+            'keys_argument_provided': bool(getattr(args, 'keys', None)),
+            'single_key_argument_provided': explicit_key,
+            'mac_user_hint_provided': bool(getattr(args, 'user', None)),
+        },
+        'environment': {
+            'python_sqlite3_available': _module_available('sqlite3'),
+            'pycryptodome_available': _module_available('Crypto.Cipher.AES'),
+            'sqlcipher3_available': _module_available('sqlcipher3'),
+            'sip_status': _sip_status(),
+        },
+        'store_probe': {
+            'mac_detected_version': mac_version,
+            'db_storage_detected': bool(detected_db_storage or db_dir_arg),
+            'db_storage_exists': bool(db_dir_exists),
+            'db_storage_readable': bool(db_dir_readable),
+            **db_counts,
+        },
+        'key_probe': {
+            'key_file_present': keys_file_present,
+            'single_key_argument_present': explicit_key,
+            'key_material_output': False,
+        },
+        'collection_readiness': {
+            'status': status,
+            'reason': reason,
+            'can_attempt_collect': can_attempt_collect,
+            'can_claim_real_validation': False,
+            'can_enter_personal_channel_lake': False,
+            'can_enter_investor_lens': False,
+            'next_action': next_action,
+        },
+    }
+
+
+def _run_diagnose(args) -> None:
+    payload = _build_diagnose_payload(args)
+    if getattr(args, 'diagnose_out', None):
+        _write_json(Path(args.diagnose_out).expanduser(), payload)
+    print(_json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+
+
 def _format_collect_source(chat: str, is_group: bool, time_str: str) -> str:
     date = (time_str or '')[:10]
     chat = chat or '(unknown)'
@@ -2237,6 +2445,8 @@ def main():
     parser.add_argument('--keys', help='Windows: path to all_keys.json from wechat_extract_windows.py')
     parser.add_argument('--user', help='Mac: specify user directory hash')
     parser.add_argument('--db-dir', help='Windows: path to db_storage directory (encrypted or decrypted)')
+    parser.add_argument('--diagnose', action='store_true', help='Preflight WeChat local-source readiness without reading messages or emitting secrets')
+    parser.add_argument('--diagnose-out', metavar='FILE', help='Write --diagnose JSON to this file')
     parser.add_argument('--recent', type=int, default=None, help='Show latest N messages (default: 10 when no other filters)')
     parser.add_argument('--search', help='Search keyword')
     parser.add_argument('--contact', help='Filter by contact or group name')
@@ -2281,6 +2491,10 @@ def main():
         if isinstance(_v, str) and _v != _v.strip():
             sys.stderr.write(f"⚠️  --{_attr.replace('_','-')} arg had whitespace, stripped: {_v!r} -> {_v.strip()!r}\n")
             setattr(args, _attr, _v.strip())
+
+    if args.diagnose:
+        _run_diagnose(args)
+        return
 
     if args.db_dir or sys.platform == 'win32' or sys.platform == 'cygwin':
         # Windows: 自动检测 db_dir（如果未指定）

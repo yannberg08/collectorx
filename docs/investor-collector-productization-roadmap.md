@@ -4323,11 +4323,33 @@ Findings:
   note-corpus false-positive review are still required before promotion beyond
   baseline+audit.
 
+### Wave BS: P0 WeChat local-source diagnosis hardening
+
+Validation record:
+
+- `docs/validations/investor-p0-wechat-diagnose-validation-2026-07-09.md`
+
+Findings:
+
+- Upgraded `wechat-export` to `0.11.4`.
+- Added `wechat_query.py --diagnose` and `--diagnose-out <file>` for
+  FinClaw product preflight screens and runbooks.
+- Diagnosis emits `collectorx.wechat_preflight.v1` JSON with sanitized
+  platform, dependency, SIP, local-store, key-material, and readiness probes.
+- Diagnosis explicitly records that it does not read message text, contacts,
+  raw database pages, credentials, or key material, and does not emit local
+  paths.
+- Fixture validation covers missing authorized `db_storage` and confirms the
+  missing local path is not written into stdout or the saved diagnosis file.
+- Current-machine diagnosis is not a successful real-message run: macOS WeChat
+  4.x storage is detected as present/readable, but no `.db` files are counted,
+  SIP is enabled, `sqlcipher3` is unavailable, and key material is absent.
+
 ## P0 Work Queue
 
 | Order | Collector | Current gate | Next gate |
 | --- | --- | --- | --- |
-| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, generic-to-lens evidence policy, validator-safe preflight/no-message data-quality gap packages, message/gap/usable counts, and package validation; `wechat-investment-dialogue` now supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; real-source precondition blocked on current Mac | G2/G3: prepare WeChat 4.x keys, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
+| 1 | `wechat` + `wechat-investment-dialogue` | `wechat` G1/G2 standard package path is implemented with event JSONL, manifest field/filter/source audit, generic-to-lens evidence policy, validator-safe preflight/no-message data-quality gap packages, message/gap/usable counts, and package validation; `wechat_query.py --diagnose` now provides a machine-readable local-source readiness probe before collection; `wechat-investment-dialogue` supports chat/sender allow/deny policy, source-policy audit, explicit filtered-all gap status, WeChat dialogue boundary proof, and dialogue surface summary; current-machine diagnosis still blocks real-source validation because no readable `.db` messages/key path is available | G2/G3: prepare WeChat 4.x readable DB/key preconditions, run on real `wechat` lake, tune contact/group/sender allowlists, backtest around actual trades |
 | 2 | `research-documents` | G2/G3 partial on macOS metadata/content extraction; filesystem default-root code paths fixture-tested for macOS/Windows/Linux; filesystem metadata scope-policy audit with extension/path/file-name/directory/keyword filters, validator-safe filtered-all/no-metadata data-quality gap packages, `collectorx.data_quality.collection_gaps` routing, usable/filesystem/file/gap counts, filesystem/data-quality/research-documents-lens gates, package validation, and filesystem boundary proof; extraction policy, per-input audit, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, validator-safe no-input/no-readable/no-match/filtered-all data-quality gap packages, required research/gap/usable manifest counts, screenshot default metadata-only boundary, explicit `--include-image-ocr` tesseract adapter, XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide extraction, upstream filesystem-event Windows/Linux/macOS path-style and source-platform boundary summaries, research document surface summary, research corpus boundary proof, and collection audit are fixture-tested | Real Windows/Linux device validation, more real XLS/XLSX/DOCX/PDF/PPTX/image samples, Chinese OCR quality review, real binary `.xls` with xlrd validation, Wiki backtest against real trades/reviews |
 | 3 | `email` + `email-research` | G1/G2 local email scan/import baseline plus Apple Mail EMLX, Maildir, Thunderbird mbox, ZIP package, sanitized attachment refs, IMAP attachment refs, local-scan/import audit, root-status/candidate-format audit, skipped file/ZIP-member reasons, Thunderbird `.msf` skip audit, path-level parse results, mailbox boundary proof, email-lake/data-quality/email-research readiness gates, research-attachment filename matching, email research surface summary, sender-domain/body-preview/attachment boundary, email/email-research authorization scope-policy audit, filtered-all readiness, validator-safe profile gap packages, email/gap and email-research/gap counts, authorization scope boundary, and email_research_boundary_proof; mailbox registration still missing | G2/G3: register mailbox, run on real mailbox events and real Apple Mail/Thunderbird/Maildir local roots/exports, broker/IR sender backtest, no-full-body Wiki leakage review |
 | 4 | `ths-portfolio` | G2/G3 partial on current macOS/local paths; CSV/Xcs historical executions, estimated holdings, personal metadata, GUI read-only snapshots, standard package, SoulMirror sync, event-kind/symbol/account/source/keyword authorization scope-policy audit, explicit filtered-all gap event, sidecar policy filtering, exact-number preservation, and `ths_portfolio_boundary_proof.authorization_scope_boundary` are fixture-tested | G3/G4: more real Tonghuashun accounts, Windows/macOS path validation, GUI current asset/holding/order/execution/cashflow coverage review, and Wiki backtest against research/review records |

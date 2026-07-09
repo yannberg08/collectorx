@@ -16,7 +16,29 @@ avoid building placeholders that look complete.
 
 ## Latest Productization Wave
 
-The latest completed wave adds a stable offline fixture E2E gate for the P1
+The latest completed wave adds machine-readable local-source readiness
+diagnosis for the P0 `wechat` collector:
+
+- `wechat-export` is upgraded to `0.11.4`.
+- `wechat_query.py --diagnose` now emits
+  `collectorx.wechat_preflight.v1` JSON before any message, contact, raw
+  database page, credential, or key material is read or emitted.
+- The diagnosis records platform, dependency availability, SIP status on macOS,
+  sanitized store/key probes, and `collection_readiness` with
+  `can_attempt_collect` and `can_claim_real_validation=false`.
+- `--diagnose-out <file>` writes the same JSON for FinClaw product preflight
+  screens and runbooks.
+- Fixture validation covers a missing authorized `db_storage` path and verifies
+  that local paths are not written into diagnosis output.
+- Current-machine diagnosis on 2026-07-09 detected macOS WeChat 4.x storage as
+  present/readable, but with zero `.db` files counted, SIP enabled,
+  `sqlcipher3` unavailable, and no key material. This is a real preflight
+  result, not a real-message validation.
+
+This improves product gating before collection, but it does not claim real
+WeChat message collection or `wechat-investment-dialogue` backtesting.
+
+The prior completed wave adds a stable offline fixture E2E gate for the P1
 `notes` to `investment-notes` flow:
 
 - Added a checked-in Obsidian-style fixture under
@@ -1599,7 +1621,7 @@ Mac because authorized WeChat 4.x key/SIP preconditions are still unresolved.
 
 | Need | Current implementation | Status | Gap to reach Tonghuashun/EastMoney standard |
 | --- | --- | --- | --- |
-| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package with message/gap/usable counts and validator-safe data-quality gap packages for preflight/no-message runs; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, WeChat dialogue boundary proof, dialogue surface summary, and fixture validation; real-source validation remains blocked on current Mac by missing WeChat 4.x keys/SIP enabled | Prepare authorized WeChat keys, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
+| 微信投资对话 | `wechat` generic collector + `wechat-investment-dialogue` lens classifier | `baseline+audit`; `wechat` writes a standard CollectorX package with message/gap/usable counts and validator-safe data-quality gap packages for preflight/no-message runs; `wechat_query.py --diagnose` now gives FinClaw a machine-readable local-source readiness check without reading messages, contacts, raw database pages, credentials, or key material; the lens supports chat/sender source policy, source-policy audit, explicit `source_policy_filtered_all` gap status, classifier metadata, WeChat dialogue boundary proof, dialogue surface summary, and fixture validation; current-machine diagnosis detects macOS WeChat 4.x storage but no counted `.db` files, SIP enabled, no `sqlcipher3`, and no key material, so real-source validation remains blocked | Prepare authorized WeChat keys/readable DB, real WeChat lake validation, user-tuned contact/group/sender allowlists, entity/time matching, backtest against trade events |
 | 本地研报/财报/PDF/Excel/Markdown/截图 | `filesystem-collector` metadata-only + `research-documents` lens classifier/content reader | `baseline+audit`; macOS metadata and explicit content extraction validation passed; default-root code paths for macOS/Windows/Linux are fixture-tested; filesystem manifest records authorized-root source audit, extension coverage, skipped reasons, per-root results, validator-safe filtered-all/no-metadata data-quality gap packages, usable/filesystem/file/gap counts, filesystem/data-quality/research-documents-lens readiness gates, and metadata-only boundary proof; research-documents manifest records requested inputs, missing inputs, per-file parse results, skipped reasons, extension/path/file-name/parser/research-surface/keyword scope-policy audit, validator-safe no-input/no-readable/no-match/filtered-all data-quality gap packages, research/gap/usable manifest counts, extraction policy, parser counts, content-read counts, limit truncation, screenshot metadata-only/default policy, explicit `--include-image-ocr` tesseract adapter audit, legacy XML/HTML/text/renamed OOXML `.xls` extraction, binary `.xls` xlrd availability/failure audit, PPTX slide-text extraction, research document surface summary, and research corpus boundary proof | Broader private PDF/XLS/XLSX/DOCX/PPTX/image samples, real binary `.xls` with xlrd validation, OCR quality review on real Chinese screenshots, real Windows/Linux device validation, backtest against real trades/reviews |
 | 雪球投资活动 | `xueqiu-watchlist` + `xueqiu-investor-activity` | `baseline+audit`; watchlist and activity collectors support authorized ZIP packages with member provenance, path-traversal skipping, source audit, field coverage, authorization scope-policy audit, validator-safe filtered-all/no-input gap packages, explicit business/data-quality/Wiki readiness gates, Investor Wiki evidence raw/gap/usable generated_from observability, and explicit non-broker-trade evidence policy; watchlist emits attention-universe boundary proof for symbol/market/group/industry/tag/keyword scope; activity also supports XLSX/XLSM, saved HTML pages, nested Snowball-like payloads, activity/source/domain/symbol/author/keyword scope boundaries, activity-boundary proof, pagination completeness summary, HAR browser-network export parsing for `xueqiu.com` response bodies, copied Chromium/Safari browser history with Xueqiu-domain filtering, visit/typed counts, transition types, credential/query stripping audit, raw sanitization, and SoulMirror sync; not yet a one-click real account adapter | Real Xueqiu account/HAR/browser-history samples, real pagination coverage, watchlist/favorites/posts/comments/follows/portfolio validation, rate/terms boundary |
 | 支付宝/天天基金/蛋卷/且慢/银行理财 | `china-wealth-assets` | `baseline+audit`; normalized local export/package path covers Excel/legacy `.xls`/Excel XML/HTML table/PDF statement/JSON/CSV/ZIP plus HAR browser-network export parsing for whitelisted fund/wealth domains, platform inference, numeric asset fields, platform/account/subtype/product/currency/side/keyword scope-policy audit, filtered-all gap packages, platform coverage, field coverage, account boundary summary, partial asset-boundary proof strength, authorization scope boundary, asset surface summary, currency summary, transaction-side summary, source/PDF/HAR audit, asset value summary, credential/query stripping, raw sanitization, ZIP provenance, skipped ZIP accounting, and SoulMirror sync; no one-click real account adapter yet | Real platform PDF/HAR/export samples, per-platform UI adapters, real account validation, complete account-boundary proof |

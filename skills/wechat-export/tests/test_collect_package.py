@@ -191,6 +191,45 @@ def main():
             check=True,
         )
 
+    with tempfile.TemporaryDirectory(prefix="wechat_diagnose_test_") as tmp:
+        missing_db = Path(tmp) / "private-missing-db-storage"
+        diagnose_out = Path(tmp) / "diagnose.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--diagnose",
+                "--db-dir",
+                str(missing_db),
+                "--diagnose-out",
+                str(diagnose_out),
+            ],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+        payload = json.loads(result.stdout)
+        disk_payload = json.loads(diagnose_out.read_text(encoding="utf-8"))
+        assert payload == disk_payload
+        assert payload["schema"] == "collectorx.wechat_preflight.v1"
+        assert payload["collector"] == "wechat"
+        assert payload["diagnostic_scope"]["message_text_read"] is False
+        assert payload["diagnostic_scope"]["raw_database_pages_read"] is False
+        assert payload["diagnostic_scope"]["contacts_read"] is False
+        assert payload["diagnostic_scope"]["credentials_collected"] is False
+        assert payload["diagnostic_scope"]["keys_emitted"] is False
+        assert payload["diagnostic_scope"]["paths_emitted"] is False
+        assert payload["input_summary"]["db_dir_argument_provided"] is True
+        assert payload["store_probe"]["db_storage_exists"] is False
+        assert payload["store_probe"]["db_file_count"] == 0
+        assert payload["collection_readiness"]["status"] == "needs_readable_wechat_db_dir"
+        assert payload["collection_readiness"]["can_attempt_collect"] is False
+        assert payload["collection_readiness"]["can_claim_real_validation"] is False
+        assert payload["collection_readiness"]["can_enter_personal_channel_lake"] is False
+        assert payload["collection_readiness"]["can_enter_investor_lens"] is False
+        assert str(missing_db) not in result.stdout
+        assert str(missing_db) not in diagnose_out.read_text(encoding="utf-8")
+
     print("wechat collect package tests passed.")
 
 
