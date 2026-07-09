@@ -300,7 +300,7 @@
       "product_surface": "import-beta",
       "evidence_role": "workflow-metadata-and-intensity",
       "user_step": "Provide authorized Wind, Choice, iFinD, or Bloomberg workflow metadata exports with available query, export, workspace, template, dataset, and field metadata; optionally choose terminal, activity, workspace, project, dataset, field, or keyword allow/deny filters.",
-      "preflight": "Input contains personal workflow metadata and workflow intensity metadata only, not vendor database mirrors or licensed content bodies; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages with can_enter_finclaw=false.",
+      "preflight": "Input contains personal workflow metadata and workflow intensity metadata only, not vendor database mirrors or licensed content bodies; optional scope filters are applied before Lake output; no-input and filtered-all runs emit validator-safe profile gap packages routed to collectorx.data_quality.collection_gaps with can_enter_finclaw=false, can_enter_pro_terminal_usage_lake=false, can_enter_data_quality_lake=true, and can_feed_investor_wiki_evidence=false.",
       "failure_state": "needs_authorized_terminal_workflow_export_or_scope_policy_retained_records"
     },
     {

@@ -32,6 +32,7 @@ except ModuleNotFoundError:  # pragma: no cover - supports direct script executi
 
 
 COLLECTOR = "pro-terminal-usage"
+DATA_QUALITY_TARGET = "collectorx.data_quality.collection_gaps"
 CN_TZ = timezone(timedelta(hours=8))
 SUPPORTED_RECORD_EXTENSIONS = {
     ".json",
@@ -1239,6 +1240,8 @@ def gap_event(
             "terminal_credentials_collected": False,
             "license_keys_collected": False,
             "order_mutation_supported": False,
+            "business_records_written": False,
+            "read_only": True,
         },
         "raw_ref": {
             "preflight": True,
@@ -1246,7 +1249,7 @@ def gap_event(
             "scope_policy_enabled": bool((audit.get("pro_terminal_scope_policy") or {}).get("enabled")),
         },
         "privacy": {"sensitive": True, "local_only": True, "contains": ["work_confidential", "collection_gap"]},
-        "wiki_targets": ["investor.data_quality.collection_gaps"],
+        "wiki_targets": [DATA_QUALITY_TARGET],
     }
 
 
@@ -1320,7 +1323,7 @@ def wiki_targets_for_activity(activity_type: str) -> List[str]:
         "model_template": ["investor.decision_framework.strategy_rules", "investor.capability_circle.analysis_ability"],
         "factor_attention": ["investor.capability_circle.analysis_ability", "investor.decision_framework.monitoring_rules"],
     }
-    return targets.get(activity_type, ["investor.data_quality.collection_gaps"])
+    return targets.get(activity_type, [DATA_QUALITY_TARGET])
 
 
 def build_manifest(
@@ -1332,6 +1335,11 @@ def build_manifest(
     usable_events = usable_terminal_events(events)
     workflow_event_count = len(usable_events)
     gap_event_count = len(events) - workflow_event_count
+    can_enter_pro_terminal_usage_lake = workflow_event_count > 0 and not bool(
+        (collection_audit or {}).get("pro_terminal_scope_policy_filtered_all")
+    )
+    can_enter_data_quality_lake = gap_event_count > 0
+    can_feed_investor_wiki_evidence = can_enter_pro_terminal_usage_lake
     kind_counts = Counter(event["kind"] for event in events)
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in usable_events)
     terminal_counts = Counter((event.get("data") or {}).get("terminal", "unknown") for event in usable_events)
@@ -1349,7 +1357,7 @@ def build_manifest(
     unknown_activity_count = sum(count for activity, count in activity_counts.items() if activity not in EXPECTED_TERMINAL_ACTIVITY_TYPES and activity != "collector_gap")
     field_counts = Counter(
         field
-        for event in events
+        for event in usable_events
         for field in RECOMMENDED_WORKFLOW_FIELDS
         if (event.get("data") or {}).get(field) not in (None, "", [])
     )
@@ -1360,6 +1368,7 @@ def build_manifest(
         "collector": COLLECTOR,
         "collected_at": collected_at or now_iso(),
         "event_count": len(events),
+        "usable_event_count": workflow_event_count,
         "workflow_event_count": workflow_event_count,
         "gap_event_count": gap_event_count,
         "kind_counts": dict(sorted(kind_counts.items())),
@@ -1417,7 +1426,13 @@ def build_manifest(
                 no_events=no_events,
                 scope_policy_filtered_all=scope_policy_filtered_all,
             ),
-            "can_enter_finclaw": bool(events) and not gap_only and not scope_policy_filtered_all,
+            "usable_event_count": workflow_event_count,
+            "workflow_event_count": workflow_event_count,
+            "gap_event_count": gap_event_count,
+            "can_enter_finclaw": can_enter_pro_terminal_usage_lake,
+            "can_enter_pro_terminal_usage_lake": can_enter_pro_terminal_usage_lake,
+            "can_enter_data_quality_lake": can_enter_data_quality_lake,
+            "can_feed_investor_wiki_evidence": can_feed_investor_wiki_evidence,
             "can_claim_complete_terminal_usage": False,
             "source_collection_scope": source_collection_scope_for_readiness(
                 gap_only=gap_only,
@@ -1621,6 +1636,9 @@ def workflow_boundary_proof(
     collection_audit: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     usable_events = usable_terminal_events(events)
+    gap_event_count = max(len(events) - len(usable_events), 0)
+    can_enter_pro_terminal_usage_lake = bool(usable_events)
+    can_enter_data_quality_lake = gap_event_count > 0
     activity_counts = Counter((event.get("data") or {}).get("activity_type", "unknown") for event in usable_events)
     terminal_counts = Counter((event.get("data") or {}).get("terminal", "unknown") for event in usable_events)
     field_counts = Counter(
@@ -1693,8 +1711,13 @@ def workflow_boundary_proof(
         "authorized_input_observed": bool(usable_events),
         "personal_workflow_only": True,
         "workflow_metadata_only": True,
-        "can_enter_finclaw_lake": bool(usable_events),
-        "can_feed_investor_wiki_evidence": bool(usable_events),
+        "can_enter_finclaw_lake": can_enter_pro_terminal_usage_lake,
+        "can_enter_pro_terminal_usage_lake": can_enter_pro_terminal_usage_lake,
+        "can_enter_data_quality_lake": can_enter_data_quality_lake,
+        "can_feed_investor_wiki_evidence": can_enter_pro_terminal_usage_lake,
+        "usable_event_count": len(usable_events),
+        "workflow_event_count": len(usable_events),
+        "gap_event_count": gap_event_count,
         "observed_event_count": len(usable_events),
         "terminal_boundary": {
             "observed_terminals": observed_expected_terminals,
@@ -1849,6 +1872,7 @@ def build_evidence(
 ) -> Dict[str, Any]:
     by_target: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
     usable_event_list = usable_terminal_events(events)
+    gap_event_count = max(len(events) - len(usable_event_list), 0)
     for event in usable_event_list:
         for target in event.get("wiki_targets", []):
             by_target[target].append(event)
@@ -1859,6 +1883,10 @@ def build_evidence(
             "collector": COLLECTOR,
             "event_schema": "collectorx.event.v1",
             "event_count": len(usable_event_list),
+            "raw_event_count": len(events),
+            "usable_event_count": len(usable_event_list),
+            "workflow_event_count": len(usable_event_list),
+            "gap_event_count": gap_event_count,
         },
         "wiki_write_policy": {
             "collector_writes_wiki_directly": False,
@@ -1870,9 +1898,13 @@ def build_evidence(
             "personal_workflow_only": True,
             "workflow_metadata_only": True,
             "vendor_database_mirror": False,
+            "raw_event_count": len(events),
+            "usable_event_count": len(usable_event_list),
+            "workflow_event_count": len(usable_event_list),
+            "gap_event_count": gap_event_count,
             "workflow_surface_summary": workflow_surface_summary(usable_event_list),
             "workflow_intensity_summary": workflow_intensity_summary(usable_event_list),
-            "workflow_boundary_proof": workflow_boundary_proof(usable_event_list, collection_audit=collection_audit),
+            "workflow_boundary_proof": workflow_boundary_proof(events, collection_audit=collection_audit),
             "route_counts": {target: len(items) for target, items in sorted(by_target.items())},
         },
     }

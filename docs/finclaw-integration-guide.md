@@ -1307,8 +1307,12 @@ Current status:
   `manifest.source_audit.pro_terminal_scope_policy` records the policy and
   filtered counts; if every candidate record is excluded, the package emits one
   validator-safe `pro_terminal_scope_policy_filtered_all` profile gap event,
-  readiness becomes `scope_policy_filtered_all`, and
-  `collection_readiness.can_enter_finclaw=false`.
+  readiness becomes `scope_policy_filtered_all`, routes only to
+  `collectorx.data_quality.collection_gaps`, and sets
+  `collection_readiness.can_enter_finclaw=false`,
+  `can_enter_pro_terminal_usage_lake=false`,
+  `can_enter_data_quality_lake=true`, and
+  `can_feed_investor_wiki_evidence=false`.
 - Adds per-event `workflow_topics`, `primary_workflow_topic`, and
   `workflow_topic_terms` so FinClaw can map terminal behavior to macro,
   strategy, industry, fundamental, valuation, credit, factor, portfolio,
@@ -1333,8 +1337,11 @@ Current status:
   rules, and information-source dimensions.
 - `manifest.workflow_event_count` and `manifest.gap_event_count` distinguish
   usable terminal workflow metadata from no-input or filtered-all collection
-  gaps. Pure gap packages keep `generated_from.event_count=0` in Investor Wiki
-  evidence and must not be treated as real workflow facts.
+  gaps. `manifest.usable_event_count` mirrors retained workflow records, and
+  `collection_readiness` exposes explicit business/data-quality/Wiki gates.
+  Pure gap packages keep `generated_from.event_count=0`,
+  `generated_from.raw_event_count=1`, and `generated_from.gap_event_count=1`
+  in Investor Wiki evidence and must not be treated as real workflow facts.
 - Does not copy vendor databases, public market data, reports, or licensed
   content bodies.
 - Real Wind/Choice/iFinD/Bloomberg native exports still require license-safe

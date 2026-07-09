@@ -113,8 +113,15 @@ def test_collect_terminal_workflow_exports() -> None:
         assert "PE" in model["data"]["factors"]
         assert "valuation_model" in model["data"]["workflow_topics"]
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 5
         assert manifest["workflow_event_count"] == 5
         assert manifest["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["usable_event_count"] == 5
+        assert manifest["collection_readiness"]["workflow_event_count"] == 5
+        assert manifest["collection_readiness"]["gap_event_count"] == 0
+        assert manifest["collection_readiness"]["can_enter_pro_terminal_usage_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
         assert manifest["collection_readiness"]["can_claim_complete_terminal_usage"] is False
         assert manifest["collection_readiness"]["license_boundary"] == "workflow_metadata_only"
         assert manifest["workflow_surface_summary"]["events_with_workflow_topics"] == 5
@@ -126,7 +133,12 @@ def test_collect_terminal_workflow_exports() -> None:
         proof = manifest["workflow_boundary_proof"]
         assert proof["proof_level"] == "medium_partial_workflow_boundary"
         assert proof["can_enter_finclaw_lake"] is True
+        assert proof["can_enter_pro_terminal_usage_lake"] is True
+        assert proof["can_enter_data_quality_lake"] is False
         assert proof["workflow_metadata_only"] is True
+        assert proof["usable_event_count"] == 5
+        assert proof["workflow_event_count"] == 5
+        assert proof["gap_event_count"] == 0
         assert proof["workflow_intensity_boundary"]["query_terms_observed"] is True
         assert proof["workflow_intensity_boundary"]["parameters_observed"] is True
         assert proof["terminal_boundary"]["observed_terminals"] == ["wind", "choice", "ifind"]
@@ -139,6 +151,12 @@ def test_collect_terminal_workflow_exports() -> None:
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["source_boundary"]["path_level_audit_available"] is True
         assert evidence["coverage_summary"]["workflow_surface_summary"]["events_with_workflow_topics"] == 5
         assert evidence["generated_from"]["event_count"] == 5
+        assert evidence["generated_from"]["raw_event_count"] == 5
+        assert evidence["generated_from"]["usable_event_count"] == 5
+        assert evidence["generated_from"]["workflow_event_count"] == 5
+        assert evidence["generated_from"]["gap_event_count"] == 0
+        assert evidence["coverage_summary"]["raw_event_count"] == 5
+        assert evidence["coverage_summary"]["gap_event_count"] == 0
         assert evidence["coverage_summary"]["dimension_count"] == 7
         assert evidence["coverage_summary"]["subdimension_count"] == 20
         analysis_ability = next(
@@ -282,6 +300,7 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert all("windows-traversal" not in event["raw_ref"]["path"] for event in events)
         assert all("C:/unsafe" not in event["raw_ref"]["path"] for event in events)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["usable_event_count"] == 8
         assert manifest["workflow_event_count"] == 8
         assert manifest["gap_event_count"] == 0
         assert manifest["activity_counts"]["download"] == 2
@@ -391,6 +410,9 @@ def test_collect_nested_sections_workbook_and_sanitizes() -> None:
         assert manifest["license_policy"]["content_preview_max_chars"] == 800
         assert manifest["evidence_policy"]["personal_workflow_only"] is True
         assert manifest["collection_readiness"]["terminal_coverage_status"] == "all_expected_terminals_observed"
+        assert manifest["collection_readiness"]["can_enter_pro_terminal_usage_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
         assert manifest["collection_readiness"]["activity_coverage_status"] == "all_expected_activity_types_observed"
         assert manifest["collection_readiness"]["workflow_field_coverage_status"] == "all_expected_workflow_fields_observed"
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
@@ -611,6 +633,9 @@ def test_collect_respects_authorization_scope_policy() -> None:
         assert proof["authorization_scope_boundary"]["pro_terminal_scope_policy_filtered_all"] is False
         assert manifest["collection_readiness"]["status"] == "events_collected"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is True
+        assert manifest["collection_readiness"]["can_enter_pro_terminal_usage_lake"] is True
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is False
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is True
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["authorization_scope_boundary"]["candidate_record_count"] == 8
 
@@ -677,6 +702,9 @@ def test_collect_scope_policy_filtered_all_is_not_success() -> None:
         assert gap["data"]["vendor_database_mirrored"] is False
         assert gap["data"]["licensed_content_body_mirrored"] is False
         assert gap["data"]["license_keys_collected"] is False
+        assert gap["data"]["business_records_written"] is False
+        assert gap["data"]["read_only"] is True
+        assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert gap["raw_ref"] == {
             "preflight": True,
             "reason": "pro_terminal_scope_policy_filtered_all",
@@ -686,14 +714,23 @@ def test_collect_scope_policy_filtered_all_is_not_success() -> None:
         assert str(export) not in json.dumps(gap, ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["workflow_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["kind_counts"] == {"profile": 1}
         assert manifest["collection_readiness"]["status"] == "scope_policy_filtered_all"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_pro_terminal_usage_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
         assert manifest["collection_readiness"]["source_collection_scope"] == "scope_policy_excluded_all"
         assert manifest["workflow_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
         assert manifest["workflow_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["workflow_boundary_proof"]["can_enter_pro_terminal_usage_lake"] is False
+        assert manifest["workflow_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["workflow_boundary_proof"]["usable_event_count"] == 0
+        assert manifest["workflow_boundary_proof"]["workflow_event_count"] == 0
+        assert manifest["workflow_boundary_proof"]["gap_event_count"] == 1
         assert "authorization_scope_excluded_all_records" in manifest["workflow_boundary_proof"]["completion_blockers"]
         source_audit = manifest["source_audit"]
         assert source_audit["candidate_record_count"] == 1
@@ -706,8 +743,14 @@ def test_collect_scope_policy_filtered_all_is_not_success() -> None:
         assert source_audit["path_results"][0]["reason"] == "scope_policy_excluded_all_records"
         evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
         assert evidence["generated_from"]["event_count"] == 0
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["usable_event_count"] == 0
+        assert evidence["generated_from"]["workflow_event_count"] == 0
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["route_counts"] == {}
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["proof_level"] == "scope_policy_filtered_all"
         assert evidence["coverage_summary"]["workflow_boundary_proof"]["can_feed_investor_wiki_evidence"] is False
+        assert evidence["coverage_summary"]["workflow_boundary_proof"]["can_enter_data_quality_lake"] is True
 
 
 def test_collect_missing_input_writes_gap_audit() -> None:
@@ -741,15 +784,25 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert events[0]["data"]["candidate_record_count"] == 0
         assert events[0]["data"]["workflow_event_count"] == 0
         assert events[0]["data"]["terminal_workflow_fact_claimed"] is False
+        assert events[0]["data"]["business_records_written"] is False
+        assert events[0]["data"]["read_only"] is True
+        assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
         assert str(missing) not in json.dumps(events[0], ensure_ascii=False)
         manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
         assert manifest["event_count"] == 1
+        assert manifest["usable_event_count"] == 0
         assert manifest["workflow_event_count"] == 0
         assert manifest["gap_event_count"] == 1
         assert manifest["collection_readiness"]["status"] == "needs_pro_terminal_usage_input"
         assert manifest["collection_readiness"]["can_enter_finclaw"] is False
+        assert manifest["collection_readiness"]["can_enter_pro_terminal_usage_lake"] is False
+        assert manifest["collection_readiness"]["can_enter_data_quality_lake"] is True
+        assert manifest["collection_readiness"]["can_feed_investor_wiki_evidence"] is False
         assert manifest["workflow_boundary_proof"]["proof_level"] == "no_authorized_terminal_input"
         assert manifest["workflow_boundary_proof"]["can_enter_finclaw_lake"] is False
+        assert manifest["workflow_boundary_proof"]["can_enter_pro_terminal_usage_lake"] is False
+        assert manifest["workflow_boundary_proof"]["can_enter_data_quality_lake"] is True
+        assert manifest["workflow_boundary_proof"]["gap_event_count"] == 1
         assert manifest["workflow_boundary_proof"]["source_boundary"]["input_missing_count"] == 1
         assert manifest["workflow_boundary_proof"]["false_claims"]["license_keys_collected"] is False
         assert manifest["source_audit"]["input_count"] == 1
@@ -758,6 +811,10 @@ def test_collect_missing_input_writes_gap_audit() -> None:
         assert manifest["source_audit"]["emitted_event_count"] == 1
         assert manifest["source_audit"]["skipped_reason_counts"] == {"input_missing": 1}
         assert manifest["source_audit"]["path_results"][0]["status"] == "missing"
+        evidence = json.loads((out / "investor_wiki_evidence.v1.json").read_text(encoding="utf-8"))
+        assert evidence["generated_from"]["raw_event_count"] == 1
+        assert evidence["generated_from"]["gap_event_count"] == 1
+        assert evidence["coverage_summary"]["route_counts"] == {}
 
 
 if __name__ == "__main__":
