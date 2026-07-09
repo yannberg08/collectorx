@@ -16,6 +16,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 MIN_PYTHON = (3, 10)
+UTF8_ENV = os.environ.copy()
+UTF8_ENV.setdefault("PYTHONUTF8", "1")
+UTF8_ENV.setdefault("PYTHONIOENCODING", "utf-8")
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -148,7 +151,7 @@ def iter_python_files() -> list[Path]:
 
 def run(cmd: list[str], *, cwd: Path = ROOT) -> None:
     print("+ " + " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=str(cwd), check=True)
+    subprocess.run(cmd, cwd=str(cwd), check=True, env=UTF8_ENV)
 
 
 def check_no_ds_store() -> None:
