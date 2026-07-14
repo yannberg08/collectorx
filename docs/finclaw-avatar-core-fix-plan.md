@@ -171,22 +171,22 @@ filesystem_query.py collect（真读正文，content_read）
 - **工作项 1C** 增量游标：scanner 落 `filesystem-roots-cursor.json`（每 root mtime 水位），`--cursor-file` / `--full-rescan`；no-op 不再误报 gap，server 层 no-op 返回 `ok:True`（"已是最新"）。实测第二次采集 0 新事件、游标跳过 2。
 - **工作项 3.1** authorship 字段：新增 `authored_by_user/consumed_by_user/unknown` + `document_authorship()` 启发式（转发文章→consumed、复盘→authored、Downloads→consumed）+ `event_authorship()` 读取器（notes 默认 authored，email/wechat 保守 unknown 待 M4）；`LeafBucket` 捕获 authorship 并随信号 round-trip。
 
+- **1B 扫描进度 sidecar**：scanner 每 500 文件 flush `filesystem-scan-progress.json`（`--progress-file`），server 用 `ThreadingHTTPServer` 并发暴露 `GET /api/local-collectors/filesystem/progress`，长扫描可显示"已扫 N/已出 M"。
+
 ### ✅ M2（能真正理解）— 已完成并验证
 - **2.1** 理解层默认开：`distill` 判据改为 env > engine `distill.mode` > `llm_ready`（默认 True），开箱即用无需设环境变量；`used_hermes` 显式暴露。本机 Hermes 冒烟 20.9s 回合法 JSON。
-- **2.2** 送正文：建 `content_index`（源事件 event_id→脱敏正文摘录 700 字 + authorship），`review_items` 增 `evidence_excerpts` / `authorship_mix`；prompt 增硬规则 6（提炼**具名可复述**事实）+ 规则 7（authorship 准入）；批量改按证据权重排序、`FINCLAW_AVATAR_DISTILL_BATCH` 可调。
-- **旗舰验证**：authored 止损复盘 → 卖出框架 wiki 产出「跌破成本8%无条件止损/估值到位减仓」**具名框架**（对比旧「命中N个关键词」）。
-- ⚠️ 已知：单批 LLM 有逐轮波动（同一复盘时而初步+具名、时而苗头）——**2.2 的"分叶蒸馏"（每叶独立请求）尚未做**，是提升稳定性的下一步。
+- **2.2** 送正文 + **分叶蒸馏**：建 `content_index`（源事件 event_id→脱敏正文摘录 700 字 + authorship），`review_items` 增 `evidence_excerpts`/`authorship_mix`；prompt 增硬规则 6（提炼**具名可复述**事实）+ 规则 7（authorship 准入）；**改为按叶分组、每叶一个焦点 Hermes 请求**（`FINCLAW_AVATAR_DISTILL_MAX_LEAVES` 上限，默认 16），解决单批 LLM 逐轮波动。
+- **2.3** 缓存：每叶按 `engine_prompt_version + 证据/摘录 hash` 键缓存决策（`spool/<avatar>/distill-cache.json`），证据未变复用、不重算。
+- **旗舰验证**：authored 止损复盘 → 卖出框架 wiki 产出「(1)跌破成本8%无条件止损、拒绝加仓摊薄；(2)估值到合理上沿分批减仓（茅台减仓三分之一）」**具名框架**；run1 分叶 10 次 Hermes、run2 证据未变 0.4s 短路复用。
 
 ### ✅ M3（不再注水）— 已完成并验证
-- **3.2** reason 闸改 authorship：新增 `bucket_has_authored_reason()`；`maturity_factor_assessment` 的 explanation_depth 深度加成从 `has_reason_layer` 改 `has_authored_reason`；`cap_maturity`/`maturity_cap_for_signal` 对 13 个 `REASON_REQUIRED_LEAVES` 无 authored 证据硬顶「苗头」；distill 后加**确定性硬重 cap**（不信任 LLM 自觉）。
-- **验证**：只喂转发文章 → 所有原因层叶子 ≤ 苗头（买入/卖出框架、风险观、认知偏差全部未注水），消费内容落到信息源/能力圈/学习风格。总分从注水的 18 → 诚实的 6。
-- **2.3** 部分：`distill_mode` 标记保留、schema 校验沿用 `normalize_leaf_signal_data`；**fact_id+证据 hash 缓存尚未做**。
+- **3.2** reason 闸改 authorship：新增 `bucket_has_authored_reason()`；`maturity_factor_assessment` explanation_depth 加成从 `has_reason_layer` 改 `has_authored_reason`；`cap_maturity`/`maturity_cap_for_signal` 对 13 个 `REASON_REQUIRED_LEAVES` 无 authored 证据硬顶「苗头」；distill 后**确定性硬重 cap**（不信任 LLM 自觉）；**路由层准入过滤**：`AUTHORSHIP_CONSUMED` 事件直接从 reason-required 叶子剔除（连苗头都进不去）。
+- **验证**：只喂转发文章 → 原因层叶子全部 **0**（买/卖框架、风险观、认知偏差都进不去），消费内容只落信息源/能力圈广度/学习风格。
 
-### ⬜ M4（画像立体）— 未做（大部分是新采集器开发）
-补原因层数据源：notes 投资复盘识别、wechat 本人发言 authorship 拆分、微信读书划线、风险测评问卷、自建 Excel 解析、意图/行动/消费三分。属新增采集能力，建议按用户实际持有的数据源单独立项推进。
+### ⬜ M4（画像立体）— 未做（新采集器开发，依赖用户真实数据源）
+补原因层数据源：notes 投资复盘识别、wechat 本人发言 authorship 拆分、微信读书划线、风险测评问卷、自建 Excel 解析、意图/行动/消费三分。属新增采集能力，建议按用户实际持有的数据源单独立项。
 
-### 下一步优先级
-1. **2.2 分叶蒸馏**（让"具名框架"稳定产出，是当前最影响体验的点）
-2. **2.3 缓存**（省 token、保幂等）
-3. **M4** 按用户真实数据源逐个补 authored 源
-4. 把 filesystem-collector 的 scanner/query 改动同步回 `~/collectorx` 源仓库（避免与 hermes-home clone 分叉）
+### 剩余
+1. **M4** 按用户真实数据源逐个补 authored 源（唯一未做项）。
+2. 把 filesystem-collector 的 scanner/query 改动同步回 `~/collectorx` 源仓库（现只在 hermes-home clone，避免分叉）。
+3. 可选优化：首次全量蒸馏较慢（10 叶×~20s），可改后台异步 + 前端轮询进度端点；稳态因增量+缓存已很快。
