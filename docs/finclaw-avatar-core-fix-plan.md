@@ -156,3 +156,37 @@ filesystem_query.py collect（真读正文，content_read）
 
 ## 验收总纲（一句话）
 拿同一批真实数据，跑通后：**组合/执行维靠交易强事实到扎实；哲学/风格/行为维只有在有 authored 复盘/笔记时才升熟，且 wiki 里是"具名框架+原文依据"而非"命中关键词清单"；转发文章只进信息源/能力圈广度。** 这三条同时成立，投资分身才算真能上线。
+
+---
+
+## 执行进度（2026-07-15 · 直接改真实 FinClaw 代码）
+
+改动落在两处（均非 collectorx git 仓库，改前已备份到 scratchpad；avatar-core 运行态用官方 `reset` 重建过）：
+- `~/Library/Application Support/FinClaw/avatar-core-tools/finclaw_avatar_core.py` / `finclaw_avatar_server.py`
+- `~/Library/Application Support/FinClaw/hermes-home/collectorx/skills/filesystem-collector/scripts/…`（scanner.py / filesystem_query.py）
+
+### ✅ M1（能稳定采）— 已完成并验证
+- **工作项 1A** 云盘默认关：`default_roots(include_cloud=False)` + 新增 `default_cloud_roots()`，iCloud/CloudStorage/OneDrive 改 opt-in（`--include-cloud`）。实测本机有 7 个 iCloud 快照目录，正是全量扫描超时元凶。
+- **工作项 1B** 保守默认：server 注入 `FILESYSTEM_DEFAULT_LIMIT=2000` / `MAX_SIZE_MB=20` / `TIMEOUT=180`（均 env 可调）；超时信息更友好。
+- **工作项 1C** 增量游标：scanner 落 `filesystem-roots-cursor.json`（每 root mtime 水位），`--cursor-file` / `--full-rescan`；no-op 不再误报 gap，server 层 no-op 返回 `ok:True`（"已是最新"）。实测第二次采集 0 新事件、游标跳过 2。
+- **工作项 3.1** authorship 字段：新增 `authored_by_user/consumed_by_user/unknown` + `document_authorship()` 启发式（转发文章→consumed、复盘→authored、Downloads→consumed）+ `event_authorship()` 读取器（notes 默认 authored，email/wechat 保守 unknown 待 M4）；`LeafBucket` 捕获 authorship 并随信号 round-trip。
+
+### ✅ M2（能真正理解）— 已完成并验证
+- **2.1** 理解层默认开：`distill` 判据改为 env > engine `distill.mode` > `llm_ready`（默认 True），开箱即用无需设环境变量；`used_hermes` 显式暴露。本机 Hermes 冒烟 20.9s 回合法 JSON。
+- **2.2** 送正文：建 `content_index`（源事件 event_id→脱敏正文摘录 700 字 + authorship），`review_items` 增 `evidence_excerpts` / `authorship_mix`；prompt 增硬规则 6（提炼**具名可复述**事实）+ 规则 7（authorship 准入）；批量改按证据权重排序、`FINCLAW_AVATAR_DISTILL_BATCH` 可调。
+- **旗舰验证**：authored 止损复盘 → 卖出框架 wiki 产出「跌破成本8%无条件止损/估值到位减仓」**具名框架**（对比旧「命中N个关键词」）。
+- ⚠️ 已知：单批 LLM 有逐轮波动（同一复盘时而初步+具名、时而苗头）——**2.2 的"分叶蒸馏"（每叶独立请求）尚未做**，是提升稳定性的下一步。
+
+### ✅ M3（不再注水）— 已完成并验证
+- **3.2** reason 闸改 authorship：新增 `bucket_has_authored_reason()`；`maturity_factor_assessment` 的 explanation_depth 深度加成从 `has_reason_layer` 改 `has_authored_reason`；`cap_maturity`/`maturity_cap_for_signal` 对 13 个 `REASON_REQUIRED_LEAVES` 无 authored 证据硬顶「苗头」；distill 后加**确定性硬重 cap**（不信任 LLM 自觉）。
+- **验证**：只喂转发文章 → 所有原因层叶子 ≤ 苗头（买入/卖出框架、风险观、认知偏差全部未注水），消费内容落到信息源/能力圈/学习风格。总分从注水的 18 → 诚实的 6。
+- **2.3** 部分：`distill_mode` 标记保留、schema 校验沿用 `normalize_leaf_signal_data`；**fact_id+证据 hash 缓存尚未做**。
+
+### ⬜ M4（画像立体）— 未做（大部分是新采集器开发）
+补原因层数据源：notes 投资复盘识别、wechat 本人发言 authorship 拆分、微信读书划线、风险测评问卷、自建 Excel 解析、意图/行动/消费三分。属新增采集能力，建议按用户实际持有的数据源单独立项推进。
+
+### 下一步优先级
+1. **2.2 分叶蒸馏**（让"具名框架"稳定产出，是当前最影响体验的点）
+2. **2.3 缓存**（省 token、保幂等）
+3. **M4** 按用户真实数据源逐个补 authored 源
+4. 把 filesystem-collector 的 scanner/query 改动同步回 `~/collectorx` 源仓库（避免与 hermes-home clone 分叉）
