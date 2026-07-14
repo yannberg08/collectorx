@@ -183,10 +183,17 @@ filesystem_query.py collect（真读正文，content_read）
 - **3.2** reason 闸改 authorship：新增 `bucket_has_authored_reason()`；`maturity_factor_assessment` explanation_depth 加成从 `has_reason_layer` 改 `has_authored_reason`；`cap_maturity`/`maturity_cap_for_signal` 对 13 个 `REASON_REQUIRED_LEAVES` 无 authored 证据硬顶「苗头」；distill 后**确定性硬重 cap**（不信任 LLM 自觉）；**路由层准入过滤**：`AUTHORSHIP_CONSUMED` 事件直接从 reason-required 叶子剔除（连苗头都进不去）。
 - **验证**：只喂转发文章 → 原因层叶子全部 **0**（买/卖框架、风险观、认知偏差都进不去），消费内容只落信息源/能力圈广度/学习风格。
 
-### ⬜ M4（画像立体）— 未做（新采集器开发，依赖用户真实数据源）
-补原因层数据源：notes 投资复盘识别、wechat 本人发言 authorship 拆分、微信读书划线、风险测评问卷、自建 Excel 解析、意图/行动/消费三分。属新增采集能力，建议按用户实际持有的数据源单独立项。
+### ◑ M4（画像立体）— 代码可完成项已做完，数据源缺失项无法验证
+拆成两类：**(a) 给现有采集器补 reason-layer 契约**（authorship + evidence_role + 正文 + 路由）——纯代码，已做；**(b) 为不存在的数据源建新采集器**——需真实数据，无法在本机验证。
+
+- ✅ **notes 投资复盘（#1 优先级）— 已做并端到端验证**：`notes/events.py` 打 `authorship`（`_note_looks_consumed` 启发式）+ `evidence_role`；core.py `content_index` 兼容 `content_preview`；`targets_for` 对 note/message/email 用投资关键词经 `target_routes` 路由到投资叶子（含"不能把 wiki 目标当 leaf_id"的修正 + 排除 document_content 防翻倍）。**实测**：Obsidian 投资笔记 → 买入决策框架/投资规则库产出具名框架「三条件同时满足才买入：ROE连续5年>15% / 能理解商业模式 / 估值低于内在价值七折」；同库转发文章被挡在原因层外。
+- ✅ **wechat 本人发言 — 代码已做**：`wechat_query.py` 按 `sender=='我'` 打 `authorship`（本人 authored / 收到 consumed）+ `evidence_role` + `content_preview`。**需真实解密微信数据验证**（本机 key/qq 限制，属 real-validation 边界）。
+- ✅ **收藏文章/研报 → consumed**：filesystem-content + notes 均已按标记判 consumed。
+- ✅ **evidence_role**：filesystem-content / notes / wechat 已标 `reasoning|consumed`。
+- ❌ **微信读书/Kindle 划线、风险测评问卷**：本机无此数据源，属**新采集器**，需先有真实导出才能建+验证。
+- ⚠️ **意图/行动三分（trade collectors 的 action/intent）**：eastmoney/ths 等交易采集器未改，需真实券商数据。
 
 ### 剩余
-1. **M4** 按用户真实数据源逐个补 authored 源（唯一未做项）。
-2. 把 filesystem-collector 的 scanner/query 改动同步回 `~/collectorx` 源仓库（现只在 hermes-home clone，避免分叉）。
-3. 可选优化：首次全量蒸馏较慢（10 叶×~20s），可改后台异步 + 前端轮询进度端点；稳态因增量+缓存已很快。
+1. **M4(b)** 数据源缺失项（微信读书划线、风险测评、trade intent/action）——需用户提供真实导出后单独建采集器。
+2. 把 scanner/query/notes/wechat 改动同步回 `~/collectorx` 源仓库（现只在 FinClaw hermes-home clone，避免分叉）。
+3. 可选优化：首次全量蒸馏较慢（每叶~20s×叶数，notes 实测 9 叶 512s），可改后台异步 + 前端轮询进度端点；稳态因增量+缓存已很快。
