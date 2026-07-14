@@ -193,6 +193,13 @@ filesystem_query.py collect（真读正文，content_read）
 - ❌ **微信读书/Kindle 划线、风险测评问卷**：本机无此数据源，属**新采集器**，需先有真实导出才能建+验证。
 - ⚠️ **意图/行动三分（trade collectors 的 action/intent）**：eastmoney/ths 等交易采集器未改，需真实券商数据。
 
+### ✅ 病根二·第三层（organize / wiki 结构）— 已修复
+诊断补充：病根二不止"蒸馏是关键词路由器"，还有第三层——**organize 把具名事实套回"已形成的画像/依据/待补充/成熟度说明"四段后台报表模板**（`generated_wiki_block` 写死；引擎的 organize LLM prompt 从未被调用，且 prompt 本身也在强制这套结构）。前端只是忠实渲染，问题全在后端。
+- `generated_wiki_block` 重写为 **SoulMirror 式知识文档**：正文=具名事实作为带来源的条目（`- 用户的买入决策框架：…（来源：我的买入原则.md）`），成熟度/证据只留 frontmatter，待补充降为一句轻提示。
+- `fact_source_attribution` + distill 里用 `content_index` 给 evidence_refs 补真实文件名 → wiki 引用 SoulMirror 式`（来源：<文件>）`。
+- 初始种子 `generic_wiki_template` 改用空 GENERATED 块、`cleanup_legacy_wiki_body` 清理遗留四段 → 新/重置 home 干净，无残留报表。
+- **验证**：买入原则复盘 → `买入决策框架.md` 从"# 标题 + 四段报表"变成"# 标题 + 具名框架条目 + 来源文件"，与 SoulMirror `决策框架.md` 同构。真实分身已 reset 应用新种子（20 叶 0 残留四段）。
+
 ### 剩余
 1. **M4(b)** 数据源缺失项（微信读书划线、风险测评、trade intent/action）——需用户提供真实导出后单独建采集器。
 2. 把 scanner/query/notes/wechat 改动同步回 `~/collectorx` 源仓库（现只在 FinClaw hermes-home clone，避免分叉）。
