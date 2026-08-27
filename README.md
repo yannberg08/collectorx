@@ -301,3 +301,27 @@ Before public release:
 
 CollectorX-original files are MIT licensed. Migrated skills may have different
 upstream licensing requirements; see `NOTICE.md` before redistribution.
+
+---
+
+## 一句话安装 FinClaw 采集器
+
+在任意支持 skill 的 agent（Claude Code / Codex / OpenCode / Warp / Zed / OpenClaw 等，以及 FinClaw 自己的对话窗口）里，输入下面统一格式的一句话，agent 会直接从 GitHub 安装采集器（因为句子自带明确路径，agent 不需要认识 FinClaw）：
+
+    请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/<技能slug> 安装［<中文显示名>］这个skill。
+
+- `<技能slug>` = 本仓库 skills/ 目录里的目录名（见下表）。
+- `［<中文显示名>］` = 采集器的中文显示名。
+
+### 采集器清单（slug → 显示名）
+
+| 采集器 | slug | 一句话（复制即可） |
+|---|---|---|
+| 微信采集器 | wechat-export | 请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/wechat-export 安装［微信采集器］这个skill。 |
+| QQ采集器 | qq-export | 请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/qq-export 安装［QQ采集器］这个skill。 |
+| 东方财富持仓 | eastmoney-portfolio | 请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/eastmoney-portfolio 安装［东方财富持仓采集器］这个skill。 |
+| 雪球自选 | xueqiu-watchlist | 请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/xueqiu-watchlist 安装［雪球自选采集器］这个skill。 |
+| 同花顺持仓 | ths-portfolio | 请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/ths-portfolio 安装［同花顺持仓采集器］这个skill。 |
+| 滴答清单 | ticktick-cli | 请帮我从 https://github.com/yannberg08/collectorx/tree/main/skills/ticktick-cli 安装［滴答清单采集器］这个skill。 |
+
+新增采集器后：把 skill 目录放进 `skills/<新slug>/`（标准 SKILL.md 结构），并按上表格式补一行即可。
