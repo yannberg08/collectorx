@@ -407,6 +407,97 @@ def test_read_decrypted_nt_entities():
     assert entities["recent_contacts"][0]["id"] == "10003"
 
 
+def test_none_db_dir_collect_emits_gap_package():
+    from tools.validate_collector_package import validate_package
+
+    root = qq_tmp("collectorx_qq_nodb_gap")
+    out_dir = root / "package"
+    cmd_collect(None, out_dir=str(out_dir), collected_at="2026-07-08T10:00:00+08:00")
+
+    events = [
+        json.loads(line)
+        for line in (out_dir / "lake" / "qq" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(events) == 1
+    assert events[0]["kind"] == "gap"
+    assert events[0]["data"]["gap"] == "qq_data_dir_not_found"
+    assert events[0]["data"]["reason"] == "qq_data_dir_not_found"
+    assert events[0]["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+
+    summary, errors = validate_package(out_dir, collector="qq")
+    assert summary["valid"] is True
+    assert errors == []
+
+
+def test_message_event_has_text_length():
+    from qq.events import messages_to_events
+
+    messages = [
+        {
+            "chat": "g",
+            "chat_id": "g",
+            "sender": "李四",
+            "sender_is_owner": False,
+            "text": "等半年报出来再看。",
+            "message_type": "text",
+            "time": "2026-07-08 09:00:00",
+            "message_id": "m001",
+        }
+    ]
+    events = messages_to_events(messages)
+    assert events[0]["data"]["text_length"] == len("等半年报出来再看。")
+    assert events[0]["data"]["message_type"] == "text"
+
+
+def test_gap_event_routes_to_data_quality_target():
+    from qq_query import _build_gap_event
+
+    gap = _build_gap_event(
+        db_dir=None,
+        collected_at="2026-07-08T10:00:00+08:00",
+        reason="no_readable_qq_message_database",
+        probe={"status": "needs_decryption"},
+    )
+    assert gap["data"]["gap"] == "no_readable_qq_message_database"
+    assert gap["data"]["status"] == "no_readable_qq_message_database"
+    assert gap["wiki_targets"] == ["collectorx.data_quality.collection_gaps"]
+    assert gap["privacy"]["contains"] == ["local_database_reference", "collection_gap"]
+
+
+def test_cli_accepts_db_dir_after_subcommand():
+    import subprocess
+
+    root = qq_tmp("collectorx_qq_cli_after")
+    db_dir = root / "db"
+    db_dir.mkdir(parents=True)
+    db = db_dir / "Msg_test.db"
+    conn = sqlite3.connect(str(db))
+    conn.execute(
+        "CREATE TABLE message (msgId TEXT, peerUin TEXT, chatName TEXT, senderUin TEXT, senderName TEXT, msgTime INTEGER, content TEXT, msgType TEXT, isGroup INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO message VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("m-001", "friend-1", "张三", "10001", "我", 1_720_000_000, "这家公司先放观察池。", "text", 0),
+    )
+    conn.commit()
+    conn.close()
+
+    out_dir = root / "package"
+    script = str(SCRIPTS_DIR / "qq_query.py")
+    proc = subprocess.run(
+        ["python3", script, "collect", "--db-dir", str(db_dir), "--owner-uin", "10001", "--out-dir", str(out_dir)],
+        capture_output=True,
+        text=True,
+        cwd=str(Path(__file__).resolve().parent.parent),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["record_count"] == 1
+    assert manifest["collection_readiness"]["status"] == "events_collected"
+
+
+
 if __name__ == "__main__":
     test_normalize_message()
     test_sqlite_read_and_event_export()
@@ -418,4 +509,8 @@ if __name__ == "__main__":
     test_keyprobe_version_compatibility_blocks_missing_qq_offset()
     test_read_decrypted_nt_message_tables()
     test_read_decrypted_nt_entities()
+    test_none_db_dir_collect_emits_gap_package()
+    test_message_event_has_text_length()
+    test_gap_event_routes_to_data_quality_target()
+    test_cli_accepts_db_dir_after_subcommand()
     print("All QQ collector tests passed!")

@@ -63,6 +63,7 @@ def message_to_event(
             "sender": message.get("sender", ""),
             "sender_is_owner": bool(message.get("sender_is_owner")),
             "text": message.get("text", ""),
+            "text_length": len(str(message.get("text", ""))),
             "message_type": message.get("message_type", "text"),
         },
         "raw_ref": raw_ref,

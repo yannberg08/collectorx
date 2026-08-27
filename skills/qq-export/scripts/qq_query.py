@@ -33,6 +33,9 @@ except (AttributeError, OSError):
 
 CN_TZ = timezone(timedelta(hours=8))
 
+# 采集 gap 事件路由目标（对齐 collectorx 数据质量湖，与微信采集器一致）。
+DATA_QUALITY_GAP_TARGET = "collectorx.data_quality.collection_gaps"
+
 
 def cmd_recent(db_dir: Path, limit: int = 10):
     """查看最新消息"""
@@ -161,6 +164,47 @@ def cmd_collect(
     collected_at: str = None,
 ):
     """微信采集器同构模式：输出紧凑 QQ collect JSON。"""
+    # 自动发现失败（db_dir=None）：仍对齐微信行为——若给出 --out-dir 则写标准 gap 包，否则报错。
+    if db_dir is None:
+        if out_dir:
+            collected = collected_at or _now_iso()
+            gap_reason = "qq_data_dir_not_found"
+            probe = {"status": "data_dir_not_found", "message": "未找到QQ数据目录，未读取任何消息。"}
+            events = [
+                _build_gap_event(
+                    db_dir=None,
+                    collected_at=collected,
+                    reason=gap_reason,
+                    probe=probe,
+                )
+            ]
+            manifest = _build_collect_manifest(
+                db_dir=None,
+                db_path=None,
+                records=[],
+                message_event_count=0,
+                package_event_count=len(events),
+                collected_at=collected,
+                filter_policy=_build_filter_policy(
+                    days=days,
+                    after=after,
+                    limit=limit,
+                    exclude=exclude,
+                    include_groups=include_groups,
+                    active_group_days=active_group_days,
+                    participated_only=participated_only,
+                    owner_uin=owner_uin,
+                ),
+                readiness_status="needs_readable_qq_db",
+                next_action="Install/sign in to QQ and authorize a readable message database, or pass --db-dir to a decrypted QQ NT directory.",
+                probe=probe,
+            )
+            _write_collect_package(Path(out_dir).expanduser(), "[]", records=[], events=events, manifest=manifest)
+            print(json.dumps(_package_result(manifest, out_dir), ensure_ascii=False))
+            return
+        _print_no_readable_db_error(None, prefix="COLLECT-ERROR")
+        return
+
     db_path = get_db_path(db_dir)
     if not db_path:
         if out_dir:
@@ -328,21 +372,28 @@ def main():
     
     parser = argparse.ArgumentParser(description="QQ聊天记录查询")
     parser.add_argument("--db-dir", help="QQ数据库目录")
-    
+
+    # 子命令公共可选参数：让 --db-dir 既能在子命令前也能在子命令后使用（直觉用法）。
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument("--db-dir", help="QQ数据库目录", default=argparse.SUPPRESS)
+
+    def add_cmd(name, **kwargs):
+        return subparsers.add_parser(name, parents=[parent], **kwargs)
+
     subparsers = parser.add_subparsers(dest="command")
-    
-    # recent命令
-    subparsers.add_parser("probe", help="检查数据库结构，不读取消息正文")
-    subparsers.add_parser("key-diagnose", help="诊断QQ NT passphrase获取条件，不读取/输出密钥")
-    key_capture_parser = subparsers.add_parser("key-capture", help="捕获QQ NT passphrase到本机文件，不输出密钥")
+
+    # 命中探测子命令
+    add_cmd("probe", help="检查数据库结构，不读取消息正文")
+    add_cmd("key-diagnose", help="诊断QQ NT passphrase获取条件，不读取/输出密钥")
+    key_capture_parser = add_cmd("key-capture", help="捕获QQ NT passphrase到本机文件，不输出密钥")
     key_capture_parser.add_argument("--out", help="passphrase写入路径，默认 ~/.collectorx/qq/nt_passphrase")
     key_capture_parser.add_argument("--timeout", type=int, default=120, help="等待捕获秒数")
 
-    prepare_parser = subparsers.add_parser("prepare-nt", help="准备QQ NT加密库：去掉1024字节封装头")
+    prepare_parser = add_cmd("prepare-nt", help="准备QQ NT加密库：去掉1024字节封装头")
     prepare_parser.add_argument("--out-dir", required=True, help="输出clean SQLCipher文件目录")
     prepare_parser.add_argument("--roles", help="只处理指定角色，逗号分隔，如 messages,contacts,groups")
 
-    decrypt_parser = subparsers.add_parser("decrypt-nt", help="用SQLCipher解密QQ NT数据库到明文SQLite")
+    decrypt_parser = add_cmd("decrypt-nt", help="用SQLCipher解密QQ NT数据库到明文SQLite")
     decrypt_parser.add_argument("--out-dir", required=True, help="输出明文SQLite目录")
     decrypt_parser.add_argument("--passphrase-env", help="从环境变量读取QQ NT数据库passphrase")
     decrypt_parser.add_argument("--passphrase-file", help="从本机文件读取QQ NT数据库passphrase")
@@ -350,12 +401,12 @@ def main():
     decrypt_parser.add_argument("--roles", help="只解密指定角色，逗号分隔，如 messages,contacts,groups")
     decrypt_parser.add_argument("--sqlcipher", default="sqlcipher", help="sqlcipher可执行文件路径")
 
-    entities_parser = subparsers.add_parser("entities", help="导出解密后的联系人、群和最近联系人清单")
+    entities_parser = add_cmd("entities", help="导出解密后的联系人、群和最近联系人清单")
     entities_parser.add_argument("--out", help="写出JSON路径")
     entities_parser.add_argument("--limit-per-table", type=int, help="每张表最多读取N行，用于排查")
 
     # collect命令，参数对齐微信采集器
-    collect_parser = subparsers.add_parser("collect", help="微信同构采集模式：输出QQ主人相关紧凑JSON")
+    collect_parser = add_cmd("collect", help="微信同构采集模式：输出QQ主人相关紧凑JSON")
     collect_parser.add_argument("--days", type=int, help="只采最近N天消息")
     collect_parser.add_argument("--after", help='只采该时刻之后消息，格式 "YYYY-MM-DD HH:MM:SS"')
     collect_parser.add_argument("--out", help="写出collect JSON路径")
@@ -371,15 +422,15 @@ def main():
     collect_parser.add_argument("--collected-at", help="事件collected_at字段")
 
     # recent命令
-    recent_parser = subparsers.add_parser("recent", help="查看最新消息")
+    recent_parser = add_cmd("recent", help="查看最新消息")
     recent_parser.add_argument("--limit", type=int, default=10)
     
     # search命令
-    search_parser = subparsers.add_parser("search", help="搜索消息")
+    search_parser = add_cmd("search", help="搜索消息")
     search_parser.add_argument("keyword", help="搜索关键词")
     
     # export命令
-    export_parser = subparsers.add_parser("export", help="导出聊天记录")
+    export_parser = add_cmd("export", help="导出聊天记录")
     export_parser.add_argument("output", help="输出文件路径")
     export_parser.add_argument("--event-export", help="导出CollectorX Event JSONL路径")
     export_parser.add_argument("--source", default="QQ 本地聊天记录", help="事件source字段")
@@ -407,6 +458,24 @@ def main():
                     "platform": sys.platform,
                     "message": "未找到QQ数据目录。请安装/登录QQ或手动指定 --db-dir。",
                 }, ensure_ascii=False, indent=2))
+                return
+            if args.command == "collect":
+                cmd_collect(
+                    None,
+                    out=args.out,
+                    out_dir=args.out_dir,
+                    pretty=args.pretty,
+                    days=args.days,
+                    after=args.after,
+                    limit=args.limit,
+                    exclude=args.exclude,
+                    include_groups=args.include_groups,
+                    active_group_days=args.active_group_days,
+                    participated_only=args.participated_only,
+                    owner_uin=args.owner_uin,
+                    event_export=args.event_export,
+                    collected_at=args.collected_at,
+                )
                 return
             print("ERROR: 未找到QQ数据目录")
             print("请手动指定 --db-dir 参数")
@@ -542,7 +611,7 @@ def _build_collect_manifest(
             "summary": "SUMMARY.md",
         },
         "source_audit": {
-            "db_dir": str(Path(db_dir).expanduser()),
+            "db_dir": str(Path(db_dir).expanduser()) if db_dir else None,
             "db_file": str(db_path) if db_path else None,
             "readable_db_found": bool(db_path),
             "probe_status": (probe or {}).get("status"),
@@ -606,19 +675,21 @@ def _build_gap_event(*, db_dir: Path, collected_at: str, reason: str, probe: dic
         "time": collected_at,
         "collected_at": collected_at,
         "data": {
+            "gap": reason,
+            "status": reason,
             "reason": reason,
             "probe_status": probe.get("status"),
             "message": "QQ collection did not emit message events; see manifest.collection_readiness.next_action.",
         },
         "raw_ref": {
-            "db_dir": str(Path(db_dir).expanduser()),
+            "db_dir": str(Path(db_dir).expanduser()) if db_dir else None,
         },
         "privacy": {
             "sensitive": True,
             "local_only": True,
-            "contains": ["local_database_reference"],
+            "contains": ["local_database_reference", "collection_gap"],
         },
-        "wiki_targets": [],
+        "wiki_targets": [DATA_QUALITY_GAP_TARGET],
     }
 
 
@@ -668,6 +739,9 @@ def _package_result(manifest: dict, out_dir: str) -> dict:
 
 
 def _print_no_readable_db_error(db_dir: Path, prefix: str = "ERROR"):
+    if db_dir is None:
+        print(f"{prefix}: 未找到QQ数据目录（请安装/登录QQ，或用 --db-dir 指定可读数据库目录）")
+        return
     probe = probe_db_dir(db_dir)
     if probe.get("status") == "needs_decryption":
         print(f"{prefix}: 已找到新版QQ NT数据，但当前数据库仍是加密封装状态。")
