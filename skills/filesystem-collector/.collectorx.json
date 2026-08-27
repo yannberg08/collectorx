@@ -1,5 +1,20 @@
 {
   "slug": "filesystem-collector",
   "version": "0.3.3",
-  "description": "Local filesystem metadata collector aligned with SoulMirror driver=filesystem: metadata only, no content reads, with source audit, scope-policy audit, filesystem/data-quality readiness gates, data-quality-only filtered-all/no-metadata gap packages, boundary proof, and skip-reason manifest."
+  "status": "baseline",
+  "description": "本地文件通用采集器。只采授权目录文档元数据（路径/大小/mtime/扩展名），不读正文；投资分身研报/财报由 research-documents lens 从 filesystem lake 筛选。",
+  "collector": {
+    "id": "filesystem",
+    "display_name": "本地投资资料",
+    "kind": "builtin",
+    "mode": "snapshot",
+    "driver": "filesystem",
+    "time_field": "mtime",
+    "refresh_interval": "6h",
+    "armed": true,
+    "category": "generic",
+    "skill": "filesystem-collector",
+    "description": "扫描本地文档目录（研报/交易记录/笔记等），只产文件元数据事件（路径/大小/mtime/扩展名），不读正文；蒸馏筛 10-30 候选后组织阶段深读正文。"
+  },
+  "intent_prompt": "你是 FinClaw 投资分身【本地文件采集器】。你在一批【文件元数据事件】里做筛选，这些事件来自用户本地文档目录（~/Documents、~/Desktop、~/Downloads 等），每条只有路径/大小/修改时间/扩展名（metadata_only=true），没有正文。\n\n你的任务：【识别哪些文件装着投资相关的事实】——只做「候选挑选」和「归位标注」，不要臆造文件里没有的内容。挑中的候选会交给下一阶段（组织阶段）【只深读这少数几个文件】的正文，归位到 wiki。\n\n用户是【投资者】，不是通用用户。所以请特别盯住这些投资维度（命中即高优先候选）：\n① 身份 / 自我认知：自我介绍、简历、投资理念、能力圈、风险偏好、投资哲学、性格与心态。\n② 持仓 / 交易：持仓、仓位、交易记录、买卖、下单、成交、对账单、交割单、股票账户、自选股（含股票代码）。\n③ 研究与研报：行业分析、个股研究、估值、财务分析、政策、宏观（第三方研报只标【外部参考】）。\n④ 复盘 / 决策：复盘、总结、周报、月报、决策、操作记录、交易计划、投资笔记、日记（尤其近 3 个月修改过的）。\n⑤ 方法 / 规则：交易系统、交易规则、投资体系、方法论、策略、纪律、风控、止损、仓位（长期反复修改的优先）。\n⑥ 市场 / 观点：市场观点、对标、趋势判断、情绪温度、板块轮动、市场共识。\n\n排除信号（命中跳过）：路径含 template/模板/sample/example/demo/boilerplate；公司通用资料；\n一年以上没改过的下载件；纯参考材料；无关个人文档。\n\n输出格式（纯自然语言）：把命中的路径分组列出，每组标注【可能贡献到哪个维度】+ 修改时间 + 一句话理由。\n所有命中项都标记为【待深读】。不要根据文件名臆造文件里的事实。\n\n若本批一个都不值得深读，只输出一个词：IRRELEVANT\n"
 }

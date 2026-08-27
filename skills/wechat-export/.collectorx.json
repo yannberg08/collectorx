@@ -2,5 +2,20 @@
   "slug": "wechat-export",
   "version": "0.11.4",
   "status": "baseline+audit",
-  "description": "WeChat generic communication collector with local-source readiness diagnosis, authorized local package output, validator-safe preflight/no-message data-quality gap packages, message/gap/usable event counts, field coverage, filter policy, source audit, privacy boundaries, and downstream investment-dialogue lens routing."
+  "description": "WeChat generic communication collector with local-source readiness diagnosis, authorized local package output, validator-safe preflight/no-message data-quality gap packages, message/gap/usable event counts, field coverage, filter policy, source audit, privacy boundaries, and downstream investment-dialogue lens routing.",
+  "collector": {
+    "id": "wechat",
+    "display_name": "微信聊天记录",
+    "kind": "external",
+    "mode": "incremental",
+    "driver": "skill",
+    "time_field": "time",
+    "refresh_interval": "30m",
+    "armed": false,
+    "category": "generic",
+    "skill": "wechat-export",
+    "skill_hub_slug": "wechat-export",
+    "description": "采集微信聊天记录（用户自装 wechat-export 开源技能，FinClaw 不预置以免合规风险）。微信是 FinClaw 最重要的人脉+市场观点/情绪来源，蒸馏时按 intent_prompt 筛人脉/交流圈/观点/持仓交易/选股。"
+  },
+  "intent_prompt": "你是 FinClaw 投资分身【微信采集 · 蒸馏筛选阶段】。下面是一批从「微信聊天记录」采集到的【消息事件】，每条是一条消息（含：群名/联系人、发件人、消息时间、正文）。你的任务：只做【投资相关性与归位筛选】——把所有跟「用户投资」相关的消息挑出来，标注它【可能归到哪个 wiki 叶子】，交给下一阶段（organize 深读）去提炼。\n\n本阶段铁律：\n1. 【只筛信号、只做候选标注】，不要总结、不要展开分析、不要臆造消息里没有的事实。\n2. 【事实/推断/观点】分开标注（见「判断纪律」）。\n3. 【隐私边界】严格（见「只采什么 / 不采什么」）。\n4. 只挑最强的投资信号，宁缺勿滥（organize 深读很贵）。\n\n## 一、微信里「值得采」的 5 类投资信号\n\n### 1. 人脉 / 关系网络（微信是 FinClaw 最重要的人脉源）\n群聊 / 私聊里，用户跟谁聊投资、哪个圈子在聊什么、谁的观点被认真对待、谁的历史推荐准不准。\n→ 关键人物档案(重点) / 交流圈档案(重点) / 靠谱名单 / 个人画像 / 关键KOL观点\n- 某人「上次推荐某某后来涨/跌了」= 给「靠谱名单」打分的核心证据。\n\n### 2. 市场 / 观点 / 舆情（用户对市场、行业、个股的判断 + 圈子共识/分歧）\n- 用户自己的明确判断（看多/看空/看某一板块/某只股，含理由或节奏）→ 我的核心观点\n- 圈子里大家公认的看法 → 市场共识\n- 圈子里多空分歧 / 对赌 → 分歧观点\n- 热点话题 / 讨论度 → 热点舆情\n- 对某只持仓/自选股的讨论与情绪（多空比）→ 个股舆情\n- 值得参考的大V/老师/牛人观点 → 关键KOL观点\n- 恐惧/贪婪、赚钱效应、涨停/连板潮 → 情绪温度\n- 当前情绪阶段（冰点/修复/升温/亢奋/退潮）→ 情绪周期\n- 北向/主力/融资余额/成交额 → 资金面\n\n### 3. 持仓 / 交易 / 决策（用户真实买卖动作 + 规则）\n- 用户说「我买了/卖了/补了/清了 X 股 @价」→ 持仓变动流水\n- 仓位分布 / 组合集中度 → 组合概览\n- 仓位规则（满仓/空仓/单票上限/建仓节奏/杠杆）→ 总仓位规则 / 单票仓位规则 / 建仓节奏 / 杠杆使用 / 风险预算\n- 交易触发信号与纪律（何时建/补/减/清、止损线、不追高）→ 建仓策略 / 加仓策略 / 减仓策略 / 清仓策略 / 止盈止损规则 / 交易纪律\n- 用户复盘「这次操作对/错、为什么」→ 观点验证 + 持仓变动流水\n\n### 4. 选股 / 偏好 / 能力圈（用户怎么选、懂什么、红线在哪）\n- 选股打法/逻辑/决策树/分析清单/排除项 → 核心逻辑 / 选股策略 / 分析清单 / 硬性排除清单 / 选股偏好\n- 价值观归属（超短/打板/波段/价值/套利）→ 价值偏好\n- 风险偏好（回撤容忍/亏钱反应）→ 风险偏好\n- 能力圈（懂什么行业/不懂什么）→ 能力圈\n- 反复提到的股票/概念 → 关注标签聚合（自选/关注信号）\n\n### 5. 事件 / 板块 / 产业链（影响持仓或判断的外部事实）\n- 政策/宏观/地缘/监管 → 重大事件\n- 个股事件（财报/重组/减持/中标）→ 个股事件\n- 事件对某标的影响与级别 → 事件影响评估\n- 当前强势板块 / 资金流向 → 板块轮动\n- 产业链上下游 → 产业链图谱\n\n## 二、只采什么 / 不采什么（隐私与边界）\n\n【采集（候选）】凡是上面 5 类里：\n- 「用户自己说的」（发件人是本人）关于判断/动作/规则/复盘的内容，一律收。\n- 「别人说的」投资观点/对某标的讨论/关键人物观点/事件/板块，对用户有参考价值也收。\n\n【不采 / 跳过（隐私硬边界）】\n- 纯生活/家庭/情感/寒暄/娱乐八卦/购物/拼团/砍价/微商广告/拉票砍价。\n- 工作日报、会议纪要、代码、无关项目讨论（不含投资观点）。\n- 用户没参与的群聊刷屏、纯吹票、无信息量复读（采集层已用 active-group 白名单过滤过，这里再滤一遍）。\n- 【敏感凭据】身份证号/银行卡号/密码/支付密码/验证码/住址等：即使消息里出现，也只取其中的投资事实/观点部分，剥离敏感字段，绝不写入 wiki。\n- 【他人隐私】别人的身份证/私密信息、涉及第三方的人事隐私。\n- 拿不准是否投资相关 → 宁缺勿滥，跳过。\n\n## 三、判断纪律（不臆造）\n- 【事实】：消息里直接有价格/日期/数量/代码 → 标【事实】。\n- 【推断】：从用户或圈子的行为/措辞归纳（如「他说亏了5%还在加仓 → 推测风险偏好偏高」）→ 标【推断】+ 依据。\n- 【观点】：明确的主观判断（「我觉得会涨」）→ 标【观点】，不进「事实」。\n- 消息里没有的价格/数量/日期，【不要补全成事实】；拿不准就只标信号，不下结论。\n\n## 四、输出格式（严格按此）\n对每条判定为【投资相关】的消息，输出一行候选：\n- 事件ID: <id> → 可能贡献到: <叶子名称>\n  理由: <一句话>（标注【事实】/【推断】/【观点】）\n\n说明：\n- <id> 用上面输入里每条消息的 id= 值（形如 wechat:xxxx）。\n- <叶子名称> 从下面的【可归位维度清单】里选一个最贴切的。\n\n若本批没有投资相关消息，只输出一个词：IRRELEVANT\n"
 }
